@@ -1375,7 +1375,10 @@ void renderGame() {
   setSize(4);
   setCur(centerX(buf, 4), 30);
   printT(buf);
-  char rec[12];
+  // 24 y no 12: en japones "きろく %u" son 10 bytes antes de la cifra y el
+  // record se quedaba en su primer digito ("きろく 2" con 219). Las tallas de
+  // los buffers de texto las vigila TestBuffersDeTexto en test/test_tools.py.
+  char rec[24];
   snprintf(rec, sizeof(rec), T(S_REC_FMT), pet.gameHi);
   setSize(2);
   setCur(centerX(rec, 2), 76);
@@ -1595,7 +1598,9 @@ void drawStreakBadge() {
 // banner temporal: medalla nueva o hito de racha
 void drawCelebration() {
   const char *l1 = nullptr, *l2 = nullptr;
-  char buf[20];
+  // 32 y no 20: "%u にちれんぞく！" ya pasa de 20 con una sola cifra, y snprintf
+  // cortaba a mitad de un caracter de 3 bytes.
+  char buf[32];
   if (pet.showMedal()) {
     for (int i = 0; i < MED_COUNT; i++)
       if (pet.newMedal & (1 << i)) { l2 = medalName(i); break; }
@@ -1663,7 +1668,7 @@ void renderCardProfile() {
   int sx = 138, sy = 224;
   gfx->fillTriangle(sx + 8, sy, sx + 1, sy + 18, sx + 15, sy + 18, UI_BAR_BAD);
   gfx->fillTriangle(sx + 8, sy + 7, sx + 4, sy + 18, sx + 12, sy + 18, UI_BAR_WARN);
-  char rl[30];
+  char rl[40];  // en japones pierde cifras con 30 a partir de 100 dias
   snprintf(rl, sizeof(rl), T(S_STREAK_FMT), pet.streak, pet.bestStreak);
   gfx->setTextColor(UI_INK);
   setSize(2);
@@ -1676,7 +1681,7 @@ void renderCardProfile() {
                       : pet.lovesBerry(0) ? T(S_BERRY_RED)
                       : pet.lovesBerry(1) ? T(S_BERRY_BLUE)
                                           : T(S_BERRY_GREEN);
-  char info[40];
+  char info[48];
   snprintf(info, sizeof(info), T(S_INFO_FMT), berry,
            (unsigned long)(pet.ageMinutes / 1440));
   gfx->setTextColor(UI_INK);
@@ -1714,7 +1719,7 @@ void renderCardMedals() {
   int got = 0;
   for (int i = 0; i < MED_COUNT; i++)
     if (pet.hasMedal(1 << i)) got++;
-  char head[20];
+  char head[24];
   snprintf(head, sizeof(head), T(S_MEDALS_FMT), got, MED_COUNT);
   gfx->setTextColor(UI_INK);
   setSize(3);
@@ -1761,7 +1766,7 @@ void renderCardProgress() {
   gfx->fillRoundRect(bx, by, bw, bh, 6, UI_TRACK);
   int fw = (bw - 4) * into / MINUTES_PER_LEVEL;
   if (fw > 0) gfx->fillRoundRect(bx + 2, by + 2, fw, bh - 4, 5, UI_BAR_OK);
-  char nx[26];
+  char nx[32];
   snprintf(nx, sizeof(nx), T(S_NEXT_LVL_FMT), MINUTES_PER_LEVEL - into, pet.level() + 1);
   gfx->setTextColor(UI_INK);
   setSize(2);
@@ -1772,7 +1777,7 @@ void renderCardProgress() {
   gfx->setTextColor(UI_TRACK);
   setCur(centerX(T(S_EVO_LABEL), 2), 230);
   printT(T(S_EVO_LABEL));
-  char evoBuf[28];
+  char evoBuf[32];
   const char *evo;
   uint16_t evoCol = UI_INK;
   if (d.evolvesTo == 0) {

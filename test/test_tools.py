@@ -4,6 +4,7 @@
   python3 test/test_tools.py
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -184,6 +185,115 @@ class TestSketchSanity(unittest.TestCase):
         self.assertEqual(self.ino.count('{'), self.ino.count('}'),
                          'llaves descompensadas en TamaPoke.ino')
 
+
+
+class TestBuffersDeTexto(unittest.TestCase):
+    """Cada snprintf(buf, sizeof(buf), T(S_x), ...) cabe en su buffer en TODOS los idiomas.
+
+    Los buffers se dimensionaron cuando toda cadena era de un byte por
+    caracter. En UTF-8 un kana o una silaba hangul ocupan 3, y snprintf corta
+    en silencio: a veces se pierden cifras ("きろく 2" por "きろく 219") y a
+    veces corta a mitad de un caracter, que la fuente ya no sabe dibujar. No lo
+    avisa ni el compilador ni la pantalla, asi que se comprueba aqui con el
+    peor caso de cada argumento segun su tipo:
+
+      %u / %d  -> 5 cifras (todos los argumentos son de 16 bits o menos)
+      %lu      -> 10 cifras
+      %s       -> lo que declare ARGS_S; un %s sin declarar hace fallar el
+                  test, para que quien lo anada piense cuanto puede ocupar
+    """
+
+    ARGS_S = {  # que puede llegar por cada %s, en orden
+        'S_NAME_FMT': ('estrella', 'nombre_o_apodo'),
+        'S_RELEASE_FMT': ('nombre',),
+        'S_INFO_FMT': ('baya',),
+        'S_FAREWELL_BTN': ('nombre_o_apodo',),
+        'S_RUNAWAY_BTN': ('nombre_o_apodo',),
+    }
+    CIFRAS = {'u': 5, 'd': 5, 'lu': 10}
+    ESPEC = re.compile(r'%0?\d*(lu|u|d|s)')
+
+    @classmethod
+    def setUpClass(cls):
+        import test_i18n_formats as fmt
+        from dex_data import DEX
+        from dex_names import LOCAL_NAMES
+
+        def leer(nombre):
+            with open(os.path.join(ROOT, nombre), encoding='utf-8') as fh:
+                return fh.read()
+
+        cls.LANGS = fmt.LANGS
+        cuerpo = re.search(r'enum\s+StrId[^{]*\{(.*?)\}', leer('i18n.h'), re.S).group(1)
+        ids = re.findall(r'\b(S_[A-Z0-9_]+)\b', cuerpo)
+        filas = fmt.extract_table(leer('i18n.cpp'), 'STRINGS', len(cls.LANGS))
+        cls.LIT = {sid: [fila[k] for fila in filas] for k, sid in enumerate(ids)}
+        cls.ino = leer('TamaPoke.ino').splitlines()
+        cls.APODO = int(re.search(r'char\s+nick\[(\d+)\]', leer('pet.h')).group(1)) - 1
+        base = max(len(row[2].encode()) for row in DEX)
+        cls.NOMBRE = {}
+        for lang in cls.LANGS:
+            propios = [n[lang.lower()] for n in LOCAL_NAMES.values() if lang.lower() in n]
+            cls.NOMBRE[lang] = max([base] + [len(n.encode('utf-8')) for n in propios])
+
+    @staticmethod
+    def bytes_literal(literal):
+        """Bytes que ocupa en memoria un literal C escrito como en el fuente."""
+        cuerpo = literal[1:-1].encode('utf-8')
+        n = i = 0
+        while i < len(cuerpo):
+            if cuerpo[i] == 0x5C:  # barra invertida: \ooo octal, o \n \" \\ ...
+                j = i + 1
+                while j < len(cuerpo) and j < i + 4 and 0x30 <= cuerpo[j] <= 0x37:
+                    j += 1
+                i = j if j > i + 1 else i + 2
+            else:
+                i += 1
+            n += 1
+        return n
+
+    def peor_caso(self, sid, li):
+        lang, lit = self.LANGS[li], self.LIT[sid][li]
+        total = self.bytes_literal(lit) + 1  # + terminador
+        pendientes = list(self.ARGS_S.get(sid, ()))
+        for m in self.ESPEC.finditer(lit):
+            total -= len(m.group(0))
+            if m.group(1) != 's':
+                total += self.CIFRAS[m.group(1)]
+                continue
+            self.assertTrue(pendientes, f'{sid}: tiene un %s sin declarar en ARGS_S')
+            arg = pendientes.pop(0)
+            if arg == 'estrella':
+                total += 1
+            elif arg == 'nombre':
+                total += self.NOMBRE[lang]
+            elif arg == 'nombre_o_apodo':
+                total += max(self.NOMBRE[lang], self.APODO)
+            elif arg == 'baya':
+                total += max(self.bytes_literal(self.LIT[b][li]) for b in
+                             ('S_BERRY_UNK', 'S_BERRY_RED', 'S_BERRY_BLUE', 'S_BERRY_GREEN'))
+        return total
+
+    def test_cada_texto_formateado_cabe_en_su_buffer_en_todos_los_idiomas(self):
+        llamada = re.compile(r'snprintf\((\w+),\s*sizeof\(\1\),\s*T\((S_[A-Z0-9_]+)\)')
+        revisadas = 0
+        for n, linea in enumerate(self.ino, 1):
+            m = llamada.search(linea.split('//')[0])
+            if not m:
+                continue
+            var, sid = m.groups()
+            tam = next((int(d.group(1)) for k in range(n - 2, -1, -1)
+                        for d in [re.search(r'\bchar\s+' + var + r'\s*\[(\d+)\]', self.ino[k])]
+                        if d), None)
+            self.assertIsNotNone(tam, f'TamaPoke.ino:{n}: no encuentro la declaracion de {var}')
+            revisadas += 1
+            for li, lang in enumerate(self.LANGS):
+                with self.subTest(linea=n, id=sid, idioma=lang):
+                    peor = self.peor_caso(sid, li)
+                    self.assertLessEqual(
+                        peor, tam,
+                        f'TamaPoke.ino:{n}: {var}[{tam}] con {sid} en {lang} necesita {peor} bytes')
+        self.assertGreater(revisadas, 10, 'el patron de snprintf ya no encuentra las llamadas')
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

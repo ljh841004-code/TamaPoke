@@ -39,6 +39,23 @@ Updating from the [web installer](https://socquique.github.io/TamaPoke/web/)
   `strlen()*6*size`, the same expression as before, so the six Latin languages
   land on the same coordinate at the same size, checked at every length from 1
   to 25.
+- **Three Japanese texts were cut short**, all already in 1.15 and 1.16.
+  Their buffers were sized when every string was one byte per character, and
+  `snprintf` truncates without a trace. The minigame record read `きろく 2`
+  with a best of 219, since `char rec[12]` left room for one digit. The streak
+  milestone banner never fit at all: `"%u にちれんぞく！"` passes 20 bytes with a
+  single digit, and the cut landed mid-character. The streak line on the stat
+  card lost digits from 100 days on. The release dialog fixed above was the
+  fourth.
+- **Every formatted text is now checked against its buffer, in all eight
+  languages.** A new test in `test/test_tools.py` finds each
+  `snprintf(buf, sizeof(buf), T(...))` in the sketch, reads the size of `buf`,
+  and computes the worst case per language from the argument types (5 digits
+  for `%u`/`%d`, 10 for `%lu`, and a declared maximum for each `%s`). It is what
+  caught the three above, and it would have caught all four. To keep it passing
+  by type rather than by typical value, four more buffers get headroom they had
+  not yet needed: the medal count, the next-level line, the evolution countdown
+  and the profile line.
 - **`tools/test_i18n_formats.py` reads only the first `len(LANGS)` language
   blocks**, and `LANGS` listed six, so later rows were skipped without a
   warning. It now lists all eight, and the docstring notes that it needs to
