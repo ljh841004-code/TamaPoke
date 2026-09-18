@@ -881,7 +881,17 @@ int gFontAscent = 0;  // px del borde superior a la linea base, 0 = fuente clasi
 // desaparecian. Es la misma familia unifont: cabecera de metricas identica y
 // superconjunto estricto, comprobado glifo a glifo sobre los 226 codepoints
 // que usa el firmware. Cuesta 102 KB mas de flash y no mueve un pixel.
-#define CJK_FONT u8g2_font_unifont_t_japanese3
+// El coreano necesita una fuente con hangul, y CJK_FONT era un solo #define.
+// En vez de dar por hecho que un subconjunto sirve para las dos escrituras, la
+// fuente se elige por idioma. korean2 y no korean1: el coreano de aqui usa 296
+// silabas distintas y todas estan en KS X 1001, el conjunto de 2350 que es el
+// tamano medido para korean2; korean1 trae 478. La comprobacion mira la
+// pertenencia a KS X 1001, no recorre la tabla de la fuente, asi que se apoya
+// en que el conjunto de korean2 sea ese; el ASCII se da por presente.
+// Sin comprobar en placa: si CJK_SIZE_DIV 2 le sienta a korean2 igual que a la
+// japonesa. El ascenso si se mide en tiempo de ejecucion en applyLangFont().
+#define CJK_FONT_JA u8g2_font_unifont_t_japanese3
+#define CJK_FONT_KO u8g2_font_unifont_t_korean2
 #define CJK_SIZE_DIV 2
 
 void setSize(uint8_t n) {
@@ -910,8 +920,8 @@ void applyLangFont() {
     gFontAscent = 0;
     return;
   }
-  gfx->setFont(CJK_FONT);
-  gfx->setUTF8Print(true);     // las cadenas japonesas son UTF-8 multibyte
+  gfx->setFont((gLang == LANG_KO) ? CJK_FONT_KO : CJK_FONT_JA);
+  gfx->setUTF8Print(true);     // las cadenas CJK son UTF-8 multibyte
   int16_t x1, y1;
   uint16_t w, h;
   uint8_t antes = gTextSize;
@@ -1075,7 +1085,11 @@ void render() {
     } else {
       gfx->fillRoundRect(94, 168, 278, 152, 16, UI_WHITE);
       gfx->drawRoundRect(94, 168, 278, 152, 16, UI_INK);
-      char q[28];
+      // 48 y no 28: el buffer se dimensiono cuando toda cadena era de un byte
+      // por caracter. Con una fila UTF-8, "%s 놓아줄까요?" mas el nombre pasa
+      // de 28 y snprintf corta a mitad de una secuencia de 3 bytes, que la
+      // fuente ya no sabe dibujar.
+      char q[48];
       snprintf(q, sizeof(q), T(S_RELEASE_FMT), dexName(pet.speciesId));
       gfx->setTextColor(UI_INK);
       setSize(2);
@@ -1361,7 +1375,10 @@ void renderGame() {
   setSize(4);
   setCur(centerX(buf, 4), 30);
   printT(buf);
-  char rec[12];
+  // 24 y no 12: en japones "きろく %u" son 10 bytes antes de la cifra y el
+  // record se quedaba en su primer digito ("きろく 2" con 219). Las tallas de
+  // los buffers de texto las vigila TestBuffersDeTexto en test/test_tools.py.
+  char rec[24];
   snprintf(rec, sizeof(rec), T(S_REC_FMT), pet.gameHi);
   setSize(2);
   setCur(centerX(rec, 2), 76);
@@ -1471,9 +1488,9 @@ void drawClockBtn(int x, int y, const char *l) {
 // pildoras de idioma centradas en y; rellena la activa
 #define LANG_PILL_Y 296
 #define LANG_PILL_H 30
-#define LANG_PILL_X 336          // pildora de idioma (cicla los 6 al tocar)
+#define LANG_PILL_X 336          // pildora de idioma (cicla LANG_COUNT al tocar)
 #define LANG_PILL_W 96
-static const char *const LANG_CODES[LANG_COUNT] = { "ES", "EN", "FR", "DE", "IT", "PT", "JA" };
+static const char *const LANG_CODES[LANG_COUNT] = { "ES", "EN", "FR", "DE", "IT", "PT", "JA", "KO" };
 
 void renderClock() {
   gfx->fillScreen(RGB565_BLACK);
@@ -1581,7 +1598,9 @@ void drawStreakBadge() {
 // banner temporal: medalla nueva o hito de racha
 void drawCelebration() {
   const char *l1 = nullptr, *l2 = nullptr;
-  char buf[20];
+  // 32 y no 20: "%u にちれんぞく！" ya pasa de 20 con una sola cifra, y snprintf
+  // cortaba a mitad de un caracter de 3 bytes.
+  char buf[32];
   if (pet.showMedal()) {
     for (int i = 0; i < MED_COUNT; i++)
       if (pet.newMedal & (1 << i)) { l2 = medalName(i); break; }
@@ -1618,23 +1637,27 @@ void drawMedalBadge(int x, int y, int i) {
 void renderCardProfile() {
   const DexEntry &d = DEX_TBL[pet.speciesId];
   const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
-  char head[26];
+  char head[32];
   snprintf(head, sizeof(head), T(S_NAME_FMT), pet.shiny ? "*" : "", nm, pet.level());
   gfx->setTextColor(d.accent);
   // auto-encoge: a tamano 3 los nombres largos no caben en la franja estrecha de
-  // arriba de la pantalla redonda, asi que se cortaban por el borde
-  int hlen = strlen(head);
-  int hts = (hlen <= 11) ? 3 : 2;
+  // arriba de la pantalla redonda, asi que se cortaban por el borde. El ancho se
+  // MIDE con textW(): strlen() cuenta bytes, y en una fila UTF-8 no hay un byte
+  // por caracter ni todos miden lo mismo. Con la fuente clasica textW() devuelve
+  // strlen()*6*size, o sea exactamente la cuenta anterior: no mueve un pixel en
+  // los seis idiomas latinos (11 caracteres a tamano 3 son esos 198 px).
+  setSize(3);
+  int hts = (textW(head, 3) <= 198) ? 3 : 2;
   setSize(hts);
-  setCur(CX - hlen * (hts == 3 ? 9 : 6), hts == 3 ? 34 : 40);
+  setCur(centerX(head, hts), hts == 3 ? 34 : 40);
   printT(head);
   if (pet.nick[0]) {  // especie real bajo el apodo
     const char *sp = dexName(pet.speciesId);
-    gfx->setTextColor(UI_TRACK);
-    setSize(2);
-    setCur(CX - (strlen(sp) + 2) * 6, 64);
     char par[32];
     snprintf(par, sizeof(par), "(%s)", sp);
+    gfx->setTextColor(UI_TRACK);
+    setSize(2);
+    setCur(centerX(par, 2), 64);   // medido, no contado en bytes
     printT(par);
   }
 
@@ -1645,7 +1668,7 @@ void renderCardProfile() {
   int sx = 138, sy = 224;
   gfx->fillTriangle(sx + 8, sy, sx + 1, sy + 18, sx + 15, sy + 18, UI_BAR_BAD);
   gfx->fillTriangle(sx + 8, sy + 7, sx + 4, sy + 18, sx + 12, sy + 18, UI_BAR_WARN);
-  char rl[30];
+  char rl[40];  // en japones pierde cifras con 30 a partir de 100 dias
   snprintf(rl, sizeof(rl), T(S_STREAK_FMT), pet.streak, pet.bestStreak);
   gfx->setTextColor(UI_INK);
   setSize(2);
@@ -1658,7 +1681,7 @@ void renderCardProfile() {
                       : pet.lovesBerry(0) ? T(S_BERRY_RED)
                       : pet.lovesBerry(1) ? T(S_BERRY_BLUE)
                                           : T(S_BERRY_GREEN);
-  char info[40];
+  char info[48];
   snprintf(info, sizeof(info), T(S_INFO_FMT), berry,
            (unsigned long)(pet.ageMinutes / 1440));
   gfx->setTextColor(UI_INK);
@@ -1696,7 +1719,7 @@ void renderCardMedals() {
   int got = 0;
   for (int i = 0; i < MED_COUNT; i++)
     if (pet.hasMedal(1 << i)) got++;
-  char head[20];
+  char head[24];
   snprintf(head, sizeof(head), T(S_MEDALS_FMT), got, MED_COUNT);
   gfx->setTextColor(UI_INK);
   setSize(3);
@@ -1743,7 +1766,7 @@ void renderCardProgress() {
   gfx->fillRoundRect(bx, by, bw, bh, 6, UI_TRACK);
   int fw = (bw - 4) * into / MINUTES_PER_LEVEL;
   if (fw > 0) gfx->fillRoundRect(bx + 2, by + 2, fw, bh - 4, 5, UI_BAR_OK);
-  char nx[26];
+  char nx[32];
   snprintf(nx, sizeof(nx), T(S_NEXT_LVL_FMT), MINUTES_PER_LEVEL - into, pet.level() + 1);
   gfx->setTextColor(UI_INK);
   setSize(2);
@@ -1754,7 +1777,7 @@ void renderCardProgress() {
   gfx->setTextColor(UI_TRACK);
   setCur(centerX(T(S_EVO_LABEL), 2), 230);
   printT(T(S_EVO_LABEL));
-  char evoBuf[28];
+  char evoBuf[32];
   const char *evo;
   uint16_t evoCol = UI_INK;
   if (d.evolvesTo == 0) {
@@ -1899,14 +1922,16 @@ void renderGallery() {
     gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
     const DexEntry &d = DEX_TBL[galleryDetail];
     bool reg = pet.isRegistered(galleryDetail);
-    char head[24];
+    char head[32];
     snprintf(head, sizeof(head), "N.%03d %s%s", galleryDetail,
              pet.isShinyRegistered(galleryDetail) ? "*" : "", reg ? dexName(galleryDetail) : "???");
     gfx->setTextColor(reg ? d.accent : UI_INK);
-    int glen = strlen(head);
-    int gts = (glen <= 13) ? 3 : 2;  // auto-encoge nombres largos (no caben a t3)
+    // auto-encoge nombres largos (no caben a t3), midiendo en vez de contar
+    // bytes; 13 caracteres a tamano 3 son los 234 px de antes.
+    setSize(3);
+    int gts = (textW(head, 3) <= 234) ? 3 : 2;
     setSize(gts);
-    setCur(CX - glen * (gts == 3 ? 9 : 6), gts == 3 ? 56 : 60);
+    setCur(centerX(head, gts), gts == 3 ? 56 : 60);
     printT(head);
     if (galleryPmd.loaded) {
       // animado y a color si esta registrado; silueta estatica si no (estilo "?")

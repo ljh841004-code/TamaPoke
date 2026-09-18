@@ -238,6 +238,40 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
 
     "スプライトなし", "SDにいれてください",
   },
+  // ---------------- KO ----------------
+  // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
+  // el coreano natural los colocaria de otra manera (p. ej. S_NEXT_LVL_FMT):
+  // T(id) se rellena con varargs en un orden fijo en cada llamada, asi que
+  // reordenar %u/%s aqui sin tocar el punto de llamada intercambiaria en
+  // silencio que valor cae en que hueco.
+  {
+    "진화 중!", "냠냠!", "마음에 들어해요!", "배고파요!", "목욕이 필요해요!",
+    "지쳤어요...", "슬퍼해요...", "조금 통통해요...", "이로치예요!!", "행복해요",
+    "고마워요! 안녕", "가출했어요...", "잘 가! 손을 흔들며...",
+    "알", "전설의 알!?", "희귀한 알!", "알을 톡톡...", "움직여요!", "거의 다 됐어요!",
+    "도감 %u/151",
+    "%s%s Lv.%u",
+    "%s 놓아줄까요?", "예", "아니오",
+    "%u회 명중", "힘 +%u", "신기록!", "최고: %u", "빠르게!",
+    "점수: %u", "정말 즐거워요!", "+행복",
+    "시간 설정", "시", "분", "위로 스와이프: 취소", "언어",
+    "메달!", "최고예요!", "%u일 연속!",
+    "연속 %u  최고 %u", "유대감", "열매 ???", "빨간 열매", "파란 열매", "초록 열매",
+    "%s   나이 %lud", "이름 탭: 이름변경",
+    "배틀", "공격", "방어", "속도", "무게", "힘 훈련",
+    "메달 %d/%d", "탭: 뒤로",
+    "이름:", "탭하면 뒤로",
+    "포만", "기분", "기력", "청결",
+    "최고 %u",
+    "진행도", "Lv.%u", "%u분 후 Lv.%u", "진화", "최종 형태",
+    "진화 준비 완료!", "진화하려면 전부 40 이상",
+    "%u레벨 이후에 진화", "실수: %u",
+    "소리 켬", "소리 끔",
+    "진화!", "%s가 할 말이 있대요...", "%s가 버려진 기분이래요...",
+    "진화할까요?", "형태 유지", "작별할까요?", "작별", "계속 함께",
+    "스타터를 선택하세요",
+    "스프라이트 없음", "SD 카드에 넣어주세요",
+  },
 };
 
 // Nombres de medalla en sus tres longitudes [idioma][medalla].
@@ -249,6 +283,7 @@ static const char *const MED_NAME[LANG_COUNT][MED_COUNT] = {
   { "Lv.10", "Lv.25", "Lv.50", "BACCA", "SERIE 7", "LEGAME", "FORMA MAX", "IN FORMA" },
   { "Niv.10", "Niv.25", "Niv.50", "BAGA", "SEQ 7", "LACO", "FORMA MAX", "EM FORMA" },
   { "Lv.10", "Lv.25", "Lv.50", "きのみ", "7にち", "なかよし", "さいしゅう", "げんき" },
+  { "Lv.10", "Lv.25", "Lv.50", "열매", "연속 7일", "유대", "최고 컨디션", "건강함" },
 };
 static const char *const MED_LBL[LANG_COUNT][MED_COUNT] = {
   { "Nv10", "Nv25", "Nv50", "BAYA", "7DIAS", "VINC", "TOPE", "SANO" },
@@ -258,6 +293,7 @@ static const char *const MED_LBL[LANG_COUNT][MED_COUNT] = {
   { "Lv10", "Lv25", "Lv50", "BACCA", "7GG", "LEG", "MAX", "FIT" },
   { "Niv10", "Niv25", "Niv50", "BAGA", "7DIAS", "LACO", "MAX", "FIT" },
   { "Lv10", "Lv25", "Lv50", "きのみ", "7にち", "なかよし", "しんか", "げんき" },
+  { "Lv10", "Lv25", "Lv50", "열매", "7일", "유대", "최고", "건강" },
 };
 static const char *const MED_DSC[LANG_COUNT][MED_COUNT] = {
   { "NIVEL 10", "NIVEL 25", "NIVEL 50", "BAYA HALLADA",
@@ -274,6 +310,8 @@ static const char *const MED_DSC[LANG_COUNT][MED_COUNT] = {
     "SEQ 7 DIAS", "LACO MAX", "FORMA FINAL", "EM FORMA" },
   { "レベル 10", "レベル 25", "レベル 50", "きのみ はっけん",
     "7にち れんぞく", "なかよし MAX", "さいしゅうしんか", "げんきいっぱい" },
+  { "레벨 10", "레벨 25", "레벨 50", "열매 발견",
+    "연속 7일", "유대감 최대", "최종 진화", "건강함" },
 };
 
 const char *T(StrId id) { return STRINGS[gLang][id]; }

@@ -14,10 +14,22 @@ import time
 import unicodedata
 
 LANGS = ('fr', 'de')
-LANGS_UTF8 = ('ja-hrkt',)  # CJK: van tal cual en UTF-8, no en octal ASCII
+LANGS_UTF8 = ('ja-hrkt', 'ko')  # CJK: van tal cual en UTF-8, no en octal ASCII
+
+# Convencion de genero por idioma: ni la tabla CP437 ni ningun subconjunto
+# unifont de U8g2 traen ♀/♂, asi que cada idioma elige con que los sustituye.
+# El camino latino usa F/M desde siempre. El coreano usa 암/수
+# ("hembra"/"macho"), que se leen como palabra y no como una letra suelta, y
+# van SEPARADOS POR UN ESPACIO: 니드런 암. El espacio va dentro del reemplazo
+# porque lo que se sustituye es solo el simbolo. Las dos silabas estan en
+# KS X 1001, y ya aparecen en la tabla (암나이트, 암스타, 홍수몬). El nombre son
+# cuatro silabas mas un espacio, frente a entradas de cinco como 깨비드릴조, asi
+# que no es el mas ancho de la tabla.
+GENERO = {'ko': (' 암', ' 수')}
+GENERO_DEF = ('F', 'M')
 
 
-def sin_genero(s):
+def sin_genero(s, lang=None):
     """Nidoran hembra/macho: ♀ y ♂ no existen en ninguna fuente que usemos.
 
     Ni la tabla CP437 de glcdfont.h los tiene en una posicion imprimible, ni
@@ -25,7 +37,8 @@ def sin_genero(s):
     Y Arduino_GFX no dibuja nada cuando le falta el glifo, ni siquiera avanza
     el cursor, asi que sin esto los dos Nidoran salen con el mismo nombre.
     """
-    return s.replace('♀', 'F').replace('♂', 'M')
+    hembra, macho = GENERO.get(lang, GENERO_DEF)
+    return s.replace('♀', hembra).replace('♂', macho)
 
 
 def ascii_up(s):
@@ -63,7 +76,8 @@ def main():
             if v:
                 # 'ja-hrkt' -> 'ja'; el UTF-8 se respeta salvo ♀/♂, que la
                 # fuente no tiene (ver sin_genero)
-                dif[lg.split('-')[0]] = sin_genero(v)
+                corto = lg.split('-')[0]
+                dif[corto] = sin_genero(v, corto)
         if dif:
             out[num] = dif
         if num % 25 == 0:
@@ -75,8 +89,8 @@ def main():
         f.write('# -*- coding: utf-8 -*-\n')
         f.write('"""GENERADO por tools/gen_names.py desde PokeAPI - no editar a mano.\n\n')
         f.write('Nombres oficiales por idioma. FR y DE van en mayusculas y sin\n')
-        f.write('acentos (fuente CP437, un byte por caracter); JA va en katakana\n')
-        f.write('UTF-8 tal cual, porque se pinta con una fuente U8g2.\n"""\n\n')
+        f.write('acentos (fuente CP437, un byte por caracter); JA y KO van en\n')
+        f.write('UTF-8 tal cual, porque se pintan con una fuente U8g2.\n"""\n\n')
         f.write('LOCAL_NAMES = {\n')
         for num in sorted(out):
             f.write(f'    {num}: {out[num]!r},\n')

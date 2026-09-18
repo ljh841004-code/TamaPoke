@@ -20,7 +20,11 @@ source (no build step needed) and checks:
     language. Too many *is* a compile error, so this mainly guards
     the silent case, but checks the count outright either way.
   - for every StrId, the sequence of %-format specifiers is identical
-    across all 6 languages.
+    across all languages.
+
+LANGS must list every row of the tables: extract_table() only pulls
+the first len(LANGS) blocks, so a language missing from this list is
+silently left unchecked.
 
   python3 tools/test_i18n_formats.py
 """
@@ -31,7 +35,7 @@ import sys
 HERE = os.path.dirname(__file__)
 I18N_CPP = os.path.join(HERE, '..', 'i18n.cpp')
 
-LANGS = ['ES', 'EN', 'FR', 'DE', 'IT', 'PT']
+LANGS = ['ES', 'EN', 'FR', 'DE', 'IT', 'PT', 'JA', 'KO']
 STRING_RE = re.compile(r'"(?:[^"\\]|\\.)*"')
 SPEC_RE = re.compile(
     r'%[-+ #0]*[\d.]*(?:l|h|ll|hh)?[diouxXeEfFgGaAcspn%]')

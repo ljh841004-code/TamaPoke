@@ -6,6 +6,65 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the [web installer](https://socquique.github.io/TamaPoke/web/)
 **without** ticking "Erase device" keeps your Pokémon.
 
+## [Unreleased]
+
+### Added
+
+- **Korean, the eighth language.** Full UI (85 strings), the three medal name
+  lengths and the 151 gen-1 species names, on the same `STRINGS[LANG][StrId]`
+  structure as every other language. The text measurement centralised in 1.15
+  carries almost all of it; the four byte-based spots a UTF-8 row turned up are
+  listed under Fixed.
+- `u8g2_font_unifont_t_korean2` for Hangul, selected per language in
+  `applyLangFont()` rather than through a single `CJK_FONT`. The Korean added
+  uses 296 distinct syllables, all of them in KS X 1001, the 2350-syllable set
+  that matches the size of `korean2`; `korean1` holds 478. Coverage was checked
+  as membership in KS X 1001 rather than by walking the font table, and the
+  ASCII in the strings is assumed present. Not yet checked on the board:
+  whether `CJK_SIZE_DIV` suits `korean2` as it does the Japanese subset.
+
+### Fixed
+
+- **The release dialog could cut a Korean name mid-character.**
+  `renderRelease()` built into `char q[28]`. `"%s 놓아줄까요?"` is 17 bytes
+  before the name, so names of four syllables or more (34 of the 151) did not
+  fit, and `snprintf` truncated inside a 3-byte sequence, leaving a tail the
+  font cannot decode. Now 48; the longest case needs 33 bytes including the
+  terminator.
+- **Three places sized and positioned text with `strlen()`**, which counts
+  bytes: the stat-card header, the species name under a nickname, and the
+  gallery detail header. On a UTF-8 row the centring offset and the auto-shrink
+  threshold worked off a byte count rather than a width. All three now go
+  through `textW()` / `centerX()`. With the classic font `textW()` returns
+  `strlen()*6*size`, the same expression as before, so the six Latin languages
+  land on the same coordinate at the same size, checked at every length from 1
+  to 25.
+- **Three Japanese texts were cut short**, all already in 1.15 and 1.16.
+  Their buffers were sized when every string was one byte per character, and
+  `snprintf` truncates without a trace. The minigame record read `きろく 2`
+  with a best of 219, since `char rec[12]` left room for one digit. The streak
+  milestone banner never fit at all: `"%u にちれんぞく！"` passes 20 bytes with a
+  single digit, and the cut landed mid-character. The streak line on the stat
+  card lost digits from 100 days on. The release dialog fixed above was the
+  fourth.
+- **Every formatted text is now checked against its buffer, in all eight
+  languages.** A new test in `test/test_tools.py` finds each
+  `snprintf(buf, sizeof(buf), T(...))` in the sketch, reads the size of `buf`,
+  and computes the worst case per language from the argument types (5 digits
+  for `%u`/`%d`, 10 for `%lu`, and a declared maximum for each `%s`). It is what
+  caught the three above, and it would have caught all four. To keep it passing
+  by type rather than by typical value, four more buffers get headroom they had
+  not yet needed: the medal count, the next-level line, the evolution countdown
+  and the profile line.
+- **`tools/test_i18n_formats.py` reads only the first `len(LANGS)` language
+  blocks**, and `LANGS` listed six, so later rows were skipped without a
+  warning. It now lists all eight, and the docstring notes that it needs to
+  stay complete.
+- **`test/test_i18n.cpp`'s `LANG_NAME[LANG_COUNT]` had six entries**, fewer
+  than `LANG_COUNT`, so every entry past the sixth was null. Four of the tests
+  build a label from `LANG_NAME[lang]` on every iteration, not only when a
+  check fails, so each run passed a null pointer to `%s`. Now lists all eight.
+
 ## [1.16] - 2026-09-09
 
 ### Fixed

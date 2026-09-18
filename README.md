@@ -6,7 +6,7 @@
 ![Firmware](https://img.shields.io/badge/firmware-v1.16-8A2BE2)
 [![CI](https://github.com/socquique/TamaPoke/actions/workflows/ci.yml/badge.svg)](https://github.com/socquique/TamaPoke/actions/workflows/ci.yml)
 ![Code](https://img.shields.io/badge/code-MIT-blue)
-![Languages](https://img.shields.io/badge/languages-7-FFCB05)
+![Languages](https://img.shields.io/badge/languages-8-FFCB05)
 [![Stars](https://img.shields.io/github/stars/socquique/TamaPoke?style=flat&logo=github&color=yellow)](https://github.com/socquique/TamaPoke/stargazers)
 
 A gen-1-Pokémon-inspired tamagotchi for the
@@ -28,7 +28,7 @@ behind a decision dialog), bred-Pokédex with gallery, battle stats (genes +
 training), retention hooks (streak / bond / medals / name), biome + real-time
 backgrounds, ball minigame, training bag, animated bath, RTC with offline
 progression, battery (AXP2101) and PWR button, anti-burn-in dimming,
-**sound (ES8311)**, **7 UI languages (English default)**, **starter choice on
+**sound (ES8311)**, **8 UI languages (English default)**, **starter choice on
 first run**, and a one-click **web installer**.
 
 Pending: wild encounters / battle (designed, not implemented), 3D case, soak
@@ -142,7 +142,7 @@ SPEED ← minigame, DEFENSE ← 12 h of unbroken good care). *(Battles: on the r
 | GFX Library for Arduino (`Arduino_GFX`) | moononournation | CO5300 over QSPI + framebuffer in PSRAM |
 | SensorLib | Lewis He | CST9217 touch + PCF85063 RTC |
 | XPowersLib | Lewis He | AXP2101 PMU (battery, brightness, PWR button) |
-| U8g2 | olikraus | CJK glyphs (`unifont_t_japanese3`, the only Japanese subset that also carries `！？。、「」`); only the font data is used, not its display driver |
+| U8g2 | olikraus | CJK glyphs (`unifont_t_japanese3`, the only Japanese subset that also carries `！？。、「」`; `unifont_t_korean2` for Hangul, 2350 syllables against korean1's 478); only the font data is used, not its display driver |
 | ESP_I2S (bundled in the ESP32 core) | Espressif | I2S to the ES8311 codec |
 
 ## IDE setup / build
@@ -297,13 +297,14 @@ The egg rolls rarity over the ~79 base forms (47 common / 27 rare / 5 legendary)
 a farewell and punished by a runaway. Legendaries only with 25+ registered.
 **Shiny** 1/48 (better with streak/bond/farewell).
 
-**Languages:** the UI ships in 7 languages — English (default), Spanish, French,
-German, Italian, Portuguese and Japanese — switchable from the settings screen
-(swipe down).
-**Pokémon names are localized too**: French, German and Japanese show the
-official names (Bulbizarre, Bisasam, フシギダネ...). Spanish, Italian and
-Portuguese use the English ones, which is what those regions officially use for
-gen 1.
+**Languages:** the UI ships in 8 languages — English (default), Spanish, French,
+German, Italian, Portuguese, Japanese and Korean — switchable from the settings
+screen (swipe down).
+**Pokémon names are localized too**: French, German, Japanese and Korean show
+the official names (Bulbizarre, Bisasam, フシギダネ, 이상해씨...). Spanish, Italian
+and Portuguese use the English ones, which is what those regions officially use
+for gen 1. Nidoran♀/♂ read ニドランF/M in Japanese and 니드런 암/수 in Korean: no
+U8g2 unifont subset carries ♀ or ♂, so each language picks its own substitute.
 
 ## Backgrounds: biome + real time
 
@@ -318,7 +319,7 @@ beach, forest, volcano, mountain, snow). Sleeping forces night.
 - `sdmon.h` / `sdmon.cpp` — TPK1 (animated) and TPK2 (PMD) sprites + thumbnails, and file reception over USB (PUT/LS)
 - `rtcbat.h` / `rtcbat.cpp` — PCF85063 RTC + AXP2101 PMU (battery, brightness, PWR button)
 - `audio.h` / `audio.cpp` — ES8311 + I2S + Game-Boy-style tone synth (non-blocking task)
-- `i18n.h` / `i18n.cpp` — the 7-language string tables
+- `i18n.h` / `i18n.cpp` — the 8-language string tables
 - `dex.h` — GENERATED (`gen_dex.py`): the 151 table
 - `species.h` — GENERATED (`sprites.py`): fallback sprites, UI icons, colours
 - `pin_config.h` — the board's official pins
