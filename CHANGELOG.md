@@ -6,7 +6,7 @@ bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 Updating from the [web installer](https://socquique.github.io/TamaPoke/web/)
 **without** ticking "Erase device" keeps your Pokémon.
 
-## [Unreleased]
+## [1.17] - 2026-09-18
 
 ### Added
 
