@@ -35,6 +35,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Evolucionar?", "Mantener forma", "Despedirse?", "Despedirse", "Quedaros juntos",
     "Elige tu inicial",
     "Sin sprites", "C\240rgalos en la SD",
+    "ATACAR", "FUERTE", "ESQUIVAR", "HUIR", "VICTORIA!", "DERROTA", "A salvo!", "Elige una accion", "Fallo!", "Contraataque listo", "No puedes huir!",
   },
   // ---------------- EN ----------------
   {
@@ -64,6 +65,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Evolve?", "Keep form", "Say goodbye?", "Goodbye", "Stay together",
     "Choose your starter",
     "No sprites", "Load them onto the SD",
+    "ATTACK", "HEAVY", "DODGE", "FLEE", "YOU WIN!", "YOU LOSE", "Escaped!", "Choose an action", "Miss!", "Counter ready", "Escape failed!",
   },
   // ---------------- FR ----------------
   {
@@ -93,6 +95,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "\220voluer?", "Garder forme", "Dire adieu?", "Adieu", "Rester ensemble",
     "Choisis ton starter",
     "Pas de sprites", "Charge-les sur la SD",
+    "ATTAQUE", "FORTE", "ESQUIVE", "FUIR", "VICTOIRE!", "DEFAITE", "En securite!", "Choisis une action", "Rate!", "Contre pret", "Fuite ratee!",
   },
   // ---------------- DE ----------------
   // El aleman si lleva dieresis: la fuente 5x7 del firmware es una tabla CP437
@@ -127,6 +130,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Entwickeln?", "Form behalten", "Abschied?", "Leb wohl", "Zusammen bleiben",
     "W\204hle deinen Starter",
     "Keine Sprites", "Auf die SD laden",
+    "ANGRIFF", "STARK", "AUSWEICHEN", "FLUCHT", "GEWONNEN!", "VERLOREN", "Entkommen!", "Aktion waehlen", "Verfehlt!", "Konter bereit", "Flucht gescheitert!",
   },
   // ---------------- IT ----------------
   {
@@ -156,6 +160,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Evolvere?", "Mantieni forma", "Salutare?", "Addio", "Restare insieme",
     "Scegli l'iniziale",
     "Senza sprite", "Caricali sulla SD",
+    "ATTACCO", "POTENTE", "SCHIVA", "FUGA", "VITTORIA!", "SCONFITTA", "In salvo!", "Scegli una mossa", "Mancato!", "Contrattacco pronto", "Fuga fallita!",
   },
   // ---------------- PT ----------------
   {
@@ -185,6 +190,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Evoluir?", "Manter forma", "Despedir?", "Adeus", "Ficar juntos",
     "Escolhe o inicial",
     "Sem sprites", "Carrega-os no SD",
+    "ATAQUE", "FORTE", "DESVIAR", "FUGIR", "VITORIA!", "DERROTA", "Escapou!", "Escolhe uma acao", "Falhou!", "Contra-ataque pronto", "Fuga falhou!",
   },
   // ---------------- JA ----------------
   {
@@ -237,6 +243,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "さいしょのポケモンをえらぶ",
 
     "スプライトなし", "SDにいれてください",
+    "こうげき", "きょうだ", "よける", "にげる", "かち！", "まけ", "にげた！", "こうどうをえらぶ", "はずれ！", "はんげきじゅんび", "にげられない！",
   },
   // ---------------- KO ----------------
   // Los especificadores van en el MISMO ORDEN que en la fila inglesa aunque
@@ -271,6 +278,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "진화할까요?", "형태 유지", "작별할까요?", "작별", "계속 함께",
     "스타터를 선택하세요",
     "스프라이트 없음", "SD 카드에 넣어주세요",
+    "공격", "강공격", "회피", "도망", "승리!", "패배", "도망 성공!", "행동을 선택하세요", "빗나감!", "반격 준비 완료", "도망 실패!",
   },
 };
 

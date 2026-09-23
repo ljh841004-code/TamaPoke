@@ -18,6 +18,7 @@
 #include "species.h"
 #include "dex.h"
 #include "pet.h"
+#include "battle.h"
 #include "sdmon.h"
 #include "rtcbat.h"
 #include "i18n.h"
@@ -40,6 +41,12 @@ TouchDrvCST92xx touch;
 bool gCjkFont = false;
 #define TOUCH_ADDR 0x5A  // CST9217
 Pet pet;
+Battle battle;
+PmdMon wildPmd;  // owned only while a battle is open
+void closeBattle();
+void startBattle();
+void battleTap(int16_t x, int16_t y);
+void renderBattle();
 
 // sprite animado de la SD para la especie actual (si existe el archivo)
 SdMon mon;          // sprite B/N (respaldo y minijuego si no hay PMD)
@@ -282,6 +289,16 @@ void loop() {
   handleTouch();
   handleSerial();
   ensureMon();
+  if (battle.active()) {
+    // Serial commands / natural lifecycle changes must not leave an orphan scene.
+    if (!Battle::canStart(pet) || pet.speciesId != battle.player.dex) closeBattle();
+    else {
+      // Touch/SD loading above can advance millis() beyond the loop's old 'now'.
+      uint32_t battleNow = millis();
+      battle.update(battleNow);
+      if (battle.finished() && (uint32_t)(battleNow - battle.eventAt) >= 3000) closeBattle();
+    }
+  }
 
   // pulsacion corta del PWR: pantalla on/off
   static uint32_t lastPwr = 0;
@@ -519,7 +536,7 @@ void handleTouch() {
     tXl = x;
     tYl = y;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
-    if (!holdFired && !swallowGesture && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && millis() - tStart > 3000 &&
+    if (!holdFired && !swallowGesture && !battle.active() && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) &&
         !pet.isEgg() && !confirmUntil && !pet.ceremony) {
       confirmUntil = millis() + 10000;
@@ -542,6 +559,7 @@ void handleTouch() {
 void openClock();  // prototipo
 
 void onSwipeV(int dir) {
+  if (battle.active()) return;
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
   if (gameOpen || galleryOpen || kbOpen || sackOpen || pet.ceremony) return;
   if (clockOpen) { clockOpen = false; return; }
@@ -559,6 +577,7 @@ void onSwipeV(int dir) {
 
 // deslizar: dir +1 = hacia la derecha
 void onSwipe(int dir) {
+  if (battle.active()) return;
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
   if (gameOpen || kbOpen || clockOpen) return;
   if (cardOpen) {  // dentro de la ficha: cambiar entre las 4 paginas
@@ -595,6 +614,7 @@ void onSwipe(int dir) {
 }
 
 void onTap(int16_t x, int16_t y) {
+  if (battle.active()) { battleTap(x, y); return; }
   // Serial.printf("TOUCH %d %d\n", x, y);  // diagnostico (silenciado: satura el log)
   if (pet.awaitingStarter()) {  // primera partida: elegir inicial
     for (int i = 0; i < 3; i++) {
@@ -622,7 +642,9 @@ void onTap(int16_t x, int16_t y) {
   if (pet.ceremony) return;  // durante la despedida no hay botones
   if (cardOpen) {
     if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
-    else if (cardPage == 1 && y >= 300 && y <= 340 && x >= 96 && x <= 370) {
+    else if (cardPage == 1 && y >= 328 && y <= 364 && x >= 96 && x <= 370) {
+      startBattle();
+    } else if (cardPage == 1 && y >= 280 && y <= 320 && x >= 96 && x <= 370) {
       cardOpen = false;            // boton ENTRENAR FUERZA
       startSack();
     } else {
@@ -970,6 +992,7 @@ void printT(const char *s) {
 }
 
 void render() {
+  if (battle.active()) { renderBattle(); return; }
   if (pet.awaitingStarter()) {  // primera partida: elegir inicial (prioridad total)
     renderStarterSelect();
     return;
@@ -1701,17 +1724,139 @@ void renderCardStats() {
   setCur(centerX(T(S_BATTLE), 3), 48);
   printT(T(S_BATTLE));
 
-  drawCardStat(118, T(S_STAT_ATK), pet.atkStat(), 260, UI_BAR_BAD);
-  drawCardStat(160, T(S_STAT_DEF), pet.defStat(), 260, 0x4C98);
-  drawCardStat(202, T(S_STAT_SPE), pet.speStat(), 260, UI_BAR_WARN);
-  drawCardStat(244, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
+  drawCardStat(98, T(S_STAT_ATK), pet.atkStat(), 260, UI_BAR_BAD);
+  drawCardStat(140, T(S_STAT_DEF), pet.defStat(), 260, 0x4C98);
+  drawCardStat(182, T(S_STAT_SPE), pet.speStat(), 260, UI_BAR_WARN);
+  drawCardStat(224, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
 
   // boton: saco de entrenamiento de fuerza
-  gfx->fillRoundRect(96, 300, 274, 40, 12, UI_BAR_BAD);
+  gfx->fillRoundRect(96, 280, 274, 40, 12, UI_BAR_BAD);
   gfx->setTextColor(UI_BG_DAY);
   setSize(2);
-  setCur(centerX(T(S_TRAIN_STR), 2), 311);
+  setCur(centerX(T(S_TRAIN_STR), 2), 291);
   printT(T(S_TRAIN_STR));
+  gfx->fillRoundRect(96, 328, 274, 36, 12, Battle::canStart(pet) ? UI_INK : 0x8410);
+  setCur(centerX(T(S_BATTLE), 2), 338);
+  printT(T(S_BATTLE));
+}
+
+// ---------- wild battle V1 (all state and HP are transient) ----------
+void closeBattle() {
+  wildPmd.unload();
+  battle.end();
+  cardOpen = !pet.isEgg() && !pet.ceremony && !pet.evolving();
+  cardPage = 1;
+}
+
+void startBattle() {
+  if (!battle.begin(pet)) { sfxPlay(SFX_DENY); return; }
+  wildPmd.unload();
+  wildPmd.load(battle.wild.dex);  // failure is safe: render a placeholder
+  cardOpen = false;
+  sfxPlay(SFX_TAP);
+}
+
+void battleTap(int16_t x, int16_t y) {
+  if (battle.finished()) {
+    // Do not let a rapid second tap skip the final hit/result.
+    if ((uint32_t)(millis() - battle.eventAt) >= Battle::STEP_MS) closeBattle();
+    return;
+  }
+  if (battle.phase != BATTLE_READY || x < 86 || x >= 380) return;
+  int row = y >= 310 && y < 348 ? 0 : (y >= 354 && y < 392 ? 1 : -1);
+  if (row < 0 || (x >= 228 && x < 238)) return;
+  BattleAction action = (BattleAction)(row * 2 + (x >= 238 ? 1 : 0));
+  if (battle.choose(action, millis())) sfxPlay(SFX_TAP);
+}
+
+void drawBattleMon(PmdMon &m, int cx, uint8_t act, uint32_t elapsed) {
+  if (!m.has(act)) act = PMD_IDLE;
+  if (!m.has(act)) {
+    // SD absent, missing action, or allocation failure: battle remains playable.
+    gfx->fillCircle(cx, 190, 24, UI_BAR_BAD);
+    gfx->fillRect(cx - 24, 190, 49, 3, UI_INK);
+    gfx->fillCircle(cx, 191, 8, UI_WHITE);
+    return;
+  }
+  const PmdAct &a = m.acts[act];
+  uint8_t frame = pmdFrameAt(a, elapsed, act == PMD_IDLE);
+  const uint8_t *pixels = a.data + (uint32_t)frame * a.w * a.h;
+  // Fit even large PMD attack sheets into each fighter's 140x140 viewport.
+  int largest = max((int)a.w, (int)a.h);
+  int span = min(140, largest * 2);
+  int w = max(1, (int)a.w * span / largest);
+  int h = max(1, (int)a.h * span / largest);
+  for (int y = 0; y < h; ++y) {
+    for (int x = 0; x < w; ++x) {
+      uint8_t idx = pixels[(y * a.h / h) * a.w + x * a.w / w];
+      if (idx != 0xFF) gfx->drawPixel(cx - w / 2 + x, 242 - h + y, m.pal[idx]);
+    }
+  }
+}
+
+void drawBattleHp(const BattleFighter &fighter, int y) {
+  char label[56];
+  snprintf(label, sizeof(label), "%s Lv.%u", dexName(fighter.dex), (unsigned)fighter.level);
+  setSize(2);
+  gfx->setTextColor(UI_INK);
+  setCur(centerX(label, 2), y);
+  printT(label);
+  gfx->fillRoundRect(110, y + 21, 150, 10, 4, 0xC618);
+  int fill = (uint32_t)150 * fighter.hp / fighter.maxHp;
+  if (fill) gfx->fillRoundRect(110, y + 21, fill, 10, 4, UI_BAR_OK);
+  snprintf(label, sizeof(label), "%u/%u", (unsigned)fighter.hp, (unsigned)fighter.maxHp);
+  setSize(1);
+  setCur(270, y + 22);
+  printT(label);
+}
+
+void renderBattle() {
+  gfx->fillScreen(UI_BG_DAY);
+  uint32_t elapsed = millis() - battle.eventAt;
+  bool animating = battle.event != BATTLE_NONE && elapsed < Battle::STEP_MS;
+  uint8_t playerAct = PMD_IDLE, wildAct = PMD_IDLE;
+  if (animating && (battle.event == BATTLE_HIT || battle.event == BATTLE_MISS || battle.event == BATTLE_EVADED)) {
+    if (battle.playerActing) {
+      playerAct = PMD_ATTACK;
+      if (battle.event == BATTLE_HIT) wildAct = PMD_HURT;
+    } else {
+      wildAct = PMD_ATTACK;
+      if (battle.event == BATTLE_HIT) playerAct = PMD_HURT;
+    }
+  }
+  drawBattleMon(pmd, 148, playerAct, playerAct == PMD_IDLE ? millis() : elapsed);
+  drawBattleMon(wildPmd, 318, wildAct, wildAct == PMD_IDLE ? millis() : elapsed);
+  drawBattleHp(battle.wild, 52);
+  drawBattleHp(battle.player, 262);
+  if (battle.damage && animating) {
+    char label[16];
+    snprintf(label, sizeof(label), "-%u", (unsigned)battle.damage);
+    gfx->setTextColor(UI_BAR_BAD);
+    setSize(2);
+    setCur(battle.playerActing ? 290 : 120, 242);
+    printT(label);
+  }
+  const StrId labels[4] = { S_BAT_ATTACK, S_BAT_HEAVY, S_BAT_DODGE, S_BAT_FLEE };
+  for (int i = 0; i < 4; ++i) {
+    int x = i % 2 ? 238 : 86, y = i / 2 ? 354 : 310;
+    gfx->fillRoundRect(x, y, 142, 38, 9, battle.phase == BATTLE_READY ? UI_INK : 0x8410);
+    gfx->setTextColor(UI_WHITE);
+    setSize(2);
+    setCur(x + (142 - textW(T(labels[i]), 2)) / 2, y + 10);
+    printT(T(labels[i]));
+  }
+  StrId status = battle.phase == BATTLE_TURN ? S_BATTLE : S_BAT_CHOOSE;
+  if (battle.phase == BATTLE_WON) status = S_BAT_WIN;
+  else if (battle.phase == BATTLE_LOST) status = S_BAT_LOSE;
+  else if (battle.phase == BATTLE_ESCAPED) status = S_BAT_ESCAPED;
+  else if (battle.event == BATTLE_ESCAPE_FAILED) status = S_BAT_NO_ESCAPE;
+  else if (battle.event == BATTLE_MISS) status = S_BAT_MISS;
+  else if (battle.counterReady) status = S_BAT_COUNTER;
+  gfx->setTextColor(UI_INK);
+  setSize(1);
+  setCur(centerX(T(status), 1), 406);
+  printT(T(status));
+  gfx->flush();
 }
 
 // pagina 2: medallas con etiqueta descriptiva

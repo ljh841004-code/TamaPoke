@@ -60,6 +60,10 @@ enum StrId : uint8_t {
   S_EVO_Q, S_EVO_KEEP, S_FAR_Q, S_FAR_GO, S_FAR_STAY,
   S_CHOOSE_STARTER,  // titulo de la eleccion del inicial (primera vez)
   S_NO_SPRITES, S_LOAD_SPRITES,  // aviso cuando falta el sprite en la SD
+  // transient wild battle V1
+  S_BAT_ATTACK, S_BAT_HEAVY, S_BAT_DODGE, S_BAT_FLEE,
+  S_BAT_WIN, S_BAT_LOSE, S_BAT_ESCAPED, S_BAT_CHOOSE,
+  S_BAT_MISS, S_BAT_COUNTER, S_BAT_NO_ESCAPE,
   STR_COUNT
 };
 
