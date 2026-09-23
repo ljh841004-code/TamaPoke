@@ -57,6 +57,7 @@ public:
   bool berryKnown = false;  // ya descubrio su baya favorita
   bool shiny = false;       // variante de color rara (se sortea en el huevo)
   uint32_t ageMinutes = 0;
+  uint32_t battleXpMinutes = 0;  // level bonus; does not advance real age
   int16_t speciesId = -1;      // numero de Pokedex (1-151), -1 = huevo
   int16_t prevSpeciesId = -1;  // para la animacion de evolucion
   uint8_t careMistakes = 0;   // descuidos: cada uno retrasa la evolucion 1 nivel
@@ -139,7 +140,7 @@ public:
   // alcanza jugando normal, porque "quedaros juntos" permite posponer la
   // despedida indefinidamente. Se topa en 999 en vez de desbordar.
   uint16_t level() const {
-    uint32_t lv = 1 + ageMinutes / MINUTES_PER_LEVEL;
+    uint64_t lv = 1 + ((uint64_t)ageMinutes + battleXpMinutes) / MINUTES_PER_LEVEL;
     return lv > 999 ? 999 : (uint16_t)lv;
   }
   bool isRegistered(int16_t dex) const {
@@ -181,6 +182,7 @@ public:
   uint32_t savedEpoch() { return prefs.getUInt("seen", 0); }
   void flushSave();
   void persist() { save(); }  // store battle inventory and progress
+  void grantBattleXp();
   void resetAfterSwap();
 
 private:

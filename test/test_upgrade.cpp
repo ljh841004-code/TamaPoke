@@ -33,6 +33,7 @@ TEST(upgrade, capture_store_and_switch_preserves_one_active_pet) {
   p.chooseStarter(1);
   p.eggTap(); p.eggTap(); p.eggTap();
   p.ageMinutes = 300;
+  p.battleXpMinutes = 30;
   p.trAtk = 7;
   p.rename("SEED");
   Collection box;
@@ -54,6 +55,7 @@ TEST(upgrade, capture_store_and_switch_preserves_one_active_pet) {
   CHECK(restored.activate(p, 1));
   CHECK_EQ(p.speciesId, (int16_t)1);
   CHECK_EQ(p.ageMinutes, (uint32_t)300);
+  CHECK_EQ(p.battleXpMinutes, (uint32_t)30);
   CHECK_EQ(p.trAtk, (uint8_t)7);
   CHECK_STREQ(p.nick, "SEED");
 }
@@ -114,4 +116,23 @@ TEST(upgrade, korean_adventure_labels_follow_language) {
   CHECK_STREQ(adventureText("WAVE %u  #%03d"), "%u웨이브  #%03d");
   gLang = LANG_EN;
   CHECK_STREQ(adventureText("FIGHT"), "FIGHT");
+}
+
+TEST(upgrade, battle_xp_levels_only_active_without_aging) {
+  mockNvsReset();
+  Pet p;
+  p.begin();
+  p.chooseStarter(1);
+  p.eggTap(); p.eggTap(); p.eggTap();
+  Collection box;
+  box.begin();
+  CHECK(box.catchWild(p, 4, 5, false));
+  CHECK(box.activate(p, 4));
+  uint32_t ageBefore = p.ageMinutes;
+  for (int i = 0; i < 4; i++) p.grantBattleXp();
+  CHECK_EQ(p.ageMinutes, ageBefore);
+  CHECK_EQ(p.level(), (uint16_t)2);
+  CHECK_EQ(box.get(1)->battleXpMinutes, (uint32_t)0);
+  p.newEgg();
+  CHECK_EQ(p.battleXpMinutes, (uint32_t)0);
 }

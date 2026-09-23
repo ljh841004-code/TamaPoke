@@ -1,12 +1,44 @@
 #include "collection.h"
 #include <string.h>
 
+// Saved by the first collection build, before battle XP was stored separately.
+struct LegacyStoredMon {
+  uint32_t ageMinutes;
+  uint16_t speciesId, medals;
+  uint8_t fullness, joy, energy, hygiene;
+  uint8_t poops, weight, bond, careMistakes;
+  uint8_t geneAtk, geneDef, geneSpe;
+  uint8_t trAtk, trDef, trSpe;
+  uint8_t shiny, berryKnown;
+  char nick[12];
+};
 void Collection::begin() {
   memset(mons, 0, sizeof(mons));
   prefs.begin("tpbox", false);
-  if (prefs.getUChar("version", 0) == 1 &&
-      prefs.getBytes("mons", mons, sizeof(mons)) != sizeof(mons)) {
-    memset(mons, 0, sizeof(mons));
+  uint8_t version = prefs.getUChar("version", 0);
+  if (version == 2) {
+    if (prefs.getBytes("mons", mons, sizeof(mons)) != sizeof(mons))
+      memset(mons, 0, sizeof(mons));
+  } else if (version == 1) {
+    static LegacyStoredMon old[151];
+    if (prefs.getBytes("mons", old, sizeof(old)) == sizeof(old)) {
+      for (int i = 0; i < 151; i++) {
+        const LegacyStoredMon &s = old[i];
+        StoredMon &d = mons[i];
+        d.ageMinutes = s.ageMinutes; d.speciesId = s.speciesId;
+        d.medals = s.medals;
+        d.fullness = s.fullness; d.joy = s.joy;
+        d.energy = s.energy; d.hygiene = s.hygiene;
+        d.poops = s.poops; d.weight = s.weight;
+        d.bond = s.bond; d.careMistakes = s.careMistakes;
+        d.geneAtk = s.geneAtk; d.geneDef = s.geneDef; d.geneSpe = s.geneSpe;
+        d.trAtk = s.trAtk; d.trDef = s.trDef; d.trSpe = s.trSpe;
+        d.shiny = s.shiny; d.berryKnown = s.berryKnown;
+        memcpy(d.nick, s.nick, sizeof(d.nick));
+        d.nick[sizeof(d.nick) - 1] = 0;
+      }
+      save();
+    }
   }
   for (int i = 0; i < 151; i++) {
     if (mons[i].speciesId != i + 1) mons[i].speciesId = 0;
@@ -20,7 +52,7 @@ void Collection::clear() {
 
 void Collection::save() {
   prefs.putBytes("mons", mons, sizeof(mons));
-  prefs.putUChar("version", 1);
+  prefs.putUChar("version", 2);
 }
 
 bool Collection::has(int16_t dex) const {
@@ -42,6 +74,7 @@ void Collection::remember(const Pet &pet) {
   StoredMon &m = mons[pet.speciesId - 1];
   m.speciesId = pet.speciesId;
   m.ageMinutes = pet.ageMinutes;
+  m.battleXpMinutes = pet.battleXpMinutes;
   m.medals = pet.medals;
   m.fullness = pet.fullness; m.joy = pet.joy;
   m.energy = pet.energy; m.hygiene = pet.hygiene;
@@ -86,6 +119,7 @@ bool Collection::activate(Pet &pet, int16_t dex) {
   pet.speciesId = selected.speciesId;
   pet.prevSpeciesId = -1;
   pet.ageMinutes = selected.ageMinutes;
+  pet.battleXpMinutes = selected.battleXpMinutes;
   pet.medals = selected.medals;
   pet.fullness = selected.fullness; pet.joy = selected.joy;
   pet.energy = selected.energy; pet.hygiene = selected.hygiene;

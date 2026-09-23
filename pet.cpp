@@ -32,6 +32,7 @@ void Pet::newEgg() {
   hygiene = 100;
   poops = 0;
   ageMinutes = 0;
+  battleXpMinutes = 0;
   careMistakes = 0;
   mistakeCooldown = 0;
   sleeping = false;
@@ -193,6 +194,12 @@ void Pet::tick() {
 
 // vuelca el guardado periodico pendiente (lo llama el loop en un momento sin
 // animacion para que el paron de la escritura a flash no se vea)
+void Pet::grantBattleXp() {
+  if (battleXpMinutes <= UINT32_MAX - MINUTES_PER_LEVEL / 4)
+    battleXpMinutes += MINUTES_PER_LEVEL / 4;
+  save();
+}
+
 void Pet::resetAfterSwap() {
   ceremony = CER_NONE;
   ceremonyUntil = 0;
@@ -611,6 +618,7 @@ void Pet::save() {
   prefs.putBool("stpk", starterPick);
   prefs.putBytes("dexsh", dexShinyReg, sizeof(dexShinyReg));
   prefs.putUInt("age", ageMinutes);
+  prefs.putUInt("bxp", battleXpMinutes);
   prefs.putShort("dexn", speciesId);
   prefs.putShort("eggT2", eggTarget);
   prefs.putUChar("crack", eggTaps);
@@ -660,6 +668,7 @@ void Pet::load() {
   starterPick = prefs.getBool("stpk", false);
   prefs.getBytes("dexsh", dexShinyReg, sizeof(dexShinyReg));
   ageMinutes = prefs.getUInt("age", 0);
+  battleXpMinutes = prefs.getUInt("bxp", 0);
   if (prefs.isKey("dexn")) {
     speciesId = prefs.getShort("dexn", -1);
     eggTarget = prefs.getShort("eggT2", 4);

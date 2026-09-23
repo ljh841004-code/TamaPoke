@@ -6,6 +6,7 @@
 // One stored individual per Kanto species. The active pet lives only in Pet.
 struct StoredMon {
   uint32_t ageMinutes = 0;
+  uint32_t battleXpMinutes = 0;
   uint16_t speciesId = 0;  // 0 means empty
   uint16_t medals = 0;
   uint8_t fullness = 80, joy = 80, energy = 80, hygiene = 100;

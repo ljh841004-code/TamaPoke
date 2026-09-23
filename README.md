@@ -40,7 +40,7 @@ A quick reference to how the game really works (values straight from the code).
 
 ### Time & leveling
 - **1 real minute = 1 in-game minute.** Your Pokémon gains **+1 level every hour**
-  of real time. Leveling is time-based, with battle wins/captures granting 15 extra minutes — caring well does not speed it up,
+  of real time. Leveling is time-based, with battle wins/captures granting a 15-minute level bonus without aging the pet — caring well does not speed it up,
   but neglect *delays evolution*.
 - It keeps **aging while powered off** (the RTC runs), catching up to **2 weeks** max.
 

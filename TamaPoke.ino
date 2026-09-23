@@ -2728,8 +2728,7 @@ void finishBattleTurn(const BattleTurnResult &turn) {
     battleOutcome = 1;
     battleMessage = "Victory! Next wave?";
     if (pet.battleWins < 65535) pet.battleWins++;
-    pet.ageMinutes += MINUTES_PER_LEVEL / 4;  // only the active companion gains battle XP
-    pet.persist();
+    pet.grantBattleXp();  // only the active companion gains battle XP
   } else {
     battleOutcome = 3;
     battleMessage = "Your Pokemon fainted.";
@@ -2789,8 +2788,7 @@ void battleTap(int16_t x, int16_t y) {
     if (random(100) < chance) {
       collection.catchWild(pet, wildDex, wildLevel, wildShiny);
       battleOutcome = 2;
-      pet.ageMinutes += MINUTES_PER_LEVEL / 4;
-      pet.persist();
+      pet.grantBattleXp();
       battleMessage = "Captured! Sent to the box.";
       return;
     }
