@@ -35,6 +35,14 @@ enum BattleAction : uint8_t {
   BATTLE_WAIT,
 };
 
+enum BattleStatus : uint8_t { STATUS_NONE = 0, STATUS_BURN, STATUS_POISON, STATUS_PARALYSIS, STATUS_SLEEP };
+
+struct BattleMove {
+  const char *name;
+  uint8_t type, powerPct, accuracy, maxPp, statusChance;
+  BattleStatus status;
+};
+
 struct BattleRuntime {
   BattleStats player;
   BattleStats enemy;
@@ -47,6 +55,9 @@ struct BattleRuntime {
   uint16_t enemyDamageTotal;
   uint8_t restUsesLeft;
   bool counterReady;
+  uint8_t pp[4];
+  BattleStatus playerStatus, enemyStatus;
+  uint8_t enemyStatusTurns;
 };
 
 struct BattleTurnResult {
@@ -60,8 +71,12 @@ struct BattleTurnResult {
   bool quickGuard;
   bool heavyRisk;
   bool counterReady;
+  uint8_t pp[4];
+  BattleStatus playerStatus, enemyStatus;
+  uint8_t enemyStatusTurns;
   bool counterUsed;
   bool restFailed;
+  bool missed, playerParalyzed, statusInflicted;
   bool battleEnded;
   bool playerWon;
   uint8_t playerTypePct;
@@ -75,6 +90,9 @@ BattleStats wildBattleStats(int16_t dex, uint8_t level);
 uint8_t battleTypeEffectPct(uint8_t attackType, uint8_t defendType1, uint8_t defendType2);
 BattleRuntime beginBattleRuntime(const BattleStats &player, const BattleStats &enemy);
 BattleTurnResult stepBattle(BattleRuntime &battle, BattleAction action, uint8_t luckRoll);
+BattleMove battleMoveFor(int16_t dex, uint8_t slot);
+BattleTurnResult stepBattleMove(BattleRuntime &battle, const BattleMove &move,
+                                uint8_t slot, uint8_t luckRoll);
 
 BattleResult resolveBattle(const BattleStats &player,
                            const BattleStats &enemy,

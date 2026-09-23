@@ -69,3 +69,20 @@ TEST(upgrade, battle_type_and_wait_turn) {
   CHECK(battle.playerHp < playerBefore);
   CHECK_EQ(turn.playerDamage, (uint16_t)0);
 }
+
+TEST(upgrade, typed_move_uses_pp_and_applies_status) {
+  BattleStats player = wildBattleStats(4, 10);
+  BattleStats enemy = wildBattleStats(1, 10);
+  BattleRuntime battle = beginBattleRuntime(player, enemy);
+  BattleMove ember = battleMoveFor(4, 1);
+  CHECK_EQ(ember.type, (uint8_t)TYPE_FIRE);
+  CHECK_EQ(battle.pp[1], (uint8_t)20);
+  BattleTurnResult turn = stepBattleMove(battle, ember, 1, 0);
+  CHECK_EQ(battle.pp[1], (uint8_t)19);
+  CHECK(turn.playerDamage > 0);
+  CHECK(turn.statusInflicted);
+  CHECK_EQ(battle.enemyStatus, STATUS_BURN);
+  uint16_t enemyBefore = battle.enemyHp;
+  stepBattle(battle, BATTLE_WAIT, 99);
+  CHECK(battle.enemyHp < enemyBefore);
+}

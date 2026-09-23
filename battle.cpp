@@ -256,6 +256,7 @@ BattleRuntime beginBattleRuntime(const BattleStats &player, const BattleStats &e
   battle.playerHp = battle.playerMaxHp;
   battle.enemyHp = battle.enemyMaxHp;
   battle.restUsesLeft = 2;
+  battle.pp[0] = 30; battle.pp[1] = 20; battle.pp[2] = 20; battle.pp[3] = 10;
   battle.counterReady = false;
   return battle;
 }
@@ -278,6 +279,10 @@ BattleTurnResult stepBattle(BattleRuntime &battle, BattleAction action, uint8_t 
   }
 
   battle.round++;
+  if (battle.playerStatus == STATUS_PARALYSIS && luck < 25 && isAttackAction(action)) {
+    action = BATTLE_WAIT;
+    turn.playerParalyzed = true;
+  }
 
   if (action == BATTLE_REST) {
     turn.playerRested = true;
@@ -295,11 +300,17 @@ BattleTurnResult stepBattle(BattleRuntime &battle, BattleAction action, uint8_t 
       turn.playerDamage = cappedTurnDamage(battle.player, battle.enemy, battle.enemyMaxHp,
                                            luck, battle.counterReady, attackPowerPct(action));
       battle.counterReady = false;
+      if (battle.playerStatus == STATUS_BURN) turn.playerDamage = (turn.playerDamage * 3) / 4;
       applyHit(battle.enemyHp, turn.playerDamage, battle.playerDamageTotal);
     }
   }
 
   bool enemyActs = battle.enemyHp > 0 && (!turn.enemyDodged || action == BATTLE_ATTACK_HEAVY);
+  if (battle.enemyStatus == STATUS_SLEEP && battle.enemyStatusTurns) {
+    enemyActs = false;
+    if (--battle.enemyStatusTurns == 0) battle.enemyStatus = STATUS_NONE;
+  }
+  if (battle.enemyStatus == STATUS_PARALYSIS && luck >= 75) enemyActs = false;
   if (enemyActs) {
     uint16_t enemyHit = cappedTurnDamage(battle.enemy, battle.player, battle.playerMaxHp, 99 - luck, false, 100);
     if (action == BATTLE_DODGE) {
@@ -324,12 +335,23 @@ BattleTurnResult stepBattle(BattleRuntime &battle, BattleAction action, uint8_t 
       enemyHit = (uint16_t)((uint32_t)enemyHit * 70 / 100);
       if (enemyHit == 0) enemyHit = 1;
     }
+    if (battle.enemyStatus == STATUS_BURN) enemyHit = (enemyHit * 3) / 4;
     if (enemyHit > 0) {
       turn.enemyDamage = enemyHit;
       applyHit(battle.playerHp, turn.enemyDamage, battle.enemyDamageTotal);
     }
   }
 
+  if (battle.enemyHp && (battle.enemyStatus == STATUS_POISON || battle.enemyStatus == STATUS_BURN)) {
+    uint16_t dot = battle.enemyMaxHp / 16; if (!dot) dot = 1;
+    applyHit(battle.enemyHp, dot, battle.playerDamageTotal);
+    turn.playerDamage += dot;
+  }
+  if (battle.playerHp && (battle.playerStatus == STATUS_POISON || battle.playerStatus == STATUS_BURN)) {
+    uint16_t dot = battle.playerMaxHp / 16; if (!dot) dot = 1;
+    applyHit(battle.playerHp, dot, battle.enemyDamageTotal);
+    turn.enemyDamage += dot;
+  }
   turn.battleEnded = finished(battle);
   turn.playerWon = turn.battleEnded ? winner(battle) : false;
   return turn;
@@ -373,4 +395,82 @@ BattleResult resolveBattle(const BattleStats &player,
   }
 
   return result;
+}
+
+
+static const char *typeMoveName(uint8_t type) {
+  switch (type) {
+    case TYPE_FIRE: return "EMBER";
+    case TYPE_WATER: return "WATER GUN";
+    case TYPE_ELECTRIC: return "THUNDER";
+    case TYPE_GRASS: return "VINE WHIP";
+    case TYPE_ICE: return "ICE BEAM";
+    case TYPE_FIGHTING: return "KARATE CHOP";
+    case TYPE_POISON: return "POISON STING";
+    case TYPE_GROUND: return "MUD SLAP";
+    case TYPE_FLYING: return "GUST";
+    case TYPE_PSYCHIC: return "CONFUSION";
+    case TYPE_BUG: return "BUG BITE";
+    case TYPE_ROCK: return "ROCK THROW";
+    case TYPE_GHOST: return "SHADOW BALL";
+    case TYPE_DRAGON: return "DRAGON BREATH";
+    default: return "TACKLE";
+  }
+}
+
+static BattleStatus statusForType(uint8_t type) {
+  switch (type) {
+    case TYPE_FIRE: return STATUS_BURN;
+    case TYPE_POISON: return STATUS_POISON;
+    case TYPE_ELECTRIC: return STATUS_PARALYSIS;
+    case TYPE_GRASS: return STATUS_SLEEP;
+    default: return STATUS_NONE;
+  }
+}
+
+BattleMove battleMoveFor(int16_t dex, uint8_t slot) {
+  uint8_t first = dexType1(dex);
+  uint8_t second = dexType2(dex);
+  if (slot == 0) return { "TACKLE", TYPE_NORMAL, 90, 100, 30, 0, STATUS_NONE };
+  if (slot == 1) {
+    BattleStatus s = statusForType(first);
+    return { typeMoveName(first), first, 115, 95, 20, s == STATUS_NONE ? (uint8_t)0 : (uint8_t)20, s };
+  }
+  if (slot == 2) {
+    uint8_t type = second == TYPE_NONE ? TYPE_NORMAL : second;
+    BattleStatus s = statusForType(type);
+    return { second == TYPE_NONE ? "QUICK HIT" : typeMoveName(type), type,
+             100, 100, 20, s == STATUS_NONE ? (uint8_t)0 : (uint8_t)15, s };
+  }
+  return { "POWER STRIKE", first, 155, 75, 10, 0, STATUS_NONE };
+}
+
+BattleTurnResult stepBattleMove(BattleRuntime &battle, const BattleMove &move,
+                                uint8_t slot, uint8_t luckRoll) {
+  BattleTurnResult turn = {};
+  if (slot >= 4 || battle.pp[slot] == 0) {
+    turn.restFailed = true;
+    return turn;
+  }
+  battle.pp[slot]--;
+  if (luckRoll >= move.accuracy) {
+    turn = stepBattle(battle, BATTLE_WAIT, luckRoll);
+    turn.missed = true;
+    return turn;
+  }
+  uint8_t originalType = battle.player.type1;
+  uint16_t originalAtk = battle.player.atk;
+  battle.player.type1 = move.type;
+  uint32_t scaledAtk = (uint32_t)originalAtk * move.powerPct / 100;
+  battle.player.atk = scaledAtk > 65535 ? 65535 : (uint16_t)scaledAtk;
+  turn = stepBattle(battle, BATTLE_ATTACK, luckRoll);
+  battle.player.type1 = originalType;
+  battle.player.atk = originalAtk;
+  if (turn.playerDamage && battle.enemyHp && battle.enemyStatus == STATUS_NONE &&
+      move.status != STATUS_NONE && ((uint16_t)luckRoll * 13 + battle.round * 7) % 100 < move.statusChance) {
+    battle.enemyStatus = move.status;
+    battle.enemyStatusTurns = move.status == STATUS_SLEEP ? 2 : 0;
+    turn.statusInflicted = true;
+  }
+  return turn;
 }

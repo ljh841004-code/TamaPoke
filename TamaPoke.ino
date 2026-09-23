@@ -46,7 +46,7 @@ Pet pet;
 Collection collection;
 PmdMon wildPmd;
 BattleRuntime battle = {};
-bool battleOpen = false, boxOpen = false, wildShiny = false;
+bool battleOpen = false, boxOpen = false, wildShiny = false, moveMenu = false;
 uint8_t battleOutcome = 0;  // 0 active, 1 win, 2 caught, 3 loss, 4 fled
 uint16_t battleWave = 1;
 int16_t wildDex = 0;
@@ -2667,6 +2667,8 @@ void startWildBattle(bool nextWave) {
   if (!canStartWildBattle(pet.isEgg(), pet.sleeping, pet.ceremony)) return;
   uint16_t carry = nextWave ? battle.playerHp : 0;
   uint16_t oldMax = nextWave ? battle.playerMaxHp : 0;
+  uint8_t oldPp[4] = {0, 0, 0, 0};
+  if (nextWave) for (int i = 0; i < 4; i++) oldPp[i] = battle.pp[i];
   if (!nextWave) battleWave = 1;
   else battleWave++;
   wildDex = 1 + random(151);  // all 151 species can be encountered
@@ -2677,11 +2679,13 @@ void startWildBattle(bool nextWave) {
   player.level = (uint8_t)min((uint16_t)100, pet.level());
   player.type1 = dexType1(pet.speciesId); player.type2 = dexType2(pet.speciesId);
   battle = beginBattleRuntime(player, wildBattleStats(wildDex, wildLevel));
+  if (nextWave) for (int i = 0; i < 4; i++) battle.pp[i] = oldPp[i];
   if (nextWave && oldMax) {
     battle.playerHp = (uint32_t)carry * battle.playerMaxHp / oldMax;
     if (battle.playerHp == 0) battle.playerHp = 1;
   }
   battleOutcome = 0;
+  moveMenu = false;
   battleMessage = "A wild Pokemon appeared!";
   pet.markSeen(wildDex);
   wildPmd.unload(); wildPmd.load(wildDex, wildShiny);
@@ -2689,7 +2693,11 @@ void startWildBattle(bool nextWave) {
 }
 
 void finishBattleTurn(const BattleTurnResult &turn) {
-  if (turn.enemyDodged) battleMessage = "The wild Pokemon dodged!";
+  if (turn.restFailed) battleMessage = "No PP left!";
+  else if (turn.missed) battleMessage = "The move missed!";
+  else if (turn.playerParalyzed) battleMessage = "Unable to move!";
+  else if (turn.statusInflicted) battleMessage = "Status inflicted!";
+  else if (turn.enemyDodged) battleMessage = "The wild Pokemon dodged!";
   else if (turn.playerDodged) battleMessage = "Dodged! Counter ready.";
   else if (turn.playerTypePct > 100) battleMessage = "Super effective!";
   else if (turn.playerTypePct < 100) battleMessage = "Not very effective.";
@@ -2709,6 +2717,17 @@ void finishBattleTurn(const BattleTurnResult &turn) {
 }
 
 void battleTap(int16_t x, int16_t y) {
+  if (moveMenu && !battleOutcome) {
+    if (y >= 376) { moveMenu = false; return; }
+    if (y >= 274 && y < 370 && x >= 74 && x <= 392) {
+      int slot = ((y - 274) / 52) * 2 + (x < 233 ? 0 : 1);
+      BattleMove move = battleMoveFor(pet.speciesId, slot);
+      BattleTurnResult turn = stepBattleMove(battle, move, slot, random(100));
+      if (turn.restFailed) { battleMessage = "No PP left!"; return; }
+      moveMenu = false; finishBattleTurn(turn);
+    }
+    return;
+  }
   if (battleOutcome) {
     if ((battleOutcome == 1 || battleOutcome == 2) && y >= 305 && y < 362) {
       startWildBattle(true); return;
@@ -2721,6 +2740,7 @@ void battleTap(int16_t x, int16_t y) {
   int col = x < 233 ? 0 : 1;
   if (row < 0 || row > 2) return;
   int choice = row * 2 + col;
+  if (choice == 0) { moveMenu = true; return; }
   if (choice == 4) {  // capture
     if (!pet.balls) { battleMessage = "No Poke Balls left."; return; }
     pet.balls--;
@@ -2756,8 +2776,7 @@ void battleTap(int16_t x, int16_t y) {
     finishBattleTurn(stepBattle(battle, BATTLE_REST, random(100)));
     return;
   }
-  BattleAction action = choice == 0 ? BATTLE_ATTACK_QUICK :
-                        choice == 1 ? BATTLE_ATTACK_HEAVY : BATTLE_DODGE;
+  BattleAction action = choice == 1 ? BATTLE_ATTACK_HEAVY : BATTLE_DODGE;
   finishBattleTurn(stepBattle(battle, action, random(100)));
 }
 
@@ -2789,8 +2808,16 @@ void renderBattle() {
   if (battleOutcome) {
     if (battleOutcome == 1 || battleOutcome == 2) battleButton(158, 310, UI_BAR_OK, "NEXT WAVE");
     battleButton(158, 374, UI_BAR_BAD, "EXIT");
+  } else if (moveMenu) {
+    for (int slot = 0; slot < 4; slot++) {
+      BattleMove move = battleMoveFor(pet.speciesId, slot);
+      char label[30];
+      snprintf(label, sizeof(label), "%s %u", move.name, battle.pp[slot]);
+      battleButton(slot % 2 ? 240 : 76, 274 + (slot / 2) * 52, slot == 3 ? UI_BAR_WARN : UI_BAR_BAD, label);
+    }
+    battleButton(158, 378, UI_TRACK, "BACK");
   } else {
-    battleButton(76, 274, UI_BAR_BAD, "ATTACK");
+    battleButton(76, 274, UI_BAR_BAD, "FIGHT");
     battleButton(240, 274, UI_BAR_WARN, "POWER");
     battleButton(76, 326, 0x4C98, "DODGE");
     battleButton(240, 326, UI_BAR_OK, "POTION");
