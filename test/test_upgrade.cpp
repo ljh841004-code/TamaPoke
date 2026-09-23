@@ -129,9 +129,10 @@ TEST(upgrade, battle_xp_levels_only_active_without_aging) {
   CHECK(box.catchWild(p, 4, 5, false));
   CHECK(box.activate(p, 4));
   uint32_t ageBefore = p.ageMinutes;
+  uint16_t levelBefore = p.level();
   for (int i = 0; i < 4; i++) p.grantBattleXp();
   CHECK_EQ(p.ageMinutes, ageBefore);
-  CHECK_EQ(p.level(), (uint16_t)2);
+  CHECK_EQ(p.level(), (uint16_t)(levelBefore + 1));
   CHECK_EQ(box.get(1)->battleXpMinutes, (uint32_t)0);
   p.newEgg();
   CHECK_EQ(p.battleXpMinutes, (uint32_t)0);
