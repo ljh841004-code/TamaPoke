@@ -2820,9 +2820,10 @@ void battleTap(int16_t x, int16_t y) {
 void battleButton(int x, int y, uint16_t color, const char *label) {
   gfx->fillRoundRect(x, y, 150, 43, 9, color);
   gfx->setTextColor(UI_WHITE);
-  setSize(2);
   const char *shown = adventureText(label);
-  setCur(x + (150 - textW(shown, 2)) / 2, y + 13);
+  uint8_t size = textW(shown, 2) > 140 ? 1 : 2;
+  setSize(size);
+  setCur(x + (150 - textW(shown, size)) / 2, y + (size == 2 ? 13 : 17));
   printT(shown);
 }
 
@@ -2950,7 +2951,10 @@ void renderBox() {
   if (!pet.isEgg()) {
     gfx->fillRoundRect(130, 393, 206, 42, 9, UI_BAR_WARN);
     gfx->setTextColor(UI_WHITE);
-    setCur(centerX(adventureText("STORE ACTIVE"), 2), 405); printT(adventureText("STORE ACTIVE"));
+    const char *storeLabel = adventureText("STORE ACTIVE");
+    uint8_t storeSize = textW(storeLabel, 2) > 196 ? 1 : 2;
+    setSize(storeSize); setCur(centerX(storeLabel, storeSize), storeSize == 2 ? 405 : 409);
+    printT(storeLabel);
   }
   gfx->flush();
 }
