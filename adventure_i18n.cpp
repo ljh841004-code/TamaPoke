@@ -55,7 +55,12 @@ const char *adventureText(const char *en) {
     {"BOSS %u  #%03d", "보스 %u  #%03d"},
     {"TRAINER %u  #%03d", "트레이너 %u  #%03d"},
     {"WAVE %u  #%03d", "%u웨이브  #%03d"},
-    {"BALL x%u", "볼 x%u"}
+    {"BALL x%u", "볼 x%u"},
+    {"NORMAL", "노말"}, {"FIRE", "불꽃"}, {"WATER", "물"},
+    {"ELECTRIC", "전기"}, {"GRASS", "풀"}, {"ICE", "얼음"},
+    {"FIGHTING", "격투"}, {"POISON", "독"}, {"GROUND", "땅"},
+    {"FLYING", "비행"}, {"PSYCHIC", "에스퍼"}, {"BUG", "벌레"},
+    {"ROCK", "바위"}, {"GHOST", "고스트"}, {"DRAGON", "드래곤"}
   };
   for (const auto &item : table) if (strcmp(en, item.en) == 0) return item.ko;
   return en;

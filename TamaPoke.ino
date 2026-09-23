@@ -1982,6 +1982,14 @@ void renderGallery() {
     gfx->setTextColor(UI_INK);
     setSize(2);
     if (reg) {
+      char types[52];
+      uint8_t t1 = dexType1(galleryDetail), t2 = dexType2(galleryDetail);
+      if (t2 == TYPE_NONE)
+        snprintf(types, sizeof(types), "%s", adventureText(battleTypeName(t1)));
+      else
+        snprintf(types, sizeof(types), "%s / %s", adventureText(battleTypeName(t1)),
+                 adventureText(battleTypeName(t2)));
+      setCur(centerX(types, 2), 337); printT(types);
       char stats[60];
       snprintf(stats, sizeof(stats), "HP %u ATK %u DEF %u SPD %u", d.bHp, d.bAtk, d.bDef, d.bSpe);
       setCur(centerX(stats, 2), 362); printT(stats);

@@ -90,6 +90,7 @@ BattleStats wildBattleStats(int16_t dex, uint8_t level);
 uint16_t battleTypeEffectPct(uint8_t attackType, uint8_t defendType1, uint8_t defendType2);
 BattleRuntime beginBattleRuntime(const BattleStats &player, const BattleStats &enemy);
 BattleTurnResult stepBattle(BattleRuntime &battle, BattleAction action, uint8_t luckRoll);
+const char *battleTypeName(uint8_t type);
 BattleMove battleMoveFor(int16_t dex, uint8_t slot);
 BattleTurnResult stepBattleMove(BattleRuntime &battle, const BattleMove &move,
                                 uint8_t slot, uint8_t luckRoll);

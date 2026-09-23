@@ -505,3 +505,24 @@ BattleTurnResult stepBattleMove(BattleRuntime &battle, const BattleMove &move,
   }
   return turn;
 }
+
+const char *battleTypeName(uint8_t type) {
+  switch (type) {
+    case TYPE_NORMAL: return "NORMAL";
+    case TYPE_FIRE: return "FIRE";
+    case TYPE_WATER: return "WATER";
+    case TYPE_ELECTRIC: return "ELECTRIC";
+    case TYPE_GRASS: return "GRASS";
+    case TYPE_ICE: return "ICE";
+    case TYPE_FIGHTING: return "FIGHTING";
+    case TYPE_POISON: return "POISON";
+    case TYPE_GROUND: return "GROUND";
+    case TYPE_FLYING: return "FLYING";
+    case TYPE_PSYCHIC: return "PSYCHIC";
+    case TYPE_BUG: return "BUG";
+    case TYPE_ROCK: return "ROCK";
+    case TYPE_GHOST: return "GHOST";
+    case TYPE_DRAGON: return "DRAGON";
+    default: return "?";
+  }
+}

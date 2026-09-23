@@ -65,6 +65,7 @@ TEST(upgrade, battle_type_and_wait_turn) {
   CHECK_EQ(battleTypeEffectPct(TYPE_ELECTRIC, TYPE_GROUND, TYPE_NONE), (uint16_t)0);
   CHECK(battleTypeEffectPct(TYPE_FIRE, TYPE_WATER, TYPE_NONE) < 100);
   CHECK_EQ(dexType1(4), (uint8_t)TYPE_FIRE);
+  CHECK_STREQ(battleTypeName(dexType1(4)), "FIRE");
   BattleStats player = wildBattleStats(4, 10);
   BattleStats enemy = wildBattleStats(1, 10);
   BattleRuntime battle = beginBattleRuntime(player, enemy);
