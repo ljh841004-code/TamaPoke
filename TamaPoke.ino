@@ -24,6 +24,7 @@
 #include "sdmon.h"
 #include "rtcbat.h"
 #include "i18n.h"
+#include "adventure_i18n.h"
 #include "audio.h"
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
@@ -52,7 +53,9 @@ uint16_t battleWave = 1;
 int16_t wildDex = 0;
 uint8_t wildLevel = 1, boxPage = 0;
 const char *battleMessage = "";
-const char *adventureText(const char *en);
+uint32_t battleAnimStart = 0;
+bool battlePlayerHit = false, battleEnemyHit = false;
+
 
 // sprite animado de la SD para la especie actual (si existe el archivo)
 SdMon mon;          // sprite B/N (respaldo y minijuego si no hay PMD)
@@ -2648,60 +2651,6 @@ void drawMap(const char *const *map, int n, int x, int y, int s, bool silhouette
 
 // ---------- wild battle and collection ----------
 
-// New adventure UI uses Korean when selected; other languages fall back to English.
-const char *adventureText(const char *en) {
-  if (gLang != LANG_KO) return en;
-  struct Pair { const char *en, *ko; };
-  static const Pair table[] = {
-    {"ADVENTURE", "모험"}, {"WILD BATTLE", "야생 배틀"},
-    {"COLLECTION BOX", "보관함"}, {"COLLECTION", "보관함"},
-    {"FIGHT", "기술"}, {"POWER", "강공격"}, {"DODGE", "회피"},
-    {"POTION", "상처약"}, {"RUN", "도망"}, {"BACK", "뒤로"},
-    {"NEXT WAVE", "다음 웨이브"}, {"EXIT", "나가기"},
-    {"STORE ACTIVE", "현재 포켓몬 맡기기"},
-    {"+3 BALLS", "볼 +3"}, {"+2 POTIONS", "상처약 +2"},
-    {"+2 TRAINING", "훈련 +2"},
-    {"SEEN - NOT CAUGHT", "발견 / 미포획"},
-    {"A wild Pokemon appeared!", "야생 포켓몬 등장!"},
-    {"A trainer challenges you!", "트레이너가 승부를 건다!"},
-    {"A boss appeared!", "보스 포켓몬 등장!"},
-    {"The wild Pokemon dodged!", "상대가 피했다!"},
-    {"Dodged! Counter ready.", "회피 성공! 반격 준비"},
-    {"No effect!", "효과가 없다!"},
-    {"Super effective!", "효과가 굉장했다!"},
-    {"Not very effective.", "효과가 별로다."},
-    {"A fierce exchange!", "서로 공격했다!"},
-    {"Victory! Next wave?", "승리! 보상을 고르세요"},
-    {"Your Pokemon fainted.", "포켓몬이 쓰러졌다."},
-    {"No PP left!", "PP가 부족하다!"},
-    {"The move missed!", "기술이 빗나갔다!"},
-    {"Unable to move!", "움직일 수 없다!"},
-    {"Status inflicted!", "상태이상 성공!"},
-    {"No Poke Balls left.", "볼이 부족하다."},
-    {"Cannot catch a trainer Pokemon.", "트레이너 포켓몬은 포획 불가"},
-    {"Captured! Sent to the box.", "포획! 보관함에 등록"},
-    {"The Pokemon broke free!", "포켓몬이 탈출했다!"},
-    {"Got away safely.", "무사히 도망쳤다."},
-    {"Could not escape!", "도망치지 못했다!"},
-    {"No potions left.", "상처약이 부족하다."},
-    {"+3 Poke Balls", "볼 3개 획득"},
-    {"+2 Potions", "상처약 2개 획득"},
-    {"Training and PP restored!", "훈련 상승 / PP 회복"},
-    {"TACKLE", "몸통박치기"}, {"EMBER", "불꽃세례"},
-    {"WATER GUN", "물대포"}, {"THUNDER", "전기쇼크"},
-    {"VINE WHIP", "덩굴채찍"}, {"ICE BEAM", "냉동빔"},
-    {"KARATE CHOP", "태권당수"}, {"POISON STING", "독침"},
-    {"MUD SLAP", "진흙뿌리기"}, {"GUST", "바람일으키기"},
-    {"CONFUSION", "염동력"}, {"BUG BITE", "벌레먹기"},
-    {"ROCK THROW", "돌떨구기"}, {"SHADOW BALL", "섀도볼"},
-    {"DRAGON BREATH", "용의숨결"}, {"QUICK HIT", "빠른공격"},
-    {"POWER STRIKE", "강타"}
-  };
-  for (const auto &item : table) if (strcmp(en, item.en) == 0) return item.ko;
-  return en;
-}
-
-
 void renderCardActions() {
   gfx->setTextColor(UI_INK);
   setSize(3);
@@ -2714,8 +2663,7 @@ void renderCardActions() {
   setCur(centerX(adventureText("WILD BATTLE"), 2), 129); printT(adventureText("WILD BATTLE"));
   setCur(centerX(adventureText("COLLECTION BOX"), 2), 209); printT(adventureText("COLLECTION BOX"));
   char info[48];
-  snprintf(info, sizeof(info), gLang == LANG_KO ? "%u종 발견 / %u종 등록" :
-           "SEEN %u  CAUGHT %u", pet.seenCount(), pet.registeredCount());
+  snprintf(info, sizeof(info), adventureText("SEEN %u  CAUGHT %u"), pet.seenCount(), pet.registeredCount());
   gfx->setTextColor(UI_INK);
   setCur(centerX(info, 2), 291); printT(info);
 }
@@ -2751,6 +2699,7 @@ void startWildBattle(bool nextWave) {
     if (battle.playerHp == 0) battle.playerHp = 1;
   }
   battleOutcome = 0;
+  battlePlayerHit = battleEnemyHit = false;
   moveMenu = false;
   rewardPicked = false;
   battleMessage = trainerBattle ? "A trainer challenges you!" :
@@ -2761,6 +2710,9 @@ void startWildBattle(bool nextWave) {
 }
 
 void finishBattleTurn(const BattleTurnResult &turn) {
+  battleAnimStart = millis();
+  battlePlayerHit = turn.playerDamage > 0;
+  battleEnemyHit = turn.enemyDamage > 0;
   if (turn.restFailed) battleMessage = "No PP left!";
   else if (turn.missed) battleMessage = "The move missed!";
   else if (turn.playerParalyzed) battleMessage = "Unable to move!";
@@ -2880,17 +2832,35 @@ void renderBattle() {
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
   char head[48];
-  const char *battleHeader = battleWave % 10 == 0 ?
-      (gLang == LANG_KO ? "보스 %u  #%03d" : "BOSS %u  #%03d") :
-      trainerBattle ? (gLang == LANG_KO ? "트레이너 %u  #%03d" : "TRAINER %u  #%03d") :
-      (gLang == LANG_KO ? "%u웨이브  #%03d" : "WAVE %u  #%03d");
+  const char *battleHeader = adventureText(battleWave % 10 == 0 ?
+      "BOSS %u  #%03d" : trainerBattle ? "TRAINER %u  #%03d" : "WAVE %u  #%03d");
   snprintf(head, sizeof(head), battleHeader, battleWave, wildDex);
   gfx->setTextColor(UI_INK); setSize(2);
   setCur(centerX(head, 2), 33); printT(head);
   gfx->setTextColor(DEX_TBL[wildDex].accent);
   setCur(centerX(dexName(wildDex), 2), 65); printT(dexName(wildDex));
-  if (pmd.loaded) drawPmdActM(pmd, PMD_IDLE, 135, 212, millis(), true, false, 3);
-  if (wildPmd.loaded) drawPmdActM(wildPmd, PMD_IDLE, 330, 212, millis(), true, false, 3);
+  uint8_t playerAct = PMD_IDLE, wildAct = PMD_IDLE;
+  uint32_t animAge = millis() - battleAnimStart;
+  if (animAge < 1100) {
+    if (animAge < 550 && battlePlayerHit) {
+      playerAct = PMD_ATTACK; wildAct = PMD_HURT;
+    } else if (battleEnemyHit) {
+      playerAct = PMD_HURT; wildAct = PMD_ATTACK;
+    }
+  }
+  if (pmd.loaded) drawPmdActM(pmd, pmd.has(playerAct) ? playerAct : PMD_IDLE,
+                               135, 212, millis(), true, false, 3);
+  else {
+    const uint8_t *t = thumbs.get(pet.speciesId);
+    if (t) drawThumb(t, 95, 122, 2, false);
+  }
+  if (wildPmd.loaded && battleOutcome != 2)
+    drawPmdActM(wildPmd, wildPmd.has(wildAct) ? wildAct : PMD_IDLE,
+                330, 212, millis(), true, false, 3);
+  else if (battleOutcome != 2) {
+    const uint8_t *t = thumbs.get(wildDex);
+    if (t) drawThumb(t, 290, 122, 2, false);
+  }
   char hp[52];
   snprintf(hp, sizeof(hp), "HP %u/%u", battle.playerHp, battle.playerMaxHp);
   gfx->setTextColor(UI_INK); setCur(88, 222); printT(hp);
@@ -2920,7 +2890,7 @@ void renderBattle() {
     battleButton(76, 326, 0x4C98, "DODGE");
     battleButton(240, 326, UI_BAR_OK, "POTION");
     char label[20];
-    snprintf(label, sizeof(label), gLang == LANG_KO ? "볼 x%u" : "BALL x%u", pet.balls);
+    snprintf(label, sizeof(label), adventureText("BALL x%u"), pet.balls);
     battleButton(76, 378, 0x4C98, label);
     battleButton(240, 378, UI_TRACK, "RUN");
   }
@@ -2962,8 +2932,7 @@ void renderBox() {
   gfx->setTextColor(UI_INK); setSize(3);
   setCur(centerX(adventureText("COLLECTION"), 3), 42); printT(adventureText("COLLECTION"));
   char head[44];
-  snprintf(head, sizeof(head), gLang == LANG_KO ? "%u마리 보관 / %u종 등록" :
-           "%u stored / %u caught", collection.count(), pet.registeredCount());
+  snprintf(head, sizeof(head), adventureText("%u stored / %u caught"), collection.count(), pet.registeredCount());
   setSize(2); setCur(centerX(head, 2), 77); printT(head);
   for (int row = 0; row < 5; row++) {
     int16_t dex = boxSpeciesAt(boxPage * 5 + row);

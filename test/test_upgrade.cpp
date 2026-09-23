@@ -4,6 +4,8 @@
 #include "../collection.h"
 #include "../battle.h"
 #include "../types.h"
+#include "../adventure_i18n.h"
+#include "../i18n.h"
 #include <string.h>
 
 TEST(upgrade, seen_species_is_not_detailed_until_caught) {
@@ -104,4 +106,12 @@ TEST(upgrade, sleep_prevents_two_turns_then_clears) {
   CHECK_EQ(battle.playerStatus, STATUS_NONE);
   BattleTurnResult third = stepBattle(battle, BATTLE_ATTACK, 99);
   CHECK(third.playerDamage > 0);
+}
+
+TEST(upgrade, korean_adventure_labels_follow_language) {
+  gLang = LANG_KO;
+  CHECK_STREQ(adventureText("FIGHT"), "기술");
+  CHECK_STREQ(adventureText("WAVE %u  #%03d"), "%u웨이브  #%03d");
+  gLang = LANG_EN;
+  CHECK_STREQ(adventureText("FIGHT"), "FIGHT");
 }
