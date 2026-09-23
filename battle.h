@@ -79,15 +79,15 @@ struct BattleTurnResult {
   bool missed, playerParalyzed, statusInflicted;
   bool battleEnded;
   bool playerWon;
-  uint8_t playerTypePct;
-  uint8_t enemyTypePct;
+  uint16_t playerTypePct;
+  uint16_t enemyTypePct;
 };
 
 bool canStartWildBattle(bool isEgg, bool sleeping, uint8_t ceremony);
 uint8_t wildLevelFor(uint8_t petLevel, uint8_t luckRoll);
 int16_t pickWildSpecies(uint8_t roll);
 BattleStats wildBattleStats(int16_t dex, uint8_t level);
-uint8_t battleTypeEffectPct(uint8_t attackType, uint8_t defendType1, uint8_t defendType2);
+uint16_t battleTypeEffectPct(uint8_t attackType, uint8_t defendType1, uint8_t defendType2);
 BattleRuntime beginBattleRuntime(const BattleStats &player, const BattleStats &enemy);
 BattleTurnResult stepBattle(BattleRuntime &battle, BattleAction action, uint8_t luckRoll);
 BattleMove battleMoveFor(int16_t dex, uint8_t slot);

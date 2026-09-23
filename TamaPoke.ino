@@ -46,7 +46,7 @@ Pet pet;
 Collection collection;
 PmdMon wildPmd;
 BattleRuntime battle = {};
-bool battleOpen = false, boxOpen = false, wildShiny = false, moveMenu = false;
+bool battleOpen = false, boxOpen = false, wildShiny = false, moveMenu = false, rewardPicked = false;
 uint8_t battleOutcome = 0;  // 0 active, 1 win, 2 caught, 3 loss, 4 fled
 uint16_t battleWave = 1;
 int16_t wildDex = 0;
@@ -2673,6 +2673,7 @@ void startWildBattle(bool nextWave) {
   else battleWave++;
   wildDex = 1 + random(151);  // all 151 species can be encountered
   wildLevel = wildLevelFor((uint8_t)min((uint16_t)100, pet.level()), random(100));
+  if (battleWave % 10 == 0) wildLevel = (uint8_t)min(100, (int)wildLevel + 5 + battleWave / 10);
   wildShiny = random(48) == 0;
   BattleStats player = {};
   player.atk = pet.atkStat(); player.def = pet.defStat(); player.spe = pet.speStat();
@@ -2686,6 +2687,7 @@ void startWildBattle(bool nextWave) {
   }
   battleOutcome = 0;
   moveMenu = false;
+  rewardPicked = false;
   battleMessage = "A wild Pokemon appeared!";
   pet.markSeen(wildDex);
   wildPmd.unload(); wildPmd.load(wildDex, wildShiny);
@@ -2699,6 +2701,7 @@ void finishBattleTurn(const BattleTurnResult &turn) {
   else if (turn.statusInflicted) battleMessage = "Status inflicted!";
   else if (turn.enemyDodged) battleMessage = "The wild Pokemon dodged!";
   else if (turn.playerDodged) battleMessage = "Dodged! Counter ready.";
+  else if (turn.playerTypePct == 0) battleMessage = "No effect!";
   else if (turn.playerTypePct > 100) battleMessage = "Super effective!";
   else if (turn.playerTypePct < 100) battleMessage = "Not very effective.";
   else battleMessage = "A fierce exchange!";
@@ -2707,8 +2710,7 @@ void finishBattleTurn(const BattleTurnResult &turn) {
     battleOutcome = 1;
     battleMessage = "Victory! Next wave?";
     if (pet.battleWins < 65535) pet.battleWins++;
-    if (pet.balls < 99) pet.balls++;
-    if (battleWave % 3 == 0 && pet.potions < 9) pet.potions++;
+    pet.ageMinutes += MINUTES_PER_LEVEL / 4;  // only the active companion gains battle XP
     pet.persist();
   } else {
     battleOutcome = 3;
@@ -2729,6 +2731,20 @@ void battleTap(int16_t x, int16_t y) {
     return;
   }
   if (battleOutcome) {
+    if ((battleOutcome == 1 || battleOutcome == 2) && !rewardPicked) {
+      if (y >= 280 && y < 330) {
+        pet.balls = (uint8_t)min(99, (int)pet.balls + 3); battleMessage = "+3 Poke Balls";
+      } else if (y >= 330 && y < 380) {
+        pet.potions = (uint8_t)min(9, (int)pet.potions + 2); battleMessage = "+2 Potions";
+      } else if (y >= 380 && y < 430) {
+        pet.trAtk = (uint8_t)min(100, (int)pet.trAtk + 2);
+        pet.trDef = (uint8_t)min(100, (int)pet.trDef + 2);
+        pet.trSpe = (uint8_t)min(100, (int)pet.trSpe + 2);
+        for (int i = 0; i < 4; i++) battle.pp[i] = battleMoveFor(pet.speciesId, i).maxPp;
+        battleMessage = "Training and PP restored!";
+      } else return;
+      rewardPicked = true; pet.persist(); return;
+    }
     if ((battleOutcome == 1 || battleOutcome == 2) && y >= 305 && y < 362) {
       startWildBattle(true); return;
     }
@@ -2747,11 +2763,15 @@ void battleTap(int16_t x, int16_t y) {
     pet.persist();
     uint16_t missing = battle.enemyMaxHp - battle.enemyHp;
     int chance = 12 + (uint32_t)missing * 68 / battle.enemyMaxHp;
+    if (battle.enemyStatus != STATUS_NONE) chance = chance * 3 / 2;
+    if (battleWave % 10 == 0) chance /= 2;
     if (DEX_TBL[wildDex].rarity == R_LEGENDARIO) chance /= 3;
     else if (DEX_TBL[wildDex].rarity == R_RARO) chance = chance * 3 / 4;
     if (random(100) < chance) {
       collection.catchWild(pet, wildDex, wildLevel, wildShiny);
       battleOutcome = 2;
+      pet.ageMinutes += MINUTES_PER_LEVEL / 4;
+      pet.persist();
       battleMessage = "Captured! Sent to the box.";
       return;
     }
@@ -2792,7 +2812,7 @@ void renderBattle() {
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
   char head[48];
-  snprintf(head, sizeof(head), "WAVE %u  #%03d", battleWave, wildDex);
+  snprintf(head, sizeof(head), battleWave % 10 == 0 ? "BOSS %u  #%03d" : "WAVE %u  #%03d", battleWave, wildDex);
   gfx->setTextColor(UI_INK); setSize(2);
   setCur(centerX(head, 2), 33); printT(head);
   gfx->setTextColor(DEX_TBL[wildDex].accent);
@@ -2806,8 +2826,14 @@ void renderBattle() {
   setCur(264, 222); printT(hp);
   setSize(2); setCur(centerX(battleMessage, 2), 251); printT(battleMessage);
   if (battleOutcome) {
-    if (battleOutcome == 1 || battleOutcome == 2) battleButton(158, 310, UI_BAR_OK, "NEXT WAVE");
-    battleButton(158, 374, UI_BAR_BAD, "EXIT");
+    if ((battleOutcome == 1 || battleOutcome == 2) && !rewardPicked) {
+      battleButton(158, 279, 0x4C98, "+3 BALLS");
+      battleButton(158, 331, UI_BAR_OK, "+2 POTIONS");
+      battleButton(158, 383, UI_BAR_WARN, "+2 TRAINING");
+    } else {
+      if (battleOutcome == 1 || battleOutcome == 2) battleButton(158, 310, UI_BAR_OK, "NEXT WAVE");
+      battleButton(158, 374, UI_BAR_BAD, "EXIT");
+    }
   } else if (moveMenu) {
     for (int slot = 0; slot < 4; slot++) {
       BattleMove move = battleMoveFor(pet.speciesId, slot);

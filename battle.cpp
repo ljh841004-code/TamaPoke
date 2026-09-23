@@ -108,21 +108,21 @@ int8_t typeRelation(uint8_t attackType, uint8_t defendType) {
   return 0;
 }
 
-uint8_t effectPctFor(uint8_t attackType, uint8_t defendType1, uint8_t defendType2) {
+uint16_t effectPctFor(uint8_t attackType, uint8_t defendType1, uint8_t defendType2) {
   uint32_t pct = 100;
   const uint8_t defendTypes[2] = { defendType1, defendType2 };
   for (uint8_t i = 0; i < 2; i++) {
     int8_t relation = typeRelation(attackType, defendTypes[i]);
-    if (relation > 0) pct = pct * 120 / 100;
-    else if (relation == -1) pct = pct * 85 / 100;
-    else if (relation == -2) pct = pct * 70 / 100;
+    if (relation > 0) pct *= 2;
+    else if (relation == -1) pct /= 2;
+    else if (relation == -2) return 0;
   }
-  if (pct < 1) pct = 1;
-  return pct > 255 ? 255 : (uint8_t)pct;
+  return (uint16_t)pct;
 }
-
 uint16_t applyTypeMultiplier(uint16_t damage, const BattleStats &attacker, const BattleStats &defender) {
-  uint32_t scaled = (uint32_t)damage * effectPctFor(attacker.type1, defender.type1, defender.type2) / 100;
+  uint16_t pct = effectPctFor(attacker.type1, defender.type1, defender.type2);
+  if (pct == 0) return 0;
+  uint32_t scaled = (uint32_t)damage * pct / 100;
   if (scaled < 1) scaled = 1;
   return scaled > 65535 ? 65535 : (uint16_t)scaled;
 }
@@ -161,7 +161,7 @@ uint16_t cappedTurnDamage(const BattleStats &attacker,
                           uint8_t powerPct) {
   uint16_t damage = damageFor(attacker, defender, luck);
   damage = (uint16_t)((uint32_t)damage * powerPct / 100);
-  if (damage == 0) damage = 1;
+  if (damage == 0) return 0;
   if (counter) damage = (uint16_t)((uint32_t)damage * 3 / 2);
   uint16_t cap = (uint16_t)((uint32_t)defenderMaxHp * 35 / 100);
   if (cap < 1) cap = 1;
@@ -199,7 +199,7 @@ uint8_t enemyDodgeChance(const BattleRuntime &battle, BattleAction action) {
 }
 }  // namespace
 
-uint8_t battleTypeEffectPct(uint8_t attackType, uint8_t defendType1, uint8_t defendType2) {
+uint16_t battleTypeEffectPct(uint8_t attackType, uint8_t defendType1, uint8_t defendType2) {
   return effectPctFor(attackType, defendType1, defendType2);
 }
 
@@ -261,6 +261,8 @@ BattleRuntime beginBattleRuntime(const BattleStats &player, const BattleStats &e
   return battle;
 }
 
+static BattleStatus statusForType(uint8_t type);
+
 BattleTurnResult stepBattle(BattleRuntime &battle, BattleAction action, uint8_t luckRoll) {
   BattleTurnResult turn = {};
   if (finished(battle)) {
@@ -300,7 +302,10 @@ BattleTurnResult stepBattle(BattleRuntime &battle, BattleAction action, uint8_t 
       turn.playerDamage = cappedTurnDamage(battle.player, battle.enemy, battle.enemyMaxHp,
                                            luck, battle.counterReady, attackPowerPct(action));
       battle.counterReady = false;
-      if (battle.playerStatus == STATUS_BURN) turn.playerDamage = (turn.playerDamage * 3) / 4;
+      if (battle.playerStatus == STATUS_BURN && turn.playerDamage) {
+        turn.playerDamage = (turn.playerDamage * 3) / 4;
+        if (!turn.playerDamage) turn.playerDamage = 1;
+      }
       applyHit(battle.enemyHp, turn.playerDamage, battle.playerDamageTotal);
     }
   }
@@ -339,6 +344,10 @@ BattleTurnResult stepBattle(BattleRuntime &battle, BattleAction action, uint8_t 
     if (enemyHit > 0) {
       turn.enemyDamage = enemyHit;
       applyHit(battle.playerHp, turn.enemyDamage, battle.enemyDamageTotal);
+      if (battle.playerHp && battle.playerStatus == STATUS_NONE &&
+          ((uint16_t)luck * 7 + battle.round * 11) % 100 < 12) {
+        battle.playerStatus = statusForType(battle.enemy.type1);
+      }
     }
   }
 

@@ -57,7 +57,8 @@ TEST(upgrade, capture_store_and_switch_preserves_one_active_pet) {
 }
 
 TEST(upgrade, battle_type_and_wait_turn) {
-  CHECK(battleTypeEffectPct(TYPE_FIRE, TYPE_GRASS, TYPE_NONE) > 100);
+  CHECK_EQ(battleTypeEffectPct(TYPE_FIRE, TYPE_GRASS, TYPE_NONE), (uint16_t)200);
+  CHECK_EQ(battleTypeEffectPct(TYPE_ELECTRIC, TYPE_GROUND, TYPE_NONE), (uint16_t)0);
   CHECK(battleTypeEffectPct(TYPE_FIRE, TYPE_WATER, TYPE_NONE) < 100);
   CHECK_EQ(dexType1(4), (uint8_t)TYPE_FIRE);
   BattleStats player = wildBattleStats(4, 10);
@@ -82,6 +83,7 @@ TEST(upgrade, typed_move_uses_pp_and_applies_status) {
   CHECK(turn.playerDamage > 0);
   CHECK(turn.statusInflicted);
   CHECK_EQ(battle.enemyStatus, STATUS_BURN);
+  CHECK_EQ(battleTypeEffectPct(TYPE_ELECTRIC, TYPE_GROUND, TYPE_NONE), (uint16_t)0);
   uint16_t enemyBefore = battle.enemyHp;
   stepBattle(battle, BATTLE_WAIT, 99);
   CHECK(battle.enemyHp < enemyBefore);
