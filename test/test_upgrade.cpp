@@ -1,0 +1,71 @@
+#include "framework.h"
+#include "shim/Arduino.h"
+#include "../pet.h"
+#include "../collection.h"
+#include "../battle.h"
+#include "../types.h"
+#include <string.h>
+
+TEST(upgrade, seen_species_is_not_detailed_until_caught) {
+  mockNvsReset();
+  Pet p;
+  p.begin();
+  p.markSeen(25);
+  CHECK(p.isSeen(25));
+  CHECK(!p.isRegistered(25));
+  CHECK_EQ(p.seenCount(), (uint16_t)1);
+  CHECK_EQ(p.registeredCount(), (uint16_t)0);
+  Pet restored;
+  restored.begin();
+  CHECK(restored.isSeen(25));
+  CHECK(!restored.isRegistered(25));
+  restored.registerCaught(25, true);
+  CHECK(restored.isRegistered(25));
+  CHECK(restored.isShinyRegistered(25));
+}
+
+TEST(upgrade, capture_store_and_switch_preserves_one_active_pet) {
+  mockNvsReset();
+  Pet p;
+  p.begin();
+  p.chooseStarter(1);
+  p.eggTap(); p.eggTap(); p.eggTap();
+  p.ageMinutes = 300;
+  p.trAtk = 7;
+  p.rename("SEED");
+  Collection box;
+  box.begin();
+  CHECK(box.catchWild(p, 4, 12, false));
+  CHECK(box.has(4));
+  CHECK(p.isRegistered(4));
+  CHECK(box.activate(p, 4));
+  CHECK_EQ(p.speciesId, (int16_t)4);
+  CHECK(box.has(1));
+  CHECK(!box.has(4));
+  CHECK(box.deposit(p));
+  CHECK(p.isEgg());
+  CHECK(box.has(4));
+  Collection restored;
+  restored.begin();
+  CHECK(restored.has(1));
+  CHECK(restored.has(4));
+  CHECK(restored.activate(p, 1));
+  CHECK_EQ(p.speciesId, (int16_t)1);
+  CHECK_EQ(p.ageMinutes, (uint32_t)300);
+  CHECK_EQ(p.trAtk, (uint8_t)7);
+  CHECK_STREQ(p.nick, "SEED");
+}
+
+TEST(upgrade, battle_type_and_wait_turn) {
+  CHECK(battleTypeEffectPct(TYPE_FIRE, TYPE_GRASS, TYPE_NONE) > 100);
+  CHECK(battleTypeEffectPct(TYPE_FIRE, TYPE_WATER, TYPE_NONE) < 100);
+  CHECK_EQ(dexType1(4), (uint8_t)TYPE_FIRE);
+  BattleStats player = wildBattleStats(4, 10);
+  BattleStats enemy = wildBattleStats(1, 10);
+  BattleRuntime battle = beginBattleRuntime(player, enemy);
+  uint16_t playerBefore = battle.playerHp;
+  BattleTurnResult turn = stepBattle(battle, BATTLE_WAIT, 99);
+  CHECK_EQ(battle.round, (uint8_t)1);
+  CHECK(battle.playerHp < playerBefore);
+  CHECK_EQ(turn.playerDamage, (uint16_t)0);
+}

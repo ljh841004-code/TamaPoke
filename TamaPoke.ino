@@ -445,6 +445,7 @@ void handleSerial() {
     pet.dbgRunawayReady();  // fuerza el estado "lista para escaparse" (test del boton)
     Serial.println("DONE");
   } else if (line == "WIPE") {
+    collection.clear();
     pet.factoryReset();     // borra NVS y reinicia -> partida nueva (eleccion de inicial)
     Serial.println("DONE");
     delay(100);
@@ -574,7 +575,11 @@ void onSwipeV(int dir) {
 void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
   if (battleOpen) return;
-  if (boxOpen) { boxPage = (uint8_t)max(0, min(30, (int)boxPage + (dir > 0 ? -1 : 1))); return; }
+  if (boxOpen) {
+    int maxPage = collection.count() ? (collection.count() - 1) / 5 : 0;
+    boxPage = (uint8_t)max(0, min(maxPage, (int)boxPage + (dir > 0 ? -1 : 1)));
+    return;
+  }
   if (gameOpen || kbOpen || clockOpen) return;
   if (cardOpen) {  // dentro de la ficha: cambiar entre las 4 paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza

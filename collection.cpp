@@ -5,12 +5,17 @@ void Collection::begin() {
   memset(mons, 0, sizeof(mons));
   prefs.begin("tpbox", false);
   if (prefs.getUChar("version", 0) == 1 &&
-      prefs.getBytesLength("mons") == sizeof(mons)) {
-    prefs.getBytes("mons", mons, sizeof(mons));
+      prefs.getBytes("mons", mons, sizeof(mons)) != sizeof(mons)) {
+    memset(mons, 0, sizeof(mons));
   }
   for (int i = 0; i < 151; i++) {
     if (mons[i].speciesId != i + 1) mons[i].speciesId = 0;
   }
+}
+
+void Collection::clear() {
+  memset(mons, 0, sizeof(mons));
+  prefs.clear();
 }
 
 void Collection::save() {
@@ -93,7 +98,7 @@ bool Collection::activate(Pet &pet, int16_t dex) {
   memcpy(pet.nick, selected.nick, sizeof(pet.nick));
   pet.nick[sizeof(pet.nick) - 1] = 0;
   pet.sleeping = false;
-  pet.persist();
+  pet.resetAfterSwap();
   save();
   return true;
 }

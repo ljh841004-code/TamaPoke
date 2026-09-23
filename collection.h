@@ -19,6 +19,7 @@ struct StoredMon {
 class Collection {
 public:
   void begin();
+  void clear();
   bool has(int16_t dex) const;
   uint16_t count() const;
   bool catchWild(Pet &pet, int16_t dex, uint16_t level, bool shiny);

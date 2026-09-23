@@ -180,7 +180,8 @@ public:
   // ultima hora real persistida; sirve para resembrar un RTC que perdio la hora
   uint32_t savedEpoch() { return prefs.getUInt("seen", 0); }
   void flushSave();
-  void persist() { save(); }  // used after switching the active companion
+  void persist() { save(); }  // store battle inventory and progress
+  void resetAfterSwap();
 
 private:
   Preferences prefs;

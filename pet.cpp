@@ -193,6 +193,18 @@ void Pet::tick() {
 
 // vuelca el guardado periodico pendiente (lo llama el loop en un momento sin
 // animacion para que el paron de la escritura a flash no se vea)
+void Pet::resetAfterSwap() {
+  ceremony = CER_NONE;
+  ceremonyUntil = 0;
+  starterPick = false;
+  neglectTicks = 0;
+  goodTicks = 0;
+  evoDeclinedLv = 0;
+  farDeclinedAge = 0;
+  eatUntil = heartUntil = evolveUntil = 0;
+  save();
+}
+
 void Pet::flushSave() {
   if (pendingSave) save();
 }
