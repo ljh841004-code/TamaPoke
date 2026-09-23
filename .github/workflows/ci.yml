@@ -46,7 +46,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tamapoke-battle-capture-esp32s3
-          path: tamapoke-battle-capture.bin
+          path: |
+            tamapoke-battle-capture.bin
+            build/esp32.esp32.esp32s3/TamaPoke.ino.bin
           if-no-files-found: error
   generated:
     name: Generated headers up to date
