@@ -376,6 +376,12 @@ uint16_t Pet::seenCount() const {
   return n;
 }
 
+uint16_t Pet::caughtCount() const {
+  uint16_t n = 0;
+  for (int16_t i = 1; i <= 151; i++)
+    if (dexCaught[(i - 1) >> 3] & (1 << ((i - 1) & 7))) n++;
+  return n;
+}
 uint16_t Pet::registeredCount() const {
   uint16_t n = 0;
   for (int i = 1; i <= 151; i++)

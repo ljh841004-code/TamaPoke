@@ -2007,11 +2007,12 @@ void renderGallery() {
 
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
-  char head[24];
-  snprintf(head, sizeof(head), T(S_POKEDEX_FMT), pet.registeredCount());
+  char head[64];
+  snprintf(head, sizeof(head), adventureText("SEEN %u  CAUGHT %u"), pet.seenCount(), pet.caughtCount());
   gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(head, 3), 36);
+  int headSize = textW(head, 3) <= 420 ? 3 : 2;
+  setSize(headSize);
+  setCur(centerX(head, headSize), 36);
   printT(head);
 
   for (int r = 0; r < 4; r++) {
@@ -2019,25 +2020,23 @@ void renderGallery() {
       int16_t dex = galleryPage * 16 + r * 4 + c + 1;
       if (dex > 151) break;
       int x = GAL_X + c * GAL_CELL, y = GAL_Y + r * GAL_CELL;
-      const uint8_t *t = thumbs.get(dex);
-      if (t) {
-        drawThumb(t, x, y, 2, !pet.isRegistered(dex));
-        if (pet.isSeen(dex) && !pet.isRegistered(dex)) {
-          gfx->setTextColor(UI_BAR_WARN); setSize(2); setCur(x + 62, y + 4); printT("?");
-        }
-        if (pet.isShinyRegistered(dex)) {
-          gfx->setTextColor(UI_BAR_WARN);
-          setSize(2);
-          setCur(x + 62, y + 4);
-          printT("*");
-        }
-      } else {
-        char num[6];
-        snprintf(num, sizeof(num), "%d", dex);
-        gfx->setTextColor(UI_TRACK);
-        setSize(2);
-        setCur(x + 24, y + 32);
-        printT(num);
+      bool seen = pet.isSeen(dex), registered = pet.isRegistered(dex);
+      const uint8_t *t = seen ? thumbs.get(dex) : nullptr;
+      if (t) drawThumb(t, x, y, 2, !registered);
+      else {
+        char label[8];
+        if (seen) snprintf(label, sizeof(label), "#%03d", dex);
+        else snprintf(label, sizeof(label), "???");
+        gfx->setTextColor(seen ? UI_INK : UI_TRACK);
+        setSize(2); setCur(x + (GAL_CELL - textW(label, 2)) / 2, y + 28); printT(label);
+      }
+      if (seen && !registered) {
+        const char *label = adventureText("SEEN");
+        gfx->fillRoundRect(x + 5, y + 61, 70, 17, 4, UI_BAR_WARN);
+        gfx->setTextColor(UI_WHITE); setSize(1);
+        setCur(x + (GAL_CELL - textW(label, 1)) / 2, y + 65); printT(label);
+      } else if (pet.isShinyRegistered(dex)) {
+        gfx->setTextColor(UI_BAR_WARN); setSize(2); setCur(x + 62, y + 4); printT("*");
       }
     }
   }
@@ -2671,7 +2670,7 @@ void renderCardActions() {
   setCur(centerX(adventureText("WILD BATTLE"), 2), 129); printT(adventureText("WILD BATTLE"));
   setCur(centerX(adventureText("COLLECTION BOX"), 2), 209); printT(adventureText("COLLECTION BOX"));
   char info[48];
-  snprintf(info, sizeof(info), adventureText("SEEN %u  CAUGHT %u"), pet.seenCount(), pet.registeredCount());
+  snprintf(info, sizeof(info), adventureText("SEEN %u  CAUGHT %u"), pet.seenCount(), pet.caughtCount());
   gfx->setTextColor(UI_INK);
   setCur(centerX(info, 2), 291); printT(info);
 }
@@ -2939,7 +2938,7 @@ void renderBox() {
   gfx->setTextColor(UI_INK); setSize(3);
   setCur(centerX(adventureText("COLLECTION"), 3), 42); printT(adventureText("COLLECTION"));
   char head[44];
-  snprintf(head, sizeof(head), adventureText("%u stored / %u caught"), collection.count(), pet.registeredCount());
+  snprintf(head, sizeof(head), adventureText("%u stored / %u caught"), collection.count(), pet.caughtCount());
   setSize(2); setCur(centerX(head, 2), 77); printT(head);
   for (int row = 0; row < 5; row++) {
     int16_t dex = boxSpeciesAt(boxPage * 5 + row);

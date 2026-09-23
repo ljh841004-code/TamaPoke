@@ -15,7 +15,7 @@ const char *adventureText(const char *en) {
     {"STORE ACTIVE", "현재 포켓몬 맡기기"},
     {"+3 BALLS", "볼 +3"}, {"+2 POTIONS", "상처약 +2"},
     {"+2 TRAINING", "훈련 +2"},
-    {"SEEN - NOT CAUGHT", "발견 / 미포획"},
+    {"SEEN - NOT CAUGHT", "발견 / 미포획"}, {"SEEN", "발견"},
     {"A wild Pokemon appeared!", "야생 포켓몬 등장!"},
     {"A trainer challenges you!", "트레이너가 승부를 건다!"},
     {"A boss appeared!", "보스 포켓몬 등장!"},

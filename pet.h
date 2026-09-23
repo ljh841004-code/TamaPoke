@@ -155,6 +155,7 @@ public:
   void markSeen(int16_t dex);
   void registerCaught(int16_t dex, bool caughtShiny = false);
   uint16_t seenCount() const;
+  uint16_t caughtCount() const;
   uint16_t registeredCount() const;
   bool lineHasUnregistered(int16_t base) const;
   uint8_t eggRarity() const;       // rareza del huevo actual (sin revelar especie)
