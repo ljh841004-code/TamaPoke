@@ -35,7 +35,7 @@ enum BattleAction : uint8_t {
   BATTLE_WAIT,
 };
 
-enum BattleStatus : uint8_t { STATUS_NONE = 0, STATUS_BURN, STATUS_POISON, STATUS_PARALYSIS, STATUS_SLEEP };
+enum BattleStatus : uint8_t { STATUS_NONE = 0, STATUS_BURN, STATUS_POISON, STATUS_PARALYSIS, STATUS_SLEEP, STATUS_FREEZE };
 
 struct BattleMove {
   const char *name;
@@ -57,7 +57,7 @@ struct BattleRuntime {
   bool counterReady;
   uint8_t pp[4];
   BattleStatus playerStatus, enemyStatus;
-  uint8_t enemyStatusTurns;
+  uint8_t enemyStatusTurns, playerStatusTurns;
 };
 
 struct BattleTurnResult {
@@ -73,7 +73,7 @@ struct BattleTurnResult {
   bool counterReady;
   uint8_t pp[4];
   BattleStatus playerStatus, enemyStatus;
-  uint8_t enemyStatusTurns;
+  uint8_t enemyStatusTurns, playerStatusTurns;
   bool counterUsed;
   bool restFailed;
   bool missed, playerParalyzed, statusInflicted;

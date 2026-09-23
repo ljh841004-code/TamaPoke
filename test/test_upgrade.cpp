@@ -88,3 +88,20 @@ TEST(upgrade, typed_move_uses_pp_and_applies_status) {
   stepBattle(battle, BATTLE_WAIT, 99);
   CHECK(battle.enemyHp < enemyBefore);
 }
+
+
+TEST(upgrade, sleep_prevents_two_turns_then_clears) {
+  BattleRuntime battle = beginBattleRuntime(wildBattleStats(4, 10),
+                                            wildBattleStats(1, 10));
+  battle.playerStatus = STATUS_SLEEP;
+  battle.playerStatusTurns = 2;
+  BattleTurnResult first = stepBattle(battle, BATTLE_ATTACK, 99);
+  CHECK(first.playerParalyzed);
+  CHECK_EQ(first.playerDamage, (uint16_t)0);
+  CHECK_EQ(battle.playerStatusTurns, (uint8_t)1);
+  BattleTurnResult second = stepBattle(battle, BATTLE_ATTACK, 99);
+  CHECK(second.playerParalyzed);
+  CHECK_EQ(battle.playerStatus, STATUS_NONE);
+  BattleTurnResult third = stepBattle(battle, BATTLE_ATTACK, 99);
+  CHECK(third.playerDamage > 0);
+}

@@ -46,12 +46,13 @@ Pet pet;
 Collection collection;
 PmdMon wildPmd;
 BattleRuntime battle = {};
-bool battleOpen = false, boxOpen = false, wildShiny = false, moveMenu = false, rewardPicked = false;
+bool battleOpen = false, boxOpen = false, wildShiny = false, moveMenu = false, rewardPicked = false, trainerBattle = false;
 uint8_t battleOutcome = 0;  // 0 active, 1 win, 2 caught, 3 loss, 4 fled
 uint16_t battleWave = 1;
 int16_t wildDex = 0;
 uint8_t wildLevel = 1, boxPage = 0;
 const char *battleMessage = "";
+const char *adventureText(const char *en);
 
 // sprite animado de la SD para la especie actual (si existe el archivo)
 SdMon mon;          // sprite B/N (respaldo y minijuego si no hay PMD)
@@ -646,6 +647,7 @@ void onTap(int16_t x, int16_t y) {
     if (cardPage == 4) {
       if (y >= 110 && y < 170) { cardOpen = false; startWildBattle(false); }
       else if (y >= 190 && y < 250) { cardOpen = false; boxOpen = true; boxPage = 0; }
+      else cardOpen = false;
       return;
     }
     if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
@@ -1068,7 +1070,7 @@ void render() {
     setCur(centerX(reg, 2), 348);
     printT(reg);
     gfx->fillRoundRect(128, 387, 210, 48, 10, 0x4C98);
-    gfx->setTextColor(UI_WHITE); setCur(centerX("COLLECTION BOX", 2), 400); printT("COLLECTION BOX");
+    gfx->setTextColor(UI_WHITE); setCur(centerX(adventureText("COLLECTION BOX"), 2), 400); printT(adventureText("COLLECTION BOX"));
   } else {
     const DexEntry &d = DEX_TBL[pet.speciesId];
     char name[28];
@@ -1981,7 +1983,7 @@ void renderGallery() {
       snprintf(stats, sizeof(stats), "HP %u ATK %u DEF %u SPD %u", d.bHp, d.bAtk, d.bDef, d.bSpe);
       setCur(centerX(stats, 2), 362); printT(stats);
     } else if (seen) {
-      setCur(centerX("SEEN - NOT CAUGHT", 2), 362); printT("SEEN - NOT CAUGHT");
+      setCur(centerX(adventureText("SEEN - NOT CAUGHT"), 2), 362); printT(adventureText("SEEN - NOT CAUGHT"));
     }
     setCur(centerX(T(S_DETAIL_BACK), 2), 408);
     printT(T(S_DETAIL_BACK));
@@ -2646,19 +2648,74 @@ void drawMap(const char *const *map, int n, int x, int y, int s, bool silhouette
 
 // ---------- wild battle and collection ----------
 
+// New adventure UI uses Korean when selected; other languages fall back to English.
+const char *adventureText(const char *en) {
+  if (gLang != LANG_KO) return en;
+  struct Pair { const char *en, *ko; };
+  static const Pair table[] = {
+    {"ADVENTURE", "모험"}, {"WILD BATTLE", "야생 배틀"},
+    {"COLLECTION BOX", "보관함"}, {"COLLECTION", "보관함"},
+    {"FIGHT", "기술"}, {"POWER", "강공격"}, {"DODGE", "회피"},
+    {"POTION", "상처약"}, {"RUN", "도망"}, {"BACK", "뒤로"},
+    {"NEXT WAVE", "다음 웨이브"}, {"EXIT", "나가기"},
+    {"STORE ACTIVE", "현재 포켓몬 맡기기"},
+    {"+3 BALLS", "볼 +3"}, {"+2 POTIONS", "상처약 +2"},
+    {"+2 TRAINING", "훈련 +2"},
+    {"SEEN - NOT CAUGHT", "발견 / 미포획"},
+    {"A wild Pokemon appeared!", "야생 포켓몬 등장!"},
+    {"A trainer challenges you!", "트레이너가 승부를 건다!"},
+    {"A boss appeared!", "보스 포켓몬 등장!"},
+    {"The wild Pokemon dodged!", "상대가 피했다!"},
+    {"Dodged! Counter ready.", "회피 성공! 반격 준비"},
+    {"No effect!", "효과가 없다!"},
+    {"Super effective!", "효과가 굉장했다!"},
+    {"Not very effective.", "효과가 별로다."},
+    {"A fierce exchange!", "서로 공격했다!"},
+    {"Victory! Next wave?", "승리! 보상을 고르세요"},
+    {"Your Pokemon fainted.", "포켓몬이 쓰러졌다."},
+    {"No PP left!", "PP가 부족하다!"},
+    {"The move missed!", "기술이 빗나갔다!"},
+    {"Unable to move!", "움직일 수 없다!"},
+    {"Status inflicted!", "상태이상 성공!"},
+    {"No Poke Balls left.", "볼이 부족하다."},
+    {"Cannot catch a trainer Pokemon.", "트레이너 포켓몬은 포획 불가"},
+    {"Captured! Sent to the box.", "포획! 보관함에 등록"},
+    {"The Pokemon broke free!", "포켓몬이 탈출했다!"},
+    {"Got away safely.", "무사히 도망쳤다."},
+    {"Could not escape!", "도망치지 못했다!"},
+    {"No potions left.", "상처약이 부족하다."},
+    {"+3 Poke Balls", "볼 3개 획득"},
+    {"+2 Potions", "상처약 2개 획득"},
+    {"Training and PP restored!", "훈련 상승 / PP 회복"},
+    {"TACKLE", "몸통박치기"}, {"EMBER", "불꽃세례"},
+    {"WATER GUN", "물대포"}, {"THUNDER", "전기쇼크"},
+    {"VINE WHIP", "덩굴채찍"}, {"ICE BEAM", "냉동빔"},
+    {"KARATE CHOP", "태권당수"}, {"POISON STING", "독침"},
+    {"MUD SLAP", "진흙뿌리기"}, {"GUST", "바람일으키기"},
+    {"CONFUSION", "염동력"}, {"BUG BITE", "벌레먹기"},
+    {"ROCK THROW", "돌떨구기"}, {"SHADOW BALL", "섀도볼"},
+    {"DRAGON BREATH", "용의숨결"}, {"QUICK HIT", "빠른공격"},
+    {"POWER STRIKE", "강타"}
+  };
+  for (const auto &item : table) if (strcmp(en, item.en) == 0) return item.ko;
+  return en;
+}
+
+
 void renderCardActions() {
   gfx->setTextColor(UI_INK);
   setSize(3);
-  setCur(centerX("ADVENTURE", 3), 55);
-  printT("ADVENTURE");
+  setCur(centerX(adventureText("ADVENTURE"), 3), 55);
+  printT(adventureText("ADVENTURE"));
   gfx->fillRoundRect(86, 110, 294, 60, 12, UI_BAR_BAD);
   gfx->fillRoundRect(86, 190, 294, 60, 12, 0x4C98);
   gfx->setTextColor(UI_WHITE);
   setSize(2);
-  setCur(centerX("WILD BATTLE", 2), 129); printT("WILD BATTLE");
-  setCur(centerX("COLLECTION BOX", 2), 209); printT("COLLECTION BOX");
+  setCur(centerX(adventureText("WILD BATTLE"), 2), 129); printT(adventureText("WILD BATTLE"));
+  setCur(centerX(adventureText("COLLECTION BOX"), 2), 209); printT(adventureText("COLLECTION BOX"));
   char info[48];
-  snprintf(info, sizeof(info), "SEEN %u  CAUGHT %u", pet.seenCount(), pet.registeredCount());
+  snprintf(info, sizeof(info), gLang == LANG_KO ? "%u종 발견 / %u종 등록" :
+           "SEEN %u  CAUGHT %u", pet.seenCount(), pet.registeredCount());
   gfx->setTextColor(UI_INK);
   setCur(centerX(info, 2), 291); printT(info);
 }
@@ -2671,8 +2728,16 @@ void startWildBattle(bool nextWave) {
   if (nextWave) for (int i = 0; i < 4; i++) oldPp[i] = battle.pp[i];
   if (!nextWave) battleWave = 1;
   else battleWave++;
-  wildDex = 1 + random(151);  // all 151 species can be encountered
+  trainerBattle = battleWave % 5 == 0 && battleWave % 10 != 0;
+  uint8_t biome = ((battleWave - 1) / 10) % 6;
+  int16_t pool[151]; int poolCount = 0;
+  for (int16_t dex = 1; dex <= 151; dex++) {
+    if (battleWave < 25 && DEX_TBL[dex].rarity == R_LEGENDARIO) continue;
+    if (DEX_TBL[dex].biome == biome || random(4) == 0) pool[poolCount++] = dex;
+  }
+  wildDex = poolCount ? pool[random(poolCount)] : 1;
   wildLevel = wildLevelFor((uint8_t)min((uint16_t)100, pet.level()), random(100));
+  if (trainerBattle) wildLevel = (uint8_t)min(100, (int)wildLevel + 3);
   if (battleWave % 10 == 0) wildLevel = (uint8_t)min(100, (int)wildLevel + 5 + battleWave / 10);
   wildShiny = random(48) == 0;
   BattleStats player = {};
@@ -2688,7 +2753,8 @@ void startWildBattle(bool nextWave) {
   battleOutcome = 0;
   moveMenu = false;
   rewardPicked = false;
-  battleMessage = "A wild Pokemon appeared!";
+  battleMessage = trainerBattle ? "A trainer challenges you!" :
+                  battleWave % 10 == 0 ? "A boss appeared!" : "A wild Pokemon appeared!";
   pet.markSeen(wildDex);
   wildPmd.unload(); wildPmd.load(wildDex, wildShiny);
   battleOpen = true;
@@ -2758,6 +2824,7 @@ void battleTap(int16_t x, int16_t y) {
   int choice = row * 2 + col;
   if (choice == 0) { moveMenu = true; return; }
   if (choice == 4) {  // capture
+    if (trainerBattle) { battleMessage = "Cannot catch a trainer Pokemon."; return; }
     if (!pet.balls) { battleMessage = "No Poke Balls left."; return; }
     pet.balls--;
     pet.persist();
@@ -2804,15 +2871,20 @@ void battleButton(int x, int y, uint16_t color, const char *label) {
   gfx->fillRoundRect(x, y, 150, 43, 9, color);
   gfx->setTextColor(UI_WHITE);
   setSize(2);
-  setCur(x + (150 - textW(label, 2)) / 2, y + 13);
-  printT(label);
+  const char *shown = adventureText(label);
+  setCur(x + (150 - textW(shown, 2)) / 2, y + 13);
+  printT(shown);
 }
 
 void renderBattle() {
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
   char head[48];
-  snprintf(head, sizeof(head), battleWave % 10 == 0 ? "BOSS %u  #%03d" : "WAVE %u  #%03d", battleWave, wildDex);
+  const char *battleHeader = battleWave % 10 == 0 ?
+      (gLang == LANG_KO ? "보스 %u  #%03d" : "BOSS %u  #%03d") :
+      trainerBattle ? (gLang == LANG_KO ? "트레이너 %u  #%03d" : "TRAINER %u  #%03d") :
+      (gLang == LANG_KO ? "%u웨이브  #%03d" : "WAVE %u  #%03d");
+  snprintf(head, sizeof(head), battleHeader, battleWave, wildDex);
   gfx->setTextColor(UI_INK); setSize(2);
   setCur(centerX(head, 2), 33); printT(head);
   gfx->setTextColor(DEX_TBL[wildDex].accent);
@@ -2824,7 +2896,7 @@ void renderBattle() {
   gfx->setTextColor(UI_INK); setCur(88, 222); printT(hp);
   snprintf(hp, sizeof(hp), "HP %u/%u", battle.enemyHp, battle.enemyMaxHp);
   setCur(264, 222); printT(hp);
-  setSize(2); setCur(centerX(battleMessage, 2), 251); printT(battleMessage);
+  setSize(2); setCur(centerX(adventureText(battleMessage), 2), 251); printT(adventureText(battleMessage));
   if (battleOutcome) {
     if ((battleOutcome == 1 || battleOutcome == 2) && !rewardPicked) {
       battleButton(158, 279, 0x4C98, "+3 BALLS");
@@ -2838,7 +2910,7 @@ void renderBattle() {
     for (int slot = 0; slot < 4; slot++) {
       BattleMove move = battleMoveFor(pet.speciesId, slot);
       char label[30];
-      snprintf(label, sizeof(label), "%s %u", move.name, battle.pp[slot]);
+      snprintf(label, sizeof(label), "%s %u", adventureText(move.name), battle.pp[slot]);
       battleButton(slot % 2 ? 240 : 76, 274 + (slot / 2) * 52, slot == 3 ? UI_BAR_WARN : UI_BAR_BAD, label);
     }
     battleButton(158, 378, UI_TRACK, "BACK");
@@ -2848,7 +2920,7 @@ void renderBattle() {
     battleButton(76, 326, 0x4C98, "DODGE");
     battleButton(240, 326, UI_BAR_OK, "POTION");
     char label[20];
-    snprintf(label, sizeof(label), "BALL x%u", pet.balls);
+    snprintf(label, sizeof(label), gLang == LANG_KO ? "볼 x%u" : "BALL x%u", pet.balls);
     battleButton(76, 378, 0x4C98, label);
     battleButton(240, 378, UI_TRACK, "RUN");
   }
@@ -2888,9 +2960,10 @@ void renderBox() {
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
   gfx->setTextColor(UI_INK); setSize(3);
-  setCur(centerX("COLLECTION", 3), 42); printT("COLLECTION");
+  setCur(centerX(adventureText("COLLECTION"), 3), 42); printT(adventureText("COLLECTION"));
   char head[44];
-  snprintf(head, sizeof(head), "%u stored / %u caught", collection.count(), pet.registeredCount());
+  snprintf(head, sizeof(head), gLang == LANG_KO ? "%u마리 보관 / %u종 등록" :
+           "%u stored / %u caught", collection.count(), pet.registeredCount());
   setSize(2); setCur(centerX(head, 2), 77); printT(head);
   for (int row = 0; row < 5; row++) {
     int16_t dex = boxSpeciesAt(boxPage * 5 + row);
@@ -2910,7 +2983,7 @@ void renderBox() {
   if (!pet.isEgg()) {
     gfx->fillRoundRect(130, 393, 206, 42, 9, UI_BAR_WARN);
     gfx->setTextColor(UI_WHITE);
-    setCur(centerX("STORE ACTIVE", 2), 405); printT("STORE ACTIVE");
+    setCur(centerX(adventureText("STORE ACTIVE"), 2), 405); printT(adventureText("STORE ACTIVE"));
   }
   gfx->flush();
 }

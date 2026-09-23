@@ -281,7 +281,12 @@ BattleTurnResult stepBattle(BattleRuntime &battle, BattleAction action, uint8_t 
   }
 
   battle.round++;
-  if (battle.playerStatus == STATUS_PARALYSIS && luck < 25 && isAttackAction(action)) {
+  if ((battle.playerStatus == STATUS_SLEEP || battle.playerStatus == STATUS_FREEZE) &&
+      battle.playerStatusTurns) {
+    action = BATTLE_WAIT;
+    turn.playerParalyzed = true;
+    if (--battle.playerStatusTurns == 0) battle.playerStatus = STATUS_NONE;
+  } else if (battle.playerStatus == STATUS_PARALYSIS && luck < 25 && isAttackAction(action)) {
     action = BATTLE_WAIT;
     turn.playerParalyzed = true;
   }
@@ -311,7 +316,7 @@ BattleTurnResult stepBattle(BattleRuntime &battle, BattleAction action, uint8_t 
   }
 
   bool enemyActs = battle.enemyHp > 0 && (!turn.enemyDodged || action == BATTLE_ATTACK_HEAVY);
-  if (battle.enemyStatus == STATUS_SLEEP && battle.enemyStatusTurns) {
+  if ((battle.enemyStatus == STATUS_SLEEP || battle.enemyStatus == STATUS_FREEZE) && battle.enemyStatusTurns) {
     enemyActs = false;
     if (--battle.enemyStatusTurns == 0) battle.enemyStatus = STATUS_NONE;
   }
@@ -347,6 +352,8 @@ BattleTurnResult stepBattle(BattleRuntime &battle, BattleAction action, uint8_t 
       if (battle.playerHp && battle.playerStatus == STATUS_NONE &&
           ((uint16_t)luck * 7 + battle.round * 11) % 100 < 12) {
         battle.playerStatus = statusForType(battle.enemy.type1);
+        if (battle.playerStatus == STATUS_SLEEP || battle.playerStatus == STATUS_FREEZE)
+          battle.playerStatusTurns = 2;
       }
     }
   }
@@ -433,6 +440,7 @@ static BattleStatus statusForType(uint8_t type) {
     case TYPE_POISON: return STATUS_POISON;
     case TYPE_ELECTRIC: return STATUS_PARALYSIS;
     case TYPE_GRASS: return STATUS_SLEEP;
+    case TYPE_ICE: return STATUS_FREEZE;
     default: return STATUS_NONE;
   }
 }
@@ -478,7 +486,7 @@ BattleTurnResult stepBattleMove(BattleRuntime &battle, const BattleMove &move,
   if (turn.playerDamage && battle.enemyHp && battle.enemyStatus == STATUS_NONE &&
       move.status != STATUS_NONE && ((uint16_t)luckRoll * 13 + battle.round * 7) % 100 < move.statusChance) {
     battle.enemyStatus = move.status;
-    battle.enemyStatusTurns = move.status == STATUS_SLEEP ? 2 : 0;
+    battle.enemyStatusTurns = (move.status == STATUS_SLEEP || move.status == STATUS_FREEZE) ? 2 : 0;
     turn.statusInflicted = true;
   }
   return turn;

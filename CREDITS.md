@@ -39,3 +39,5 @@ Huge thanks to that whole community for an enormous amount of work.
 | Web installer | [ESP Web Tools](https://esphome.github.io/esp-web-tools/) (Nabu Casa) |
 
 TamaPoke's own code (firmware and tools) is original work.
+
+Battle calculation in battle.cpp is adapted from the MIT-licensed ShadowEnemyx TamaPoke expansion, with changes for this branch.
