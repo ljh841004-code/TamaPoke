@@ -66,6 +66,8 @@ public:
   uint8_t lastEnd = CER_NONE;   // como acabo la anterior (afecta al huevo)
   uint8_t dexReg[19] = { 0 };       // pokedex de criados (bitmap 151 bits)
   uint8_t dexShinyReg[19] = { 0 };  // criados en version shiny
+  uint8_t dexSeen[19] = { 0 };      // species encountered in battle
+  uint8_t dexCaught[19] = { 0 };    // wild species captured
   // racha de cuidado diario (del jugador: persiste entre crianzas)
   uint16_t streak = 0, bestStreak = 0;
   uint32_t lastCareDay = 0;
@@ -77,7 +79,9 @@ public:
   uint16_t newMedal = 0;   // recien conseguida(s), para celebrar
   uint16_t lastMilestone = 0;  // hito de racha ya celebrado
   uint16_t gameHi = 0;     // record del minijuego (del jugador)
-  uint16_t strHi = 0;      // record de golpes al saco
+  uint16_t strHi = 0;
+  uint8_t balls = 5, potions = 2;
+  uint16_t battleWins = 0;      // record de golpes al saco
 
   void begin();                 // carga estado de NVS (o crea el primer huevo)
   void update(uint32_t nowMs);  // llamar en cada loop()
@@ -139,11 +143,17 @@ public:
     return lv > 999 ? 999 : (uint16_t)lv;
   }
   bool isRegistered(int16_t dex) const {
-    return dex >= 1 && dex <= 151 && (dexReg[(dex - 1) >> 3] & (1 << ((dex - 1) & 7)));
+    return dex >= 1 && dex <= 151 && ((dexReg[(dex - 1) >> 3] | dexCaught[(dex - 1) >> 3]) & (1 << ((dex - 1) & 7)));
   }
   bool isShinyRegistered(int16_t dex) const {
     return dex >= 1 && dex <= 151 && (dexShinyReg[(dex - 1) >> 3] & (1 << ((dex - 1) & 7)));
   }
+  bool isSeen(int16_t dex) const {
+    return dex >= 1 && dex <= 151 && ((dexSeen[(dex - 1) >> 3] | dexReg[(dex - 1) >> 3] | dexCaught[(dex - 1) >> 3]) & (1 << ((dex - 1) & 7)));
+  }
+  void markSeen(int16_t dex);
+  void registerCaught(int16_t dex, bool caughtShiny = false);
+  uint16_t seenCount() const;
   uint16_t registeredCount() const;
   bool lineHasUnregistered(int16_t base) const;
   uint8_t eggRarity() const;       // rareza del huevo actual (sin revelar especie)
@@ -170,6 +180,7 @@ public:
   // ultima hora real persistida; sirve para resembrar un RTC que perdio la hora
   uint32_t savedEpoch() { return prefs.getUInt("seen", 0); }
   void flushSave();
+  void persist() { save(); }  // used after switching the active companion
 
 private:
   Preferences prefs;

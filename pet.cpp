@@ -254,6 +254,7 @@ int16_t Pet::pickEggSpecies() {
 void Pet::registerSpecies(int16_t dex) {
   if (dex < 1 || dex > 151) return;
   dexReg[(dex - 1) >> 3] |= (1 << ((dex - 1) & 7));
+  dexSeen[(dex - 1) >> 3] |= (1 << ((dex - 1) & 7));
   if (shiny) dexShinyReg[(dex - 1) >> 3] |= (1 << ((dex - 1) & 7));
 }
 
@@ -333,6 +334,27 @@ uint16_t Pet::defStat() const {
 }
 uint16_t Pet::speStat() const {
   return isEgg() ? 0 : calcStat(DEX_TBL[speciesId].bSpe, geneSpe, level(), trSpe);
+}
+
+void Pet::markSeen(int16_t dex) {
+  if (dex < 1 || dex > 151 || isSeen(dex)) return;
+  dexSeen[(dex - 1) >> 3] |= (1 << ((dex - 1) & 7));
+  save();
+}
+
+void Pet::registerCaught(int16_t dex, bool caughtShiny) {
+  if (dex < 1 || dex > 151) return;
+  uint8_t bit = 1 << ((dex - 1) & 7);
+  dexSeen[(dex - 1) >> 3] |= bit;
+  dexCaught[(dex - 1) >> 3] |= bit;
+  if (caughtShiny) dexShinyReg[(dex - 1) >> 3] |= bit;
+  save();
+}
+
+uint16_t Pet::seenCount() const {
+  uint16_t n = 0;
+  for (int16_t i = 1; i <= 151; i++) if (isSeen(i)) n++;
+  return n;
 }
 
 uint16_t Pet::registeredCount() const {
@@ -585,6 +607,8 @@ void Pet::save() {
   prefs.putUChar("lend", lastEnd);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
   prefs.putBytes("dexreg", dexReg, sizeof(dexReg));
+  prefs.putBytes("dexseen", dexSeen, sizeof(dexSeen));
+  prefs.putBytes("dexcatch", dexCaught, sizeof(dexCaught));
   prefs.putUShort("strk", streak);
   prefs.putUShort("bstrk", bestStreak);
   prefs.putUInt("cday", lastCareDay);
@@ -594,6 +618,9 @@ void Pet::save() {
   prefs.putUShort("mstone", lastMilestone);
   prefs.putUShort("ghi", gameHi);
   prefs.putUShort("shi", strHi);
+  prefs.putUChar("balls", balls);
+  prefs.putUChar("potions", potions);
+  prefs.putUShort("bwins", battleWins);
   prefs.putString("nick", nick);
 }
 
@@ -637,6 +664,8 @@ void Pet::load() {
   sleeping = prefs.getBool("sleep", false);
   lastEnd = prefs.getUChar("lend", CER_NONE);
   prefs.getBytes("dexreg", dexReg, sizeof(dexReg));
+  prefs.getBytes("dexseen", dexSeen, sizeof(dexSeen));
+  prefs.getBytes("dexcatch", dexCaught, sizeof(dexCaught));
   streak = prefs.getUShort("strk", 0);
   bestStreak = prefs.getUShort("bstrk", 0);
   lastCareDay = prefs.getUInt("cday", 0);
@@ -646,6 +675,9 @@ void Pet::load() {
   lastMilestone = prefs.getUShort("mstone", 0);
   gameHi = prefs.getUShort("ghi", 0);
   strHi = prefs.getUShort("shi", 0);
+  balls = prefs.getUChar("balls", 5);
+  potions = prefs.getUChar("potions", 2);
+  battleWins = prefs.getUShort("bwins", 0);
   prefs.getString("nick", nick, sizeof(nick));
   // siembra: la mascota actual cuenta como criada (guardados antiguos)
   if (speciesId >= 1) registerSpecies(speciesId);

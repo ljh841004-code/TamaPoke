@@ -18,6 +18,9 @@
 #include "species.h"
 #include "dex.h"
 #include "pet.h"
+#include "collection.h"
+#include "battle.h"
+#include "types.h"
 #include "sdmon.h"
 #include "rtcbat.h"
 #include "i18n.h"
@@ -40,6 +43,15 @@ TouchDrvCST92xx touch;
 bool gCjkFont = false;
 #define TOUCH_ADDR 0x5A  // CST9217
 Pet pet;
+Collection collection;
+PmdMon wildPmd;
+BattleRuntime battle = {};
+bool battleOpen = false, boxOpen = false, wildShiny = false;
+uint8_t battleOutcome = 0;  // 0 active, 1 win, 2 caught, 3 loss, 4 fled
+uint16_t battleWave = 1;
+int16_t wildDex = 0;
+uint8_t wildLevel = 1, boxPage = 0;
+const char *battleMessage = "";
 
 // sprite animado de la SD para la especie actual (si existe el archivo)
 SdMon mon;          // sprite B/N (respaldo y minijuego si no hay PMD)
@@ -208,6 +220,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(TP_INT), touchIsr, FALLING);
 
   pet.begin();
+  collection.begin();
   sdBegin();
   thumbs.load();
 
@@ -519,7 +532,7 @@ void handleTouch() {
     tXl = x;
     tYl = y;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
-    if (!holdFired && !swallowGesture && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && millis() - tStart > 3000 &&
+    if (!holdFired && !swallowGesture && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && !battleOpen && !boxOpen && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) &&
         !pet.isEgg() && !confirmUntil && !pet.ceremony) {
       confirmUntil = millis() + 10000;
@@ -543,7 +556,7 @@ void openClock();  // prototipo
 
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || galleryOpen || kbOpen || sackOpen || pet.ceremony) return;
+  if (gameOpen || galleryOpen || kbOpen || sackOpen || battleOpen || boxOpen || pet.ceremony) return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
     if (dir < 0) cardOpen = false;  // arriba cierra la ficha
@@ -560,10 +573,12 @@ void onSwipeV(int dir) {
 // deslizar: dir +1 = hacia la derecha
 void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
+  if (battleOpen) return;
+  if (boxOpen) { boxPage = (uint8_t)max(0, min(30, (int)boxPage + (dir > 0 ? -1 : 1))); return; }
   if (gameOpen || kbOpen || clockOpen) return;
   if (cardOpen) {  // dentro de la ficha: cambiar entre las 4 paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
-    cardPage = p < 0 ? 0 : (p > 3 ? 3 : p);
+    cardPage = p < 0 ? 0 : (p > 4 ? 4 : p);
     return;
   }
   if (!galleryOpen) {
@@ -595,6 +610,8 @@ void onSwipe(int dir) {
 }
 
 void onTap(int16_t x, int16_t y) {
+  if (battleOpen) { battleTap(x, y); return; }
+  if (boxOpen) { boxTap(x, y); return; }
   // Serial.printf("TOUCH %d %d\n", x, y);  // diagnostico (silenciado: satura el log)
   if (pet.awaitingStarter()) {  // primera partida: elegir inicial
     for (int i = 0; i < 3; i++) {
@@ -621,6 +638,11 @@ void onTap(int16_t x, int16_t y) {
   }
   if (pet.ceremony) return;  // durante la despedida no hay botones
   if (cardOpen) {
+    if (cardPage == 4) {
+      if (y >= 110 && y < 170) { cardOpen = false; startWildBattle(false); }
+      else if (y >= 190 && y < 250) { cardOpen = false; boxOpen = true; boxPage = 0; }
+      return;
+    }
     if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
     else if (cardPage == 1 && y >= 300 && y <= 340 && x >= 96 && x <= 370) {
       cardOpen = false;            // boton ENTRENAR FUERZA
@@ -665,6 +687,7 @@ void onTap(int16_t x, int16_t y) {
     return;
   }
   if (pet.isEgg()) {
+    if (y > 340) { boxOpen = true; boxPage = 0; return; }
     pet.eggTap();
     sfxPlay(SFX_TAP);
     return;
@@ -970,6 +993,8 @@ void printT(const char *s) {
 }
 
 void render() {
+  if (battleOpen) { renderBattle(); return; }
+  if (boxOpen) { renderBox(); return; }
   if (pet.awaitingStarter()) {  // primera partida: elegir inicial (prioridad total)
     renderStarterSelect();
     return;
@@ -1037,6 +1062,8 @@ void render() {
     setSize(2);
     setCur(centerX(reg, 2), 348);
     printT(reg);
+    gfx->fillRoundRect(128, 387, 210, 48, 10, 0x4C98);
+    gfx->setTextColor(UI_WHITE); setCur(centerX("COLLECTION BOX", 2), 400); printT("COLLECTION BOX");
   } else {
     const DexEntry &d = DEX_TBL[pet.speciesId];
     char name[28];
@@ -1810,12 +1837,13 @@ void renderCard() {
   if (cardPage == 0) renderCardProfile();
   else if (cardPage == 1) renderCardStats();
   else if (cardPage == 2) renderCardMedals();
-  else renderCardProgress();
+  else if (cardPage == 3) renderCardProgress();
+  else renderCardActions();
 
-  // indicador de 4 paginas + ayuda
-  for (int i = 0; i < 4; i++) {
-    if (i == cardPage) gfx->fillCircle(194 + i * 26, 374, 5, UI_INK);
-    else gfx->drawCircle(194 + i * 26, 374, 4, UI_INK);
+  // indicador de 5 paginas + ayuda
+  for (int i = 0; i < 5; i++) {
+    if (i == cardPage) gfx->fillCircle(181 + i * 26, 374, 5, UI_INK);
+    else gfx->drawCircle(181 + i * 26, 374, 4, UI_INK);
   }
   gfx->setTextColor(UI_TRACK);
   setSize(2);
@@ -1922,9 +1950,10 @@ void renderGallery() {
     gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
     const DexEntry &d = DEX_TBL[galleryDetail];
     bool reg = pet.isRegistered(galleryDetail);
+    bool seen = pet.isSeen(galleryDetail);
     char head[32];
     snprintf(head, sizeof(head), "N.%03d %s%s", galleryDetail,
-             pet.isShinyRegistered(galleryDetail) ? "*" : "", reg ? dexName(galleryDetail) : "???");
+             pet.isShinyRegistered(galleryDetail) ? "*" : "", seen ? dexName(galleryDetail) : "???");
     gfx->setTextColor(reg ? d.accent : UI_INK);
     // auto-encoge nombres largos (no caben a t3), midiendo en vez de contar
     // bytes; 13 caracteres a tamano 3 son los 234 px de antes.
@@ -1942,6 +1971,13 @@ void renderGallery() {
     }
     gfx->setTextColor(UI_INK);
     setSize(2);
+    if (reg) {
+      char stats[60];
+      snprintf(stats, sizeof(stats), "HP %u ATK %u DEF %u SPD %u", d.bHp, d.bAtk, d.bDef, d.bSpe);
+      setCur(centerX(stats, 2), 362); printT(stats);
+    } else if (seen) {
+      setCur(centerX("SEEN - NOT CAUGHT", 2), 362); printT("SEEN - NOT CAUGHT");
+    }
     setCur(centerX(T(S_DETAIL_BACK), 2), 408);
     printT(T(S_DETAIL_BACK));
     gfx->flush();
@@ -1968,6 +2004,9 @@ void renderGallery() {
       const uint8_t *t = thumbs.get(dex);
       if (t) {
         drawThumb(t, x, y, 2, !pet.isRegistered(dex));
+        if (pet.isSeen(dex) && !pet.isRegistered(dex)) {
+          gfx->setTextColor(UI_BAR_WARN); setSize(2); setCur(x + 62, y + 4); printT("?");
+        }
         if (pet.isShinyRegistered(dex)) {
           gfx->setTextColor(UI_BAR_WARN);
           setSize(2);
@@ -2597,4 +2636,223 @@ void drawMap(const char *const *map, int n, int x, int y, int s, bool silhouette
       gfx->fillRect(x + c * s, y + r * s, s, s, silhouette ? INK_K : spriteColor(ch));
     }
   }
+}
+
+
+// ---------- wild battle and collection ----------
+
+void renderCardActions() {
+  gfx->setTextColor(UI_INK);
+  setSize(3);
+  setCur(centerX("ADVENTURE", 3), 55);
+  printT("ADVENTURE");
+  gfx->fillRoundRect(86, 110, 294, 60, 12, UI_BAR_BAD);
+  gfx->fillRoundRect(86, 190, 294, 60, 12, 0x4C98);
+  gfx->setTextColor(UI_WHITE);
+  setSize(2);
+  setCur(centerX("WILD BATTLE", 2), 129); printT("WILD BATTLE");
+  setCur(centerX("COLLECTION BOX", 2), 209); printT("COLLECTION BOX");
+  char info[48];
+  snprintf(info, sizeof(info), "SEEN %u  CAUGHT %u", pet.seenCount(), pet.registeredCount());
+  gfx->setTextColor(UI_INK);
+  setCur(centerX(info, 2), 291); printT(info);
+}
+
+void startWildBattle(bool nextWave) {
+  if (!canStartWildBattle(pet.isEgg(), pet.sleeping, pet.ceremony)) return;
+  uint16_t carry = nextWave ? battle.playerHp : 0;
+  uint16_t oldMax = nextWave ? battle.playerMaxHp : 0;
+  if (!nextWave) battleWave = 1;
+  else battleWave++;
+  wildDex = 1 + random(151);  // all 151 species can be encountered
+  wildLevel = wildLevelFor((uint8_t)min((uint16_t)100, pet.level()), random(100));
+  wildShiny = random(48) == 0;
+  BattleStats player = {};
+  player.atk = pet.atkStat(); player.def = pet.defStat(); player.spe = pet.speStat();
+  player.level = (uint8_t)min((uint16_t)100, pet.level());
+  player.type1 = dexType1(pet.speciesId); player.type2 = dexType2(pet.speciesId);
+  battle = beginBattleRuntime(player, wildBattleStats(wildDex, wildLevel));
+  if (nextWave && oldMax) {
+    battle.playerHp = (uint32_t)carry * battle.playerMaxHp / oldMax;
+    if (battle.playerHp == 0) battle.playerHp = 1;
+  }
+  battleOutcome = 0;
+  battleMessage = "A wild Pokemon appeared!";
+  pet.markSeen(wildDex);
+  wildPmd.unload(); wildPmd.load(wildDex, wildShiny);
+  battleOpen = true;
+}
+
+void finishBattleTurn(const BattleTurnResult &turn) {
+  if (turn.enemyDodged) battleMessage = "The wild Pokemon dodged!";
+  else if (turn.playerDodged) battleMessage = "Dodged! Counter ready.";
+  else if (turn.playerTypePct > 100) battleMessage = "Super effective!";
+  else if (turn.playerTypePct < 100) battleMessage = "Not very effective.";
+  else battleMessage = "A fierce exchange!";
+  if (!turn.battleEnded) return;
+  if (turn.playerWon) {
+    battleOutcome = 1;
+    battleMessage = "Victory! Next wave?";
+    if (pet.battleWins < 65535) pet.battleWins++;
+    if (pet.balls < 99) pet.balls++;
+    if (battleWave % 3 == 0 && pet.potions < 9) pet.potions++;
+    pet.persist();
+  } else {
+    battleOutcome = 3;
+    battleMessage = "Your Pokemon fainted.";
+  }
+}
+
+void battleTap(int16_t x, int16_t y) {
+  if (battleOutcome) {
+    if ((battleOutcome == 1 || battleOutcome == 2) && y >= 305 && y < 362) {
+      startWildBattle(true); return;
+    }
+    if (y >= 360 || y < 86) { wildPmd.unload(); battleOpen = false; }
+    return;
+  }
+  if (y < 268 || y > 428 || x < 74 || x > 392) return;
+  int row = (y - 272) / 52;
+  int col = x < 233 ? 0 : 1;
+  if (row < 0 || row > 2) return;
+  int choice = row * 2 + col;
+  if (choice == 4) {  // capture
+    if (!pet.balls) { battleMessage = "No Poke Balls left."; return; }
+    pet.balls--;
+    pet.persist();
+    uint16_t missing = battle.enemyMaxHp - battle.enemyHp;
+    int chance = 12 + (uint32_t)missing * 68 / battle.enemyMaxHp;
+    if (DEX_TBL[wildDex].rarity == R_LEGENDARIO) chance /= 3;
+    else if (DEX_TBL[wildDex].rarity == R_RARO) chance = chance * 3 / 4;
+    if (random(100) < chance) {
+      collection.catchWild(pet, wildDex, wildLevel, wildShiny);
+      battleOutcome = 2;
+      battleMessage = "Captured! Sent to the box.";
+      return;
+    }
+    battleMessage = "The Pokemon broke free!";
+    finishBattleTurn(stepBattle(battle, BATTLE_WAIT, random(100)));
+    return;
+  }
+  if (choice == 5) {  // run
+    if (random(100) < (battle.player.spe >= battle.enemy.spe ? 85 : 55)) {
+      battleOutcome = 4;
+      battleMessage = "Got away safely.";
+      return;
+    }
+    battleMessage = "Could not escape!";
+    finishBattleTurn(stepBattle(battle, BATTLE_WAIT, random(100)));
+    return;
+  }
+  if (choice == 3) {  // potion
+    if (!pet.potions || !battle.restUsesLeft) { battleMessage = "No potions left."; return; }
+    pet.potions--;
+    pet.persist();
+    finishBattleTurn(stepBattle(battle, BATTLE_REST, random(100)));
+    return;
+  }
+  BattleAction action = choice == 0 ? BATTLE_ATTACK_QUICK :
+                        choice == 1 ? BATTLE_ATTACK_HEAVY : BATTLE_DODGE;
+  finishBattleTurn(stepBattle(battle, action, random(100)));
+}
+
+void battleButton(int x, int y, uint16_t color, const char *label) {
+  gfx->fillRoundRect(x, y, 150, 43, 9, color);
+  gfx->setTextColor(UI_WHITE);
+  setSize(2);
+  setCur(x + (150 - textW(label, 2)) / 2, y + 13);
+  printT(label);
+}
+
+void renderBattle() {
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  char head[48];
+  snprintf(head, sizeof(head), "WAVE %u  #%03d", battleWave, wildDex);
+  gfx->setTextColor(UI_INK); setSize(2);
+  setCur(centerX(head, 2), 33); printT(head);
+  gfx->setTextColor(DEX_TBL[wildDex].accent);
+  setCur(centerX(dexName(wildDex), 2), 65); printT(dexName(wildDex));
+  if (pmd.loaded) drawPmdActM(pmd, PMD_IDLE, 135, 212, millis(), true, false, 3);
+  if (wildPmd.loaded) drawPmdActM(wildPmd, PMD_IDLE, 330, 212, millis(), true, false, 3);
+  char hp[52];
+  snprintf(hp, sizeof(hp), "HP %u/%u", battle.playerHp, battle.playerMaxHp);
+  gfx->setTextColor(UI_INK); setCur(88, 222); printT(hp);
+  snprintf(hp, sizeof(hp), "HP %u/%u", battle.enemyHp, battle.enemyMaxHp);
+  setCur(264, 222); printT(hp);
+  setSize(2); setCur(centerX(battleMessage, 2), 251); printT(battleMessage);
+  if (battleOutcome) {
+    if (battleOutcome == 1 || battleOutcome == 2) battleButton(158, 310, UI_BAR_OK, "NEXT WAVE");
+    battleButton(158, 374, UI_BAR_BAD, "EXIT");
+  } else {
+    battleButton(76, 274, UI_BAR_BAD, "ATTACK");
+    battleButton(240, 274, UI_BAR_WARN, "POWER");
+    battleButton(76, 326, 0x4C98, "DODGE");
+    battleButton(240, 326, UI_BAR_OK, "POTION");
+    char label[20];
+    snprintf(label, sizeof(label), "BALL x%u", pet.balls);
+    battleButton(76, 378, 0x4C98, label);
+    battleButton(240, 378, UI_TRACK, "RUN");
+  }
+  gfx->flush();
+}
+
+int16_t boxSpeciesAt(uint16_t index) {
+  uint16_t n = 0;
+  for (int16_t dex = 1; dex <= 151; dex++) {
+    if (!collection.has(dex)) continue;
+    if (n++ == index) return dex;
+  }
+  return 0;
+}
+
+void boxTap(int16_t x, int16_t y) {
+  if (y < 82) { boxOpen = false; return; }
+  if (y >= 100 && y < 340) {
+    int row = (y - 100) / 48;
+    int16_t dex = boxSpeciesAt(boxPage * 5 + row);
+    if (dex && collection.activate(pet, dex)) {
+      boxOpen = false; ensureMon();
+    }
+    return;
+  }
+  if (y >= 348 && y < 390) {
+    if (x < 233 && boxPage > 0) boxPage--;
+    if (x >= 233 && (boxPage + 1) * 5 < collection.count()) boxPage++;
+    return;
+  }
+  if (y >= 390 && !pet.isEgg() && collection.deposit(pet)) {
+    boxPage = 0; ensureMon();
+  }
+}
+
+void renderBox() {
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->setTextColor(UI_INK); setSize(3);
+  setCur(centerX("COLLECTION", 3), 42); printT("COLLECTION");
+  char head[44];
+  snprintf(head, sizeof(head), "%u stored / %u caught", collection.count(), pet.registeredCount());
+  setSize(2); setCur(centerX(head, 2), 77); printT(head);
+  for (int row = 0; row < 5; row++) {
+    int16_t dex = boxSpeciesAt(boxPage * 5 + row);
+    if (!dex) break;
+    const StoredMon *m = collection.get(dex);
+    int y = 100 + row * 48;
+    gfx->fillRoundRect(83, y, 300, 42, 8, row % 2 ? UI_WHITE : 0xDEFB);
+    gfx->setTextColor(UI_INK); setSize(2);
+    char line[46];
+    snprintf(line, sizeof(line), "#%03d %s Lv%u", dex, dexName(dex),
+             1 + m->ageMinutes / MINUTES_PER_LEVEL);
+    setCur(96, y + 12); printT(line);
+  }
+  gfx->setTextColor(UI_INK); setSize(2);
+  setCur(135, 355); printT("< PREV");
+  setCur(268, 355); printT("NEXT >");
+  if (!pet.isEgg()) {
+    gfx->fillRoundRect(130, 393, 206, 42, 9, UI_BAR_WARN);
+    gfx->setTextColor(UI_WHITE);
+    setCur(centerX("STORE ACTIVE", 2), 405); printT("STORE ACTIVE");
+  }
+  gfx->flush();
 }
