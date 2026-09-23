@@ -2669,7 +2669,7 @@ void renderCardActions() {
 }
 
 void startWildBattle(bool nextWave) {
-  if (!canStartWildBattle(pet.isEgg(), pet.sleeping, pet.ceremony)) return;
+  if (!canStartWildBattle(pet.isEgg(), pet.sleeping, pet.ceremony) || pet.evolving()) return;
   uint16_t carry = nextWave ? battle.playerHp : 0;
   uint16_t oldMax = nextWave ? battle.playerMaxHp : 0;
   uint8_t oldPp[4] = {0, 0, 0, 0};

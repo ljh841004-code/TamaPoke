@@ -136,3 +136,12 @@ TEST(upgrade, battle_xp_levels_only_active_without_aging) {
   p.newEgg();
   CHECK_EQ(p.battleXpMinutes, (uint32_t)0);
 }
+
+TEST(upgrade, fire_cannot_burn_fire_type) {
+  BattleRuntime battle = beginBattleRuntime(wildBattleStats(4, 10),
+                                            wildBattleStats(4, 10));
+  BattleTurnResult turn = stepBattleMove(battle, battleMoveFor(4, 1), 1, 0);
+  CHECK(turn.playerDamage > 0);
+  CHECK(!turn.statusInflicted);
+  CHECK_EQ(battle.enemyStatus, STATUS_NONE);
+}

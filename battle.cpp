@@ -262,6 +262,7 @@ BattleRuntime beginBattleRuntime(const BattleStats &player, const BattleStats &e
 }
 
 static BattleStatus statusForType(uint8_t type);
+static bool canReceiveStatus(BattleStatus status, const BattleStats &target);
 
 BattleTurnResult stepBattle(BattleRuntime &battle, BattleAction action, uint8_t luckRoll) {
   BattleTurnResult turn = {};
@@ -351,9 +352,12 @@ BattleTurnResult stepBattle(BattleRuntime &battle, BattleAction action, uint8_t 
       applyHit(battle.playerHp, turn.enemyDamage, battle.enemyDamageTotal);
       if (battle.playerHp && battle.playerStatus == STATUS_NONE &&
           ((uint16_t)luck * 7 + battle.round * 11) % 100 < 12) {
-        battle.playerStatus = statusForType(battle.enemy.type1);
-        if (battle.playerStatus == STATUS_SLEEP || battle.playerStatus == STATUS_FREEZE)
-          battle.playerStatusTurns = 2;
+        BattleStatus inflicted = statusForType(battle.enemy.type1);
+        if (canReceiveStatus(inflicted, battle.player)) {
+          battle.playerStatus = inflicted;
+          if (inflicted == STATUS_SLEEP || inflicted == STATUS_FREEZE)
+            battle.playerStatusTurns = 2;
+        }
       }
     }
   }
@@ -445,6 +449,15 @@ static BattleStatus statusForType(uint8_t type) {
   }
 }
 
+static bool canReceiveStatus(BattleStatus status, const BattleStats &target) {
+  uint8_t a = target.type1, b = target.type2;
+  if (status == STATUS_BURN && (a == TYPE_FIRE || b == TYPE_FIRE)) return false;
+  if (status == STATUS_POISON &&
+      (a == TYPE_POISON || b == TYPE_POISON || a == TYPE_STEEL || b == TYPE_STEEL)) return false;
+  if (status == STATUS_PARALYSIS && (a == TYPE_ELECTRIC || b == TYPE_ELECTRIC)) return false;
+  if (status == STATUS_FREEZE && (a == TYPE_ICE || b == TYPE_ICE)) return false;
+  return status != STATUS_NONE;
+}
 BattleMove battleMoveFor(int16_t dex, uint8_t slot) {
   uint8_t first = dexType1(dex);
   uint8_t second = dexType2(dex);
@@ -484,7 +497,8 @@ BattleTurnResult stepBattleMove(BattleRuntime &battle, const BattleMove &move,
   battle.player.type1 = originalType;
   battle.player.atk = originalAtk;
   if (turn.playerDamage && battle.enemyHp && battle.enemyStatus == STATUS_NONE &&
-      move.status != STATUS_NONE && ((uint16_t)luckRoll * 13 + battle.round * 7) % 100 < move.statusChance) {
+      canReceiveStatus(move.status, battle.enemy) &&
+      ((uint16_t)luckRoll * 13 + battle.round * 7) % 100 < move.statusChance) {
     battle.enemyStatus = move.status;
     battle.enemyStatusTurns = (move.status == STATUS_SLEEP || move.status == STATUS_FREEZE) ? 2 : 0;
     turn.statusInflicted = true;
