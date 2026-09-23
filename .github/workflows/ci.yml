@@ -29,10 +29,27 @@ jobs:
 
       - name: Compile
         run: >
-          arduino-cli compile --warnings=all
+          arduino-cli compile --warnings=all --export-binaries
           --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB"
           .
 
+      - name: Build USB installer image
+        run: |
+          python3 -m pip install esptool
+          python3 -m esptool --chip esp32s3 merge-bin -o tamapoke-battle-capture.bin \
+            0x0 build/esp32.esp32.esp32s3/TamaPoke.ino.bootloader.bin \
+            0x8000 build/esp32.esp32.esp32s3/TamaPoke.ino.partitions.bin \
+            0xe000 build/esp32.esp32.esp32s3/boot_app0.bin \
+            0x10000 build/esp32.esp32.esp32s3/TamaPoke.ino.bin
+
+      - name: Save USB installer image
+        uses: actions/upload-artifact@v4
+        with:
+          name: tamapoke-battle-capture-esp32s3
+          path: |
+            tamapoke-battle-capture.bin
+            build/esp32.esp32.esp32s3/TamaPoke.ino.bin
+          if-no-files-found: error
   generated:
     name: Generated headers up to date
     runs-on: ubuntu-latest

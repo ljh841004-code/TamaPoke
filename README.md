@@ -31,8 +31,8 @@ progression, battery (AXP2101) and PWR button, anti-burn-in dimming,
 **sound (ES8311)**, **8 UI languages (English default)**, **starter choice on
 first run**, and a one-click **web installer**.
 
-Pending: wild encounters / battle (designed, not implemented), 3D case, soak
-test. See **Roadmap**.
+On the `feature/battle-capture-dex` branch: wild battles, catching, a seen/caught
+Pokedex, and a collection box. Hardware soak testing is still pending.
 
 ## Game manual (the actual numbers)
 
@@ -40,7 +40,7 @@ A quick reference to how the game really works (values straight from the code).
 
 ### Time & leveling
 - **1 real minute = 1 in-game minute.** Your Pokémon gains **+1 level every hour**
-  of real time. Leveling is purely time-based — caring well doesn't speed it up,
+  of real time. Leveling is time-based, with battle wins/captures granting a 15-minute level bonus without aging the pet — caring well does not speed it up,
   but neglect *delays evolution*.
 - It keeps **aging while powered off** (the RTC runs), catching up to **2 weeks** max.
 
@@ -119,8 +119,35 @@ After any ending, a **new egg** appears.
 
 ### Battle stats
 ATK / DEF / SPD = real **Gen-1 base** × genes + level + training (STRENGTH ← bag,
-SPEED ← minigame, DEFENSE ← 12 h of unbroken good care). *(Battles: on the roadmap.)*
+SPEED ← minigame, DEFENSE ← 12 h of unbroken good care). *(Battles also use these stats.)*
 
+## Adventure (feature branch)
+
+- Raise one active Pokemon at a time. Swipe up to the pet card, then swipe left
+  to **Adventure** for a wild battle or the collection box. A stored Pokemon does
+  not age or gain battle experience; switching restores its level, training,
+  needs, medals, and nickname. The egg screen also opens the box.
+- Battles have waves, biome-weighted encounters across all 151 Kanto species,
+  a trainer fight every fifth wave, and a stronger boss every tenth wave.
+  Trainer Pokemon cannot be caught. HP and PP carry to the next wave.
+- Choose one of four type-based moves, a power attack, dodge, a potion, a Ball,
+  or run. Moves use PP and accuracy; types use normal effectiveness, resistance,
+  and immunity. Burn, poison, paralysis, sleep, and freeze can affect turns.
+- A successful fight or catch gives battle experience only to the active pet.
+  After clearing a wave, choose Balls, Potions, or training with PP recovery.
+- A wild species is marked **seen** on encounter. Its name appears in the
+  Pokedex, but its silhouette and stats stay hidden until caught. Catching
+  reveals the details and stores the individual in the box. Previously raised
+  species retain their detailed entries when upgrading an existing save.
+- The box keeps one individual per species (151 slots). Catching another of the
+  same species updates the Pokedex but preserves the first stored individual.
+  `WIPE` clears the collection as well as the pet save.
+
+This is a compact battle system for the 466-pixel device. The four move choices
+are type-based templates rather than every species' canonical learnset; held
+items, the complete ability catalog, and the full PokéRogue item shop are not
+implemented. New adventure labels are translated for Korean and English; other
+UI languages use English for those new labels.
 ## Hardware
 
 - Board: [ESP32-S3-Touch-AMOLED-1.75](https://www.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-1.75)
@@ -343,9 +370,8 @@ To test fast: lower `PET_TICK_MS`, `MINUTES_PER_LEVEL` and `FAREWELL_AGE_MIN` in
 
 ## Roadmap
 
-- **Wild encounters / battle** — designed (see project memory): resolution by
-  ATK/DEF/SPD with PMD Attack/Hurt animations, trainer rank as endgame. Style
-  still to pick (auto / timing / turn-based).
+- **Adventure expansion** — canonical learnsets, held items, abilities, and a
+  larger shop, after hardware testing the compact battle system.
 - **Soak test** 24–48 h (instrumentation ready: `HEALTH` command/heartbeat).
 
 *(Done: 3D-printed case [published on MakerWorld](https://makerworld.com/es/models/2937822-tamapoke-a-pokemon-pokeball-tamagotchi); repo public with the browser installer + one-click sprite bundle.)*
