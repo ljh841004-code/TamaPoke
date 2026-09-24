@@ -1,0 +1,272 @@
+diff --git a/TamaPoke.ino b/TamaPoke.ino
+index 5f691ed..11b643b 100644
+--- a/TamaPoke.ino
++++ b/TamaPoke.ino
+@@ -31,7 +31,7 @@
+ 
+ // Version del firmware. Subir este numero en cada release (y manifest.json para
+ // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
+-#define FW_VERSION "1.19"
++#define FW_VERSION "1.20"
+ 
+ Arduino_DataBus *bus = new Arduino_ESP32QSPI(
+   LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
+@@ -329,12 +329,9 @@ void loop() {
+   audioSetBattleMusic(wildMusicActive(battleOpen, trainerBattle, battleOutcome, screenOff));
+   updateBrightness(now);
+ 
+-  // vuelca el autoguardado periodico SOLO con la pantalla atenuada/apagada o
+-  // durmiendo: la escritura a NVS congela ~1s ambos cores (caché de flash off),
+-  // y aqui no hay animacion que se corte ni dedo esperando respuesta. Con 90s
+-  // de inactividad la pantalla ya atenua, asi que se vuelca enseguida; el uso
+-  // activo persiste igual por los guardados de cada accion (comer/jugar/...).
+-  if (pet.savePending() && (screenOff || dimStage >= 1 || pet.sleeping)) {
++  // Checkpoint even during active play so an unplugged device loses at most
++  // the progress since the last three-minute checkpoint or saved event.
++  if (pet.savePending()) {
+     pet.flushSave();
+   }
+ 
+@@ -787,6 +784,32 @@ int sceneHour() {
+   return e ? (int)((e / 3600) % 24) : 13;
+ }
+ 
++// The board has a clock but no weather receiver. A stable daily pattern
++// changes the scene with local time without claiming live forecast data.
++uint8_t sceneWeather(uint8_t biome) {
++  if (!pet.lastSeenEpoch) return 0;
++  uint32_t day = pet.lastSeenEpoch / 86400UL;
++  int hour = sceneHour();
++  if (biome == 5) return (day % 3 == 0 && hour >= 8 && hour < 20) ? 3 : 1;
++  if (day % 4 == 0 && hour >= 10 && hour < 19) return 2; // rain
++  return (day % 3 == 0 || hour < 8 || hour >= 18) ? 1 : 0; // clouds
++}
++
++void drawSceneClock(bool night) {
++  if (!pet.lastSeenEpoch) return;
++  uint32_t minutes = (pet.lastSeenEpoch / 60UL) % 1440UL;
++  char clockText[8];
++  snprintf(clockText, sizeof(clockText), "%02u:%02u",
++           (unsigned)(minutes / 60), (unsigned)(minutes % 60));
++  // In the sky behind the Pokémon: large enough to read, away from the header.
++  gfx->fillRoundRect(32, 184, 112, 42, 10,
++                     night ? C565(0x22, 0x30, 0x50) : C565(0xe9, 0xf4, 0xed));
++  setInk(night ? UI_WHITE : UI_INK);
++  setSize(3);
++  setCur(44, 192);
++  printT(clockText);
++}
++
+ // suelo de cada bioma de dia (de noche se mezcla hacia el azul nocturno)
+ static const uint16_t BIOME_SOIL[6] = {
+   C565(0x7e, 0xc0, 0x7f),  // 0 pradera
+@@ -809,11 +832,13 @@ void drawClouds(uint32_t now, uint16_t col) {
+ 
+ void drawScene(uint8_t biome, uint32_t now, bool night) {
+   int h = sceneHour();
++  uint8_t weather = sceneWeather(biome);
+   uint16_t top, bot;
+   if (night)            { top = C565(0x0c, 0x12, 0x24); bot = C565(0x1e, 0x26, 0x46); }
+   else if (h < 8)       { top = C565(0xd1, 0x6a, 0x86); bot = C565(0xf3, 0xb8, 0x7c); }  // amanecer
+   else if (h < 18)      { top = C565(0x8f, 0xc8, 0xea); bot = C565(0xdc, 0xee, 0xe6); }  // dia
+   else                  { top = C565(0xc7, 0x5a, 0x4a); bot = C565(0xf0, 0xae, 0x64); }  // atardecer
++  if (weather == 2) { top = C565(0x48, 0x62, 0x79); bot = C565(0x9b, 0xb2, 0xbe); }
+ 
+   // cielo en bandas
+   for (int y = 0; y < HORIZON; y += 8)
+@@ -826,7 +851,7 @@ void drawScene(uint8_t biome, uint32_t now, bool night) {
+     for (auto &st : STARS) gfx->fillRect(st[0], st[1], 4, 4, UI_WHITE);
+   } else if (h < 18) {
+     gfx->fillCircle(360, 84, 26, h < 8 ? C565(0xff, 0xd9, 0x8a) : C565(0xff, 0xe7, 0x9f));
+-    drawClouds(now, C565(0xff, 0xff, 0xff));
++    if (weather != 0) drawClouds(now, weather == 2 ? C565(0xbf, 0xcb, 0xd2) : C565(0xff, 0xff, 0xff));
+   } else {
+     gfx->fillCircle(233, HORIZON - 6, 34, C565(0xff, 0xf1, 0xc8));  // sol poniente
+   }
+@@ -877,6 +902,13 @@ void drawScene(uint8_t biome, uint32_t now, bool night) {
+       for (int b = -1; b <= 1; b++)
+         gfx->fillRect(gx + b * 5, HORIZON + 6, 2, 8 + (b == 0 ? 4 : 0), dk);
+   }
++  if (weather == 2) {
++    for (int i = 0; i < 22; ++i) {
++      int x = (i * 67 + now / 47) % 466;
++      int y = (i * 47 + now / 17) % HORIZON;
++      gfx->drawLine(x, y, x - 3, y + 9, C565(0xbf, 0xe3, 0xf4));
++    }
++  }
+ }
+ 
+ // primera partida: elige inicial entre Bulbasaur / Charmander / Squirtle
+@@ -954,7 +986,10 @@ int gFontAscent = 0;  // px del borde superior a la linea base, 0 = fuente clasi
+ void setSize(uint8_t n) {
+   // gTextSize guarda la escala REALMENTE aplicada, no la pedida: setCur()
+   // multiplica el ascenso por ella y tiene que cuadrar con lo que se pinta.
+-  gTextSize = gCjkFont ? (n >= CJK_SIZE_DIV ? n / CJK_SIZE_DIV : 1) : n;
++  // Enlarge the ordinary UI one step. Large display numerals already fill
++  // their regions; keep them unchanged to avoid cutting off game counters.
++  uint8_t displaySize = n <= 2 ? n + 1 : n;
++  gTextSize = gCjkFont ? (displaySize >= CJK_SIZE_DIV ? displaySize / CJK_SIZE_DIV : 1) : displaySize;
+   gfx->setTextSize(gTextSize);
+ }
+ 
+@@ -1008,8 +1043,10 @@ uint16_t textW(const char *s, uint8_t size) {
+     while (n < len && s[n]) { glyph[n] = s[n]; ++n; }
+     uint32_t cp = 0;
+     if (n == 3) cp = ((c & 15) << 12) | ((s[1] & 63) << 6) | (s[2] & 63);
+-    if (cp >= 0xAC00 && cp <= 0xD7A3) width += 16 * (gCjkFont ? gTextSize : max(1, (int)gTextSize/2));
+-    else if (!gCjkFont) width += 6 * size;
++    if (cp >= 0xAC00 && cp <= 0xD7A3)
++      width += (gLang == LANG_KO && gTextSize == 1) ? 20 :
++               16 * (gCjkFont ? gTextSize : max(1, (int)gTextSize/2));
++    else if (!gCjkFont) width += 6 * (size <= 2 ? size + 1 : size);
+     else { int16_t x, y; uint16_t w, h; gfx->getTextBounds(glyph, 0, 0, &x, &y, &w, &h); width += w; }
+     s += n;
+   }
+@@ -1041,12 +1078,26 @@ void printT(const char *s) {
+       int x = gfx->getCursorX(), baseline = gfx->getCursorY();
+       int hs = gCjkFont ? gTextSize : max(1, (int)gTextSize/2);
+       int y = baseline - gFontAscent * gTextSize;
+-      for (int row = 0; row < 16; ++row) {
+-        uint16_t bits = HANGUL_BITMAP[cp - 0xAC00][row];
+-        for (int col = 0; col < 16; ++col) if (bits & (0x8000 >> col))
+-          gfx->fillRect(x + col*hs, y + row*hs, hs, hs, currentTextColor);
++      if (gLang == LANG_KO && gTextSize == 1) {
++        // A 20 px Hangul cell gives Korean body labels one visible step up
++        // without doubling them to 32 px and colliding with adjacent rows.
++        for (int row = 0; row < 16; ++row) {
++          uint16_t bits = HANGUL_BITMAP[cp - 0xAC00][row];
++          int y0 = row * 5 / 4, y1 = (row + 1) * 5 / 4;
++          for (int col = 0; col < 16; ++col) if (bits & (0x8000 >> col)) {
++            int x0 = col * 5 / 4, x1 = (col + 1) * 5 / 4;
++            gfx->fillRect(x + x0, y + y0, x1 - x0, y1 - y0, currentTextColor);
++          }
++        }
++        gfx->setCursor(x + 20, baseline);
++      } else {
++        for (int row = 0; row < 16; ++row) {
++          uint16_t bits = HANGUL_BITMAP[cp - 0xAC00][row];
++          for (int col = 0; col < 16; ++col) if (bits & (0x8000 >> col))
++            gfx->fillRect(x + col*hs, y + row*hs, hs, hs, currentTextColor);
++        }
++        gfx->setCursor(x + 16*hs, baseline);
+       }
+-      gfx->setCursor(x + 16*hs, baseline);
+     } else gfx->print(glyph);
+     s += n;
+   }
+@@ -1090,6 +1141,7 @@ void render() {
+   // drawScene cubre los 466x466 completos: sin fillScreen(NEGRO) previo para
+   // que un flush DMA solapado nunca capture negro a medias (anti-parpadeo)
+   drawScene(pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome, millis(), gNight);
++  drawSceneClock(gNight);
+ 
+   if (pet.ceremony) {
+     const DexEntry &d = DEX_TBL[pet.speciesId];
+@@ -1355,7 +1407,7 @@ void renderSack() {
+       printT(T(S_NEW_RECORD));
+     } else {
+       char r[18];
+-      snprintf(r, sizeof(r), T(S_RECORD_FMT), pet.strHi);
++      snprintf(r, sizeof(r), T(S_RECORD_FMT), pet.trainingBest(trainingKind));
+       setInk(ink);
+       setCur(centerX(r, 2), 256);
+       printT(r);
+@@ -1366,7 +1418,7 @@ void renderSack() {
+ 
+   // se acabaron los 10 s: aplicar entrenamiento
+   if (!timeLeft(sackUntil)) {
+-    sackNewHi = trainingKind == 0 && (sackHits > pet.strHi);
++    sackNewHi = sackHits > pet.trainingBest(trainingKind);
+     sackGain = pet.trainSession(trainingKind, sackHits);
+     sfxPlay(sackNewHi ? SFX_MEDAL : SFX_PLAY);
+     sackOverUntil = now + 3500;
+@@ -3092,7 +3144,9 @@ void renderTrainingMenu() {
+   setInk(UI_INK);setSize(2);setCur(160,55);printT(localText("훈련 선택","TRAINING"));
+   for(int i=0;i<4;++i) {
+     gfx->fillRoundRect(72,98+i*58,322,48,10,UI_WHITE);
+-    setCur(90,113+i*58);printT(localText(ko[i],en[i]));
++    setCur(90,103+i*58);printT(localText(ko[i],en[i]));
++    char best[24]; snprintf(best, sizeof(best), "BEST %u", pet.trainingBest(i));
++    setCur(90,128+i*58);printT(best);
+   }
+   setCur(110,342);printT(localText("무게 50 초과: 불이익","WEIGHT >50: PENALTY"));
+   setCur(198,386);printT("BACK");gfx->flush();
+diff --git a/pet.cpp b/pet.cpp
+index 6c638b1..e51a4a8 100644
+--- a/pet.cpp
++++ b/pet.cpp
+@@ -133,7 +133,8 @@ void Pet::tick() {
+     }
+     if (ageMinutes % 3 == 0) hygiene = dropTo(hygiene, 1, 45);
+     checkMedals();  // aun puede cruzar un nivel por edad mientras duerme
+-    if (++ticksSinceSave >= 5) pendingSave = true;
++    if (++ticksSinceSave >= 3) pendingSave = true;
++    if (ageMinutes % MINUTES_PER_LEVEL == 0) save();
+     return;
+   }
+@@ -187,9 +188,9 @@ void Pet::tick() {
+   // ciclo completo (forma final + 7 dias): la despedida NO salta sola; queda
+   // lista (canFarewellNow) y la dispara el usuario con el boton, para que la vea
+-
+-  // autoguardado periodico: NO escribir a flash aqui (corre dentro del loop,
+-  // mientras se anima); solo marcar y dejar que el loop lo vuelque al atenuar
+-  if (++ticksSinceSave >= 5) pendingSave = true;
++  // Request a checkpoint; the main loop commits it on the same iteration.
++  if (++ticksSinceSave >= 3) pendingSave = true;
++  if (ageMinutes % MINUTES_PER_LEVEL == 0) save();
+ }
+@@ -537,6 +538,7 @@ void Pet::playResult(uint8_t score) {
+   weight = burn > 0 ? burn : 0;
+   if (score >= 5) heartUntil = millis() + HEART_MS;
+   if (score > gameHi) gameHi = score;  // nuevo record
++  if (score > trainingHi[2]) trainingHi[2] = score;
+   addBond(2);
+@@ -559,6 +561,7 @@ uint8_t Pet::trainStrength(uint16_t hits) {
+   joy = clamp100(joy + 6);
+   if (hits >= 20) heartUntil = millis() + HEART_MS;
+   if (hits > strHi) strHi = hits;   // record de golpes
++  if (hits > trainingHi[0]) trainingHi[0] = hits;
+   addBond(2);
+@@ -569,6 +572,7 @@ uint8_t Pet::trainStrength(uint16_t hits) {
+ uint8_t Pet::trainSession(uint8_t kind, uint16_t score) {
+   if (kind > 3 || ceremony != CER_NONE || isEgg() || sleeping || energy <= 5) return 0;
+   if (kind == 0) return trainStrength(score);
++  if (score > trainingHi[kind]) trainingHi[kind] = score;
+   uint8_t gain = score / (kind == 3 ? 2 : 3);
+@@ -672,6 +676,10 @@ void Pet::save() {
+   prefs.putUShort("mstone", lastMilestone);
+   prefs.putUShort("ghi", gameHi);
+   prefs.putUShort("shi", strHi);
++  prefs.putUShort("th_atk", trainingHi[0]);
++  prefs.putUShort("th_def", trainingHi[1]);
++  prefs.putUShort("th_spd", trainingHi[2]);
++  prefs.putUShort("th_wgt", trainingHi[3]);
+@@ -730,6 +738,10 @@ void Pet::load() {
+   lastMilestone = prefs.getUShort("mstone", 0);
+   gameHi = prefs.getUShort("ghi", 0);
+   strHi = prefs.getUShort("shi", 0);
++  trainingHi[0] = prefs.getUShort("th_atk", strHi);
++  trainingHi[1] = prefs.getUShort("th_def", 0);
++  trainingHi[2] = prefs.getUShort("th_spd", gameHi);
++  trainingHi[3] = prefs.getUShort("th_wgt", 0);
+diff --git a/pet.h b/pet.h
+index e40358f..dbe3332 100644
+--- a/pet.h
++++ b/pet.h
+@@ -81,6 +81,8 @@ public:
+   uint16_t lastMilestone = 0;  // hito de racha ya celebrado
+   uint16_t gameHi = 0;     // record del minijuego (del jugador)
+   uint16_t strHi = 0;
++  uint16_t trainingHi[4] = { 0, 0, 0, 0 }; // attack, defense, speed, weight
++  uint16_t trainingBest(uint8_t kind) const { return kind < 4 ? trainingHi[kind] : 0; }
+   uint8_t balls = 5, potions = 2;
+@@ -176,9 +178,8 @@ public:
+   bool showMilestone() const { return timeLeft(milestoneUntil) > 0; }
+   int careBonus() const;  // mejora del huevo por racha + vinculo
+-
+-  // guardado periodico diferido: tick() marca pendiente y el loop lo vuelca
+-  // cuando la pantalla esta atenuada/apagada (la escritura a flash congela
+-  // ~1s ambos cores: asi no se ve ni corta el tactil)
++  // Every three game minutes tick() requests an NVS checkpoint. The main loop
++  // commits it even while the screen is active to bound unexpected power loss.
+   bool savePending() const { return pendingSave; }
