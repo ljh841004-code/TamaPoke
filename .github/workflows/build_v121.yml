@@ -1,0 +1,76 @@
+name: Build TamaPoke v1.21 FontFix
+
+on:
+  push:
+    branches:
+      - build/v1.21-fontfix
+  workflow_dispatch:
+
+jobs:
+  build-v121:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply v1.20 and v1.21 patches
+        run: |
+          git apply --whitespace=nowarn .build/v120.patch
+          git apply --whitespace=nowarn .build/v121.patch
+          grep -n 'FW_VERSION' TamaPoke.ino
+
+      - name: Generate native 20 px Hangul font
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+          python3 -m pip install pillow
+          FONT="$(fc-match -f '%{file}\n' 'Noto Sans CJK KR' | head -1)"
+          echo "Using font: $FONT"
+          python3 tools/build_hangul_font.py "$FONT"
+          test -s hangul_font_20.h
+          grep -q 'HANGUL20_BITMAP' hangul_font_20.h
+
+      - name: Install arduino-cli
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32 core
+        run: |
+          arduino-cli config init --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@3.3.10
+
+      - name: Install libraries
+        run: |
+          arduino-cli lib install "GFX Library for Arduino@1.6.8" "SensorLib@0.5.0" "XPowersLib@0.3.3" "U8g2@2.36.19"
+
+      - name: Compile v1.21
+        run: |
+          arduino-cli compile --warnings=all --export-binaries             --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB"             .
+          ls -lh build/esp32.esp32.esp32s3/
+
+      - name: Validate and package
+        run: |
+          python3 -m pip install esptool
+          APP="build/esp32.esp32.esp32s3/TamaPoke.ino.bin"
+          PART="build/esp32.esp32.esp32s3/TamaPoke.ino.partitions.bin"
+          BOOT="build/esp32.esp32.esp32s3/TamaPoke.ino.bootloader.bin"
+          test -s "$APP"
+          test -s "$PART"
+          test -s "$BOOT"
+          python3 -m esptool --chip esp32s3 image-info "$APP"
+          sha256sum "$APP" "$PART" "$BOOT" > SHA256_v1.21.txt
+          python3 -m esptool --chip esp32s3 merge-bin -o TamaPoke_v1.21_FULL.bin             0x0 "$BOOT"             0x8000 "$PART"             0xe000 build/esp32.esp32.esp32s3/boot_app0.bin             0x10000 "$APP"
+          cp "$APP" TamaPoke_v1.21_APP_0x10000.bin
+          cp "$PART" partitions_v1.21.bin
+          printf 'TamaPoke v1.21 FontFix\nAPP flash address: 0x10000\nBoard: ESP32-S3 16MB OPI PSRAM\n' > README_V121.txt
+
+      - name: Upload v1.21 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: TamaPoke-v1.21-FontFix-ESP32S3
+          path: |
+            TamaPoke_v1.21_APP_0x10000.bin
+            TamaPoke_v1.21_FULL.bin
+            partitions_v1.21.bin
+            SHA256_v1.21.txt
+            README_V121.txt
+          if-no-files-found: error
