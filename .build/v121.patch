@@ -1,0 +1,112 @@
+--- a/TamaPoke.ino
++++ b/TamaPoke.ino
+@@ -28,10 +28,11 @@
+ #include "audio.h"
+ #include "music_route.h"
+ #include "hangul_font.h"
++#include "hangul_font_20.h"
+ 
+ // Version del firmware. Subir este numero en cada release (y manifest.json para
+ // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
+-#define FW_VERSION "1.20"
++#define FW_VERSION "1.21"
+ 
+ Arduino_DataBus *bus = new Arduino_ESP32QSPI(
+   LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
+@@ -1079,14 +1080,25 @@
+       int hs = gCjkFont ? gTextSize : max(1, (int)gTextSize/2);
+       int y = baseline - gFontAscent * gTextSize;
+       if (gLang == LANG_KO && gTextSize == 1) {
+-        // A 20 px Hangul cell gives Korean body labels one visible step up
+-        // without doubling them to 32 px and colliding with adjacent rows.
+-        for (int row = 0; row < 16; ++row) {
+-          uint16_t bits = HANGUL_BITMAP[cp - 0xAC00][row];
+-          int y0 = row * 5 / 4, y1 = (row + 1) * 5 / 4;
+-          for (int col = 0; col < 16; ++col) if (bits & (0x8000 >> col)) {
+-            int x0 = col * 5 / 4, x1 = (col + 1) * 5 / 4;
+-            gfx->fillRect(x + x0, y + y0, x1 - x0, y1 - y0, currentTextColor);
++        // v1.21: draw Hangul from a native 20x20 raster instead of stretching
++        // the 16x16 bitmap by 5/4. The old nearest-neighbour enlargement made
++        // some strokes alternate between 1 and 2 px, which looked broken on
++        // the 466 px AMOLED. The packed native raster keeps the same 20 px
++        // advance and therefore does not change the existing UI layout.
++        const uint8_t *bm = HANGUL20_BITMAP[cp - 0xAC00];
++        for (int row = 0; row < 20; ++row) {
++          int col = 0;
++          while (col < 20) {
++            int bit = row * 20 + col;
++            bool on = bm[bit >> 3] & (0x80 >> (bit & 7));
++            if (!on) { ++col; continue; }
++            int start = col++;
++            while (col < 20) {
++              bit = row * 20 + col;
++              if (!(bm[bit >> 3] & (0x80 >> (bit & 7)))) break;
++              ++col;
++            }
++            gfx->fillRect(x + start, y + row, col - start, 1, currentTextColor);
+           }
+         }
+         gfx->setCursor(x + 20, baseline);
+--- a/tools/build_hangul_font.py
++++ b/tools/build_hangul_font.py
+@@ -1,17 +1,55 @@
+ #!/usr/bin/env python3
+-"""Build all 11,172 modern Hangul syllables at 16px from Noto Sans CJK KR (OFL)."""
++"""Build TamaPoke Hangul rasters from Noto Sans CJK KR (OFL).
++
++16x16 is retained for the existing large integer-scaled paths.
++20x20 is a packed native raster used by Korean body text in v1.21 so it is
++never produced by stretching the 16px source.
++"""
+ import sys
+ from pathlib import Path
+ from PIL import Image, ImageDraw, ImageFont
+ 
+-font = ImageFont.truetype(sys.argv[1], 16)
++if len(sys.argv) != 2:
++    raise SystemExit("usage: build_hangul_font.py /path/to/NotoSansCJK-Regular.ttc")
++
++font_path = sys.argv[1]
++root = Path(__file__).resolve().parents[1]
++
++# Legacy 16x16 table. Keep byte-for-byte generation semantics used previously.
++font16 = ImageFont.truetype(font_path, 16)
+ rows = []
+ for cp in range(0xAC00, 0xD7A4):
+     im = Image.new('1', (16, 16))
+     draw = ImageDraw.Draw(im)
+-    draw.text((0, -3), chr(cp), font=font, fill=1)
++    draw.text((0, -3), chr(cp), font=font16, fill=1)
+     rows.append(','.join(str(sum(im.getpixel((x, y)) << (15-x) for x in range(16))) for y in range(16)))
+-Path(__file__).resolve().parents[1].joinpath('hangul_font.h').write_text(
++root.joinpath('hangul_font.h').write_text(
+     '// Generated from Noto Sans CJK KR, SIL OFL 1.1. See fonts-OFL.txt.\n'
+     '#pragma once\n#include <stdint.h>\nstatic const uint16_t HANGUL_BITMAP[11172][16] = {\n'
+-    + '\n'.join('{' + row + '},' for row in rows) + '\n};\n')
++    + '\n'.join('{' + row + '},' for row in rows) + '\n};\n'
++)
++
++# Native 20x20 raster. Render antialiased first, then threshold once; this keeps
++# diagonal/curved glyph structure cleaner than 16->20 nearest-neighbour scaling.
++# Each 400-bit glyph is packed into 50 bytes, MSB first, to limit flash usage.
++font20 = ImageFont.truetype(font_path, 20)
++glyphs = []
++for cp in range(0xAC00, 0xD7A4):
++    im = Image.new('L', (20, 20), 0)
++    draw = ImageDraw.Draw(im)
++    # Noto CJK 20px has a 6px top bearing; -6 fits the glyph into the 20px cell.
++    draw.text((0, -6), chr(cp), font=font20, fill=255)
++    bits = [1 if im.getpixel((x, y)) >= 96 else 0 for y in range(20) for x in range(20)]
++    packed = []
++    for i in range(0, 400, 8):
++        b = 0
++        for j in range(8):
++            b = (b << 1) | (bits[i + j] if i + j < 400 else 0)
++        packed.append(b)
++    glyphs.append('{' + ','.join(map(str, packed)) + '},')
++root.joinpath('hangul_font_20.h').write_text(
++    '// Generated from Noto Sans CJK KR, SIL OFL 1.1. See fonts-OFL.txt.\n'
++    '// Native 20x20 monochrome Hangul, 400 bits / 50 bytes per glyph.\n'
++    '#pragma once\n#include <stdint.h>\nstatic const uint8_t HANGUL20_BITMAP[11172][50] = {\n'
++    + '\n'.join(glyphs) + '\n};\n'
++)
