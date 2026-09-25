@@ -6,6 +6,7 @@
 #include "audio.h"
 
 SemaphoreHandle_t sdMutex = nullptr;
+std::atomic<bool> sdExternal{false};
 
 bool sdReady = false;
 bool sdDirty = false;
@@ -148,9 +149,7 @@ const uint8_t *SdThumbs::get(int16_t dex) const {
   return data + off;
 }
 
-bool sdBegin() {
-  sdMutex = xSemaphoreCreateMutex();
-  if (!sdMutex) return false;
+static bool sdMount() {
   SD_MMC.setPins(SDMMC_CLK, SDMMC_CMD, SDMMC_DATA);
   sdReady = SD_MMC.begin("/sdcard", true /* modo 1-bit */, false /* preserve existing card if mounting fails */);
   if (sdReady) {
@@ -160,6 +159,21 @@ bool sdBegin() {
     Serial.println("SD no detectada (el juego usa los sprites de flash)");
   }
   return sdReady;
+}
+
+bool sdBegin() {
+  sdMutex = xSemaphoreCreateMutex();
+  if (!sdMutex) return false;
+  return sdMount();
+}
+
+// fork KO: tras usarla el PC como unidad USB, la FAT en cache de la placa ya no
+// vale. Se desmonta y se vuelve a montar; el llamador tiene el sdMutex.
+bool sdRemount() {
+  SD_MMC.end();
+  bool ok = sdMount();
+  sdDirty = true;  // ensureMon() recarga sprite y miniaturas
+  return ok;
 }
 
 bool SdMon::load(uint8_t dexNum, bool shiny) {
@@ -300,11 +314,13 @@ bool sdSerialCommand(const String &line) {
     return true;
   } else if (line == "SDINFO") {  // diagnostico remoto de "no me reconoce la SD"
     SdCardLock lock;
+    if (!lock) { Serial.println("ERR"); return true; }
     Serial.printf("total=%llu used=%llu\n", SD_MMC.totalBytes(), SD_MMC.usedBytes());
     Serial.println("DONE");
     return true;
   } else if (line == "LS") {
     SdCardLock lock;
+    if (!lock) { Serial.println("ERR"); return true; }
     File dir = SD_MMC.open("/mons");
     if (dir) {
       File e;

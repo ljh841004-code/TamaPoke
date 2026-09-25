@@ -56,6 +56,7 @@ struct SdThumbs {
 extern SdThumbs thumbs;
 
 bool sdBegin();                 // monta la SD (SDMMC 1-bit), true si hay tarjeta
+bool sdRemount();               // fork KO: remonta tras la unidad USB (con sdMutex tomado)
 bool sdSerialCommand(const String &line);  // PUT/LS por USB; true si la maneja
 extern bool sdReady;
 extern bool sdDirty;  // true tras recibir archivos: recargar sprite

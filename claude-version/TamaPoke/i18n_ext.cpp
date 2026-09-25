@@ -23,6 +23,9 @@ static const char *const XS[2][X_COUNT] = {
     "Partner: %s Lv.%u", "Trade Pokemon?", "Waiting for partner...", "Trade complete!", "Trade cancelled",
     "Connection lost",
     "Not now (egg / asleep)", "Your Pokemon will leave!", "Partner said YES",
+    "USB DRIVE (SD)", "USB DRIVE", "SD card is open on the PC", "Put sounds in the mons folder",
+    "When done: eject on the PC", "Waiting for PC...", "PC connected",
+    "DONE", "Can't open SD card", "No USB drive in this build",
   },
   // ---------------- KO ----------------
   {
@@ -42,6 +45,9 @@ static const char *const XS[2][X_COUNT] = {
     "상대: %s Lv.%u", "포켓몬을 교환할까요?", "상대를 기다리는 중...", "교환 완료!", "교환 취소",
     "연결이 끊겼어요",
     "지금은 안 돼요 (알/수면)", "지금 포켓몬이 떠나요!", "상대는 수락했어요",
+    "USB 드라이브 (SD카드)", "USB 드라이브", "PC에서 SD카드가 열렸어요", "음원은 mons 폴더에 넣으세요",
+    "끝나면 PC에서 꺼내기", "PC 연결 기다리는 중...", "PC 연결됨",
+    "끝내기", "SD카드를 열 수 없어요", "이 펌웨어는 USB 드라이브 미지원",
   },
 };
 

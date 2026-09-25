@@ -8,7 +8,7 @@
 // Se engancha al sketch principal solo por funciones (extraRender, extraTap,
 // extraSwipe, extraLoop...), para tocar lo minimo el fichero original.
 
-enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK };
+enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_USB };
 uint8_t xScreen = XS_NONE;
 
 // aviso breve en la pantalla principal
@@ -67,6 +67,10 @@ void screenBase() {
 #define NET_SETUP_Y 266
 #define NET_AUTO_Y 318
 #define NET_TZ_Y 150
+#define NET_USB_X 113
+#define NET_USB_W 240
+#define NET_USB_Y 370
+#define NET_USB_H 40
 
 void openNet() { xScreen = XS_NET; }
 
@@ -162,7 +166,8 @@ void renderNet() {
   drawBtn(NET_BTN_X, NET_SETUP_Y, NET_BTN_W, NET_BTN_H, 0x4C98, UI_WHITE, XT(X_SETUP_WIFI));
   drawBtn(NET_BTN_X, NET_AUTO_Y, NET_BTN_W, NET_BTN_H, netAuto() ? UI_WHITE : UI_TRACK, UI_INK,
           netAuto() ? XT(X_AUTO_ON) : XT(X_AUTO_OFF));
-  drawFit(XT(X_TAP_CLOSE), 400, 300, UI_TRACK, 2);
+  drawBtn(NET_USB_X, NET_USB_Y, NET_USB_W, NET_USB_H, 0x8C1F, UI_WHITE, XT(X_USB_BTN));
+  drawFit(XT(X_TAP_CLOSE), 420, 220, UI_TRACK, 2);
   gfx->flush();
 }
 
@@ -172,6 +177,7 @@ void netTap(int16_t x, int16_t y) {
     return;
   }
   if (y < 72) { closeNet(); return; }
+  if (inRect(x, y, NET_USB_X, NET_USB_Y, NET_USB_W, NET_USB_H)) { openUsb(); return; }
   if (y >= NET_TZ_Y && y < NET_TZ_Y + 44) {
     if (x < 140) netSetTzMin(netTzMin() - 30);
     else if (x > 326) netSetTzMin(netTzMin() + 30);
@@ -190,6 +196,49 @@ void netTap(int16_t x, int16_t y) {
     netSetAuto(!netAuto());
     sfxPlay(SFX_TAP);
   }
+}
+
+// ======================================================================
+// Unidad USB: la SD en el PC (desde la pantalla de red)
+// ======================================================================
+
+#define USB_BTN_Y 330
+int8_t usbFail = -1;  // XId del error si no se pudo activar, -1 = activa
+
+void openUsb() {
+  if (netPortalOn()) netStopPortal();
+  usbFail = !usbDiskSupported() ? X_USB_NA : (!sdReady || !usbDiskStart()) ? X_USB_FAIL : -1;
+  sfxPlay(usbFail < 0 ? SFX_TAP : SFX_DENY);
+  xScreen = XS_USB;
+}
+
+void closeUsb() {
+  usbDiskStop();  // remonta la SD y recarga sprites/musica (nada si no estaba activa)
+  xScreen = XS_NET;
+}
+
+void renderUsb() {
+  screenBase();
+  drawFit(XT(X_USB_TITLE), 48, 300, UI_INK, 3);
+  if (usbFail >= 0) {
+    drawFit(XT((XId)usbFail), 180, 360, UI_BAR_BAD, 2);
+    drawBtn(133, USB_BTN_Y, 200, 50, UI_TRACK, UI_INK, T(S_BACK));
+    gfx->flush();
+    return;
+  }
+  drawFit(XT(X_USB_1), 118, 360, UI_INK, 2);
+  drawFit(XT(X_USB_2), 158, 360, UI_INK, 2);
+  drawFit(XT(X_USB_3), 198, 360, UI_INK, 2);
+  bool seen = usbDiskHostSeen();
+  drawFit(XT(seen ? X_USB_SEEN : X_USB_WAIT), 262, 340, seen ? UI_BAR_OK : UI_BAR_WARN, 2);
+  drawBtn(133, USB_BTN_Y, 200, 50, UI_BAR_OK, UI_WHITE, XT(X_USB_DONE));
+  gfx->flush();
+}
+
+void usbTap(int16_t x, int16_t y) {
+  if (!inRect(x, y, 113, USB_BTN_Y - 10, 240, 70)) return;
+  sfxPlay(SFX_TAP);
+  closeUsb();
 }
 
 // ======================================================================
@@ -483,6 +532,7 @@ uint32_t wildNextRoll = 0;
 void triggerWildAlert() { wildAlertUntil = millis() + 5UL * 60UL * 1000UL; }
 
 bool battleAllowed(bool toast) {
+  if (usbDiskActive()) { sfxPlay(SFX_DENY); return false; }  // la SD es del PC ahora
   if (!pet.canBattle()) { if (toast) showToast(XT(X_CANT_NOW)); sfxPlay(SFX_DENY); return false; }
   if (pet.tooTiredToBattle()) { if (toast) showToast(XT(X_TOO_TIRED)); sfxPlay(SFX_DENY); return false; }
   return true;
@@ -862,6 +912,10 @@ void extraLoop(uint32_t now) {
   if (xScreen == XS_WILD) updateWild();
   else if (xScreen == XS_LINK) updateLink();
   if (xScreen == XS_NET) lastInteract = now;
+  if (xScreen == XS_USB) {
+    lastInteract = now;  // la pantalla se queda encendida mientras el PC trabaja
+    if (usbDiskEjected()) { closeUsb(); sfxPlay(SFX_MEDAL); }
+  }
   rollWildEncounter(now);
 }
 
@@ -871,6 +925,7 @@ bool extraRender() {
     case XS_WILD: renderBattleView(); return true;
     case XS_LINKMENU: renderLinkMenu(); return true;
     case XS_LINK: renderLink(); return true;
+    case XS_USB: renderUsb(); return true;
     default: return false;
   }
 }
@@ -881,6 +936,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_WILD: wildTap(x, y); return true;
     case XS_LINKMENU: linkMenuTap(x, y); return true;
     case XS_LINK: linkTap(x, y); return true;
+    case XS_USB: usbTap(x, y); return true;
     default: return false;
   }
 }
@@ -889,6 +945,7 @@ bool extraTap(int16_t x, int16_t y) {
 bool extraSwipe() {
   if (xScreen == XS_NET) { closeNet(); return true; }
   if (xScreen == XS_LINKMENU) { xScreen = XS_NONE; return true; }
+  if (xScreen == XS_USB && usbFail >= 0) { xScreen = XS_NET; return true; }  // activa: solo el boton
   return xScreen != XS_NONE;  // batalla / tongsin: se ignoran
 }
 

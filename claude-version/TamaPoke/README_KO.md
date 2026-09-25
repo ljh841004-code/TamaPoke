@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko2)
+# TamaPoke KO (v1.17-ko3)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -12,6 +12,7 @@
 | ⚔️ 야생 배틀 | 턴제 배틀. 몸통박치기 / 타입 기술 / 방어 / 도망. 1세대 타입 상성 적용 |
 | 🔗 통신 대전 (2인) | TamaPoke 두 대를 ESP-NOW로 연결해 자동 대전 (공유기 필요 없음) |
 | 🔁 통신 교환 (2인) | 포켓몬을 서로 교환. 윤겔라·근육몬·데구리·고우스트는 교환하면 진화 |
+| 💾 USB 드라이브 (ko3) | 보드의 SD카드를 PC에서 USB 드라이브로 열어 파일을 바로 넣기 |
 | 🔊 SD카드 소리 (ko2) | 배경음, 배틀 배경음, 포켓몬 울음소리를 SD카드 WAV로 재생 (TamaPoke v1.23에서 이식) |
 
 ## 설치 (한 번만)
@@ -25,7 +26,8 @@
      Chrome에서 `http://localhost:8000` 열고 Install (펌웨어가 이 포크 버전으로 바뀌어 있어요.
      zip에는 스프라이트 묶음 `sprites.pak`(40MB)이 빠져 있으니 스프라이트는 1번처럼 원본 페이지에서 넣어요)
    - **Arduino IDE로:** 보드 *ESP32S3 Dev Module*, Flash 16MB, PSRAM **OPI PSRAM**,
-     Partition *16M Flash (3MB APP/9MB FATFS)*, USB CDC On Boot *Enabled*.
+     Partition *16M Flash (3MB APP/9MB FATFS)*, USB CDC On Boot *Enabled*,
+     **USB Mode *USB-OTG (TinyUSB)*** (ko3부터. 다른 값이면 USB 드라이브 기능만 빠진 채로 빌드돼요)
      라이브러리: GFX Library for Arduino, SensorLib, XPowersLib, U8g2. ESP32 코어 3.3.x
 
 > 이미 원본을 쓰고 있었다면 2단계만 하면 돼요. 키우던 포켓몬·도감은 그대로 남아요
@@ -69,6 +71,22 @@ SD카드 `/mons/` 폴더에 넣고 재부팅하면 자동으로 적용돼요. �
 - 볼륨: 시리얼 `VOL 배경 울음 효과` (각 0~100, 기본 `VOL 25 65 100`), `VOL`만 치면 현재 값
 - 자는 동안이나 소리를 끄면 모두 멈춰요. 화면을 꺼도 배경음은 계속 나와요 (배틀 배경음은 평소 배경음으로 바뀜)
 
+### USB 드라이브 (ko3) – SD카드를 PC에서 바로 열기
+1. 보드를 PC에 USB로 연결
+2. 메인 화면에서 **아래로 스와이프** → **WiFi** → 맨 아래 보라색 **USB 드라이브 (SD카드)**
+3. PC에 SD카드 드라이브(이동식 디스크)가 새로 생겨요 → `mons` 폴더에 WAV 파일을 복사
+4. 끝나면 PC에서 **꺼내기(추출)** → 보드가 SD카드를 다시 읽고 새 소리·스프라이트를 바로 적용해요
+   (보드의 **끝내기** 버튼도 되지만, PC에서 먼저 꺼내는 게 안전해요)
+
+- 이 화면에 있는 동안 보드는 SD카드를 건드리지 않아요 (PC와 동시에 쓰면 파일이 깨지기 때문). 배틀도 막혀요
+- 드라이브 모드가 아닐 때 PC에 빈 이동식 드라이브가 보일 수 있어요. 정상이에요
+- **PC에서 SD카드를 포맷하지 마세요** (FAT32 그대로 두기)
+
+### 펌웨어 업데이트 (ko3부터 방법이 조금 달라요)
+ko3부터 USB가 TinyUSB 방식이라 브라우저 업로드 도구가 자동으로 업로드 모드에 못 들어갈 수 있어요.
+**BOOT 버튼을 누른 채 RESET을 눌렀다 떼고**(또는 BOOT를 누른 채 USB를 꽂고) → Connect → 새로 보이는 포트 선택 → Program →
+끝나면 RESET. 포켓몬을 유지하려면 지금처럼 `...-app-0x10000.bin`을 주소 **0x10000**에 올리면 돼요.
+
 ### 시리얼 명령 (115200bps, 디버깅용)
 `WIFI 이름|비번` · `WIFIOFF` · `NTP` (지금 동기화) · `TZ 540` (분 단위 시간대) · `NET` (상태) ·
 `WILD` (바로 야생 배틀) · `ALERT` (야생 출현 알림) · `VOL` (볼륨) — 원본 명령(`STATS`, `HATCH`, `LVL 16` 등)도 그대로 동작
@@ -79,8 +97,10 @@ SD카드 `/mons/` 폴더에 넣고 재부팅하면 자동으로 적용돼요. �
 - ✅ PC 테스트 130개 통과 (AddressSanitizer 포함): 배틀 계산, 타입 상성, 교환 데이터 검증,
   한국어 조사(은/는, 이/가…), **두 기기 통신 프로토콜을 패킷 60% 손실 상황까지 시뮬레이션**
 - ✅ 실제 Arduino_GFX 그리기 코드를 PC에서 돌려 화면 캡처로 레이아웃 확인 (한국어/영어)
+- ✅ ko3: TinyUSB 모드로 컴파일 (1.64MB / 3MB), 기존 USB 모드에서도 빌드됨 (드라이브 기능만 빠짐).
+  새 화면 문구가 한국어 폰트에 있는지 테스트, 둥근 화면 안에 들어가는지 계산으로 확인
 - ✅ ko2: ESP32 코어 3.3.10으로 다시 컴파일 (1.58MB / 3MB), 소리 스트리밍 테스트 9개 추가해 139개 통과
-- ❌ **실기기 테스트는 아직 못 했어요.** ko2의 소리 재생도 보드에서 들어봐야 해요. 특히 WiFi 포털, ESP-NOW 실제 전파, 한국어 폰트 크기는
+- ❌ **실기기 테스트는 아직 못 했어요.** ko2의 소리 재생, ko3의 USB 드라이브 인식도 보드에서 확인이 필요해요. 특히 WiFi 포털, ESP-NOW 실제 전파, 한국어 폰트 크기는
   보드에서 확인이 필요해요. 문제가 있으면 시리얼 로그(`NET`, `LINK ...`)와 함께 알려주세요
 
 ## 파일 구성 (새로 추가/변경)
@@ -91,6 +111,7 @@ SD카드 `/mons/` 폴더에 넣고 재부팅하면 자동으로 적용돼요. �
 - `i18n_ext.h/.cpp` – 새 기능 문구 (한국어/영어, 한국어 조사 자동 처리)
 - `ui_extra.ino` – 새 화면들 (네트워크, 배틀, 통신)
 - `audio.h/.cpp`, `wav_stream.h`, `music_route.h`, `sd_lock.h` – SD카드 소리 (v1.23에서 이식, ko2) / `sdmon.cpp` – SD 접근 잠금
+- `usbdisk.h/.cpp` – SD카드를 USB 드라이브로 (ko3). `sd_lock.h`의 `sdExternal`로 그동안 보드의 SD 접근을 막아요
 - `pet.h/.cpp` – 배틀 보상, 교환, 전적 저장 / `dex.h` – 타입 정보 추가 (`tools/gen_dex.py`로 생성)
 - `test/test_battle.cpp`, `test/test_link.cpp`, `test/test_i18n_ext.cpp` – 새 테스트
 

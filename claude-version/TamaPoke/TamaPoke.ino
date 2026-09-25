@@ -26,10 +26,11 @@
 #include "i18n_ext.h"  // fork KO: textos nuevos (KO/EN)
 #include "net.h"       // fork KO: WiFi + NTP
 #include "link.h"      // fork KO: tongsin ESP-NOW
+#include "usbdisk.h"   // fork KO: la SD como unidad USB en el PC
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko2"
+#define FW_VERSION "1.17-ko3"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
