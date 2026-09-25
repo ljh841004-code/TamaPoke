@@ -18,14 +18,21 @@
 #include "species.h"
 #include "dex.h"
 #include "pet.h"
+#include "collection.h"
+#include "battle.h"
+#include "types.h"
 #include "sdmon.h"
 #include "rtcbat.h"
 #include "i18n.h"
+#include "adventure_i18n.h"
 #include "audio.h"
+#include "music_route.h"
+#include "hangul_font.h"
+#include "hangul_font20.h"
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17"
+#define FW_VERSION "1.23"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
@@ -40,6 +47,18 @@ TouchDrvCST92xx touch;
 bool gCjkFont = false;
 #define TOUCH_ADDR 0x5A  // CST9217
 Pet pet;
+Collection collection;
+PmdMon wildPmd;
+BattleRuntime battle = {};
+bool battleOpen = false, boxOpen = false, wildShiny = false, moveMenu = false, rewardPicked = false, trainerBattle = false;
+uint8_t battleOutcome = 0;  // 0 active, 1 win, 2 caught, 3 loss, 4 fled
+uint16_t battleWave = 1;
+int16_t wildDex = 0;
+uint8_t wildLevel = 1, boxPage = 0;
+const char *battleMessage = "";
+uint32_t battleAnimStart = 0;
+bool battlePlayerHit = false, battleEnemyHit = false;
+
 
 // sprite animado de la SD para la especie actual (si existe el archivo)
 SdMon mon;          // sprite B/N (respaldo y minijuego si no hay PMD)
@@ -68,8 +87,16 @@ int16_t galleryDetail = 0;  // dex en vista detalle, 0 = rejilla
 bool screenOff = false;       // pulsacion corta del boton PWR
 bool cardOpen = false;        // ficha del bicho (deslizar vertical)
 bool kbOpen = false;          // teclado para renombrar al bicho
-char nameBuf[12] = "";
+char nameBuf[34] = "";
 uint8_t nameLen = 0;
+bool kbKorean = false, audioMenu = false, trainingMenu = false;
+uint8_t trainingKind = 0;
+uint32_t trainingLastTap = 0, trainingBeat = 0;
+int koInitial = 0, koVowel = 0, koFinal = 0;
+uint16_t currentTextColor = 0;
+void setInk(uint16_t color) { currentTextColor = color; gfx->setTextColor(color); }
+const char *localText(const char *ko, const char *en) { return gLang == LANG_KO ? ko : en; }
+
 uint8_t cardPage = 0;         // 0 perfil, 1 stats+medallas
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 int clockH = 12, clockM = 0;  // hora en edicion
@@ -208,6 +235,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(TP_INT), touchIsr, FALLING);
 
   pet.begin();
+  collection.begin();
   sdBegin();
   thumbs.load();
 
@@ -233,7 +261,8 @@ void setup() {
   }
   pet.syncClock(e);
 
-  audioBegin();  // ES8311 + I2S + amplificador (suena un jingle de arranque)
+  audioBegin();
+  if (sdReady) audioLoadMusic();  // ES8311 + I2S + amplificador (suena un jingle de arranque)
 
   lastInteract = millis();
 }
@@ -282,6 +311,10 @@ void loop() {
   handleTouch();
   handleSerial();
   ensureMon();
+  static int16_t crySpecies = -1;
+  if (!pet.isEgg() && pet.speciesId != crySpecies) {
+    crySpecies = pet.speciesId; audioCry(pet.speciesId);
+  }
 
   // pulsacion corta del PWR: pantalla on/off
   static uint32_t lastPwr = 0;
@@ -293,14 +326,13 @@ void loop() {
     }
   }
 
+  // Results/escape/closed screen restore normal music; next wild wave resumes.
+  audioSetBattleMusic(wildMusicActive(battleOpen, trainerBattle, battleOutcome, screenOff));
   updateBrightness(now);
 
-  // vuelca el autoguardado periodico SOLO con la pantalla atenuada/apagada o
-  // durmiendo: la escritura a NVS congela ~1s ambos cores (caché de flash off),
-  // y aqui no hay animacion que se corte ni dedo esperando respuesta. Con 90s
-  // de inactividad la pantalla ya atenua, asi que se vuelca enseguida; el uso
-  // activo persiste igual por los guardados de cada accion (comer/jugar/...).
-  if (pet.savePending() && (screenOff || dimStage >= 1 || pet.sleeping)) {
+  // Checkpoint even during active play so an unplugged device loses at most
+  // the progress since the last three-minute checkpoint or saved event.
+  if (pet.savePending()) {
     pet.flushSave();
   }
 
@@ -365,7 +397,11 @@ void handleSerial() {
   if (line.length() == 0) return;
   if (sdSerialCommand(line)) return;
 
-  if (line == "HATCH") {
+  if (line == "VERSION") {
+    Serial.printf("VERSION %s\n", FW_VERSION); Serial.println("DONE");
+  } else if (line == "REBOOT") {
+    pet.flushSave(); Serial.println("DONE"); Serial.flush(); delay(100); ESP.restart();
+  } else if (line == "HATCH") {
     pet.eggTap(); pet.eggTap(); pet.eggTap();
     Serial.println("DONE");
   } else if (line.startsWith("SPEC ")) {
@@ -376,9 +412,20 @@ void handleSerial() {
       Serial.printf("especie #%d %s\n", n, DEX_TBL[n].name);
     }
     Serial.println("DONE");
-  } else if (line.startsWith("LVL ")) {
-    pet.ageMinutes = (uint32_t)line.substring(4).toInt() * MINUTES_PER_LEVEL;
-    Serial.println("DONE");
+} else if (line.startsWith("LVL ")) {
+  int targetLevel = line.substring(4).toInt();
+
+  if (targetLevel < 1) targetLevel = 1;
+  if (targetLevel > 999) targetLevel = 999;
+
+  pet.ageMinutes = (uint32_t)(targetLevel - 1) * MINUTES_PER_LEVEL;
+  pet.battleXpMinutes = 0;
+
+  pet.persist();
+
+  Serial.printf("level=%d\n", pet.level());
+  Serial.println("DONE");
+
   } else if (line.startsWith("TIME ")) {
     uint32_t e = (uint32_t)line.substring(5).toInt();
     rtcSetEpoch(e);
@@ -432,6 +479,7 @@ void handleSerial() {
     pet.dbgRunawayReady();  // fuerza el estado "lista para escaparse" (test del boton)
     Serial.println("DONE");
   } else if (line == "WIPE") {
+    collection.clear();
     pet.factoryReset();     // borra NVS y reinicia -> partida nueva (eleccion de inicial)
     Serial.println("DONE");
     delay(100);
@@ -519,7 +567,7 @@ void handleTouch() {
     tXl = x;
     tYl = y;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
-    if (!holdFired && !swallowGesture && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && millis() - tStart > 3000 &&
+    if (!holdFired && !swallowGesture && !audioMenu && !trainingMenu && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && !battleOpen && !boxOpen && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) &&
         !pet.isEgg() && !confirmUntil && !pet.ceremony) {
       confirmUntil = millis() + 10000;
@@ -542,8 +590,9 @@ void handleTouch() {
 void openClock();  // prototipo
 
 void onSwipeV(int dir) {
+  if (audioMenu || trainingMenu) return;
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || galleryOpen || kbOpen || sackOpen || pet.ceremony) return;
+  if (gameOpen || galleryOpen || kbOpen || sackOpen || battleOpen || boxOpen || pet.ceremony) return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
     if (dir < 0) cardOpen = false;  // arriba cierra la ficha
@@ -560,10 +609,16 @@ void onSwipeV(int dir) {
 // deslizar: dir +1 = hacia la derecha
 void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || kbOpen || clockOpen) return;
+  if (battleOpen) return;
+  if (boxOpen) {
+    int maxPage = collection.count() ? (collection.count() - 1) / 5 : 0;
+    boxPage = (uint8_t)max(0, min(maxPage, (int)boxPage + (dir > 0 ? -1 : 1)));
+    return;
+  }
+  if (gameOpen || kbOpen || clockOpen || audioMenu || trainingMenu) return;
   if (cardOpen) {  // dentro de la ficha: cambiar entre las 4 paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
-    cardPage = p < 0 ? 0 : (p > 3 ? 3 : p);
+    cardPage = p < 0 ? 0 : (p > 4 ? 4 : p);
     return;
   }
   if (!galleryOpen) {
@@ -595,6 +650,10 @@ void onSwipe(int dir) {
 }
 
 void onTap(int16_t x, int16_t y) {
+  if (audioMenu) { audioMenuTap(x, y); return; }
+  if (trainingMenu) { trainingMenuTap(x, y); return; }
+  if (battleOpen) { battleTap(x, y); return; }
+  if (boxOpen) { boxTap(x, y); return; }
   // Serial.printf("TOUCH %d %d\n", x, y);  // diagnostico (silenciado: satura el log)
   if (pet.awaitingStarter()) {  // primera partida: elegir inicial
     for (int i = 0; i < 3; i++) {
@@ -621,10 +680,16 @@ void onTap(int16_t x, int16_t y) {
   }
   if (pet.ceremony) return;  // durante la despedida no hay botones
   if (cardOpen) {
+    if (cardPage == 1) {
+      if (y >= 110 && y < 170) { cardOpen = false; startWildBattle(false); }
+      else if (y >= 190 && y < 250) { cardOpen = false; boxOpen = true; boxPage = 0; }
+      else cardOpen = false;
+      return;
+    }
     if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
-    else if (cardPage == 1 && y >= 300 && y <= 340 && x >= 96 && x <= 370) {
+    else if (cardPage == 2 && y >= 300 && y <= 340 && x >= 96 && x <= 370) {
       cardOpen = false;            // boton ENTRENAR FUERZA
-      startSack();
+      trainingMenu = true;
     } else {
       cardOpen = false;
     }
@@ -665,6 +730,7 @@ void onTap(int16_t x, int16_t y) {
     return;
   }
   if (pet.isEgg()) {
+    if (y > 340) { boxOpen = true; boxPage = 0; return; }
     pet.eggTap();
     sfxPlay(SFX_TAP);
     return;
@@ -702,7 +768,7 @@ void onTap(int16_t x, int16_t y) {
   if (inPetZone(x, y)) {
     Serial.println("PET");
     pet.caress();
-    if (!pet.sleeping) sfxPlay(SFX_HEART);
+    if (!pet.sleeping) { sfxPlay(SFX_HEART); audioCry(pet.speciesId); }
   }
 }
 
@@ -730,6 +796,32 @@ int sceneHour() {
   return e ? (int)((e / 3600) % 24) : 13;
 }
 
+// The board has a clock but no weather receiver. A stable daily pattern
+// changes the scene with local time without claiming live forecast data.
+uint8_t sceneWeather(uint8_t biome) {
+  if (!pet.lastSeenEpoch) return 0;
+  uint32_t day = pet.lastSeenEpoch / 86400UL;
+  int hour = sceneHour();
+  if (biome == 5) return (day % 3 == 0 && hour >= 8 && hour < 20) ? 3 : 1;
+  if (day % 4 == 0 && hour >= 10 && hour < 19) return 2; // rain
+  return (day % 3 == 0 || hour < 8 || hour >= 18) ? 1 : 0; // clouds
+}
+
+void drawSceneClock(bool night) {
+  if (!pet.lastSeenEpoch) return;
+  uint32_t minutes = (pet.lastSeenEpoch / 60UL) % 1440UL;
+  char clockText[8];
+  snprintf(clockText, sizeof(clockText), "%02u:%02u",
+           (unsigned)(minutes / 60), (unsigned)(minutes % 60));
+  // In the sky behind the Pokémon: large enough to read, away from the header.
+  gfx->fillRoundRect(32, 184, 112, 42, 10,
+                     night ? C565(0x22, 0x30, 0x50) : C565(0xe9, 0xf4, 0xed));
+  setInk(night ? UI_WHITE : UI_INK);
+  setSize(3);
+  setCur(44, 192);
+  printT(clockText);
+}
+
 // suelo de cada bioma de dia (de noche se mezcla hacia el azul nocturno)
 static const uint16_t BIOME_SOIL[6] = {
   C565(0x7e, 0xc0, 0x7f),  // 0 pradera
@@ -752,11 +844,13 @@ void drawClouds(uint32_t now, uint16_t col) {
 
 void drawScene(uint8_t biome, uint32_t now, bool night) {
   int h = sceneHour();
+  uint8_t weather = sceneWeather(biome);
   uint16_t top, bot;
   if (night)            { top = C565(0x0c, 0x12, 0x24); bot = C565(0x1e, 0x26, 0x46); }
   else if (h < 8)       { top = C565(0xd1, 0x6a, 0x86); bot = C565(0xf3, 0xb8, 0x7c); }  // amanecer
   else if (h < 18)      { top = C565(0x8f, 0xc8, 0xea); bot = C565(0xdc, 0xee, 0xe6); }  // dia
   else                  { top = C565(0xc7, 0x5a, 0x4a); bot = C565(0xf0, 0xae, 0x64); }  // atardecer
+  if (weather == 2) { top = C565(0x48, 0x62, 0x79); bot = C565(0x9b, 0xb2, 0xbe); }
 
   // cielo en bandas
   for (int y = 0; y < HORIZON; y += 8)
@@ -769,7 +863,7 @@ void drawScene(uint8_t biome, uint32_t now, bool night) {
     for (auto &st : STARS) gfx->fillRect(st[0], st[1], 4, 4, UI_WHITE);
   } else if (h < 18) {
     gfx->fillCircle(360, 84, 26, h < 8 ? C565(0xff, 0xd9, 0x8a) : C565(0xff, 0xe7, 0x9f));
-    drawClouds(now, C565(0xff, 0xff, 0xff));
+    if (weather != 0) drawClouds(now, weather == 2 ? C565(0xbf, 0xcb, 0xd2) : C565(0xff, 0xff, 0xff));
   } else {
     gfx->fillCircle(233, HORIZON - 6, 34, C565(0xff, 0xf1, 0xc8));  // sol poniente
   }
@@ -820,6 +914,13 @@ void drawScene(uint8_t biome, uint32_t now, bool night) {
       for (int b = -1; b <= 1; b++)
         gfx->fillRect(gx + b * 5, HORIZON + 6, 2, 8 + (b == 0 ? 4 : 0), dk);
   }
+  if (weather == 2) {
+    for (int i = 0; i < 22; ++i) {
+      int x = (i * 67 + now / 47) % 466;
+      int y = (i * 47 + now / 17) % HORIZON;
+      gfx->drawLine(x, y, x - 3, y + 9, C565(0xbf, 0xe3, 0xf4));
+    }
+  }
 }
 
 // primera partida: elige inicial entre Bulbasaur / Charmander / Squirtle
@@ -827,7 +928,7 @@ void renderStarterSelect() {
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
   const char *t = T(S_CHOOSE_STARTER);
-  gfx->setTextColor(UI_INK);
+  setInk(UI_INK);
   setSize(2);
   setCur(centerX(t, 2), 68);
   printT(t);
@@ -839,7 +940,7 @@ void renderStarterSelect() {
     gfx->drawRoundRect(70, ry, 326, STARTER_ROW_H, 14, de.accent);
     const uint8_t *th = thumbs.get(d);     // miniatura del inicial (si la SD esta lista)
     if (th) drawThumb(th, 76, ry - 5, 3, false);
-    gfx->setTextColor(UI_INK);
+    setInk(UI_INK);
     setSize(3);
     setCur(178, ry + 24);
     printT(dexName(d));
@@ -897,7 +998,10 @@ int gFontAscent = 0;  // px del borde superior a la linea base, 0 = fuente clasi
 void setSize(uint8_t n) {
   // gTextSize guarda la escala REALMENTE aplicada, no la pedida: setCur()
   // multiplica el ascenso por ella y tiene que cuadrar con lo que se pinta.
-  gTextSize = gCjkFont ? (n >= CJK_SIZE_DIV ? n / CJK_SIZE_DIV : 1) : n;
+  // Enlarge the ordinary UI one step. Large display numerals already fill
+  // their regions; keep them unchanged to avoid cutting off game counters.
+  uint8_t displaySize = n <= 2 ? n + 1 : n;
+  gTextSize = gCjkFont ? (displaySize >= CJK_SIZE_DIV ? displaySize / CJK_SIZE_DIV : 1) : displaySize;
   gfx->setTextSize(gTextSize);
 }
 
@@ -941,11 +1045,24 @@ void applyLangFont() {
 // Para la fuente clasica devuelve EXACTAMENTE la misma cuenta que habia antes,
 // asi que este cambio no mueve un pixel en los seis idiomas actuales.
 uint16_t textW(const char *s, uint8_t size) {
-  if (!gCjkFont) return (uint16_t)strlen(s) * 6 * size;
-  int16_t x1, y1;
-  uint16_t w, h;
-  gfx->getTextBounds(s, 0, 0, &x1, &y1, &w, &h);
-  return w;
+  uint16_t width = 0;
+  while (*s) {
+    unsigned char c = (unsigned char)*s;
+    int len = c < 128 ? 1 : c < 224 ? 2 : c < 240 ? 3 : 4;
+    if (!gCjkFont && !(c >= 0xE0 && c <= 0xED && s[1] && s[2] &&
+                      ((unsigned char)s[1] & 0xC0) == 0x80 && ((unsigned char)s[2] & 0xC0) == 0x80)) len = 1;
+    char glyph[5] = {}; int n = 0;
+    while (n < len && s[n]) { glyph[n] = s[n]; ++n; }
+    uint32_t cp = 0;
+    if (n == 3) cp = ((c & 15) << 12) | ((s[1] & 63) << 6) | (s[2] & 63);
+    if (cp >= 0xAC00 && cp <= 0xD7A3)
+      width += (gLang == LANG_KO && gTextSize == 1) ? 20 :
+               16 * (gCjkFont ? gTextSize : max(1, (int)gTextSize/2));
+    else if (!gCjkFont) width += 6 * (size <= 2 ? size + 1 : size);
+    else { int16_t x, y; uint16_t w, h; gfx->getTextBounds(glyph, 0, 0, &x, &y, &w, &h); width += w; }
+    s += n;
+  }
+  return width;
 }
 
 // x del cursor para dejar el texto centrado en CX
@@ -961,15 +1078,40 @@ int centerX(const char *s, uint8_t size) { return CX - textW(s, size) / 2; }
 void printT(char c) { gfx->print(c); }
 
 void printT(const char *s) {
-  if (gCjkFont) {
-    int16_t x = gfx->getCursorX(), y = gfx->getCursorY();
-    gfx->print(s);
-    gfx->setCursor(x + 1, y);
+  while (*s) {
+    unsigned char c = (unsigned char)*s;
+    int len = c < 128 ? 1 : c < 224 ? 2 : c < 240 ? 3 : 4;
+    if (!gCjkFont && !(c >= 0xE0 && c <= 0xED && s[1] && s[2] &&
+                      ((unsigned char)s[1] & 0xC0) == 0x80 && ((unsigned char)s[2] & 0xC0) == 0x80)) len = 1;
+    char glyph[5] = {}; int n = 0;
+    while (n < len && s[n]) { glyph[n] = s[n]; ++n; }
+    uint32_t cp = n == 3 ? ((c & 15) << 12) | ((s[1] & 63) << 6) | (s[2] & 63) : 0;
+    if (cp >= 0xAC00 && cp <= 0xD7A3) {
+      int x = gfx->getCursorX(), baseline = gfx->getCursorY();
+      int hs = gCjkFont ? gTextSize : max(1, (int)gTextSize/2);
+      int y = baseline - gFontAscent * gTextSize;
+      if (gLang == LANG_KO && gTextSize == 1) {
+        // Native 20x20 glyph: preserve the existing cell and cursor advance.
+        gfx->drawBitmap(x, y, HANGUL20_BITMAP[cp - 0xAC00], 20, 20, currentTextColor);
+        gfx->setCursor(x + 20, baseline);
+      } else {
+        for (int row = 0; row < 16; ++row) {
+          uint16_t bits = HANGUL_BITMAP[cp - 0xAC00][row];
+          for (int col = 0; col < 16; ++col) if (bits & (0x8000 >> col))
+            gfx->fillRect(x + col*hs, y + row*hs, hs, hs, currentTextColor);
+        }
+        gfx->setCursor(x + 16*hs, baseline);
+      }
+    } else gfx->print(glyph);
+    s += n;
   }
-  gfx->print(s);
 }
 
 void render() {
+  if (audioMenu) { renderAudioMenu(); return; }
+  if (trainingMenu) { renderTrainingMenu(); return; }
+  if (battleOpen) { renderBattle(); return; }
+  if (boxOpen) { renderBox(); return; }
   if (pet.awaitingStarter()) {  // primera partida: elegir inicial (prioridad total)
     renderStarterSelect();
     return;
@@ -1003,6 +1145,7 @@ void render() {
   // drawScene cubre los 466x466 completos: sin fillScreen(NEGRO) previo para
   // que un flush DMA solapado nunca capture negro a medias (anti-parpadeo)
   drawScene(pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome, millis(), gNight);
+  drawSceneClock(gNight);
 
   if (pet.ceremony) {
     const DexEntry &d = DEX_TBL[pet.speciesId];
@@ -1025,7 +1168,7 @@ void render() {
       for (auto &c : CRACK2) gfx->fillRect(x + c[0] * s, y + c[1] * s, s, s, INK_K);
     if (pet.eggRarity() >= R_RARO) {
       const char *rar = (pet.eggRarity() == R_LEGENDARIO) ? T(S_EGG_LEGEND) : T(S_EGG_RARE);
-      gfx->setTextColor(pet.eggRarity() == R_LEGENDARIO ? UI_BAR_WARN : 0x4C98);
+      setInk(pet.eggRarity() == R_LEGENDARIO ? UI_BAR_WARN : 0x4C98);
       setSize(2);
       setCur(centerX(rar, 2), 316);
       printT(rar);
@@ -1033,13 +1176,15 @@ void render() {
     char reg[24];
     snprintf(reg, sizeof(reg), T(S_POKEDEX_FMT), pet.registeredCount());
     gfx->fillRect(0, 312, 466, 154, gNight ? UI_BG_NIGHT : UI_BG_DAY);
-    gfx->setTextColor(inkColor());
+    setInk(inkColor());
     setSize(2);
     setCur(centerX(reg, 2), 348);
     printT(reg);
+    gfx->fillRoundRect(128, 387, 210, 48, 10, 0x4C98);
+    setInk(UI_WHITE); setCur(centerX(adventureText("COLLECTION BOX"), 2), 400); printT(adventureText("COLLECTION BOX"));
   } else {
     const DexEntry &d = DEX_TBL[pet.speciesId];
-    char name[28];
+    char name[80];
     const char *base = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
     snprintf(name, sizeof(name), T(S_NAME_FMT), pet.shiny ? "*" : "", base, pet.level());
     drawHeader(name, gNight ? UI_INK_NIGHT : d.accent, statusMsg());
@@ -1058,7 +1203,7 @@ void render() {
   }
 
   if (pet.sleeping) {
-    gfx->setTextColor(UI_INK_NIGHT);
+    setInk(UI_INK_NIGHT);
     setSize(3);
     setCur(320, 130);
     printT("Zz");
@@ -1091,12 +1236,12 @@ void render() {
       // fuente ya no sabe dibujar.
       char q[48];
       snprintf(q, sizeof(q), T(S_RELEASE_FMT), dexName(pet.speciesId));
-      gfx->setTextColor(UI_INK);
+      setInk(UI_INK);
       setSize(2);
       setCur(centerX(q, 2), 196);
       printT(q);
       gfx->fillRoundRect(118, 252, 100, 52, 12, UI_BAR_OK);
-      gfx->setTextColor(UI_WHITE);
+      setInk(UI_WHITE);
       setCur(118 + (100 - textW(T(S_YES), 2)) / 2, 270);
       printT(T(S_YES));
       gfx->fillRoundRect(248, 252, 100, 52, 12, UI_BAR_BAD);
@@ -1215,13 +1360,24 @@ void startSack() {
   sackUntil = millis() + 10000;
   sackOverUntil = 0;
   sackHits = 0;
+  trainingLastTap = 0; trainingBeat = UINT32_MAX;
   sackShake = 0;
   sackNewHi = false;
 }
 
 void sackTap() {
   if (!timeLeft(sackUntil)) return;  // ya termino el tiempo
+  uint32_t now = millis(), elapsed = 10000 - (sackUntil - now);
+  if (trainingKind == 1) {
+    uint32_t beat = elapsed / 1000;
+    if (elapsed % 1000 < 350 || elapsed % 1000 > 650 || trainingBeat == beat) return;
+    trainingBeat = beat;
+  } else if (trainingKind == 3) {
+    if (trainingLastTap && now - trainingLastTap < 700) return;
+    trainingLastTap = now;
+  }
   sackHits++;
+  sfxPlay(SFX_TAP);
   sackShake = 16;  // sacude el saco
 }
 
@@ -1238,25 +1394,25 @@ void renderSack() {
     if (!timeLeft(sackOverUntil)) { sackOpen = false; return; }
     char b[20];
     snprintf(b, sizeof(b), T(S_HITS_FMT), sackHits);
-    gfx->setTextColor(ink);
+    setInk(ink);
     setSize(4);
     setCur(centerX(b, 4), 150);
     printT(b);
-    char g[18];
-    snprintf(g, sizeof(g), T(S_STR_GAIN_FMT), sackGain);
-    gfx->setTextColor(UI_BAR_BAD);
+    char g[48];
+    snprintf(g, sizeof(g), "%s +%u", trainingKind == 1 ? "DEF" : trainingKind == 3 ? "WGT" : "ATK", sackGain);
+    setInk(UI_BAR_BAD);
     setSize(3);
     setCur(centerX(g, 3), 210);
     printT(g);
     setSize(2);
     if (sackNewHi && sackHits > 0) {
-      gfx->setTextColor(UI_BAR_WARN);
+      setInk(UI_BAR_WARN);
       setCur(centerX(T(S_NEW_RECORD), 2), 256);
       printT(T(S_NEW_RECORD));
     } else {
       char r[18];
-      snprintf(r, sizeof(r), T(S_RECORD_FMT), pet.strHi);
-      gfx->setTextColor(ink);
+      snprintf(r, sizeof(r), T(S_RECORD_FMT), pet.trainingBest(trainingKind));
+      setInk(ink);
       setCur(centerX(r, 2), 256);
       printT(r);
     }
@@ -1266,8 +1422,8 @@ void renderSack() {
 
   // se acabaron los 10 s: aplicar entrenamiento
   if (!timeLeft(sackUntil)) {
-    sackNewHi = (sackHits > pet.strHi);
-    sackGain = pet.trainStrength(sackHits);
+    sackNewHi = sackHits > pet.trainingBest(trainingKind);
+    sackGain = pet.trainSession(trainingKind, sackHits);
     sfxPlay(sackNewHi ? SFX_MEDAL : SFX_PLAY);
     sackOverUntil = now + 3500;
     gfx->flush();
@@ -1288,14 +1444,19 @@ void renderSack() {
   // contador de golpes
   char buf[8];
   snprintf(buf, sizeof(buf), "%u", sackHits);
-  gfx->setTextColor(ink);
+  setInk(ink);
   setSize(6);
   setCur(centerX(buf, 6), 268);
   printT(buf);
 
   setSize(2);
-  setCur(centerX(T(S_HIT_FAST), 2), 322);
-  printT(T(S_HIT_FAST));
+  const char *hint = trainingKind == 1 ? localText("초록일 때 방어!", "BLOCK ON GREEN!") :
+                     trainingKind == 3 ? localText("천천히 저항 훈련", "SLOW RESISTANCE") : T(S_HIT_FAST);
+  setCur(centerX(hint, 2), 322); printT(hint);
+  if (trainingKind == 1) {
+    uint32_t phase = (10000 - (sackUntil - now)) % 1000;
+    gfx->fillCircle(330, 170, 24, phase >= 350 && phase <= 650 ? UI_BAR_OK : UI_BAR_BAD);
+  }
 
   // barra de tiempo
   uint32_t left = sackUntil - now;
@@ -1341,24 +1502,24 @@ void renderGame() {
     }
     char buf[22];
     snprintf(buf, sizeof(buf), T(S_SCORE_FMT), gameScore);
-    gfx->setTextColor(ink);
+    setInk(ink);
     setSize(4);
     setCur(centerX(buf, 4), 160);
     printT(buf);
     setSize(2);
     if (gameNewHi && gameScore > 0) {
-      gfx->setTextColor(UI_BAR_WARN);
+      setInk(UI_BAR_WARN);
       setCur(centerX(T(S_NEW_RECORD), 2), 214);
       printT(T(S_NEW_RECORD));
     } else {
       char rec[20];
       snprintf(rec, sizeof(rec), T(S_RECORD_FMT), pet.gameHi);
-      gfx->setTextColor(ink);
+      setInk(ink);
       setCur(centerX(rec, 2), 214);
       printT(rec);
     }
     const char *msg = gameScore >= 10 ? T(S_GREAT_JOY) : T(S_PLUS_JOY);
-    gfx->setTextColor(ink);
+    setInk(ink);
     setCur(centerX(msg, 2), 250);
     printT(msg);
     gfx->flush();
@@ -1371,7 +1532,7 @@ void renderGame() {
   // marcador, record y vidas
   char buf[8];
   snprintf(buf, sizeof(buf), "%u", gameScore);
-  gfx->setTextColor(ink);
+  setInk(ink);
   setSize(4);
   setCur(centerX(buf, 4), 30);
   printT(buf);
@@ -1441,7 +1602,7 @@ static int statBarX() {
 }
 
 void drawCardStat(int y, const char *label, uint16_t val, uint16_t maxBar, uint16_t color) {
-  gfx->setTextColor(UI_INK);
+  setInk(UI_INK);
   setSize(2);
   setCur(96, y);
   printT(label);
@@ -1479,7 +1640,7 @@ void applyClock() {
 void drawClockBtn(int x, int y, const char *l) {
   gfx->fillRoundRect(x, y, 58, 58, 12, UI_WHITE);
   gfx->drawRoundRect(x, y, 58, 58, 12, UI_INK);
-  gfx->setTextColor(UI_INK);
+  setInk(UI_INK);
   setSize(4);
   setCur(x + 17, y + 15);
   printT(l);
@@ -1495,7 +1656,7 @@ static const char *const LANG_CODES[LANG_COUNT] = { "ES", "EN", "FR", "DE", "IT"
 void renderClock() {
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
-  gfx->setTextColor(UI_INK);
+  setInk(UI_INK);
   setSize(3);
   setCur(centerX(T(S_SET_TIME), 3), 44);
   printT(T(S_SET_TIME));
@@ -1511,7 +1672,7 @@ void renderClock() {
   drawClockBtn(252, 190, "-");  // min -
   drawClockBtn(318, 190, "+");  // min +
   setSize(2);
-  gfx->setTextColor(UI_TRACK);
+  setInk(UI_TRACK);
   setCur(120, 256);
   printT(T(S_HOUR));
   setCur(276, 256);
@@ -1522,34 +1683,37 @@ void renderClock() {
   const char *sl = snd ? T(S_SND_ON) : T(S_SND_OFF);
   gfx->fillRoundRect(34, LANG_PILL_Y, 96, LANG_PILL_H, 8, snd ? UI_BAR_OK : UI_WHITE);
   gfx->drawRoundRect(34, LANG_PILL_Y, 96, LANG_PILL_H, 8, UI_INK);
-  gfx->setTextColor(snd ? UI_BG_DAY : UI_INK);
+  setInk(snd ? UI_BG_DAY : UI_INK);
   setSize(2);
   setCur(34 + (96 - textW(sl, 2)) / 2, LANG_PILL_Y + 8);
   printT(sl);
 
+  gfx->fillRoundRect(148, LANG_PILL_Y, 172, LANG_PILL_H, 8, UI_WHITE);
+  setInk(UI_INK); setSize(2);
+  setCur(170, LANG_PILL_Y + 7); printT(localText("개별 볼륨", "VOLUME"));
   // selector de idioma: una pildora que cicla los 6 idiomas al tocar
   gfx->fillRoundRect(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, 8, UI_WHITE);
   gfx->drawRoundRect(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, 8, UI_INK);
   char lp[10];
   snprintf(lp, sizeof(lp), "%s >", LANG_CODES[gLang]);
-  gfx->setTextColor(UI_INK);
+  setInk(UI_INK);
   setSize(2);
   setCur(LANG_PILL_X + (LANG_PILL_W - textW(lp, 2)) / 2, LANG_PILL_Y + 8);
   printT(lp);
 
   gfx->fillRoundRect(133, 340, 200, 48, 14, UI_BAR_OK);
-  gfx->setTextColor(UI_BG_DAY);
+  setInk(UI_BG_DAY);
   setSize(3);
   setCur(CX - 18, 352);
   printT("OK");
 
-  gfx->setTextColor(UI_TRACK);
+  setInk(UI_TRACK);
   setSize(2);
   setCur(centerX(T(S_CLOCK_CANCEL), 2), 410);
   printT(T(S_CLOCK_CANCEL));
 
   // version del firmware (discreta, abajo del todo)
-  char ver[20];
+  char ver[40];
   snprintf(ver, sizeof(ver), "TamaPoke v%s", FW_VERSION);
   setSize(1);
   setCur(centerX(ver, 1), 436);
@@ -1566,6 +1730,7 @@ void clockTap(int16_t x, int16_t y) {
     return;
   }
   if (y >= LANG_PILL_Y && y <= LANG_PILL_Y + LANG_PILL_H) {
+    if (x >= 148 && x < 320) { audioMenu = true; return; }
     if (x >= 34 && x < 130) {                  // interruptor de sonido
       audioSetEnabled(!audioEnabled());
       if (audioEnabled()) sfxPlay(SFX_TAP);    // confirma al encender
@@ -1589,7 +1754,7 @@ void drawStreakBadge() {
   gfx->fillTriangle(x + 8, y + 7, x + 4, y + 17, x + 12, y + 17, UI_BAR_WARN);
   char s[6];
   snprintf(s, sizeof(s), "%u", pet.streak);
-  gfx->setTextColor(inkColor());
+  setInk(inkColor());
   setSize(2);
   setCur(x + 22, y + 2);
   printT(s);
@@ -1613,7 +1778,7 @@ void drawCelebration() {
   if (!l1) return;
   gfx->fillRoundRect(73, 150, 320, 96, 16, UI_BAR_WARN);
   gfx->drawRoundRect(73, 150, 320, 96, 16, UI_INK);
-  gfx->setTextColor(UI_INK);
+  setInk(UI_INK);
   setSize(3);
   setCur(centerX(l1, 3), 176);
   printT(l1);
@@ -1627,7 +1792,7 @@ void drawMedalBadge(int x, int y, int i) {
   bool got = pet.hasMedal(1 << i);
   gfx->fillRoundRect(x, y, 100, 24, 6, got ? UI_BAR_OK : UI_TRACK);
   if (!got) gfx->drawRoundRect(x, y, 100, 24, 6, UI_TRACK);
-  gfx->setTextColor(got ? UI_BG_DAY : 0x9492);
+  setInk(got ? UI_BG_DAY : 0x9492);
   setSize(2);
   setCur(x + (100 - textW(medalLabel(i), 2)) / 2, y + 5);
   printT(medalLabel(i));
@@ -1637,9 +1802,9 @@ void drawMedalBadge(int x, int y, int i) {
 void renderCardProfile() {
   const DexEntry &d = DEX_TBL[pet.speciesId];
   const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
-  char head[32];
+  char head[80];
   snprintf(head, sizeof(head), T(S_NAME_FMT), pet.shiny ? "*" : "", nm, pet.level());
-  gfx->setTextColor(d.accent);
+  setInk(d.accent);
   // auto-encoge: a tamano 3 los nombres largos no caben en la franja estrecha de
   // arriba de la pantalla redonda, asi que se cortaban por el borde. El ancho se
   // MIDE con textW(): strlen() cuenta bytes, y en una fila UTF-8 no hay un byte
@@ -1655,7 +1820,7 @@ void renderCardProfile() {
     const char *sp = dexName(pet.speciesId);
     char par[32];
     snprintf(par, sizeof(par), "(%s)", sp);
-    gfx->setTextColor(UI_TRACK);
+    setInk(UI_TRACK);
     setSize(2);
     setCur(centerX(par, 2), 64);   // medido, no contado en bytes
     printT(par);
@@ -1670,7 +1835,7 @@ void renderCardProfile() {
   gfx->fillTriangle(sx + 8, sy + 7, sx + 4, sy + 18, sx + 12, sy + 18, UI_BAR_WARN);
   char rl[40];  // en japones pierde cifras con 30 a partir de 100 dias
   snprintf(rl, sizeof(rl), T(S_STREAK_FMT), pet.streak, pet.bestStreak);
-  gfx->setTextColor(UI_INK);
+  setInk(UI_INK);
   setSize(2);
   setCur(sx + 24, sy + 2);
   printT(rl);
@@ -1684,19 +1849,19 @@ void renderCardProfile() {
   char info[48];
   snprintf(info, sizeof(info), T(S_INFO_FMT), berry,
            (unsigned long)(pet.ageMinutes / 1440));
-  gfx->setTextColor(UI_INK);
+  setInk(UI_INK);
   setSize(2);
   setCur(centerX(info, 2), 296);
   printT(info);
 
-  gfx->setTextColor(UI_TRACK);
+  setInk(UI_TRACK);
   setCur(centerX(T(S_RENAME_HINT), 2), 332);
   printT(T(S_RENAME_HINT));
 }
 
 // pagina 1: combate (4 barras + boton de entrenar)
 void renderCardStats() {
-  gfx->setTextColor(UI_INK);
+  setInk(UI_INK);
   setSize(3);
   setCur(centerX(T(S_BATTLE), 3), 48);
   printT(T(S_BATTLE));
@@ -1708,10 +1873,10 @@ void renderCardStats() {
 
   // boton: saco de entrenamiento de fuerza
   gfx->fillRoundRect(96, 300, 274, 40, 12, UI_BAR_BAD);
-  gfx->setTextColor(UI_BG_DAY);
+  setInk(UI_BG_DAY);
   setSize(2);
-  setCur(centerX(T(S_TRAIN_STR), 2), 311);
-  printT(T(S_TRAIN_STR));
+  setCur(centerX(localText("능력별 훈련", "STAT TRAINING"), 2), 311);
+  printT(localText("능력별 훈련", "STAT TRAINING"));
 }
 
 // pagina 2: medallas con etiqueta descriptiva
@@ -1721,7 +1886,7 @@ void renderCardMedals() {
     if (pet.hasMedal(1 << i)) got++;
   char head[24];
   snprintf(head, sizeof(head), T(S_MEDALS_FMT), got, MED_COUNT);
-  gfx->setTextColor(UI_INK);
+  setInk(UI_INK);
   setSize(3);
   setCur(centerX(head, 3), 48);
   printT(head);
@@ -1732,12 +1897,12 @@ void renderCardMedals() {
     gfx->fillRoundRect(x, y, 196, 44, 10, g ? UI_BAR_OK : UI_TRACK);
     if (g) {  // marca de conseguida
       gfx->fillCircle(x + 22, y + 22, 11, UI_BG_DAY);
-      gfx->setTextColor(UI_BAR_OK);
+      setInk(UI_BAR_OK);
       setSize(2);
       setCur(x + 16, y + 13);
       printT("v");
     }
-    gfx->setTextColor(g ? UI_BG_DAY : 0x8410);
+    setInk(g ? UI_BG_DAY : 0x8410);
     setSize(2);
     setCur(x + 44, y + 14);
     printT(medalDesc(i));
@@ -1748,7 +1913,7 @@ void renderCardMedals() {
 // que antes eran invisibles (cuanto falta para subir/evolucionar y por que)
 void renderCardProgress() {
   const DexEntry &d = DEX_TBL[pet.speciesId];
-  gfx->setTextColor(UI_INK);
+  setInk(UI_INK);
   setSize(3);
   setCur(centerX(T(S_PROGRESS), 3), 44);
   printT(T(S_PROGRESS));
@@ -1768,13 +1933,13 @@ void renderCardProgress() {
   if (fw > 0) gfx->fillRoundRect(bx + 2, by + 2, fw, bh - 4, 5, UI_BAR_OK);
   char nx[32];
   snprintf(nx, sizeof(nx), T(S_NEXT_LVL_FMT), MINUTES_PER_LEVEL - into, pet.level() + 1);
-  gfx->setTextColor(UI_INK);
+  setInk(UI_INK);
   setSize(2);
   setCur(centerX(nx, 2), by + 32);
   printT(nx);
 
   // estado de evolucion
-  gfx->setTextColor(UI_TRACK);
+  setInk(UI_TRACK);
   setCur(centerX(T(S_EVO_LABEL), 2), 230);
   printT(T(S_EVO_LABEL));
   char evoBuf[32];
@@ -1792,14 +1957,14 @@ void renderCardProgress() {
       evo = evoBuf;
     }
   }
-  gfx->setTextColor(evoCol);
+  setInk(evoCol);
   setCur(centerX(evo, 2), 256);
   printT(evo);
 
   // descuidos (retrasan la evolucion)
   char ms[24];
   snprintf(ms, sizeof(ms), T(S_MISTAKES_FMT), pet.careMistakes);
-  gfx->setTextColor(pet.careMistakes > 0 ? UI_BAR_BAD : UI_INK);
+  setInk(pet.careMistakes > 0 ? UI_BAR_BAD : UI_INK);
   setCur(centerX(ms, 2), 312);
   printT(ms);
 }
@@ -1808,16 +1973,17 @@ void renderCard() {
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
   if (cardPage == 0) renderCardProfile();
-  else if (cardPage == 1) renderCardStats();
-  else if (cardPage == 2) renderCardMedals();
+  else if (cardPage == 1) renderCardActions();
+  else if (cardPage == 2) renderCardStats();
+  else if (cardPage == 3) renderCardMedals();
   else renderCardProgress();
 
-  // indicador de 4 paginas + ayuda
-  for (int i = 0; i < 4; i++) {
-    if (i == cardPage) gfx->fillCircle(194 + i * 26, 374, 5, UI_INK);
-    else gfx->drawCircle(194 + i * 26, 374, 4, UI_INK);
+  // indicador de 5 paginas + ayuda
+  for (int i = 0; i < 5; i++) {
+    if (i == cardPage) gfx->fillCircle(181 + i * 26, 374, 5, UI_INK);
+    else gfx->drawCircle(181 + i * 26, 374, 4, UI_INK);
   }
-  gfx->setTextColor(UI_TRACK);
+  setInk(UI_TRACK);
   setSize(2);
   setCur(centerX(T(S_BACK), 2), 398);
   printT(T(S_BACK));
@@ -1835,18 +2001,21 @@ static const char KB_KEYS[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ.-";  // 28 + DEL + OK 
 
 void openKeyboard() {
   kbOpen = true;
+  kbKorean = gLang == LANG_KO; koInitial = koVowel = koFinal = 0;
   strncpy(nameBuf, pet.nick, sizeof(nameBuf) - 1);
   nameBuf[sizeof(nameBuf) - 1] = 0;
   nameLen = strlen(nameBuf);
 }
 
 void renderKeyboard() {
+  if (kbKorean) { renderKoreanKeyboard(); return; }
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
-  gfx->setTextColor(UI_INK);
+  setInk(UI_INK);
   setSize(2);
   setCur(centerX(T(S_NAME), 2), 56);
   printT(T(S_NAME));
+  setSize(2); setCur(190, 128); printT("KO / EN");
   // buffer actual
   gfx->fillRoundRect(83, 84, 300, 40, 8, UI_WHITE);
   gfx->drawRoundRect(83, 84, 300, 40, 8, UI_INK);
@@ -1859,7 +2028,7 @@ void renderKeyboard() {
     bool special = (i >= 28);
     gfx->fillRoundRect(x, y, KB_W - 6, KB_H - 6, 6, special ? UI_BAR_WARN : UI_WHITE);
     gfx->drawRoundRect(x, y, KB_W - 6, KB_H - 6, 6, UI_INK);
-    gfx->setTextColor(UI_INK);
+    setInk(UI_INK);
     setSize(2);
     if (i < 28) {
       setCur(x + KB_W / 2 - 9, y + KB_H / 2 - 10);
@@ -1874,6 +2043,8 @@ void renderKeyboard() {
 }
 
 void keyboardTap(int16_t x, int16_t y) {
+  if (kbKorean) { koreanKeyboardTap(x, y); return; }
+  if (y >= 125 && y < 150) { kbKorean = true; return; }
   // filtra ANTES de dividir: con x/y menores que KB_X/KB_Y la resta da negativo
   // y la division entera trunca hacia cero (no hacia -inf), asi que col/row
   // saldria 0 en vez de negativo y el filtro de abajo no lo detectaria
@@ -1883,11 +2054,16 @@ void keyboardTap(int16_t x, int16_t y) {
   int i = row * KB_COLS + col;
   if (i >= 30) return;
   if (i == 28) {  // borrar
-    if (nameLen) nameBuf[--nameLen] = 0;
+    if (nameLen) {
+      do { --nameLen; } while (nameLen && ((unsigned char)nameBuf[nameLen] & 0xC0) == 0x80);
+      nameBuf[nameLen] = 0;
+    }
   } else if (i == 29) {  // OK
     pet.rename(nameBuf);
     kbOpen = false;
   } else if (nameLen < sizeof(nameBuf) - 1) {
+    int chars = 0; for (int j=0;j<nameLen;++j) if (((unsigned char)nameBuf[j]&0xC0)!=0x80) ++chars;
+    if (chars >= 11) return;
     nameBuf[nameLen++] = KB_KEYS[i];
     nameBuf[nameLen] = 0;
   }
@@ -1922,10 +2098,11 @@ void renderGallery() {
     gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
     const DexEntry &d = DEX_TBL[galleryDetail];
     bool reg = pet.isRegistered(galleryDetail);
-    char head[32];
+    bool seen = pet.isSeen(galleryDetail);
+    char head[80];
     snprintf(head, sizeof(head), "N.%03d %s%s", galleryDetail,
-             pet.isShinyRegistered(galleryDetail) ? "*" : "", reg ? dexName(galleryDetail) : "???");
-    gfx->setTextColor(reg ? d.accent : UI_INK);
+             pet.isShinyRegistered(galleryDetail) ? "*" : "", seen ? dexName(galleryDetail) : "???");
+    setInk(reg ? d.accent : UI_INK);
     // auto-encoge nombres largos (no caben a t3), midiendo en vez de contar
     // bytes; 13 caracteres a tamano 3 son los 234 px de antes.
     setSize(3);
@@ -1940,8 +2117,23 @@ void renderGallery() {
       const uint8_t *t = thumbs.get(galleryDetail);
       if (t) drawThumb(t, CX - GAL_CELL, 135, 4, !reg);
     }
-    gfx->setTextColor(UI_INK);
+    setInk(UI_INK);
     setSize(2);
+    if (reg) {
+      char types[52];
+      uint8_t t1 = dexType1(galleryDetail), t2 = dexType2(galleryDetail);
+      if (t2 == TYPE_NONE)
+        snprintf(types, sizeof(types), "%s", adventureText(battleTypeName(t1)));
+      else
+        snprintf(types, sizeof(types), "%s / %s", adventureText(battleTypeName(t1)),
+                 adventureText(battleTypeName(t2)));
+      setCur(centerX(types, 2), 337); printT(types);
+      char stats[60];
+      snprintf(stats, sizeof(stats), "HP %u ATK %u DEF %u SPD %u", d.bHp, d.bAtk, d.bDef, d.bSpe);
+      setCur(centerX(stats, 2), 362); printT(stats);
+    } else if (seen) {
+      setCur(centerX(adventureText("SEEN - NOT CAUGHT"), 2), 362); printT(adventureText("SEEN - NOT CAUGHT"));
+    }
     setCur(centerX(T(S_DETAIL_BACK), 2), 408);
     printT(T(S_DETAIL_BACK));
     gfx->flush();
@@ -1953,11 +2145,12 @@ void renderGallery() {
 
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
-  char head[24];
-  snprintf(head, sizeof(head), T(S_POKEDEX_FMT), pet.registeredCount());
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(head, 3), 36);
+  char head[64];
+  snprintf(head, sizeof(head), adventureText("SEEN %u  CAUGHT %u"), pet.seenCount(), pet.caughtCount());
+  setInk(UI_INK);
+  int headSize = textW(head, 3) <= 420 ? 3 : 2;
+  setSize(headSize);
+  setCur(centerX(head, headSize), 36);
   printT(head);
 
   for (int r = 0; r < 4; r++) {
@@ -1965,22 +2158,23 @@ void renderGallery() {
       int16_t dex = galleryPage * 16 + r * 4 + c + 1;
       if (dex > 151) break;
       int x = GAL_X + c * GAL_CELL, y = GAL_Y + r * GAL_CELL;
-      const uint8_t *t = thumbs.get(dex);
-      if (t) {
-        drawThumb(t, x, y, 2, !pet.isRegistered(dex));
-        if (pet.isShinyRegistered(dex)) {
-          gfx->setTextColor(UI_BAR_WARN);
-          setSize(2);
-          setCur(x + 62, y + 4);
-          printT("*");
-        }
-      } else {
-        char num[6];
-        snprintf(num, sizeof(num), "%d", dex);
-        gfx->setTextColor(UI_TRACK);
-        setSize(2);
-        setCur(x + 24, y + 32);
-        printT(num);
+      bool seen = pet.isSeen(dex), registered = pet.isRegistered(dex);
+      const uint8_t *t = seen ? thumbs.get(dex) : nullptr;
+      if (t) drawThumb(t, x, y, 2, !registered);
+      else {
+        char label[8];
+        if (seen) snprintf(label, sizeof(label), "#%03d", dex);
+        else snprintf(label, sizeof(label), "???");
+        setInk(seen ? UI_INK : UI_TRACK);
+        setSize(2); setCur(x + (GAL_CELL - textW(label, 2)) / 2, y + 28); printT(label);
+      }
+      if (seen && !registered) {
+        const char *label = adventureText("SEEN");
+        gfx->fillRoundRect(x + 5, y + 61, 70, 17, 4, UI_BAR_WARN);
+        setInk(UI_WHITE); setSize(1);
+        setCur(x + (GAL_CELL - textW(label, 1)) / 2, y + 65); printT(label);
+      } else if (pet.isShinyRegistered(dex)) {
+        setInk(UI_BAR_WARN); setSize(2); setCur(x + 62, y + 4); printT("*");
       }
     }
   }
@@ -2039,11 +2233,11 @@ void drawBattery() {
 
 void drawHeader(const char *name, uint16_t nameColor, const char *msg) {
   drawBattery();
-  gfx->setTextColor(nameColor);
+  setInk(nameColor);
   setSize(3);
   setCur(centerX(name, 3), 52);
   printT(name);
-  gfx->setTextColor(inkColor());
+  setInk(inkColor());
   setSize(2);
   setCur(centerX(msg, 2), 90);
   printT(msg);
@@ -2122,16 +2316,16 @@ void drawChoiceDialog() {
   }
   gfx->fillRoundRect(73, 156, 320, 188, 16, UI_WHITE);
   gfx->drawRoundRect(73, 156, 320, 188, 16, UI_INK);
-  gfx->setTextColor(UI_INK);
+  setInk(UI_INK);
   setSize(2);
   setCur(centerX(q, 2), 176);
   printT(q);
   gfx->fillRoundRect(93, 206, 280, 52, 12, c1);     // boton accion
-  gfx->setTextColor(t1);
+  setInk(t1);
   setCur(centerX(o1, 2), 224);
   printT(o1);
   gfx->fillRoundRect(93, 268, 280, 52, 12, c2);     // boton mantener/quedaros
-  gfx->setTextColor(t2);
+  setInk(t2);
   setCur(centerX(o2, 2), 286);
   printT(o2);
 }
@@ -2144,7 +2338,7 @@ void drawEvolveButton() {
   gfx->fillRoundRect(x, y, w, h, 18, UI_BAR_BAD);
   gfx->drawRoundRect(x, y, w, h, 18, UI_WHITE);
   gfx->drawRoundRect(x + 2, y + 2, w - 4, h - 4, 16, UI_WHITE);
-  gfx->setTextColor(UI_WHITE);
+  setInk(UI_WHITE);
   setSize(3);
   const char *t = T(S_EVO_TAP);
   setCur(centerX(t, 3), y + h / 2 - 11);
@@ -2158,10 +2352,10 @@ void drawFarewellButton() {
   int x = FAR_BTN_X - p, y = FAR_BTN_Y - p, w = FAR_BTN_W + 2 * p, h = FAR_BTN_H + 2 * p;
   gfx->fillRoundRect(x, y, w, h, 16, UI_BAR_WARN);
   gfx->drawRoundRect(x, y, w, h, 16, UI_INK);
-  char buf[52];
+  char buf[100];
   const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
   snprintf(buf, sizeof(buf), T(S_FAREWELL_BTN), nm);
-  gfx->setTextColor(UI_INK);
+  setInk(UI_INK);
   setSize(2);
   setCur(centerX(buf, 2), y + h / 2 - 8);
   printT(buf);
@@ -2175,10 +2369,10 @@ void drawRunawayButton() {
   int x = FAR_BTN_X - p, y = FAR_BTN_Y - p, w = FAR_BTN_W + 2 * p, h = FAR_BTN_H + 2 * p;
   gfx->fillRoundRect(x, y, w, h, 16, C565(0x3a, 0x44, 0x5a));
   gfx->drawRoundRect(x, y, w, h, 16, C565(0x70, 0x80, 0x98));
-  char buf[52];
+  char buf[100];
   const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
   snprintf(buf, sizeof(buf), T(S_RUNAWAY_BTN), nm);
-  gfx->setTextColor(C565(0xc8, 0xd2, 0xe0));
+  setInk(C565(0xc8, 0xd2, 0xe0));
   setSize(2);
   setCur(centerX(buf, 2), y + h / 2 - 8);
   printT(buf);
@@ -2232,7 +2426,7 @@ void drawPet() {
   int fi = flashIdxForDex(pet.speciesId);
   if (fi < 0) {
     // sin SD y sin sprite de flash: aviso claro de que faltan sprites
-    gfx->setTextColor(inkColor());
+    setInk(inkColor());
     setSize(6);
     setCur(CX - 18, PET_CY - 80);
     printT("?");
@@ -2539,7 +2733,7 @@ static int barLabelGap() {
 }
 
 void drawBar(int x, int y, const char *label, uint8_t val) {
-  gfx->setTextColor(inkColor());
+  setInk(inkColor());
   setSize(2);
   setCur(x, y);
   printT(label);
@@ -2553,6 +2747,9 @@ void drawBar(int x, int y, const char *label, uint8_t val) {
   gfx->fillRoundRect(bx, y, bw, bh, 4, UI_TRACK);
   int fw = (bw - 4) * val / 100;
   if (fw > 0) gfx->fillRoundRect(bx + 2, y + 2, fw, bh - 4, 3, fill);
+  char value[5]; snprintf(value, sizeof(value), "%u", val);
+  gfx->fillRect(bx + bw - 27, y, 27, 16, UI_WHITE);
+  setInk(UI_INK); setSize(1); setCur(bx + bw - 26, y); printT(value);
 }
 
 void drawButtons() {
@@ -2597,4 +2794,410 @@ void drawMap(const char *const *map, int n, int x, int y, int s, bool silhouette
       gfx->fillRect(x + c * s, y + r * s, s, s, silhouette ? INK_K : spriteColor(ch));
     }
   }
+}
+
+
+// ---------- wild battle and collection ----------
+
+void renderCardActions() {
+  setInk(UI_INK);
+  setSize(3);
+  setCur(centerX(adventureText("ADVENTURE"), 3), 55);
+  printT(adventureText("ADVENTURE"));
+  gfx->fillRoundRect(86, 110, 294, 60, 12, UI_BAR_BAD);
+  gfx->fillRoundRect(86, 190, 294, 60, 12, 0x4C98);
+  setInk(UI_WHITE);
+  setSize(2);
+  setCur(centerX(adventureText("WILD BATTLE"), 2), 129); printT(adventureText("WILD BATTLE"));
+  setCur(centerX(adventureText("COLLECTION BOX"), 2), 209); printT(adventureText("COLLECTION BOX"));
+  char info[48];
+  snprintf(info, sizeof(info), adventureText("SEEN %u  CAUGHT %u"), pet.seenCount(), pet.caughtCount());
+  setInk(UI_INK);
+  setCur(centerX(info, 2), 291); printT(info);
+}
+
+void startWildBattle(bool nextWave) {
+  if (!canStartWildBattle(pet.isEgg(), pet.sleeping, pet.ceremony) || pet.evolving()) return;
+  uint16_t carry = nextWave ? battle.playerHp : 0;
+  uint16_t oldMax = nextWave ? battle.playerMaxHp : 0;
+  uint8_t oldPp[4] = {0, 0, 0, 0};
+  if (nextWave) for (int i = 0; i < 4; i++) oldPp[i] = battle.pp[i];
+  if (!nextWave) { battleWave = 1; audioSetBattleMusic(false, true); }
+  else battleWave++;
+  trainerBattle = battleWave % 5 == 0 && battleWave % 10 != 0;
+  uint8_t biome = ((battleWave - 1) / 10) % 6;
+  int16_t pool[151]; int poolCount = 0;
+  for (int16_t dex = 1; dex <= 151; dex++) {
+    if (battleWave < 25 && DEX_TBL[dex].rarity == R_LEGENDARIO) continue;
+    if (DEX_TBL[dex].biome == biome || random(4) == 0) pool[poolCount++] = dex;
+  }
+  wildDex = poolCount ? pool[random(poolCount)] : 1;
+  wildLevel = wildLevelFor((uint8_t)min((uint16_t)100, pet.level()), random(100));
+  if (trainerBattle) wildLevel = (uint8_t)min(100, (int)wildLevel + 3);
+  if (battleWave % 10 == 0) wildLevel = (uint8_t)min(100, (int)wildLevel + 5 + battleWave / 10);
+  wildShiny = random(48) == 0;
+  BattleStats player = {};
+  player.atk = pet.atkStat(); player.def = pet.defStat(); player.spe = pet.speStat();
+  player.level = (uint8_t)min((uint16_t)100, pet.level());
+  player.type1 = dexType1(pet.speciesId); player.type2 = dexType2(pet.speciesId);
+  battle = beginBattleRuntime(player, wildBattleStats(wildDex, wildLevel));
+  if (nextWave) for (int i = 0; i < 4; i++) battle.pp[i] = oldPp[i];
+  if (nextWave && oldMax) {
+    battle.playerHp = (uint32_t)carry * battle.playerMaxHp / oldMax;
+    if (battle.playerHp == 0) battle.playerHp = 1;
+  }
+  battleOutcome = 0;
+  battlePlayerHit = battleEnemyHit = false;
+  moveMenu = false;
+  rewardPicked = false;
+  battleMessage = trainerBattle ? "A trainer challenges you!" :
+                  battleWave % 10 == 0 ? "A boss appeared!" : "A wild Pokemon appeared!";
+  pet.markSeen(wildDex);
+  audioCry(wildDex);
+  wildPmd.unload(); wildPmd.load(wildDex, wildShiny);
+  battleOpen = true;
+}
+
+void finishBattleTurn(const BattleTurnResult &turn) {
+  battleAnimStart = millis();
+  battlePlayerHit = turn.playerDamage > 0;
+  battleEnemyHit = turn.enemyDamage > 0;
+  if (turn.restFailed) battleMessage = "No PP left!";
+  else if (turn.missed) battleMessage = "The move missed!";
+  else if (turn.playerParalyzed) battleMessage = "Unable to move!";
+  else if (turn.statusInflicted) battleMessage = "Status inflicted!";
+  else if (turn.enemyDodged) battleMessage = "The wild Pokemon dodged!";
+  else if (turn.playerDodged) battleMessage = "Dodged! Counter ready.";
+  else if (turn.playerTypePct == 0) battleMessage = "No effect!";
+  else if (turn.playerTypePct > 100) battleMessage = "Super effective!";
+  else if (turn.playerTypePct < 100) battleMessage = "Not very effective.";
+  else battleMessage = "A fierce exchange!";
+  if (!turn.battleEnded) return;
+  if (turn.playerWon) {
+    battleOutcome = 1;
+    battleMessage = "Victory! Next wave?";
+    if (pet.battleWins < 65535) pet.battleWins++;
+    pet.grantBattleXp();  // only the active companion gains battle XP
+  } else {
+    battleOutcome = 3;
+    battleMessage = "Your Pokemon fainted.";
+  }
+}
+
+void battleTap(int16_t x, int16_t y) {
+  if (moveMenu && !battleOutcome) {
+    if (y >= 376) { moveMenu = false; return; }
+    if (y >= 274 && y < 370 && x >= 74 && x <= 392) {
+      int slot = ((y - 274) / 52) * 2 + (x < 233 ? 0 : 1);
+      BattleMove move = battleMoveFor(pet.speciesId, slot);
+      BattleTurnResult turn = stepBattleMove(battle, move, slot, random(100));
+      if (turn.restFailed) { battleMessage = "No PP left!"; return; }
+      moveMenu = false; finishBattleTurn(turn);
+    }
+    return;
+  }
+  if (battleOutcome) {
+    if ((battleOutcome == 1 || battleOutcome == 2) && !rewardPicked) {
+      if (y >= 280 && y < 330) {
+        pet.balls = (uint8_t)min(99, (int)pet.balls + 3); battleMessage = "+3 Poke Balls";
+      } else if (y >= 330 && y < 380) {
+        pet.potions = (uint8_t)min(9, (int)pet.potions + 2); battleMessage = "+2 Potions";
+      } else if (y >= 380 && y < 430) {
+        pet.trAtk = (uint8_t)min(100, (int)pet.trAtk + 2);
+        pet.trDef = (uint8_t)min(100, (int)pet.trDef + 2);
+        pet.trSpe = (uint8_t)min(100, (int)pet.trSpe + 2);
+        for (int i = 0; i < 4; i++) battle.pp[i] = battleMoveFor(pet.speciesId, i).maxPp;
+        battleMessage = "Training and PP restored!";
+      } else return;
+      rewardPicked = true; pet.persist(); return;
+    }
+    if ((battleOutcome == 1 || battleOutcome == 2) && y >= 305 && y < 362) {
+      startWildBattle(true); return;
+    }
+    if (y >= 360 || y < 86) { wildPmd.unload(); battleOpen = false; }
+    return;
+  }
+  if (y < 268 || y > 428 || x < 74 || x > 392) return;
+  int row = (y - 272) / 52;
+  int col = x < 233 ? 0 : 1;
+  if (row < 0 || row > 2) return;
+  int choice = row * 2 + col;
+  if (choice == 0) { moveMenu = true; return; }
+  if (choice == 4) {  // capture
+    if (trainerBattle) { battleMessage = "Cannot catch a trainer Pokemon."; return; }
+    if (!pet.balls) { battleMessage = "No Poke Balls left."; return; }
+    pet.balls--;
+    pet.persist();
+    uint16_t missing = battle.enemyMaxHp - battle.enemyHp;
+    int chance = 12 + (uint32_t)missing * 68 / battle.enemyMaxHp;
+    if (battle.enemyStatus != STATUS_NONE) chance = chance * 3 / 2;
+    if (battleWave % 10 == 0) chance /= 2;
+    if (DEX_TBL[wildDex].rarity == R_LEGENDARIO) chance /= 3;
+    else if (DEX_TBL[wildDex].rarity == R_RARO) chance = chance * 3 / 4;
+    if (random(100) < chance) {
+      collection.catchWild(pet, wildDex, wildLevel, wildShiny);
+      battleOutcome = 2;
+      pet.grantBattleXp();
+      battleMessage = "Captured! Sent to the box.";
+      return;
+    }
+    battleMessage = "The Pokemon broke free!";
+    finishBattleTurn(stepBattle(battle, BATTLE_WAIT, random(100)));
+    return;
+  }
+  if (choice == 5) {  // run
+    if (random(100) < (battle.player.spe >= battle.enemy.spe ? 85 : 55)) {
+      battleOutcome = 4;
+      battleMessage = "Got away safely.";
+      return;
+    }
+    battleMessage = "Could not escape!";
+    finishBattleTurn(stepBattle(battle, BATTLE_WAIT, random(100)));
+    return;
+  }
+  if (choice == 3) {  // potion
+    if (!pet.potions || !battle.restUsesLeft) { battleMessage = "No potions left."; return; }
+    pet.potions--;
+    pet.persist();
+    finishBattleTurn(stepBattle(battle, BATTLE_REST, random(100)));
+    return;
+  }
+  BattleAction action = choice == 1 ? BATTLE_ATTACK_HEAVY : BATTLE_DODGE;
+  finishBattleTurn(stepBattle(battle, action, random(100)));
+}
+
+void battleButton(int x, int y, uint16_t color, const char *label) {
+  gfx->fillRoundRect(x, y, 150, 43, 9, color);
+  setInk(UI_WHITE);
+  const char *shown = adventureText(label);
+  uint8_t size = textW(shown, 2) > 140 ? 1 : 2;
+  setSize(size);
+  setCur(x + (150 - textW(shown, size)) / 2, y + (size == 2 ? 13 : 17));
+  printT(shown);
+}
+
+void renderBattle() {
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  char head[48];
+  const char *battleHeader = adventureText(battleWave % 10 == 0 ?
+      "BOSS %u  #%03d" : trainerBattle ? "TRAINER %u  #%03d" : "WAVE %u  #%03d");
+  snprintf(head, sizeof(head), battleHeader, battleWave, wildDex);
+  setInk(UI_INK); setSize(2);
+  setCur(centerX(head, 2), 33); printT(head);
+  setInk(DEX_TBL[wildDex].accent);
+  setCur(centerX(dexName(wildDex), 2), 65); printT(dexName(wildDex));
+  uint8_t playerAct = PMD_IDLE, wildAct = PMD_IDLE;
+  uint32_t animAge = millis() - battleAnimStart;
+  if (animAge < 1100) {
+    if (animAge < 550 && battlePlayerHit) {
+      playerAct = PMD_ATTACK; wildAct = PMD_HURT;
+    } else if (battleEnemyHit) {
+      playerAct = PMD_HURT; wildAct = PMD_ATTACK;
+    }
+  }
+  if (pmd.loaded) drawPmdActM(pmd, pmd.has(playerAct) ? playerAct : PMD_IDLE,
+                               135, 212, millis(), true, false, 3);
+  else {
+    const uint8_t *t = thumbs.get(pet.speciesId);
+    if (t) drawThumb(t, 95, 122, 2, false);
+  }
+  if (wildPmd.loaded && battleOutcome != 2)
+    drawPmdActM(wildPmd, wildPmd.has(wildAct) ? wildAct : PMD_IDLE,
+                330, 212, millis(), true, false, 3);
+  else if (battleOutcome != 2) {
+    const uint8_t *t = thumbs.get(wildDex);
+    if (t) drawThumb(t, 290, 122, 2, false);
+  }
+  char hp[52];
+  snprintf(hp, sizeof(hp), "HP %u/%u", battle.playerHp, battle.playerMaxHp);
+  setInk(UI_INK); setCur(88, 222); printT(hp);
+  snprintf(hp, sizeof(hp), "HP %u/%u", battle.enemyHp, battle.enemyMaxHp);
+  setCur(264, 222); printT(hp);
+  drawHpGauge(88, 241, 138, battle.playerHp, battle.playerMaxHp);
+  drawHpGauge(264, 241, 138, battle.enemyHp, battle.enemyMaxHp);
+  setSize(2); setCur(centerX(adventureText(battleMessage), 2), 254); printT(adventureText(battleMessage));
+  if (battleOutcome) {
+    if ((battleOutcome == 1 || battleOutcome == 2) && !rewardPicked) {
+      battleButton(158, 279, 0x4C98, "+3 BALLS");
+      battleButton(158, 331, UI_BAR_OK, "+2 POTIONS");
+      battleButton(158, 383, UI_BAR_WARN, "+2 TRAINING");
+    } else {
+      if (battleOutcome == 1 || battleOutcome == 2) battleButton(158, 310, UI_BAR_OK, "NEXT WAVE");
+      battleButton(158, 374, UI_BAR_BAD, "EXIT");
+    }
+  } else if (moveMenu) {
+    for (int slot = 0; slot < 4; slot++) {
+      BattleMove move = battleMoveFor(pet.speciesId, slot);
+      char label[30];
+      snprintf(label, sizeof(label), "%s %u", adventureText(move.name), battle.pp[slot]);
+      battleButton(slot % 2 ? 240 : 76, 274 + (slot / 2) * 52, slot == 3 ? UI_BAR_WARN : UI_BAR_BAD, label);
+    }
+    battleButton(158, 378, UI_TRACK, "BACK");
+  } else {
+    battleButton(76, 274, UI_BAR_BAD, "FIGHT");
+    battleButton(240, 274, UI_BAR_WARN, "POWER");
+    battleButton(76, 326, 0x4C98, "DODGE");
+    battleButton(240, 326, UI_BAR_OK, "POTION");
+    char label[20];
+    snprintf(label, sizeof(label), adventureText("BALL x%u"), pet.balls);
+    battleButton(76, 378, 0x4C98, label);
+    battleButton(240, 378, UI_TRACK, "RUN");
+  }
+  gfx->flush();
+}
+
+int16_t boxSpeciesAt(uint16_t index) {
+  uint16_t n = 0;
+  for (int16_t dex = 1; dex <= 151; dex++) {
+    if (!collection.has(dex)) continue;
+    if (n++ == index) return dex;
+  }
+  return 0;
+}
+
+void boxTap(int16_t x, int16_t y) {
+  if (y < 82) { boxOpen = false; return; }
+  if (y >= 100 && y < 340) {
+    int row = (y - 100) / 48;
+    int16_t dex = boxSpeciesAt(boxPage * 5 + row);
+    if (dex && collection.activate(pet, dex)) {
+      boxOpen = false; ensureMon();
+    }
+    return;
+  }
+  if (y >= 348 && y < 390) {
+    if (x < 233 && boxPage > 0) boxPage--;
+    if (x >= 233 && (boxPage + 1) * 5 < collection.count()) boxPage++;
+    return;
+  }
+  if (y >= 390 && !pet.isEgg() && collection.deposit(pet)) {
+    boxPage = 0; ensureMon();
+  }
+}
+
+void renderBox() {
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  setInk(UI_INK); setSize(3);
+  setCur(centerX(adventureText("COLLECTION"), 3), 42); printT(adventureText("COLLECTION"));
+  char head[44];
+  snprintf(head, sizeof(head), adventureText("%u stored / %u caught"), collection.count(), pet.caughtCount());
+  setSize(2); setCur(centerX(head, 2), 77); printT(head);
+  for (int row = 0; row < 5; row++) {
+    int16_t dex = boxSpeciesAt(boxPage * 5 + row);
+    if (!dex) break;
+    const StoredMon *m = collection.get(dex);
+    int y = 100 + row * 48;
+    gfx->fillRoundRect(83, y, 300, 42, 8, row % 2 ? UI_WHITE : 0xDEFB);
+    setInk(UI_INK); setSize(2);
+    char line[46];
+    snprintf(line, sizeof(line), "#%03d %s Lv%u", dex, dexName(dex),
+             1 + m->ageMinutes / MINUTES_PER_LEVEL);
+    setCur(96, y + 12); printT(line);
+  }
+  setInk(UI_INK); setSize(2);
+  setCur(135, 355); printT("< PREV");
+  setCur(268, 355); printT("NEXT >");
+  if (!pet.isEgg()) {
+    gfx->fillRoundRect(130, 393, 206, 42, 9, UI_BAR_WARN);
+    setInk(UI_WHITE);
+    const char *storeLabel = adventureText("STORE ACTIVE");
+    uint8_t storeSize = textW(storeLabel, 2) > 196 ? 1 : 2;
+    setSize(storeSize); setCur(centerX(storeLabel, storeSize), storeSize == 2 ? 405 : 409);
+    printT(storeLabel);
+  }
+  gfx->flush();
+}
+
+// ---------- personal upgrade UI ----------
+void drawHpGauge(int x, int y, int width, uint16_t hp, uint16_t maximum) {
+  gfx->fillRoundRect(x, y, width, 9, 3, UI_TRACK);
+  uint32_t fill = maximum ? (uint32_t)hp * (width - 2) / maximum : 0;
+  if (fill > (uint32_t)(width - 2)) fill = width - 2;
+  uint16_t color = (uint32_t)hp * 2 > maximum ? UI_BAR_OK :
+                   (uint32_t)hp * 4 > maximum ? UI_BAR_WARN : UI_BAR_BAD;
+  if (fill) gfx->fillRect(x + 1, y + 1, fill, 7, color);
+}
+void renderAudioMenu() {
+  gfx->fillScreen(RGB565_BLACK); gfx->fillCircle(CX,CY,231,UI_BG_DAY);
+  setInk(UI_INK); setSize(2); setCur(170,60); printT(localText("소리 설정","SOUND"));
+  const char *ko[] = {"배경음", "울음소리", "시스템음"};
+  const char *en[] = {"BGM", "CRIES", "SYSTEM"};
+  for (int i=0;i<3;++i) {
+    int y=110+i*80;
+    setInk(UI_INK); setSize(2); setCur(115,y); printT(localText(ko[i],en[i]));
+    char b[12]; snprintf(b,sizeof(b),"%u%%",audioVolume(i)); setCur(270,y); printT(b);
+    gfx->fillRoundRect(100,y+25,266,24,6,UI_TRACK);
+    gfx->fillRoundRect(100,y+25,266*audioVolume(i)/100,24,6,UI_BAR_OK);
+  }
+  setInk(UI_INK); setCur(195,375); printT("OK"); gfx->flush();
+}
+void audioMenuTap(int16_t x,int16_t y) {
+  if(y>=355) {audioMenu=false;return;}
+  for(int i=0;i<3;++i) if(y>=110+i*80 && y<165+i*80 && x>=90 && x<=376) {
+    int v=(x-100)*100/266; v=max(0,min(100,v));
+    audioSetVolume(i, (v+5)/10*10);
+    if(i==1) audioCry(pet.speciesId); else if(i==2) sfxPlay(SFX_TAP);
+  }
+}
+void renderTrainingMenu() {
+  gfx->fillScreen(RGB565_BLACK); gfx->fillCircle(CX,CY,231,UI_BG_DAY);
+  const char *ko[]={"공격: 연타 훈련","방어: 타이밍 훈련","속도: 공놀이","무게: 저항 훈련"};
+  const char *en[]={"ATTACK: RAPID TAPS","DEFENSE: TIMING","SPEED: BALL GAME","WEIGHT: RESISTANCE"};
+  setInk(UI_INK);setSize(2);setCur(160,55);printT(localText("훈련 선택","TRAINING"));
+  for(int i=0;i<4;++i) {
+    gfx->fillRoundRect(72,98+i*58,322,48,10,UI_WHITE);
+    setCur(90,103+i*58);printT(localText(ko[i],en[i]));
+    char best[24]; snprintf(best, sizeof(best), "BEST %u", pet.trainingBest(i));
+    setCur(90,128+i*58);printT(best);
+  }
+  setCur(110,342);printT(localText("무게 50 초과: 불이익","WEIGHT >50: PENALTY"));
+  setCur(198,386);printT("BACK");gfx->flush();
+}
+void trainingMenuTap(int16_t x,int16_t y) {
+  if(y>=365){trainingMenu=false;cardOpen=true;return;}
+  if(x<72||x>394||y<98||y>=320)return;
+  int i=(y-98)/58; if(i>3||(y-98)%58>=48)return;
+  if(pet.sleeping||pet.isEgg()||pet.energy<=5){sfxPlay(SFX_DENY);return;}
+  trainingMenu=false;trainingKind=i;
+  if(i==2)startGame();else startSack();
+}
+void hangulUtf8(uint32_t cp,char *out) {
+  out[0]=0xE0|(cp>>12);out[1]=0x80|((cp>>6)&63);out[2]=0x80|(cp&63);out[3]=0;
+}
+void renderKoreanKeyboard() {
+  gfx->fillScreen(RGB565_BLACK);gfx->fillCircle(CX,CY,231,UI_BG_DAY);
+  setInk(UI_INK);setSize(2);setCur(142,48);printT("한글 이름 입력");
+  setCur(80,84);printT(nameLen?nameBuf:"_");
+  char syllable[4]; hangulUtf8(0xAC00+(koInitial*21+koVowel)*28+koFinal,syllable);
+  setSize(4);setCur(215,125);printT(syllable);setSize(2);
+  const char *labels[]={"초성", "중성", "종성"};
+  int values[]={koInitial+1,koVowel+1,koFinal};
+  for(int i=0;i<3;++i){
+    int y=178+i*49;
+    gfx->fillRoundRect(83,y,54,40,6,UI_WHITE);setCur(103,y+12);printT("-");
+    char b[32];snprintf(b,sizeof(b),"%s %d",labels[i],values[i]);setCur(168,y+12);printT(b);
+    gfx->fillRoundRect(329,y,54,40,6,UI_WHITE);setCur(349,y+12);printT("+");
+  }
+  const char *buttons[]={"추가","지움","완료"};
+  for(int i=0;i<3;++i){gfx->fillRoundRect(89+i*98,333,92,42,8,UI_BAR_WARN);setCur(111+i*98,345);printT(buttons[i]);}
+  setCur(205,397);printT("EN");gfx->flush();
+}
+void koreanKeyboardTap(int16_t x,int16_t y) {
+  if(y>=390){kbKorean=false;return;}
+  if(y>=178&&y<325){
+    int i=(y-178)/49;if(i>2||(y-178)%49>=40)return;
+    int delta=x>=83&&x<137?-1:x>=329&&x<383?1:0;
+    int *v=i==0?&koInitial:i==1?&koVowel:&koFinal;int n=i==0?19:i==1?21:28;
+    *v=(*v+delta+n)%n;return;
+  }
+  if(y<333||y>=375||x<89||x>=383)return;
+  int button=(x-89)/98;
+  if(button==0){
+    int chars=0;for(int j=0;j<nameLen;++j)if(((unsigned char)nameBuf[j]&0xC0)!=0x80)++chars;
+    if(nameLen+3<sizeof(nameBuf)&&chars<11){hangulUtf8(0xAC00+(koInitial*21+koVowel)*28+koFinal,nameBuf+nameLen);nameLen+=3;}
+  }else if(button==1){
+    if(nameLen){do{--nameLen;}while(nameLen&&((unsigned char)nameBuf[nameLen]&0xC0)==0x80);nameBuf[nameLen]=0;}
+  }else{pet.rename(nameBuf);kbOpen=false;}
 }

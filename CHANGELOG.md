@@ -3,6 +3,20 @@
 All notable changes to the firmware. Versions match the number shown at the
 bottom of the clock/settings screen (swipe down) and `web/manifest.json`.
 
+## [1.20] - 2026-09-24 (personal update)
+
+- Keep separate best scores for attack, defense, speed, and weight training.
+  Existing attack and ball-game records seed the new records on first boot.
+- Commit care progress every three game minutes even with the screen active;
+  commit immediately on level gain. Capture and care events already save.
+- Show the RTC time behind the active Pokemon. The scene varies its sky and
+  illustrative clouds/rain/snow by local clock and day; this is not live weather.
+- Increase ordinary UI text one step where it fits; render Korean body Hangul
+  at 20 px instead of 16 px. Large counters retain their safe sizes.
+- Keep v1.19 music streaming and the existing SD card files unchanged.
+  This personal v1.20 app was installed directly; the public web installer
+  remains at v1.19 until a matching full image is published.
+
 Updating from the [web installer](https://socquique.github.io/TamaPoke/web/)
 **without** ticking "Erase device" keeps your Pokémon.
 

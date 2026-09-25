@@ -25,14 +25,31 @@ jobs:
           arduino-cli core install esp32:esp32@3.3.10
 
       - name: Install libraries
-        run: arduino-cli lib install "GFX Library for Arduino" SensorLib XPowersLib U8g2
+        run: arduino-cli lib install "GFX Library for Arduino@1.6.8" "SensorLib@0.5.0" "XPowersLib@0.3.3" "U8g2@2.36.19"
 
       - name: Compile
         run: >
-          arduino-cli compile --warnings=all
+          arduino-cli compile --warnings=all --export-binaries
           --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB"
           .
 
+      - name: Build USB installer image
+        run: |
+          python3 -m pip install esptool
+          python3 -m esptool --chip esp32s3 merge-bin -o tamapoke-v1.19.bin \
+            0x0 build/esp32.esp32.esp32s3/TamaPoke.ino.bootloader.bin \
+            0x8000 build/esp32.esp32.esp32s3/TamaPoke.ino.partitions.bin \
+            0xe000 build/esp32.esp32.esp32s3/boot_app0.bin \
+            0x10000 build/esp32.esp32.esp32s3/TamaPoke.ino.bin
+
+      - name: Save USB installer image
+        uses: actions/upload-artifact@v4
+        with:
+          name: tamapoke-v1.19-esp32s3
+          path: |
+            tamapoke-v1.19.bin
+            build/esp32.esp32.esp32s3/TamaPoke.ino.bin
+          if-no-files-found: error
   generated:
     name: Generated headers up to date
     runs-on: ubuntu-latest

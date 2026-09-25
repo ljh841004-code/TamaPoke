@@ -29,6 +29,7 @@ class TestToolsCompile(unittest.TestCase):
                 except SyntaxError as e:
                     self.fail(f'{name} no compila: {e}')
 
+    @unittest.skipIf(os.name == "nt", "Windows does not expose POSIX executable bits")
     def test_los_scripts_ejecutables_declaran_shebang(self):
         for name in sorted(f for f in os.listdir(TOOLS) if f.endswith('.py')):
             path = os.path.join(TOOLS, name)
@@ -172,13 +173,14 @@ class TestSketchSanity(unittest.TestCase):
         with open(os.path.join(ROOT, 'TamaPoke.ino')) as fh:
             cls.ino = fh.read()
 
-    def test_el_sketch_no_lleva_caracteres_no_ascii_en_literales_de_pantalla(self):
-        # los comentarios pueden llevar lo que quieran; los literales, no:
-        # la fuente GFX es ASCII y un acento sale como basura
+    def test_sketch_literals_have_ascii_or_bundled_hangul_glyphs(self):
+        # The personal firmware adds all modern Hangul syllables via printT.
+        # Keep rejecting other unsupported non-ASCII literal glyphs.
+        self.assertIn('#include "hangul_font.h"', self.ino)
         for lineno, line in enumerate(self.ino.splitlines(), 1):
             code = line.split('//')[0]
             for chunk in code.split('"')[1::2]:
-                self.assertTrue(chunk.isascii(),
+                self.assertTrue(all(ord(c) < 128 or 0xAC00 <= ord(c) <= 0xD7A3 for c in chunk),
                                 f'TamaPoke.ino:{lineno}: literal no ASCII: {chunk!r}')
 
     def test_las_llaves_estan_equilibradas(self):

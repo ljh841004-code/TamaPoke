@@ -2,6 +2,10 @@
 #include "pin_config.h"
 #include <FS.h>
 #include <SD_MMC.h>
+#include "sd_lock.h"
+#include "audio.h"
+
+SemaphoreHandle_t sdMutex = nullptr;
 
 bool sdReady = false;
 bool sdDirty = false;
@@ -10,6 +14,8 @@ SdThumbs thumbs;
 bool PmdMon::load(uint8_t dexNum, bool shiny) {
   unload();
   if (!sdReady) return false;
+  SdCardLock lock;
+  if (!lock) return false;
 
   char path[28];
   snprintf(path, sizeof(path), "/mons/p%s%03u.bin", shiny ? "s" : "", dexNum);
@@ -95,6 +101,8 @@ void SdThumbs::unload() {
 bool SdThumbs::load() {
   unload();  // recargar sin fugar el blob anterior
   if (!sdReady) return false;
+  SdCardLock lock;
+  if (!lock) return false;
   File f = SD_MMC.open("/mons/thumbs.bin", FILE_READ);
   if (!f) {
     Serial.println("sin thumbs.bin (galeria sin miniaturas)");
@@ -141,8 +149,10 @@ const uint8_t *SdThumbs::get(int16_t dex) const {
 }
 
 bool sdBegin() {
+  sdMutex = xSemaphoreCreateMutex();
+  if (!sdMutex) return false;
   SD_MMC.setPins(SDMMC_CLK, SDMMC_CMD, SDMMC_DATA);
-  sdReady = SD_MMC.begin("/sdcard", true /* modo 1-bit */, true /* formatea si no monta */);
+  sdReady = SD_MMC.begin("/sdcard", true /* modo 1-bit */, false /* preserve existing card if mounting fails */);
   if (sdReady) {
     Serial.printf("SD montada: %llu MB\n", SD_MMC.cardSize() / (1024ULL * 1024ULL));
     SD_MMC.mkdir("/mons");
@@ -155,6 +165,8 @@ bool sdBegin() {
 bool SdMon::load(uint8_t dexNum, bool shiny) {
   unload();
   if (!sdReady) return false;
+  SdCardLock lock;
+  if (!lock) return false;
 
   char path[24];
   snprintf(path, sizeof(path), "/mons/%s%03u.bin", shiny ? "s" : "", dexNum);
@@ -236,7 +248,7 @@ bool sdSerialCommand(const String &line) {
     int sp = line.lastIndexOf(' ');
     String path = line.substring(4, sp);
     uint32_t size = line.substring(sp + 1).toInt();
-    if (!sdReady || size == 0 || size > 4 * 1024 * 1024) {
+    if (!sdReady || size == 0 || size > 32 * 1024 * 1024) {
       Serial.println("ERR");
       return true;
     }
@@ -249,6 +261,13 @@ bool sdSerialCommand(const String &line) {
       Serial.println("ERR");
       return true;
     }
+    if (!audioPauseForUpload()) {
+      audioResumeAfterUpload(); Serial.println("ERR"); return true;
+    }
+    // Destruction order releases the SD lock before resuming playback.
+    struct ResumeAudio { ~ResumeAudio() { audioResumeAfterUpload(); } } resumeAudio;
+    SdCardLock lock;
+    if (!lock) { Serial.println("ERR"); return true; }
     // FILE_WRITE ANADE al final si el fichero ya existe, asi que reintentar uno
     // que quedo a medias lo alargaba en vez de reemplazarlo: quedaba un sprite
     // corrupto y mas grande que el original. Importa mas desde que el instalador
@@ -280,10 +299,12 @@ bool sdSerialCommand(const String &line) {
     Serial.println(remaining == 0 ? "DONE" : "ERR");
     return true;
   } else if (line == "SDINFO") {  // diagnostico remoto de "no me reconoce la SD"
+    SdCardLock lock;
     Serial.printf("total=%llu used=%llu\n", SD_MMC.totalBytes(), SD_MMC.usedBytes());
     Serial.println("DONE");
     return true;
   } else if (line == "LS") {
+    SdCardLock lock;
     File dir = SD_MMC.open("/mons");
     if (dir) {
       File e;

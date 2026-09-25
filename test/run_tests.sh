@@ -19,6 +19,7 @@ fi
 echo
 echo "== herramientas y ficheros generados (tools/) =="
 python3 test_tools.py || fail=1
+python3 test_installer.py || fail=1
 
 echo
 if [[ $fail -eq 0 ]]; then

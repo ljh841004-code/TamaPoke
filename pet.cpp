@@ -32,6 +32,7 @@ void Pet::newEgg() {
   hygiene = 100;
   poops = 0;
   ageMinutes = 0;
+  battleXpMinutes = 0;
   careMistakes = 0;
   mistakeCooldown = 0;
   sleeping = false;
@@ -132,11 +133,13 @@ void Pet::tick() {
     }
     if (ageMinutes % 3 == 0) hygiene = dropTo(hygiene, 1, 45);
     checkMedals();  // aun puede cruzar un nivel por edad mientras duerme
-    if (++ticksSinceSave >= 5) pendingSave = true;
+    if (++ticksSinceSave >= 3) pendingSave = true;
+    if (((uint64_t)ageMinutes + battleXpMinutes) % MINUTES_PER_LEVEL == 0) save();
     return;
   }
 
-  if (ageMinutes % MINUTES_PER_LEVEL == 0) sfxPlay(SFX_LEVEL);  // subio de nivel (despierto)
+  if (((uint64_t)ageMinutes + battleXpMinutes) % MINUTES_PER_LEVEL == 0)
+  sfxPlay(SFX_LEVEL);  // subio de nivel (despierto)
 
   fullness = clamp100(fullness - 2);
   energy = clamp100(energy - 1);
@@ -186,13 +189,31 @@ void Pet::tick() {
   // ciclo completo (forma final + 7 dias): la despedida NO salta sola; queda
   // lista (canFarewellNow) y la dispara el usuario con el boton, para que la vea
 
-  // autoguardado periodico: NO escribir a flash aqui (corre dentro del loop,
-  // mientras se anima); solo marcar y dejar que el loop lo vuelque al atenuar
-  if (++ticksSinceSave >= 5) pendingSave = true;
+  // Request a checkpoint; the main loop commits it on the same iteration.
+  if (++ticksSinceSave >= 3) pendingSave = true;
+ if (((uint64_t)ageMinutes + battleXpMinutes) % MINUTES_PER_LEVEL == 0) save();
 }
 
 // vuelca el guardado periodico pendiente (lo llama el loop en un momento sin
 // animacion para que el paron de la escritura a flash no se vea)
+void Pet::grantBattleXp() {
+  if (battleXpMinutes <= UINT32_MAX - MINUTES_PER_LEVEL / 4)
+    battleXpMinutes += MINUTES_PER_LEVEL / 4;
+  save();
+}
+
+void Pet::resetAfterSwap() {
+  ceremony = CER_NONE;
+  ceremonyUntil = 0;
+  starterPick = false;
+  neglectTicks = 0;
+  goodTicks = 0;
+  evoDeclinedLv = 0;
+  farDeclinedAge = 0;
+  eatUntil = heartUntil = evolveUntil = 0;
+  save();
+}
+
 void Pet::flushSave() {
   if (pendingSave) save();
 }
@@ -254,6 +275,7 @@ int16_t Pet::pickEggSpecies() {
 void Pet::registerSpecies(int16_t dex) {
   if (dex < 1 || dex > 151) return;
   dexReg[(dex - 1) >> 3] |= (1 << ((dex - 1) & 7));
+  dexSeen[(dex - 1) >> 3] |= (1 << ((dex - 1) & 7));
   if (shiny) dexShinyReg[(dex - 1) >> 3] |= (1 << ((dex - 1) & 7));
 }
 
@@ -316,8 +338,20 @@ void Pet::checkMedals() {
 }
 
 void Pet::rename(const char *name) {
-  strncpy(nick, name, sizeof(nick) - 1);
-  nick[sizeof(nick) - 1] = 0;
+  // Copy at most eleven complete UTF-8 code points (never split a syllable).
+  size_t out = 0, chars = 0;
+  while (*name && chars < 11) {
+    unsigned char c = (unsigned char)*name;
+    size_t n = c < 0x80 ? 1 : (c >= 0xC2 && c < 0xE0) ? 2 :
+               (c < 0xF0 && c >= 0xE0) ? 3 : (c >= 0xF0 && c <= 0xF4) ? 4 : 0;
+    if (!n || out + n >= sizeof(nick)) break;
+    bool valid = true;
+    for (size_t i = 1; i < n; ++i)
+      if (!name[i] || ((unsigned char)name[i] & 0xC0) != 0x80) { valid = false; break; }
+    if (!valid) break;
+    memcpy(nick + out, name, n); out += n; name += n; ++chars;
+  }
+  nick[out] = 0;
   save();
 }
 
@@ -335,6 +369,33 @@ uint16_t Pet::speStat() const {
   return isEgg() ? 0 : calcStat(DEX_TBL[speciesId].bSpe, geneSpe, level(), trSpe);
 }
 
+void Pet::markSeen(int16_t dex) {
+  if (dex < 1 || dex > 151 || isSeen(dex)) return;
+  dexSeen[(dex - 1) >> 3] |= (1 << ((dex - 1) & 7));
+  save();
+}
+
+void Pet::registerCaught(int16_t dex, bool caughtShiny) {
+  if (dex < 1 || dex > 151) return;
+  uint8_t bit = 1 << ((dex - 1) & 7);
+  dexSeen[(dex - 1) >> 3] |= bit;
+  dexCaught[(dex - 1) >> 3] |= bit;
+  if (caughtShiny) dexShinyReg[(dex - 1) >> 3] |= bit;
+  save();
+}
+
+uint16_t Pet::seenCount() const {
+  uint16_t n = 0;
+  for (int16_t i = 1; i <= 151; i++) if (isSeen(i)) n++;
+  return n;
+}
+
+uint16_t Pet::caughtCount() const {
+  uint16_t n = 0;
+  for (int16_t i = 1; i <= 151; i++)
+    if (dexCaught[(i - 1) >> 3] & (1 << ((i - 1) & 7))) n++;
+  return n;
+}
 uint16_t Pet::registeredCount() const {
   uint16_t n = 0;
   for (int i = 1; i <= 151; i++)
@@ -478,6 +539,7 @@ void Pet::playResult(uint8_t score) {
   weight = burn > 0 ? burn : 0;
   if (score >= 5) heartUntil = millis() + HEART_MS;
   if (score > gameHi) gameHi = score;  // nuevo record
+  if (score > trainingHi[2]) trainingHi[2] = score;
   addBond(2);
   registerCare();
   save();
@@ -500,10 +562,28 @@ uint8_t Pet::trainStrength(uint16_t hits) {
   joy = clamp100(joy + 6);
   if (hits >= 20) heartUntil = millis() + HEART_MS;
   if (hits > strHi) strHi = hits;   // record de golpes
+  if (hits > trainingHi[0]) trainingHi[0] = hits;
   addBond(2);
   registerCare();
   save();
   return gain;
+}
+
+// 0 attack, 1 timed defense, 2 speed, 3 resistance/weight gain.
+uint8_t Pet::trainSession(uint8_t kind, uint16_t score) {
+  if (kind > 3 || ceremony != CER_NONE || isEgg() || sleeping || energy <= 5) return 0;
+  if (kind == 0) return trainStrength(score);
+  if (score > trainingHi[kind]) trainingHi[kind] = score;
+  uint8_t gain = score / (kind == 3 ? 2 : 3);
+  if (gain > 18) gain = 18;
+  uint8_t *stat = kind == 1 ? &trDef : kind == 2 ? &trSpe : &weight;
+  uint8_t before = *stat;
+  *stat = clamp100((int)*stat + gain);
+  energy = dropTo(energy, 12, 5);
+  fullness = dropTo(fullness, kind == 3 ? 10 : 5, 5);
+  joy = clamp100(joy + 4);
+  registerCare(); save();
+  return *stat - before;
 }
 
 void Pet::play() {
@@ -577,6 +657,7 @@ void Pet::save() {
   prefs.putBool("stpk", starterPick);
   prefs.putBytes("dexsh", dexShinyReg, sizeof(dexShinyReg));
   prefs.putUInt("age", ageMinutes);
+  prefs.putUInt("bxp", battleXpMinutes);
   prefs.putShort("dexn", speciesId);
   prefs.putShort("eggT2", eggTarget);
   prefs.putUChar("crack", eggTaps);
@@ -585,6 +666,8 @@ void Pet::save() {
   prefs.putUChar("lend", lastEnd);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
   prefs.putBytes("dexreg", dexReg, sizeof(dexReg));
+  prefs.putBytes("dexseen", dexSeen, sizeof(dexSeen));
+  prefs.putBytes("dexcatch", dexCaught, sizeof(dexCaught));
   prefs.putUShort("strk", streak);
   prefs.putUShort("bstrk", bestStreak);
   prefs.putUInt("cday", lastCareDay);
@@ -594,6 +677,13 @@ void Pet::save() {
   prefs.putUShort("mstone", lastMilestone);
   prefs.putUShort("ghi", gameHi);
   prefs.putUShort("shi", strHi);
+  prefs.putUShort("th_atk", trainingHi[0]);
+  prefs.putUShort("th_def", trainingHi[1]);
+  prefs.putUShort("th_spd", trainingHi[2]);
+  prefs.putUShort("th_wgt", trainingHi[3]);
+  prefs.putUChar("balls", balls);
+  prefs.putUChar("potions", potions);
+  prefs.putUShort("bwins", battleWins);
   prefs.putString("nick", nick);
 }
 
@@ -621,6 +711,7 @@ void Pet::load() {
   starterPick = prefs.getBool("stpk", false);
   prefs.getBytes("dexsh", dexShinyReg, sizeof(dexShinyReg));
   ageMinutes = prefs.getUInt("age", 0);
+  battleXpMinutes = prefs.getUInt("bxp", 0);
   if (prefs.isKey("dexn")) {
     speciesId = prefs.getShort("dexn", -1);
     eggTarget = prefs.getShort("eggT2", 4);
@@ -637,6 +728,8 @@ void Pet::load() {
   sleeping = prefs.getBool("sleep", false);
   lastEnd = prefs.getUChar("lend", CER_NONE);
   prefs.getBytes("dexreg", dexReg, sizeof(dexReg));
+  prefs.getBytes("dexseen", dexSeen, sizeof(dexSeen));
+  prefs.getBytes("dexcatch", dexCaught, sizeof(dexCaught));
   streak = prefs.getUShort("strk", 0);
   bestStreak = prefs.getUShort("bstrk", 0);
   lastCareDay = prefs.getUInt("cday", 0);
@@ -646,6 +739,13 @@ void Pet::load() {
   lastMilestone = prefs.getUShort("mstone", 0);
   gameHi = prefs.getUShort("ghi", 0);
   strHi = prefs.getUShort("shi", 0);
+  trainingHi[0] = prefs.getUShort("th_atk", strHi);
+  trainingHi[1] = prefs.getUShort("th_def", 0);
+  trainingHi[2] = prefs.getUShort("th_spd", gameHi);
+  trainingHi[3] = prefs.getUShort("th_wgt", 0);
+  balls = prefs.getUChar("balls", 5);
+  potions = prefs.getUChar("potions", 2);
+  battleWins = prefs.getUShort("bwins", 0);
   prefs.getString("nick", nick, sizeof(nick));
   // siembra: la mascota actual cuenta como criada (guardados antiguos)
   if (speciesId >= 1) registerSpecies(speciesId);
