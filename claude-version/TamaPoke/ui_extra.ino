@@ -504,6 +504,8 @@ void startWild() {
   bPhaseT = millis();
   xScreen = XS_WILD;
   sfxPlay(SFX_MEDAL);
+  audioSetBattleMusic(false, true);  // batalla nueva: la cancion empieza de cero
+  audioCry(bFoe.dex);
 }
 
 void endBattleScreen() {
@@ -718,6 +720,8 @@ void startLinkBattle() {
   bPhaseT = millis();
   linkBattleStarted = true;
   sfxPlay(SFX_MEDAL);
+  audioSetBattleMusic(false, true);
+  audioCry(th.t.dex);
 }
 
 void updateLinkBattle() {
@@ -843,6 +847,13 @@ void updateLink() {
 // ======================================================================
 // ganchos para TamaPoke.ino
 // ======================================================================
+
+// /mons/battle_wild.wav suena durante el combate (salvaje y tongsin), no en el
+// resultado: al acabar vuelve /mons/bgm.wav
+bool battleMusicActive() {
+  bool fighting = xScreen == XS_WILD || (xScreen == XS_LINK && linkBattleStarted);
+  return fighting && bPhase != BP_RESULT;
+}
 
 void extraLoop(uint32_t now) {
   uint32_t e = netPoll(now);

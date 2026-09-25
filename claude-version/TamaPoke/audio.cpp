@@ -4,6 +4,11 @@
 #include <Wire.h>
 #include <ESP_I2S.h>
 #include <Preferences.h>
+#include <SD_MMC.h>
+#include <atomic>
+#include "wav_stream.h"
+#include "sd_lock.h"
+#include "music_route.h"
 
 // ---------------------------------------------------------------------------
 // Audio del TamaPoke: códec ES8311 (DAC -> amplificador PA -> altavoz) por I2S.
@@ -18,9 +23,16 @@
 
 static I2SClass i2s;
 static bool gReady = false;
-static bool gOn = true;
-static bool gSleeping = false;
+static std::atomic<bool> gOn{true};
+static std::atomic<bool> gSleeping{false};
 static QueueHandle_t gQ = nullptr;
+// Sin pantalla de volumen en el fork KO: efectos al 100% = la amplitud de v1.17.
+static std::atomic<uint8_t> levels[3] = {25, 65, 100};
+struct AudioCommand { uint8_t kind, id; int16_t *pcm; uint32_t samples; };
+static std::atomic<uint32_t> musicRequest{0}; // bit 0: wild; upper bits: session
+static std::atomic<uint32_t> musicReload{0}, uploadRequest{0}, uploadAck{0};
+static std::atomic<bool> musicEnabled{false};
+static const char *const volumeKeys[] = {"volBgm", "volCry", "volSfx"};
 
 // El NS4150B tarda bastante mas de 8 ms en estabilizarse tras cada apagado, asi
 // que encenderlo justo antes de cada efecto se comia los cortos: el jingle de
@@ -107,43 +119,144 @@ static const SfxDef SFX[SFX_COUNT] = {
   {N_EVOLVE, 5}, {N_MEDAL, 5}, {N_DENY, 2}, {N_BYE, 3}, {N_LEVEL, 2},
 };
 
-static int16_t buf[256 * 2];  // estéreo intercalado (L=R)
-
-// reproduce un tono (o silencio si f==0) con rampa de ataque/caida anti-click
-static void playTone(uint16_t f, uint16_t ms) {
-  int total = SAMPLE_RATE * ms / 1000;
-  int half = f ? (SAMPLE_RATE / (2 * f)) : 0;  // medio periodo en muestras
-  const int16_t amp = 5000;
-  int phase = 0, done = 0;
-  bool high = true;
-  while (done < total) {
-    int n = total - done; if (n > 256) n = 256;
-    for (int i = 0; i < n; i++) {
-      int16_t s = 0;
-      if (f) {
-        s = high ? amp : -amp;
-        int idx = done + i;
-        if (idx < 64) s = (int16_t)(s * idx / 64);                 // ataque
-        else if (idx > total - 96) s = (int16_t)(s * (total - idx) / 96);  // caida
-        if (++phase >= half) { phase = 0; high = !high; }
-      }
-      buf[i * 2] = s; buf[i * 2 + 1] = s;
-    }
-    i2s.write((uint8_t *)buf, n * 4);
-    done += n;
-  }
-}
-
+// Single task owns all playback state. Commands transfer ownership of PCM buffers.
 static void audioTask(void *) {
-  uint8_t id;
+  int16_t out[256 * 2];
+  static WavStream<File> music; // 8 KiB read-ahead, never a whole-song allocation
+  int16_t musicBlock[256];
+  int16_t *cry = nullptr;
+  uint32_t cryLen = 0, cryAt = 0;
+  MusicRoute route;
+  bool suspended = false;
+  int sfx = -1, note = 0;
+  uint32_t noteAt = 0, phase = 0;
   for (;;) {
-    if (xQueueReceive(gQ, &id, portMAX_DELAY) && gOn && !gSleeping && gReady &&
-        id < SFX_COUNT) {
-      const SfxDef &d = SFX[id];
-      for (uint8_t i = 0; i < d.len; i++) playTone(d.n[i].f, d.n[i].ms);
+    AudioCommand c;
+    if (xQueueReceive(gQ, &c, 0)) {
+      if (c.kind == 2) { free(cry); cry = c.pcm; cryLen = c.samples; cryAt = 0; }
+      else if (c.id < SFX_COUNT) { sfx = c.id; note = 0; noteAt = phase = 0; }
+    }
+    bool audible = gOn.load() && !gSleeping.load();
+    if (!audible) { sfx = -1; free(cry); cry = nullptr; cryLen = 0; }
+    size_t musicSamples = 0;
+    uint32_t upload = uploadRequest.load();
+    uint32_t request = musicRequest.load(), reload = musicReload.load();
+    {
+      // Sprite loads and USB writes share the card. Never block I2S on a lock:
+      // use read-ahead while busy, then silence without losing the cursor.
+      SdCardLock lock(0);
+      if (lock) {
+        if (upload & 1u) {
+          music.close(); suspended = true;
+          uploadAck.store(upload); // writer may now safely replace a WAV
+        } else {
+          uploadAck.store(upload);
+          if (suspended || route.changed(request, reload)) {
+            uint32_t resume = route.switchTo(request, reload, music.position(), music.valid());
+            music.close();
+            suspended = false;
+            if (musicEnabled.load()) {
+              const char *path = request & 1u ? "/mons/battle_wild.wav" : "/mons/bgm.wav";
+              if (!music.open(SD_MMC.open(path, FILE_READ), resume))
+                Serial.printf("AUDIO invalid/missing WAV: %s\n", path);
+            }
+          }
+          if (audible) musicSamples = music.read(musicBlock, 256);
+        }
+      } else if (audible && !(upload & 1u) && !route.changed(request, reload) && !suspended) {
+        musicSamples = music.read(musicBlock, 256, false);
+      }
+    }
+    for (int i = 0; i < 256; ++i) {
+      int32_t sample = i < (int)musicSamples ?
+          (int32_t)musicBlock[i] * levels[0].load() / 100 : 0;
+      if (audible && cry && cryAt < cryLen) {
+        sample += (int32_t)cry[cryAt++] * levels[1].load() / 100;
+        if (cryAt == cryLen) { free(cry); cry = nullptr; cryLen = 0; }
+      }
+      if (audible && sfx >= 0) {
+        const Note &n = SFX[sfx].n[note];
+        uint32_t total = (uint32_t)SAMPLE_RATE * n.ms / 1000;
+        if (n.f) {
+          phase += n.f;
+          phase %= SAMPLE_RATE;
+          int32_t v = phase < SAMPLE_RATE / 2 ? 5000 : -5000;
+          uint32_t ramp = noteAt < 64 ? noteAt : total - noteAt < 64 ? total - noteAt : 64;
+          sample += v * (int32_t)ramp / 64 * levels[2].load() / 100;
+        }
+        if (++noteAt >= total) {
+          noteAt = phase = 0;
+          if (++note >= SFX[sfx].len) sfx = -1;
+        }
+      }
+      if (sample > 32767) sample = 32767;
+      if (sample < -32768) sample = -32768;
+      out[i * 2] = out[i * 2 + 1] = (int16_t)sample;
+    }
+    size_t sent = 0;
+    while (sent < sizeof(out)) {
+      size_t written = i2s.write((uint8_t *)out + sent, sizeof(out) - sent);
+      if (!written) { vTaskDelay(1); break; }
+      sent += written;
     }
   }
 }
+
+// Short cry samples retain the v1.18 bounded PCM loader; music uses WavStream.
+static void queueWav(const char *path, uint8_t kind) {
+  if (!gReady || !gQ) return;
+  SdCardLock lock;
+  if (!lock) return;
+  File f = SD_MMC.open(path, FILE_READ);
+  uint8_t h[44];
+  if (!f || f.read(h, 44) != 44) return;
+  auto u16 = [&](int p) { return (uint16_t)(h[p] | h[p+1] << 8); };
+  auto u32 = [&](int p) { return (uint32_t)h[p] | (uint32_t)h[p+1] << 8 |
+                               (uint32_t)h[p+2] << 16 | (uint32_t)h[p+3] << 24; };
+  uint32_t bytes = u32(40);
+  if (memcmp(h,"RIFF",4) || memcmp(h+8,"WAVEfmt ",8) || u32(16) != 16 ||
+      u16(20) != 1 || u16(22) != 1 || u32(24) != SAMPLE_RATE ||
+      u16(34) != 16 || memcmp(h+36,"data",4) || !bytes || bytes % 2 ||
+      bytes > SAMPLE_RATE * 2 * 30 || bytes > f.size() - 44) return;
+  int16_t *pcm = (int16_t *)ps_malloc(bytes);
+  if (!pcm) return;
+  if (f.read((uint8_t *)pcm, bytes) != bytes) { free(pcm); return; }
+  AudioCommand c{kind, 0, pcm, bytes / 2};
+  if (!xQueueSend(gQ, &c, 0)) free(pcm);
+}
+void audioLoadMusic() { musicEnabled = true; musicReload.fetch_add(1); }
+void audioSetBattleMusic(bool active, bool newSession) {
+  uint32_t value = musicRequest.load();
+  if (newSession) value = (value & ~1u) + 2;
+  musicRequest.store((value & ~1u) | (active ? 1u : 0u));
+}
+bool audioPauseForUpload() {
+  if (!gReady) return true;
+  uint32_t ticket = uploadRequest.load();
+  if (!(ticket & 1u)) ticket = uploadRequest.fetch_add(1) + 1;
+  uint32_t start = millis();
+  while (uploadAck.load() != ticket) {
+    if (millis() - start >= 2000) return false;
+    vTaskDelay(1);
+  }
+  return true;
+}
+void audioResumeAfterUpload() {
+  if (uploadRequest.load() & 1u) uploadRequest.fetch_add(1);
+}
+void audioCry(uint16_t dex) {
+  if (!gOn.load() || gSleeping.load() || !levels[1].load() || dex < 1 || dex > 151) return;
+  char path[32]; snprintf(path, sizeof(path), "/mons/cry%03u.wav", dex);
+  queueWav(path, 2);
+}
+void audioSetVolume(uint8_t channel, uint8_t percent) {
+  if (channel >= 3) return;
+  if (percent > 100) percent = 100;
+  levels[channel] = percent;
+  Preferences p; p.begin("tamapoke", false);
+  p.putUChar(volumeKeys[channel], percent); p.end();
+}
+uint8_t audioVolume(uint8_t channel) { return channel < 3 ? levels[channel].load() : 0; }
 
 void audioBegin() {
   // I2S primero: arranca el MCLK que necesita el códec para engancharse
@@ -161,17 +274,22 @@ void audioBegin() {
   Preferences p;
   p.begin("tamapoke", true);
   gOn = p.getBool("snd", true);
+  for (int i = 0; i < 3; ++i) { uint8_t v = p.getUChar(volumeKeys[i], levels[i].load()); levels[i] = v > 100 ? 100 : v; }
   p.end();
 
+  gQ = xQueueCreate(8, sizeof(AudioCommand));
+  if (!gQ) return;
+  if (xTaskCreatePinnedToCore(audioTask, "audio", 6144, nullptr, 1, nullptr, 0) != pdPASS) {
+    vQueueDelete(gQ); gQ = nullptr; return;
+  }
   gReady = true;
   updateAmplifierPower();
-  gQ = xQueueCreate(8, sizeof(uint8_t));
-  xTaskCreatePinnedToCore(audioTask, "audio", 4096, nullptr, 1, nullptr, 0);
   sfxPlay(SFX_HATCH);  // jingle de arranque (confirma que suena)
 }
 
 void sfxPlay(uint8_t id) {
-  if (gReady && gOn && gQ) xQueueSend(gQ, &id, 0);  // descarta si la cola esta llena
+  AudioCommand c{0, id, nullptr, 0};
+  if (gReady && gOn.load() && !gSleeping.load() && gQ) xQueueSend(gQ, &c, 0);  // descarta si la cola esta llena
 }
 
 void audioSetEnabled(bool on) {

@@ -1,4 +1,4 @@
-TamaPoke KO  v1.17-ko1  정리
+TamaPoke KO  v1.17-ko2  정리 (클로드 버전)
 ========================================
 보드: Waveshare ESP32-S3-Touch-AMOLED-1.75
 바탕: socquique/TamaPoke v1.17 + 기능 추가
@@ -12,6 +12,7 @@ TamaPoke KO  v1.17-ko1  정리
 - 통신 대전 (2인) : 두 대를 ESP-NOW로 연결해 자동 대전 (공유기 필요 없음)
 - 통신 교환 (2인) : 포켓몬 교환
                     윤겔라, 근육몬, 데구리, 고우스트는 교환하면 진화
+- SD카드 소리 (ko2) : 배경음, 배틀 배경음, 포켓몬 울음소리
 
 
 [화면 조작]
@@ -46,6 +47,19 @@ TamaPoke KO  v1.17-ko1  정리
         받은 포켓몬은 도감에 등록됨
 
 
+[SD카드 소리] (ko2)
+SD카드 /mons/ 폴더에 넣고 재부팅하면 자동 적용
+  bgm.wav                 평소 배경음 (반복)
+  battle_wild.wav         야생 배틀, 통신 대전 중 (결과 화면부터 평소 배경음)
+  cry001.wav ~ cry151.wav 울음소리 (켤 때, 쓰다듬을 때, 종이 바뀔 때,
+                          배틀 상대가 나올 때) / 번호 = 도감 번호 3자리
+형식: WAV, 16kHz, 모노, 16비트 PCM (울음소리는 30초 이하)
+변환: ffmpeg -i 원본.mp3 -ac 1 -ar 16000 -c:a pcm_s16le -map_metadata -1
+      -fflags +bitexact -flags:a +bitexact cry025.wav
+      (뒤쪽 옵션을 빼면 울음소리가 안 나옴)
+없는 파일은 건너뛰고 기본 효과음은 그대로 나옴
+
+
 [시리얼 명령] (115200bps, 디버깅용)
 WIFI 이름|비번   WiFi 설정
 WIFIOFF          WiFi 끄기
@@ -54,10 +68,12 @@ TZ 540           시간대 (분 단위, 540 = 한국)
 NET              네트워크 상태
 WILD             바로 야생 배틀
 ALERT            야생 출현 알림 띄우기
+VOL 25 65 100    볼륨 (배경 울음 효과, 각 0~100) / VOL만 치면 현재 값
 (원본 명령 STATS, HATCH, LVL 16 등도 동작)
 
 
 [주의]
 - 스프라이트는 SD카드에 있어야 함 (원본 웹 설치 페이지의 Load sprites)
+- ko1 -> ko2 업데이트: 주소 0x10000에 app 파일 (포켓몬 유지)
 - 실기기 테스트 전 버전: WiFi 포털, ESP-NOW 통신, 한국어 폰트 크기는
   문제 생기면 시리얼 로그(NET, LINK ...)로 확인

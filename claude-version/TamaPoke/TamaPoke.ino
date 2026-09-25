@@ -29,7 +29,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko1"
+#define FW_VERSION "1.17-ko2"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
@@ -246,6 +246,7 @@ void setup() {
 
   netBegin();    // WiFi/NTP: la primera sincronizacion va sola a los pocos segundos
   audioBegin();  // ES8311 + I2S + amplificador (suena un jingle de arranque)
+  if (sdReady) audioLoadMusic();  // /mons/bgm.wav y /mons/battle_wild.wav si existen
 
   lastInteract = millis();
 }
@@ -295,6 +296,10 @@ void loop() {
   handleSerial();
   extraLoop(now);  // fork KO: red, tongsin, batallas (ui_extra.ino)
   ensureMon();
+  static int16_t crySpecies = -1;  // grito al nacer/evolucionar/cambiar (/mons/cryNNN.wav)
+  if (!pet.isEgg() && pet.speciesId != crySpecies) {
+    crySpecies = pet.speciesId; audioCry(pet.speciesId);
+  }
 
   // pulsacion corta del PWR: pantalla on/off
   static uint32_t lastPwr = 0;
@@ -306,6 +311,9 @@ void loop() {
     }
   }
 
+  // musica de combate mientras dura una batalla (salvaje o tongsin); el
+  // resultado, la huida y la pantalla apagada vuelven a la BGM normal
+  audioSetBattleMusic(battleMusicActive() && !screenOff);
   updateBrightness(now);
 
   // vuelca el autoguardado periodico SOLO con la pantalla atenuada/apagada o
@@ -379,6 +387,14 @@ void handleSerial() {
   if (sdSerialCommand(line)) return;
   if (netSerialCommand(line)) return;
 
+  if (line.startsWith("VOL")) {  // fork KO: VOL [bgm cry sfx] en 0..100
+    int v[3], n = sscanf(line.c_str() + 3, "%d %d %d", &v[0], &v[1], &v[2]);
+    if (n == 3)
+      for (int i = 0; i < 3; i++) audioSetVolume(i, (uint8_t)constrain(v[i], 0, 100));
+    Serial.printf("vol bgm=%u cry=%u sfx=%u\n", audioVolume(0), audioVolume(1), audioVolume(2));
+    Serial.println(n == 3 || n <= 0 ? "DONE" : "ERR");
+    return;
+  }
   if (line == "WILD") {         // fork KO: batalla salvaje ya
     startWild();
     Serial.println("DONE");
@@ -732,7 +748,7 @@ void onTap(int16_t x, int16_t y) {
   if (inPetZone(x, y)) {
     Serial.println("PET");
     pet.caress();
-    if (!pet.sleeping) sfxPlay(SFX_HEART);
+    if (!pet.sleeping) { sfxPlay(SFX_HEART); audioCry(pet.speciesId); }
   }
 }
 

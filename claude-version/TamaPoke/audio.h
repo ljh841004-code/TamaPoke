@@ -22,3 +22,12 @@ void sfxPlay(uint8_t id);   // encola un efecto (no bloquea el loop)
 void audioSetEnabled(bool on);
 bool audioEnabled();
 void audioSetSleeping(bool sleeping);  // dormida: amplificador apagado
+
+// Independent 0..100 levels, saved to NVS. 0=BGM, 1=cry, 2=system.
+void audioSetVolume(uint8_t channel, uint8_t percent);
+uint8_t audioVolume(uint8_t channel);
+void audioLoadMusic(); // enable/reload streaming music after SD mount
+void audioSetBattleMusic(bool active, bool newSession = false);
+bool audioPauseForUpload(); // closes streaming file before PUT; false on timeout
+void audioResumeAfterUpload();
+void audioCry(uint16_t dex); // main loop only
