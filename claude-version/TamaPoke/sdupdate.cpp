@@ -72,3 +72,45 @@ bool sdUpdateRun(void (*progress)(uint32_t done, uint32_t total)) {
   Serial.println("UPD ok");
   return true;
 }
+
+bool sdUpdateFileVersion(char *out, size_t n) {
+  out[0] = 0;
+  if (!sdReady || n < 2) return false;
+  SdCardLock lock;
+  if (!lock) return false;
+  File f = SD_MMC.open(updPath, FILE_READ);
+  if (!f) return false;
+  // por bloques con solape, para no perder una marca partida entre dos
+  static uint8_t buf[4096 + 32];
+  size_t keep = 0;
+  bool found = false;
+  while (!found) {
+    size_t got = f.read(buf + keep, 4096);
+    if (!got) break;
+    size_t len = keep + got;
+    // puede haber varias: la propia cadena "TPVER:" que usa esta funcion para
+    // buscar tambien esta en el binario, sin version detras. Vale la que sigue
+    // con un digito.
+    size_t from = 0;
+    int at;
+    while ((at = updFindTag(buf + from, len - from)) >= 0) {
+      size_t p = from + at + sizeof(UPD_TAG) - 1;
+      if (p + n > len && len < sizeof(buf)) {  // la version sigue en el bloque siguiente
+        len += f.read(buf + len, sizeof(buf) - len);
+      }
+      if (p < len && buf[p] >= '0' && buf[p] <= '9') {
+        size_t j = 0;
+        while (p < len && j < n - 1 && buf[p] >= 0x20 && buf[p] < 0x7F) out[j++] = buf[p++];
+        out[j] = 0;
+        found = j > 0;
+        break;
+      }
+      from += at + 1;
+    }
+    if (found) break;
+    keep = len < 32 ? len : 32;
+    memmove(buf, buf + len - keep, keep);
+  }
+  f.close();
+  return found;
+}

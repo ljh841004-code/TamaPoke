@@ -1,4 +1,4 @@
-# TamaPoke KO v1.17-ko6.1 (클로드 버전)
+# TamaPoke KO v1.17-ko6.2 (클로드 버전)
 
 > 이 폴더는 **클로드(Claude) 버전**이에요. 저장소 루트의 TamaPoke v1.23과는 따로 관리하는 별도 갈래예요.
 > v1.23의 어드벤처·컬렉션 기능은 이 버전에 없어요. (소리와 한글 글꼴은 옮겨 왔어요)
@@ -13,9 +13,9 @@
 | 파일 | 내용 |
 |---|---|
 | `update.bin` | **SD카드 업데이트용**. 웹 설치 페이지로 보내고 [SD 업데이트] (아래 A) |
-| `tamapoke-ko-v1.17-ko6.1-app-0xe000.bin` | **esptool 업데이트용**. 주소 **0xe000**. 포켓몬은 그대로 남아요 |
-| `tamapoke-ko-v1.17-ko6.1.bin` | **새로 설치용** 통합 이미지. 주소 **0x0**. 저장 데이터가 초기화돼요 |
-| `TamaPoke_v1.17-ko6.1_정리.txt` | 기능·사용법 요약 메모 |
+| `tamapoke-ko-v1.17-ko6.2-app-0xe000.bin` | **esptool 업데이트용**. 주소 **0xe000**. 포켓몬은 그대로 남아요 |
+| `tamapoke-ko-v1.17-ko6.2.bin` | **새로 설치용** 통합 이미지. 주소 **0x0**. 저장 데이터가 초기화돼요 |
+| `TamaPoke_v1.17-ko6.2_정리.txt` | 기능·사용법 요약 메모 |
 | `TamaPoke/` | 전체 소스 (Arduino 스케치 폴더). 자세한 설명은 `TamaPoke/README_KO.md` |
 
 ## SD카드에 파일 넣기 (울음소리, 배경음, update.bin)
@@ -35,11 +35,11 @@
 
 ### B. esptool로
 1. Chrome/Edge에서 [ESP Tool (esptool-js)](https://espressif.github.io/esptool-js/) → Baudrate **115200** → Connect → 포트 선택
-2. 주소 **`0xe000`**에 `tamapoke-ko-v1.17-ko6.1-app-0xe000.bin` → Program (**Erase Flash 누르지 않기**)
+2. 주소 **`0xe000`**에 `tamapoke-ko-v1.17-ko6.2-app-0xe000.bin` → Program (**Erase Flash 누르지 않기**)
    (0x10000이 아니라 0xe000: SD 업데이트 뒤에도 esptool로 올린 펌웨어가 켜지게 부팅 선택 정보를 같이 써요.
    이 파일을 0x10000이나 0x0에 올리면 켜지지 않아요)
-3. 처음 설치하거나 초기화하고 싶다면: 주소 `0x0`에 `tamapoke-ko-v1.17-ko6.1.bin`
-4. 끝나면 USB를 뽑고 전원 버튼을 6초 눌러 껐다 켜기. 시계 화면 아래쪽에 `v1.17-ko6.1`이 보이면 성공
+3. 처음 설치하거나 초기화하고 싶다면: 주소 `0x0`에 `tamapoke-ko-v1.17-ko6.2.bin`
+4. 끝나면 USB를 뽑고 전원 버튼을 6초 눌러 껐다 켜기. 시계 화면 아래쪽에 `v1.17-ko6.2`가 보이면 성공
 
 > **ko3~ko5.1에서 ko6으로 올릴 때만** esptool이 바로 연결되지 않아요 (그 버전들의 USB 방식 때문).
 > 장치 관리자에서 COM 번호 확인 → esptool 창을 닫고 PowerShell에서
@@ -61,6 +61,8 @@ SD카드 `mons` 폴더에 `bgm.wav`(평소), `battle_wild.wav`(배틀 중), `cry
 
 ## 버전 기록
 
+- **ko6.2** – 시계 화면의 버전 표시가 잘리던 문제 수정 ("ko6.1"이 "ko6."로 보였음),
+  SD 업데이트 화면에 현재 버전과 **파일 안의 버전** 표시 (같으면 "이미 같은 버전이에요")
 - **ko6.1** – [WiFi 설정하기]가 켜지자마자 꺼지던 버그 수정 (원본 ko1부터 있던 시간 계산 오류).
   같은 오류로 통신 2인이 바로 "연결이 끊겼어요"가 될 수 있던 것도 수정
 - **ko6** – USB 드라이브 모드 제거 (실기기에서 동작하지 않았음), USB 방식을 원래대로 되돌림

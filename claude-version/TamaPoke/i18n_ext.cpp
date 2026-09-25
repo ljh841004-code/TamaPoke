@@ -39,6 +39,7 @@ static const char *const XS[2][X_COUNT] = {
     "Use the app file (0x10000)", "update.bin  %u KB", "UPDATE", "CANCEL", "Updating... do not power off",
     "Done! Restarting...", "Update failed", "Send update.bin with the web installer",
     "DOUBLE TAP: EXIT",
+    "NOW v%s", "FILE v%s", "Same version already",
   },
   // ---------------- KO ----------------
   {
@@ -74,6 +75,7 @@ static const char *const XS[2][X_COUNT] = {
     "app 파일(0x10000용)을 넣어주세요", "update.bin  %u KB", "업데이트", "취소", "업데이트 중... 전원을 끄지 마세요",
     "완료! 다시 시작해요", "업데이트 실패", "웹 설치 페이지로 update.bin을 보내주세요",
     "두 번 탭: 나가기",
+    "현재 v%s", "파일 v%s", "이미 같은 버전이에요",
   },
 };
 

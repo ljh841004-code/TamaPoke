@@ -6,6 +6,7 @@
 // arranque. Un fallo a medias deja el firmware de antes.
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
 
 enum UpdCheck : uint8_t {
   UPD_OK = 0,
@@ -29,8 +30,22 @@ static inline UpdCheck updClassify(const uint8_t *head, size_t headLen, uint32_t
   return UPD_OK;
 }
 
+// ko6.2: marca de version dentro del firmware ("TPVER:" + FW_VERSION). La
+// pantalla de actualizacion la busca en update.bin para ensenar que version trae.
+#define UPD_TAG "TPVER:"
+
+// posicion de la marca en buf (-1 si no esta). Logica pura (tests).
+static inline int updFindTag(const uint8_t *buf, size_t len) {
+  const size_t tl = sizeof(UPD_TAG) - 1;
+  for (size_t i = 0; i + tl <= len; i++)
+    if (buf[i] == 'T' && !memcmp(buf + i, UPD_TAG, tl)) return (int)i;
+  return -1;
+}
+
 // En la placa (sdupdate.cpp)
 UpdCheck sdUpdateCheck(uint32_t *size);
 // escribe y verifica; progress(done, total) se llama por bloque. true = listo
 // para reiniciar (y /update.bin pasa a /update_done.bin)
 bool sdUpdateRun(void (*progress)(uint32_t done, uint32_t total));
+// version que trae el update.bin encontrado por sdUpdateCheck ("" si no se sabe)
+bool sdUpdateFileVersion(char *out, size_t n);

@@ -335,6 +335,19 @@ class TestCadenasDelFork(unittest.TestCase):
             with open(ruta, encoding='utf-8') as fh:
                 self.assertEqual(fuera_de_ks(fh.read()), [], nombre)
 
+    def test_update_bin_publicado_es_de_esta_version(self):
+        # ko6.2: el update.bin de claude-version/ debe llevar la marca TPVER de
+        # la FW_VERSION del sketch (si no, se publico un binario viejo)
+        ruta = os.path.join(ROOT, '..', 'update.bin')
+        if not os.path.exists(ruta):
+            self.skipTest('sin update.bin')
+        with open(os.path.join(ROOT, 'TamaPoke.ino'), encoding='utf-8') as fh:
+            ver = re.search(r'#define FW_VERSION "([^"]+)"', fh.read()).group(1)
+        with open(ruta, 'rb') as fh:
+            datos = fh.read()
+        self.assertIn(b'TPVER:' + ver.encode() + b'\0', datos,
+                      f'update.bin no es la version {ver}')
+
     def test_ino_sin_literales_no_ascii_en_modulos_nuevos(self):
         for nombre in ('link.cpp', 'battle.cpp'):  # net.cpp lleva la web del portal (UTF-8 para el movil)
             ruta = os.path.join(ROOT, nombre)

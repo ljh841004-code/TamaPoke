@@ -89,6 +89,7 @@ void audioSetMusicPaused(bool) {}
 #include "../../sdupdate.h"
 UpdCheck sdUpdateCheck(uint32_t *size) { if (size) *size = 1873367; return UPD_OK; }
 bool sdUpdateRun(void (*)(uint32_t, uint32_t)) { return false; }
+bool sdUpdateFileVersion(char *out, size_t n) { snprintf(out, n, "1.17-ko6.3"); return true; }
 
 // ---- reloj / PMU ----
 bool rtcBegin() { return true; }

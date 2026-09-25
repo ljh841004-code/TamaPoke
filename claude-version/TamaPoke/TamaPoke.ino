@@ -32,7 +32,11 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko6.1"
+#define FW_VERSION "1.17-ko6.2"
+// ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
+// mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
+extern const char TP_VERSION_TAG[];
+__attribute__((used)) const char TP_VERSION_TAG[] = UPD_TAG FW_VERSION;
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
@@ -195,7 +199,8 @@ void setup() {
   // monitor serie abierto en el host (el bufer TX del USB CDC se llena
   // y nadie lo vacia) -> con timeout 0 los mensajes se descartan
   Serial.setTxTimeoutMs(0);
-  Serial.printf("TamaPoke fw v%s\n", FW_VERSION);
+  // TP_VERSION_TAG + 6 = FW_VERSION; usarla aqui evita que el enlazador la quite
+  Serial.printf("TamaPoke fw v%s\n", TP_VERSION_TAG + sizeof(UPD_TAG) - 1);
   loadLang();  // idioma guardado (KO por defecto)
   Wire.begin(IIC_SDA, IIC_SCL);
   // CST9217 (tactil), AXP2101 (PMU) y PCF85063 (RTC) comparten este bus I2C.
@@ -1804,7 +1809,9 @@ void renderClock() {
   printT(T(S_CLOCK_CANCEL));
 
   // version del firmware (discreta, abajo del todo)
-  char ver[20];
+  // ko6.2: 20 no bastaba para "TamaPoke v1.17-ko6.1" (se veia "ko6."): que no vuelva a pasar
+  char ver[40];
+  static_assert(sizeof("TamaPoke v" FW_VERSION) <= sizeof(ver), "la version no cabe en pantalla");
   snprintf(ver, sizeof(ver), "TamaPoke v%s", FW_VERSION);
   setSize(1);
   setCur(centerX(ver, 1), 436);

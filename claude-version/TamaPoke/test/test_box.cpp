@@ -356,10 +356,21 @@ TEST(sdupdate, clasifica_cabeceras) {
 TEST(sdupdate, los_bin_publicados_se_clasifican_bien) {
   // los ficheros reales de la carpeta claude-version (si estan)
   std::vector<uint8_t> app = readFile("../../update.bin");
-  std::vector<uint8_t> full = readFile("../../tamapoke-ko-v1.17-ko6.1.bin");
+  std::vector<uint8_t> full = readFile("../../tamapoke-ko-v1.17-ko6.2.bin");
   if (app.empty() || full.empty()) return;
   size_t ha = app.size() < UPD_HEAD_LEN ? app.size() : UPD_HEAD_LEN;
   size_t hf = full.size() < UPD_HEAD_LEN ? full.size() : UPD_HEAD_LEN;
   CHECK_EQ(updClassify(app.data(), ha, (uint32_t)app.size()), UPD_OK);
   CHECK_EQ(updClassify(full.data(), hf, (uint32_t)full.size()), UPD_FULLIMG);
+}
+
+TEST(sdupdate, busca_la_marca_de_version) {
+  const char blob[] = "xxTPVER:\0yyyyTPVER:1.17-ko6.2\0zz";
+  const uint8_t *b = (const uint8_t *)blob;
+  int at = updFindTag(b, sizeof(blob));
+  CHECK_EQ(at, 2);  // la primera es la cadena de busqueda, sin version detras
+  int next = updFindTag(b + at + 1, sizeof(blob) - at - 1);
+  CHECK(next >= 0);
+  CHECK(!memcmp(b + at + 1 + next + 6, "1.17-ko6.2", 10));
+  CHECK_EQ(updFindTag((const uint8_t *)"TPVE", 4), -1);  // cortada: no
 }

@@ -251,12 +251,15 @@ void soundTap(int16_t x, int16_t y) {
 
 UpdCheck updState = UPD_NONE;
 uint32_t updSize = 0;
+char updVer[24] = "";  // ko6.2: version dentro de update.bin ("" si no lleva marca)
 int8_t updResult = 0;  // 0 nada, 1 hecho (reinicia), -1 fallo
 
 void openUpdate() {
   if (netPortalOn()) netStopPortal();
   updResult = 0;
   updState = sdUpdateCheck(&updSize);
+  updVer[0] = 0;
+  if (updState == UPD_OK) sdUpdateFileVersion(updVer, sizeof(updVer));
   xScreen = XS_UPD;
   sfxPlay(SFX_TAP);
 }
@@ -285,9 +288,9 @@ static void updProgress(uint32_t done, uint32_t total) {
 
 void renderUpdate() {
   updScreenBase();
-  char ver[24];
-  snprintf(ver, sizeof(ver), "v%s", FW_VERSION);
-  drawFit(ver, 92, 200, UI_INK, 2);
+  char ver[40];
+  snprintf(ver, sizeof(ver), XT(X_UPD_CUR_FMT), FW_VERSION);
+  drawFit(ver, 92, 300, UI_INK, 2);
   if (updResult > 0) {
     drawFit(XT(X_UPD_DONE), 200, 360, UI_BAR_OK, 3);
   } else if (updResult < 0) {
@@ -295,8 +298,15 @@ void renderUpdate() {
     drawBtn(133, 330, 200, 48, UI_TRACK, UI_INK, T(S_BACK));
   } else if (updState == UPD_OK) {
     char l[40];
+    // ko6.2: la version que trae el fichero (si no se sabe, solo el tamano)
+    if (updVer[0]) {
+      snprintf(l, sizeof(l), XT(X_UPD_FILE_FMT), updVer);
+      bool same = !strcmp(updVer, FW_VERSION);
+      drawFit(l, 140, 340, same ? UI_BAR_WARN : UI_BAR_OK, 2);
+      if (same) drawFit(XT(X_UPD_SAME), 200, 340, UI_BAR_WARN, 2);
+    }
     snprintf(l, sizeof(l), XT(X_UPD_SIZE_FMT), (unsigned)(updSize / 1024));
-    drawFit(l, 170, 340, UI_INK, 2);
+    drawFit(l, 172, 340, UI_INK, 1);
     drawBtn(88, 250, 140, 52, UI_BAR_OK, UI_WHITE, XT(X_UPD_GO));
     drawBtn(238, 250, 140, 52, UI_TRACK, UI_INK, XT(X_UPD_CANCEL));
   } else {
