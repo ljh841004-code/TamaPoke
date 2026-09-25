@@ -9,6 +9,7 @@ struct SDMMCFS {
   uint64_t totalBytes() { return 1ULL << 30; }
   uint64_t usedBytes() { return 0; }
   bool mkdir(const char *) { return true; }
+  bool rename(const char *, const char *) { return true; }
   bool exists(const char *) { return false; }
   bool remove(const char *) { return false; }
   bool exists(const String &) { return false; }

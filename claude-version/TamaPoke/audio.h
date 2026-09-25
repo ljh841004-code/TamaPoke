@@ -31,3 +31,6 @@ void audioSetBattleMusic(bool active, bool newSession = false);
 bool audioPauseForUpload(); // closes streaming file before PUT; false on timeout
 void audioResumeAfterUpload();
 void audioCry(uint16_t dex); // main loop only
+// fork KO (ko5): pantalla apagada con el PWR -> la musica se pausa (y sigue
+// donde iba al encenderla). Voces y efectos siguen sonando.
+void audioSetMusicPaused(bool paused);

@@ -32,6 +32,7 @@ struct AudioCommand { uint8_t kind, id; int16_t *pcm; uint32_t samples; };
 static std::atomic<uint32_t> musicRequest{0}; // bit 0: wild; upper bits: session
 static std::atomic<uint32_t> musicReload{0}, uploadRequest{0}, uploadAck{0};
 static std::atomic<bool> musicEnabled{false};
+static std::atomic<bool> musicPaused{false};  // fork KO (ko5): pantalla apagada
 static const char *const volumeKeys[] = {"volBgm", "volCry", "volSfx"};
 
 // El NS4150B tarda bastante mas de 8 ms en estabilizarse tras cada apagado, asi
@@ -161,9 +162,9 @@ static void audioTask(void *) {
                 Serial.printf("AUDIO invalid/missing WAV: %s\n", path);
             }
           }
-          if (audible) musicSamples = music.read(musicBlock, 256);
+          if (audible && !musicPaused.load()) musicSamples = music.read(musicBlock, 256);
         }
-      } else if (audible && !(upload & 1u) && !route.changed(request, reload) && !suspended) {
+      } else if (audible && !musicPaused.load() && !(upload & 1u) && !route.changed(request, reload) && !suspended) {
         musicSamples = music.read(musicBlock, 256, false);
       }
     }
@@ -225,6 +226,7 @@ static void queueWav(const char *path, uint8_t kind) {
   if (!xQueueSend(gQ, &c, 0)) free(pcm);
 }
 void audioLoadMusic() { musicEnabled = true; musicReload.fetch_add(1); }
+void audioSetMusicPaused(bool paused) { musicPaused = paused; }
 void audioSetBattleMusic(bool active, bool newSession) {
   uint32_t value = musicRequest.load();
   if (newSession) value = (value & ~1u) + 2;

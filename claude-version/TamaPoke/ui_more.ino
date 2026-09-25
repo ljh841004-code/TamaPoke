@@ -244,3 +244,84 @@ void soundTap(int16_t x, int16_t y) {
     return;
   }
 }
+
+// ======================================================================
+// ko5: actualizar el firmware desde /update.bin de la SD (pantalla de red)
+// ======================================================================
+
+UpdCheck updState = UPD_NONE;
+uint32_t updSize = 0;
+int8_t updResult = 0;  // 0 nada, 1 hecho (reinicia), -1 fallo
+
+void openUpdate() {
+  if (netPortalOn()) netStopPortal();
+  updResult = 0;
+  updState = sdUpdateCheck(&updSize);
+  xScreen = XS_UPD;
+  sfxPlay(SFX_TAP);
+}
+
+static void updScreenBase() {
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  drawFit(XT(X_UPD_TITLE), 48, 300, UI_INK, 3);
+}
+
+static void updProgress(uint32_t done, uint32_t total) {
+  static uint32_t last = 0;
+  uint32_t now = millis();
+  if (done < total && now - last < 250) return;  // no frenar la escritura
+  last = now;
+  updScreenBase();
+  drawFit(XT(X_UPD_WRITING), 170, 360, UI_INK, 2);
+  int w = 300, fw = (int)((uint64_t)(w - 4) * done / (total ? total : 1));
+  gfx->fillRoundRect(CX - w / 2, 214, w, 24, 8, UI_TRACK);
+  if (fw > 0) gfx->fillRoundRect(CX - w / 2 + 2, 216, fw, 20, 7, UI_BAR_OK);
+  char pc[8];
+  snprintf(pc, sizeof(pc), "%u%%", (unsigned)((uint64_t)done * 100 / (total ? total : 1)));
+  drawFit(pc, 254, 200, UI_INK, 2);
+  gfx->flush();
+}
+
+void renderUpdate() {
+  updScreenBase();
+  char ver[24];
+  snprintf(ver, sizeof(ver), "v%s", FW_VERSION);
+  drawFit(ver, 92, 200, UI_INK, 2);
+  if (updResult > 0) {
+    drawFit(XT(X_UPD_DONE), 200, 360, UI_BAR_OK, 3);
+  } else if (updResult < 0) {
+    drawFit(XT(X_UPD_FAIL), 180, 360, UI_BAR_BAD, 3);
+    drawBtn(133, 330, 200, 48, UI_TRACK, UI_INK, T(S_BACK));
+  } else if (updState == UPD_OK) {
+    char l[40];
+    snprintf(l, sizeof(l), XT(X_UPD_SIZE_FMT), (unsigned)(updSize / 1024));
+    drawFit(l, 170, 340, UI_INK, 2);
+    drawBtn(88, 250, 140, 52, UI_BAR_OK, UI_WHITE, XT(X_UPD_GO));
+    drawBtn(238, 250, 140, 52, UI_TRACK, UI_INK, XT(X_UPD_CANCEL));
+  } else {
+    drawFit(XT(updState == UPD_FULLIMG ? X_UPD_FULLIMG : X_UPD_NOFILE), 170, 360, UI_BAR_BAD, 2);
+    drawFit(XT(X_UPD_HINT), 206, 380, UI_INK, 1);
+    drawBtn(133, 330, 200, 48, UI_TRACK, UI_INK, T(S_BACK));
+  }
+  gfx->flush();
+}
+
+void updateTap(int16_t x, int16_t y) {
+  if (updResult > 0) return;  // ya reiniciando
+  if (updResult == 0 && updState == UPD_OK) {
+    if (y >= 250 && y < 302 && x >= 88 && x < 228) {  // actualizar
+      pet.saveNow();  // el estado queda guardado antes de reiniciar
+      updProgress(0, 1);
+      bool ok = sdUpdateRun(updProgress);
+      updResult = ok ? 1 : -1;
+      sfxPlay(ok ? SFX_MEDAL : SFX_DENY);
+      renderUpdate();
+      if (ok) { delay(1500); ESP.restart(); }
+      return;
+    }
+    if (y >= 250 && y < 302 && x >= 238 && x < 378) { xScreen = XS_NET; return; }
+    return;
+  }
+  if (y >= 320 || y < 72) xScreen = XS_NET;
+}

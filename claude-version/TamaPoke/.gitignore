@@ -19,3 +19,7 @@ test/build/
 MAKERWORLD.md
 case/
 test/render/build/
+
+# gritos descargados con tools/get_cries.py: (c) Nintendo, no se suben
+sd_cries/
+cry*.wav

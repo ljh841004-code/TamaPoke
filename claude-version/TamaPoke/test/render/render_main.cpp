@@ -83,6 +83,10 @@ static void scenes(bool ko, const char *sfx) {
   // sonido y hora
   closeAll(); openClock(); render(); shot("15_clock_settings");
   closeAll(); openSound(); render(); shot("16_sound");
+  closeAll(); openNet(); render(); shot("18_net");
+  closeAll(); openUpdate(); render(); shot("19_update");
+  closeAll(); galleryOpen = true; galleryDetail = 0; galleryDirty = true; render(); shot("20_dex_grid_hint");
+  galleryOpen = false;
   // siguiente tras la despedida: sale de la caja
   closeAll(); galleryPmd.unload();
   pet.startFarewell(); tick(CEREMONY_MS + 50); pet.update(millis()); ensureMon();

@@ -86,6 +86,10 @@ void audioSetBattleMusic(bool, bool) {}
 bool audioPauseForUpload() { return true; }
 void audioResumeAfterUpload() {}
 void audioCry(uint16_t) {}
+void audioSetMusicPaused(bool) {}
+#include "../../sdupdate.h"
+UpdCheck sdUpdateCheck(uint32_t *size) { if (size) *size = 1873367; return UPD_OK; }
+bool sdUpdateRun(void (*)(uint32_t, uint32_t)) { return false; }
 
 // ---- reloj / PMU ----
 bool rtcBegin() { return true; }

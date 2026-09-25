@@ -29,10 +29,11 @@
 #include "usbdisk.h"   // fork KO: la SD como unidad USB en el PC
 #include "hangul_ks.h"  // fork KO (ko4): hangul Noto Sans KR, 16 y 20 px
 #include "box.h"        // fork KO (ko4): bogwanham y registro de la pokedex
+#include "sdupdate.h"   // fork KO (ko5): actualizar desde /update.bin de la SD
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko4"
+#define FW_VERSION "1.17-ko5"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
@@ -339,6 +340,7 @@ void loop() {
   // musica de combate mientras dura una batalla (salvaje o tongsin); el
   // resultado, la huida y la pantalla apagada vuelven a la BGM normal
   audioSetBattleMusic(battleMusicActive() && !screenOff);
+  audioSetMusicPaused(screenOff);  // ko5: pantalla apagada = sin musica
   updateBrightness(now);
 
   // fork KO (ko4): guardado en tiempo real. tick() lo marca cada minuto de
@@ -1190,7 +1192,8 @@ void printT(const char *s) {
         char g[5] = {};
         memcpy(g, s, n);
         int base = gfx->getCursorY();
-        gfx->setCursor(gfx->getCursorX(), base + 3 * gTextSize);
+        // con el hangul de 20 px (tamano 3) el centro queda mas abajo: +6
+        gfx->setCursor(gfx->getCursorX(), base + (gReqSize == 3 ? 6 : 3 * gTextSize));
         gfx->print(g);
         gfx->setCursor(gfx->getCursorX(), base);
       }
@@ -2242,7 +2245,8 @@ void renderDexDetail() {
     drawFit(l, 316, 340, UI_INK, 2);
     if (pet.isRegistered(dx)) drawFit(XT(X_RAISED), 342, 300, C565(0x2e, 0x7d, 0x32), 2);
   }
-  drawFit(T(S_DETAIL_BACK), 392, 260, UI_INK, 2);
+  drawFit(T(S_DETAIL_BACK), 386, 260, UI_INK, 2);
+  drawFit(XT(X_DEX_EXIT), 412, 220, UI_INK, 1);  // ko5
   gfx->flush();
 }
 
@@ -2288,6 +2292,7 @@ void renderGallery() {
       }
     }
   }
+  drawFit(XT(X_DEX_EXIT), 410, 220, UI_INK, 1);  // ko5
   // puntos de pagina
   for (int i = 0; i < 10; i++) {
     if (i == galleryPage) gfx->fillCircle(170 + i * 14, 436, 4, UI_INK);
@@ -2297,6 +2302,19 @@ void renderGallery() {
 }
 
 void galleryTap(int16_t x, int16_t y) {
+  // fork KO (ko5): doble toque = salir de la pokedex (antes habia que deslizar
+  // hasta la primera pagina y una vez mas)
+  static uint32_t lastTap = 0;
+  uint32_t now = millis();
+  if (lastTap && now - lastTap < 450) {
+    lastTap = 0;
+    galleryOpen = false;
+    galleryDetail = 0;
+    galleryPmd.unload();
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  lastTap = now;
   if (galleryDetail) {  // volver a la rejilla
     galleryDetail = 0;
     galleryPmd.unload();

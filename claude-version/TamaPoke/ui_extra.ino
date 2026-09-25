@@ -8,7 +8,7 @@
 // Se engancha al sketch principal solo por funciones (extraRender, extraTap,
 // extraSwipe, extraLoop...), para tocar lo minimo el fichero original.
 
-enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_USB, XS_BOX, XS_VOL };
+enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_USB, XS_BOX, XS_VOL, XS_UPD };
 uint8_t xScreen = XS_NONE;
 
 // aviso breve en la pantalla principal
@@ -67,8 +67,9 @@ void screenBase() {
 #define NET_SETUP_Y 266
 #define NET_AUTO_Y 318
 #define NET_TZ_Y 150
-#define NET_USB_X 113
-#define NET_USB_W 240
+#define NET_USB_X 90    // ko5: [USB drive] [SD update] en la misma fila
+#define NET_USB_W 138
+#define NET_UPD_X 238
 #define NET_USB_Y 370
 #define NET_USB_H 40
 
@@ -167,6 +168,7 @@ void renderNet() {
   drawBtn(NET_BTN_X, NET_AUTO_Y, NET_BTN_W, NET_BTN_H, netAuto() ? UI_WHITE : UI_TRACK, UI_INK,
           netAuto() ? XT(X_AUTO_ON) : XT(X_AUTO_OFF));
   drawBtn(NET_USB_X, NET_USB_Y, NET_USB_W, NET_USB_H, 0x8C1F, UI_WHITE, XT(X_USB_BTN));
+  drawBtn(NET_UPD_X, NET_USB_Y, NET_USB_W, NET_USB_H, 0xFB20, UI_WHITE, XT(X_UPD_BTN));
   drawFit(XT(X_TAP_CLOSE), 420, 220, UI_INK, 2);
   gfx->flush();
 }
@@ -178,6 +180,7 @@ void netTap(int16_t x, int16_t y) {
   }
   if (y < 72) { closeNet(); return; }
   if (inRect(x, y, NET_USB_X, NET_USB_Y, NET_USB_W, NET_USB_H)) { openUsb(); return; }
+  if (inRect(x, y, NET_UPD_X, NET_USB_Y, NET_USB_W, NET_USB_H)) { openUpdate(); return; }
   if (y >= NET_TZ_Y && y < NET_TZ_Y + 44) {
     if (x < 140) netSetTzMin(netTzMin() - 30);
     else if (x > 326) netSetTzMin(netTzMin() + 30);
@@ -264,6 +267,7 @@ bool bvMeFainted = false, bvFoeFainted = false;  // ya se reprodujo su desmayo
 bool bvFoeCaught = false;  // fork KO (ko4): el rival ya esta dentro de la pokeball
 bool bCaught = false;      // la batalla acabo en captura
 int8_t bBoxMsg = -1;       // XId del aviso de la caja en el resultado (-1 = nada)
+#define BOX_JOIN_PCT 20    // ko5: % de salvajes vencidos que se unen a la caja
 PmdMon foePmd;
 int16_t foePmdDex = 0;       // que especie tiene cargada foePmd
 bool foePmdShiny = false;
@@ -642,11 +646,14 @@ void finishBattle(bool won, bool fled, bool caught) {
     bRewarded = true;
     pet.battleResult(bLink ? BATTLE_LINK : BATTLE_WILD, won, fled, caught);
     sfxPlay(won || caught ? SFX_MEDAL : SFX_BYE);
-    // fork KO (ko4): el salvaje vencido o capturado va a la caja
-    if (!bLink && (won || caught)) {
+    // fork KO: el capturado va siempre a la caja; el vencido, solo a veces
+    // (ko5: 1 de cada 5 "quiere unirse"; si no, la pokeball no servia de nada)
+    bool joins = won && (uint32_t)random(100) < BOX_JOIN_PCT;
+    if (!bLink && (caught || joins)) {
       uint32_t e = clockEpoch();
       if (caught) dexLog.caught(bFoe.dex, e);
-      bBoxMsg = box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, caught, e) ? X_TO_BOX : X_BOX_FULL;
+      bBoxMsg = !box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, caught, e) ? X_BOX_FULL
+                : caught ? X_TO_BOX : X_JOINED;
     }
   }
 }
@@ -978,6 +985,7 @@ void extraLoop(uint32_t now) {
   if (xScreen == XS_WILD) updateWild();
   else if (xScreen == XS_LINK) updateLink();
   if (xScreen == XS_NET) lastInteract = now;
+  if (xScreen == XS_UPD) lastInteract = now;
   if (xScreen == XS_USB) {
     lastInteract = now;  // la pantalla se queda encendida mientras el PC trabaja
     if (usbDiskEjected()) { closeUsb(); sfxPlay(SFX_MEDAL); }
@@ -994,6 +1002,7 @@ bool extraRender() {
     case XS_USB: renderUsb(); return true;
     case XS_BOX: renderBox(); return true;    // ko4 (ui_more.ino)
     case XS_VOL: renderSound(); return true;  // ko4 (ui_more.ino)
+    case XS_UPD: renderUpdate(); return true; // ko5 (ui_more.ino)
     default: return false;
   }
 }
@@ -1007,6 +1016,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_USB: usbTap(x, y); return true;
     case XS_BOX: boxTap(x, y); return true;
     case XS_VOL: soundTap(x, y); return true;
+    case XS_UPD: updateTap(x, y); return true;
     default: return false;
   }
 }
@@ -1018,6 +1028,7 @@ bool extraSwipe() {
   if (xScreen == XS_USB && usbFail >= 0) { xScreen = XS_NET; return true; }  // activa: solo el boton
   if (xScreen == XS_BOX) { boxSwipe(); return true; }
   if (xScreen == XS_VOL) { xScreen = XS_NONE; clockOpen = true; return true; }
+  if (xScreen == XS_UPD) { xScreen = XS_NET; return true; }
   return xScreen != XS_NONE;  // batalla / tongsin: se ignoran
 }
 

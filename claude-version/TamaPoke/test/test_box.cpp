@@ -319,3 +319,47 @@ TEST(save, cada_minuto_queda_guardado_y_sobrevive_a_un_corte) {
   CHECK_EQ(q.fullness, p.fullness);
   CHECK(q.fullness < 90);  // bajo con el tick y eso tambien se guardo
 }
+
+// ---------------------------------------------------------------- ko5
+#include "../sdupdate.h"
+#include <vector>
+
+static std::vector<uint8_t> readFile(const char *path) {
+  std::vector<uint8_t> v;
+  FILE *f = fopen(path, "rb");
+  if (!f) return v;
+  uint8_t b[4096];
+  size_t n;
+  while ((n = fread(b, 1, sizeof(b), f)) > 0) v.insert(v.end(), b, b + n);
+  fclose(f);
+  return v;
+}
+
+TEST(sdupdate, clasifica_cabeceras) {
+  std::vector<uint8_t> app(0x9000, 0);
+  app[0] = 0xE9; app[12] = 9;  // app de ESP32-S3
+  CHECK_EQ(updClassify(app.data(), app.size(), 1800000), UPD_OK);
+  std::vector<uint8_t> full = app;  // imagen fusionada de 0x0
+  full[0x8000] = 0xAA; full[0x8001] = 0x50;
+  CHECK_EQ(updClassify(full.data(), full.size(), 1900000), UPD_FULLIMG);
+  std::vector<uint8_t> bad = app;
+  bad[0] = 0x00;
+  CHECK_EQ(updClassify(bad.data(), bad.size(), 1800000), UPD_BAD);
+  std::vector<uint8_t> c3 = app;  // otro chip (ESP32-C3 = 5)
+  c3[12] = 5;
+  CHECK_EQ(updClassify(c3.data(), c3.size(), 1800000), UPD_BAD);
+  CHECK_EQ(updClassify(app.data(), app.size(), 100), UPD_BAD);                // demasiado pequeno
+  CHECK_EQ(updClassify(app.data(), app.size(), 4 * 1024 * 1024), UPD_BAD);    // no cabe en 3 MB
+  CHECK_EQ(updClassify(app.data(), 8, 1800000), UPD_BAD);                     // cabecera cortada
+}
+
+TEST(sdupdate, los_bin_publicados_se_clasifican_bien) {
+  // los ficheros reales de la carpeta claude-version (si estan)
+  std::vector<uint8_t> app = readFile("../../update.bin");
+  std::vector<uint8_t> full = readFile("../../tamapoke-ko-v1.17-ko5.bin");
+  if (app.empty() || full.empty()) return;
+  size_t ha = app.size() < UPD_HEAD_LEN ? app.size() : UPD_HEAD_LEN;
+  size_t hf = full.size() < UPD_HEAD_LEN ? full.size() : UPD_HEAD_LEN;
+  CHECK_EQ(updClassify(app.data(), ha, (uint32_t)app.size()), UPD_OK);
+  CHECK_EQ(updClassify(full.data(), hf, (uint32_t)full.size()), UPD_FULLIMG);
+}

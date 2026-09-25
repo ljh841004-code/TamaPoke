@@ -23,7 +23,7 @@ static const char *const XS[2][X_COUNT] = {
     "Partner: %s Lv.%u", "Trade Pokemon?", "Waiting for partner...", "Trade complete!", "Trade cancelled",
     "Connection lost",
     "Not now (egg / asleep)", "Your Pokemon will leave!", "Partner said YES",
-    "USB DRIVE (SD)", "USB DRIVE", "SD card is open on the PC", "Put sounds in the mons folder",
+    "USB DRIVE", "USB DRIVE", "SD card is open on the PC", "Put sounds in the mons folder",
     "When done: eject on the PC", "Waiting for PC...", "PC connected",
     "DONE", "Can't open SD card", "No USB drive in this build",
     "POTION %u", "BALL %u", "No potions left", "No Poke Balls left", "You threw a Poke Ball!",
@@ -38,6 +38,10 @@ static const char *const XS[2][X_COUNT] = {
     "SOUND", "MUSIC", "CRIES", "SYSTEM", "SOUND ON", "SOUND OFF", "DONE",
     "EVOLVED", "COMMON", "RARE", "LEGEND", "HP %u  AT %u  DF %u  SP %u", "EVOLVES: %s Lv%u",
     "FINAL FORM", "FIRST SEEN %02u/%02u", "MET %u  CAUGHT %u", "RAISED BEFORE", "Not discovered yet",
+    "It wants to join you!", "SD UPDATE", "SD CARD UPDATE", "No update.bin on the SD card",
+    "Use the app file (0x10000)", "update.bin  %u KB", "UPDATE", "CANCEL", "Updating... do not power off",
+    "Done! Restarting...", "Update failed", "Copy update.bin to the SD card root",
+    "DOUBLE TAP: EXIT",
   },
   // ---------------- KO ----------------
   {
@@ -57,7 +61,7 @@ static const char *const XS[2][X_COUNT] = {
     "상대: %s Lv.%u", "포켓몬을 교환할까요?", "상대를 기다리는 중...", "교환 완료!", "교환 취소",
     "연결이 끊겼어요",
     "지금은 안 돼요 (알/수면)", "지금 포켓몬이 떠나요!", "상대는 수락했어요",
-    "USB 드라이브 (SD카드)", "USB 드라이브", "PC에서 SD카드가 열렸어요", "음원은 mons 폴더에 넣으세요",
+    "USB 드라이브", "USB 드라이브", "PC에서 SD카드가 열렸어요", "음원은 mons 폴더에 넣으세요",
     "끝나면 PC에서 꺼내기", "PC 연결 기다리는 중...", "PC 연결됨",
     "끝내기", "SD카드를 열 수 없어요", "이 펌웨어는 USB 드라이브 미지원",
     "물약 %u", "볼 %u", "물약이 없어요", "포켓볼이 없어요", "포켓볼을 던졌다!",
@@ -72,6 +76,10 @@ static const char *const XS[2][X_COUNT] = {
     "소리 설정", "배경음", "포켓몬 목소리", "시스템음", "소리 켜짐", "소리 꺼짐", "완료",
     "진화형", "흔함", "희귀", "전설", "HP %u  공 %u  방 %u  속 %u", "진화: %s (Lv.%u)",
     "최종 진화형", "처음 발견 %02u/%02u", "만남 %u  포획 %u", "키운 적 있어요", "아직 발견하지 못했어요",
+    "동료가 되고 싶어 해요!", "SD 업데이트", "SD카드로 업데이트", "SD카드에 update.bin이 없어요",
+    "app 파일(0x10000용)을 넣어주세요", "update.bin  %u KB", "업데이트", "취소", "업데이트 중... 전원을 끄지 마세요",
+    "완료! 다시 시작해요", "업데이트 실패", "SD카드 맨 위 폴더에 update.bin을 넣어주세요",
+    "두 번 탭: 나가기",
   },
 };
 
