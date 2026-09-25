@@ -44,6 +44,9 @@ static void scenes(bool ko, const char *sfx) {
   // ficha: combate
   cardOpen = true; cardPage = 1;
   render(); shot("03_card_battle");
+  pet.exp = expForLevel(17) + 400;  // fork KO (ko7): barra de EXP
+  cardPage = 3;
+  render(); shot("03b_card_progress");
   // entrenamiento
   closeAll(); openTrainMenu();
   render(); shot("04_train_menu");
@@ -59,6 +62,24 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); pet.energy = 80; startWild();
   bPhase = BP_MENU; txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
   render(); shot("08_battle_menu");
+  // fork KO (ko7): efectos de cada tipo (viaje y impacto) + critico/muy eficaz
+  for (int ty = -1; ty < PT_COUNT; ty++) {
+    bPhase = BP_PLAY; bqAisMe = true; bqN = 1; bqI = 0;
+    memset(&bq[0], 0, sizeof(bq[0]));
+    bq[0].side = 0; bq[0].kind = EV_HIT; bq[0].move = ty < 0 ? BA_TACKLE : BA_TYPE;
+    bq[0].eff = 2; bq[0].dmg = 5; bq[0].hpA = bMe.hp; bq[0].hpB = bFoe.hp;
+    if (ty >= 0) bvMeType = (uint8_t)ty;
+    bqT = gMockMillis;
+    for (uint32_t at : { 260u, 520u, 760u }) {
+      gMockMillis = bqT + at;
+      render();
+      snprintf(n, sizeof(n), "fx_%02d_%u", ty + 1, at);
+      shot(n);
+    }
+  }
+  bq[0].crit = true; bq[0].eff = 4; bq[0].move = BA_TACKLE; bqT = gMockMillis;
+  gMockMillis = bqT + 480; render(); shot("fx_crit_super");
+  bPhase = BP_MENU; bqN = 0;
   bvFoeHp = bvFoeTgt = bFoe.hp = bFoe.maxHp / 3;
   finishBattle(false, false, true);
   bvFoeCaught = true;
@@ -107,7 +128,7 @@ int main(int argc, char **argv) {
   pet.syncClock(gMockEpoch);
   if (pet.awaitingStarter()) pet.chooseStarter(4);
   pet.eggTap(); pet.eggTap(); pet.eggTap();
-  pet.ageMinutes = 17 * MINUTES_PER_LEVEL + 20;  // Lv.18
+  pet.exp = expForLevel(18) + 1200;  // Lv.18
   pet.fullness = 72; pet.joy = 88; pet.energy = 54; pet.hygiene = 23;
   pet.balls = 5; pet.potions = 2;
   ensureMon();

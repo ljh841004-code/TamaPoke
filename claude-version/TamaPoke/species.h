@@ -13,6 +13,7 @@
 #define UI_INK_NIGHT 0xDEFE  // #d8dcf0
 #define UI_TRACK 0xDE97  // #d8d2bd
 #define UI_BAR_OK 0x5DCD  // #58b868
+#define UI_EXP 0x4CDF     // #4898f8 barra de EXP (fork KO, ko7)
 #define UI_BAR_WARN 0xED07  // #e8a23c
 #define UI_BAR_BAD 0xEA87  // #e8503a
 #define UI_WHITE 0xFFFF  // #ffffff

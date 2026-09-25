@@ -132,14 +132,26 @@ static String htmlEsc(const String &s) {
 }
 
 static void pageRoot() {
+  // fork KO (ko7): lista de redes para ELEGIR (el datalist solo sugeria al
+  // escribir y en muchos moviles no se veia). Sin repetidos, la mas fuerte primero
+  // (scanNetworks ya las da ordenadas por senal).
   String opts;
   int n = WiFi.scanComplete();
-  if (n > 0) {
-    for (int i = 0; i < n && i < 20; i++) {
-      String s = WiFi.SSID(i);
-      if (s.length()) opts += "<option value=\"" + htmlEsc(s) + "\">";
-    }
+  int shown = 0;
+  for (int i = 0; i < n && shown < 20; i++) {
+    String s = WiFi.SSID(i);
+    if (!s.length()) continue;
+    bool dup = false;
+    for (int j = 0; j < i && !dup; j++) dup = WiFi.SSID(j) == s;
+    if (dup) continue;
+    int r = WiFi.RSSI(i);
+    const char *bars = r > -60 ? "\u2582\u2584\u2586" : r > -75 ? "\u2582\u2584" : "\u2582";
+    String e = htmlEsc(s);
+    opts += "<option value=\"" + e + "\"" + (s == gSsid ? " selected" : "") + ">" + e + "  " + bars +
+            (WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "" : " \U0001F512") + "</option>";
+    shown++;
   }
+  bool scanning = n == WIFI_SCAN_RUNNING;
   String tz;
   for (int m = -720; m <= 840; m += 30) {
     char lab[16];
@@ -163,16 +175,25 @@ static void pageRoot() {
          "<p>시계를 인터넷 시간(NTP)에 맞추기 위한 WiFi를 설정해요.<br>"
          "<small>Set the WiFi used to sync the clock (NTP).</small></p>"
          "<form method=post action=/save>"
-         "<label>WiFi 이름 (SSID)</label><input name=s list=nets required maxlength=32 value=\"");
-  h += htmlEsc(gSsid);
-  h += F("\"><datalist id=nets>");
+         "<label>WiFi 선택 (Choose)</label><select id=pick "
+         "onchange=\"if(this.value)document.getElementById('s').value=this.value\">"
+         "<option value=''>");
+  h += scanning ? F("검색 중... (Searching)") : shown ? F("-- 목록에서 고르기 --") : F("찾은 WiFi 없음 (None)");
+  h += F("</option>");
   h += opts;
-  h += F("</datalist><label>비밀번호 (Password)</label>"
+  h += F("</select><small><a href=/rescan>다시 검색 (Rescan)</a></small>"
+         "<label>WiFi 이름 (SSID) <small>직접 입력도 돼요</small></label>"
+         "<input id=s name=s required maxlength=32 value=\"");
+  h += htmlEsc(gSsid);
+  h += F("\"><label>비밀번호 (Password)</label>"
          "<input name=p type=password maxlength=64 placeholder='(없으면 비워두기)'>"
          "<label>시간대 (Time zone)</label><select name=z>");
   h += tz;
   h += F("</select><button>저장하고 시간 맞추기 / Save</button></form>"
-         "<p><small>2.4GHz WiFi만 됩니다. 5GHz는 안 돼요.</small></p></div></body></html>");
+         "<p><small>2.4GHz WiFi만 됩니다. 5GHz는 안 돼요.</small></p></div>");
+  // la busqueda aun no acabo: recargar sola en 3 s para que aparezca la lista
+  if (scanning) h += F("<script>setTimeout(function(){location.reload()},3000)</script>");
+  h += F("</body></html>");
   gWeb->send(200, "text/html; charset=utf-8", h);
 }
 
@@ -195,6 +216,14 @@ static void pageSave() {
   }
 }
 
+static void pageRescan() {
+  WiFi.scanDelete();
+  WiFi.scanNetworks(true);
+  gPortalT0 = millis();  // sigue abierto: el usuario esta en ello
+  gWeb->sendHeader("Location", "/", true);
+  gWeb->send(302, "text/plain", "");
+}
+
 static void pageRedirect() {
   gWeb->sendHeader("Location", String("http://") + WiFi.softAPIP().toString() + "/", true);
   gWeb->send(302, "text/plain", "");
@@ -212,6 +241,7 @@ void netStartPortal() {
   gWeb = new WebServer(80);
   gWeb->on("/", HTTP_GET, pageRoot);
   gWeb->on("/save", HTTP_POST, pageSave);
+  gWeb->on("/rescan", HTTP_GET, pageRescan);
   gWeb->onNotFound(pageRedirect);
   gWeb->begin();
   gPortal = true;

@@ -56,7 +56,7 @@ TEST(battle, salvaje_acorde_al_nivel) {
     // a nivel 17-22 no puede salir una forma que exija evolucionar a 36
     int16_t d = w.dex;
     for (int16_t b = 1; b <= DEX_COUNT; b++)
-      if (DEX_TBL[b].evolvesTo == d && b != DEX_EEVEE) CHECK(DEX_TBL[b].evolveLevel <= w.lvl);
+      if (DEX_TBL[b].evolvesTo == d && b != DEX_EEVEE) CHECK(evoLevel(b) <= w.lvl);
   }
   Battler low = makeWild(1, rng);
   CHECK(low.lvl >= 2);
@@ -268,6 +268,26 @@ TEST(trade, rechaza_datos_basura) {
   CHECK_EQ(a.geneDef, (uint8_t)90);
   CHECK_EQ(a.trAtk, (uint8_t)100);
   CHECK_EQ(a.weight, (uint8_t)100);
-  CHECK(a.level() <= 999);
+  CHECK(a.level() <= LEVEL_MAX);
   CHECK_EQ(a.nick[0], (char)0);
+}
+
+// fork KO (ko7): el salvaje sigue al nivel de la mascota y se topa en 100
+TEST(battle, salvaje_nivel_topado_en_100) {
+  BRng rng(99);
+  for (int i = 0; i < 200; i++) {
+    Battler w = makeWild(100, rng);
+    CHECK(w.lvl >= 96 && w.lvl <= 100);
+    Battler v = makeWild(5, rng);
+    CHECK(v.lvl >= 2 && v.lvl <= 6);
+  }
+}
+
+TEST(battle, exp_de_batalla_crece_con_el_nivel_del_rival) {
+  CHECK(battleExp(16, 10) > battleExp(16, 5));
+  CHECK(battleExp(150, 50) > battleExp(16, 50));  // Mewtwo rinde mas que Pidgey
+  CHECK_EQ(battleExp(0, 10), (uint32_t)0);
+  CHECK(battleExp(129, 1) >= 1);
+  CHECK_EQ(levelForExp(expForLevel(37)), (uint16_t)37);
+  CHECK_EQ(careExp(100), (uint32_t)0);
 }

@@ -2,6 +2,7 @@
 #include "framework.h"
 #include "shim/Arduino.h"
 #include "../dex.h"
+#include "../battle.h"
 #include "../i18n.h"
 #include "../pet.h"
 #include <ctype.h>
@@ -124,20 +125,30 @@ TEST(dex, toda_especie_es_alcanzable) {
     CHECK_MSG(reach[d], std::string("inalcanzable: ") + DEX_TBL[d].name);
 }
 
-// con la despedida a los 3 dias (nivel 72), toda linea tiene que poder llegar a
-// su forma final antes de que la mascota cumpla el ciclo
-TEST(dex, toda_linea_se_completa_antes_de_la_despedida) {
-  const uint32_t maxLevel = FAREWELL_AGE_MIN / MINUTES_PER_LEVEL;
+// fork KO (ko7): niveles de evolucion. Lineas de 3 fases: la base a 16 y la
+// intermedia a su nivel original (minimo 20); lineas de 2 fases: el original.
+// Todo tiene que caber bajo el tope de nivel 100.
+TEST(dex, niveles_de_evolucion_ko7) {
+  CHECK_EQ(evoLevel(4), (uint8_t)16);    // CHARMANDER
+  CHECK_EQ(evoLevel(5), (uint8_t)36);    // CHARMELEON: original
+  CHECK_EQ(evoLevel(6), (uint8_t)0);     // CHARIZARD: final
+  CHECK_EQ(evoLevel(10), (uint8_t)16);   // CATERPIE: base de 3 fases
+  CHECK_EQ(evoLevel(11), (uint8_t)20);   // METAPOD: 10 -> minimo 20
+  CHECK_EQ(evoLevel(147), (uint8_t)16);  // DRATINI
+  CHECK_EQ(evoLevel(148), (uint8_t)55);  // DRAGONAIR
+  CHECK_EQ(evoLevel(19), (uint8_t)20);   // RATTATA: 2 fases, original
+  CHECK_EQ(evoLevel(25), (uint8_t)30);   // PIKACHU
+  CHECK_EQ(evoLevel(DEX_EEVEE), (uint8_t)30);  // EEVEE: 2 fases (rama)
   for (int d = 1; d <= N; d++) {
-    if (DEX_TBL[d].rarity == R_EVO) continue;
-    int cur = d, guard = 0;
-    uint32_t need = 0;
-    while (DEX_TBL[cur].evolvesTo != 0 && guard++ < 6) {
-      if (DEX_TBL[cur].evolveLevel > need) need = DEX_TBL[cur].evolveLevel;
-      cur = DEX_TBL[cur].evolvesTo;
+    uint8_t lv = evoLevel(d);
+    if (DEX_TBL[d].evolvesTo) {
+      CHECK_MSG(lv >= 2 && lv <= LEVEL_MAX, std::string("nivel raro: ") + DEX_TBL[d].name);
+      int nx = DEX_TBL[d].evolvesTo;
+      if (DEX_TBL[nx].evolvesTo && d != DEX_EEVEE)
+        CHECK_MSG(evoLevel(nx) > lv, std::string("la final antes que la 1a: ") + DEX_TBL[d].name);
+    } else {
+      CHECK_EQ(lv, (uint8_t)0);
     }
-    CHECK_MSG(need <= maxLevel,
-              std::string("la linea de ") + DEX_TBL[d].name + " no llega a forma final a tiempo");
   }
 }
 

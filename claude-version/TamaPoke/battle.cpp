@@ -52,6 +52,48 @@ Battler makeBattler(int16_t dex, uint16_t lvl, uint16_t atk, uint16_t def, uint1
   return b;
 }
 
+uint32_t expForLevel(uint16_t lvl) {
+  if (lvl <= 1) return 0;
+  if (lvl > LEVEL_MAX) lvl = LEVEL_MAX;
+  return (uint32_t)lvl * lvl * lvl;
+}
+
+uint16_t levelForExp(uint32_t exp) {
+  uint16_t l = 1;
+  while (l < LEVEL_MAX && expForLevel(l + 1) <= exp) l++;
+  return l;
+}
+
+uint32_t battleExp(int16_t foeDex, uint16_t foeLvl) {
+  if (foeDex < 1 || foeDex > DEX_COUNT) return 0;
+  const DexEntry &e = DEX_TBL[foeDex];
+  uint32_t yield = ((uint32_t)e.bHp + e.bAtk + e.bDef + e.bSpe) / 3;  // ~50..200
+  uint32_t x = yield * lvlCap(foeLvl) / 4;
+  return x ? x : 1;
+}
+
+uint32_t careExp(uint16_t lvl) {
+  if (lvl >= LEVEL_MAX) return 0;
+  uint32_t x = (expForLevel(lvl + 1) - expForLevel(lvl)) / 4;
+  return x ? x : 1;
+}
+
+static bool hasPreEvo(int16_t dex) {
+  for (int16_t d = 1; d <= DEX_COUNT; d++)
+    if (DEX_TBL[d].evolvesTo == dex && d != DEX_EEVEE) return true;
+  return false;
+}
+
+uint8_t evoLevel(int16_t dex) {
+  if (dex < 1 || dex > DEX_COUNT) return 0;
+  const DexEntry &e = DEX_TBL[dex];
+  if (!e.evolvesTo) return 0;
+  bool nextEvolves = dex != DEX_EEVEE && DEX_TBL[e.evolvesTo].evolvesTo != 0;
+  if (nextEvolves) return 16;                          // base de 3 fases
+  if (hasPreEvo(dex)) return e.evolveLevel < 20 ? 20 : e.evolveLevel;  // intermedia
+  return e.evolveLevel;                                // linea de 2 fases
+}
+
 static uint16_t wildStat(uint8_t base, uint8_t gene, uint16_t lvl) {
   return (uint16_t)((uint32_t)base * gene / 100 + lvl);
 }
@@ -59,7 +101,7 @@ static uint16_t wildStat(uint8_t base, uint8_t gene, uint16_t lvl) {
 Battler makeWild(uint16_t petLvl, BRng &rng) {
   int lv = (int)petLvl - 4 + (int)rng.below(6);  // -4 .. +1
   if (lv < 2) lv = 2;
-  if (lv > 999) lv = 999;
+  if (lv > LEVEL_MAX) lv = LEVEL_MAX;
   // rareza del encuentro
   uint32_t r = rng.below(100);
   uint8_t want = (r < 70) ? (uint8_t)R_COMUN : (r < 98 || petLvl < 40) ? (uint8_t)R_RARO : (uint8_t)R_LEGENDARIO;
@@ -70,7 +112,7 @@ Battler makeWild(uint16_t petLvl, BRng &rng) {
   int16_t dex = n ? pool[rng.below(n)] : 16;
   // sube por su linea evolutiva segun el nivel
   for (int guard = 0; guard < 3 && DEX_TBL[dex].evolvesTo; guard++) {
-    if (lv < DEX_TBL[dex].evolveLevel) break;
+    if (lv < evoLevel(dex)) break;
     dex = (dex == DEX_EEVEE) ? (int16_t)(134 + rng.below(3)) : (int16_t)DEX_TBL[dex].evolvesTo;
   }
   const DexEntry &e = DEX_TBL[dex];

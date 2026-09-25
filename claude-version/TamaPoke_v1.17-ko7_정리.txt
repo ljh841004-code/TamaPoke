@@ -1,4 +1,4 @@
-TamaPoke KO  v1.17-ko6.2  정리 (클로드 버전)
+TamaPoke KO  v1.17-ko7  정리 (클로드 버전)
 ========================================
 보드: Waveshare ESP32-S3-Touch-AMOLED-1.75
 바탕: socquique/TamaPoke v1.17 + 기능 추가
@@ -15,6 +15,28 @@ TamaPoke KO  v1.17-ko6.2  정리 (클로드 버전)
 - SD카드 소리 (ko2) : 배경음, 배틀 배경음, 포켓몬 울음소리
 - ko4 : 큰 시계, 보관함, 도감 기록, 소리 설정, 훈련 3종, 실시간 저장,
         배틀 아이템(물약/포켓볼), 검정 글자 + 깔끔한 한글, 게이지 숫자
+
+
+[ko7 새 기능]
+- 경험치 레벨 : 배틀(이기기/잡기) + 시간(깨어 있고 게이지 40 이상, 1시간마다)
+                최대 Lv.100 / 레벨 n = n^3 EXP / 진행도 카드에 EXP 막대
+- 진화 레벨   : 3단계 = 기본형 -> 1차 진화 Lv.16, 최종 진화는 원작 레벨 (최소 20)
+                2단계 = 원작 레벨 그대로 (피카츄 30, 이브이 30 ...)
+- 레벨 초기화 : ko6에서 올리면 지금 포켓몬은 종류 그대로 Lv.1부터
+                보관함의 Lv.100 넘는 포켓몬은 Lv.5
+- Lv.338 버그 : WiFi 시간 맞춤이 꺼져 있던 시간을 잘못 더하던 문제 수정
+- 배틀 이펙트 : 타입 14종마다 다른 이펙트 / 급소 = 화면 흔들림 / 효과 굉장 = 충격파
+- 배틀 결과   : "경험치 +○○" / 레벨이 오르면 "레벨 ○ 달성!"
+- WiFi 설정   : 휴대폰 페이지에서 WiFi 목록을 골라요 (직접 입력도 가능, 다시 검색)
+
+
+[사이트가 닫히면]
+- 웹 설치 페이지: 저장소 TamaPoke/web 폴더에서 python -m http.server 8000
+                  -> Chrome에서 http://localhost:8000
+- Espressif Flash Download Tool (Windows, 오프라인) / esptool (pip install esptool)
+- Arduino IDE로 소스 직접 올리기
+- SD카드 파일: SD카드를 PC에 꽂고 mons 폴더에 복사
+               또는 .bin은 tools/sdcard/mons 에 두고 python tools/send_sd.py --port COM5
 
 
 [ko6.2 수정]

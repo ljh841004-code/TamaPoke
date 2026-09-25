@@ -84,6 +84,20 @@ uint8_t catchChance(const Battler &foe);
 // ev puede ser nullptr (solo el resultado); nEv recibe cuantos eventos se escribieron.
 uint8_t battleAuto(Battler a, Battler b, uint32_t seed, BEvent *ev, int maxEv, int *nEv);
 
+// ---- fork KO (ko7): niveles por experiencia, como PokeRogue/los juegos ----
+// curva "media-rapida": el nivel n empieza en n^3 de EXP (tope nivel 100)
+#define LEVEL_MAX 100
+uint32_t expForLevel(uint16_t lvl);      // EXP donde empieza ese nivel (1 -> 0)
+uint16_t levelForExp(uint32_t exp);      // nivel que da esa EXP (1..LEVEL_MAX)
+// EXP de derrotar/capturar a un rival: rendimiento de la especie x nivel / 4
+uint32_t battleExp(int16_t foeDex, uint16_t foeLvl);
+// EXP por una hora despierto y bien cuidado: 1/4 del nivel actual
+uint32_t careExp(uint16_t lvl);
+// nivel al que evoluciona esta especie (0 = forma final). Lineas de 3 fases:
+// la base a 16 y la intermedia a su nivel original (minimo 20). Lineas de 2
+// fases: el nivel original.
+uint8_t evoLevel(int16_t dex);
+
 // potencia y precision de cada movimiento
 #define MOVE_TACKLE_POW 40
 #define MOVE_TACKLE_ACC 95

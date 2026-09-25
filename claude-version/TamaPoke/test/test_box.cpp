@@ -374,3 +374,24 @@ TEST(sdupdate, busca_la_marca_de_version) {
   CHECK(!memcmp(b + at + 1 + next + 6, "1.17-ko6.2", 10));
   CHECK_EQ(updFindTag((const uint8_t *)"TPVE", 4), -1);  // cortada: no
 }
+
+// fork KO (ko7): la caja topa en 100 y los Lv300+ de ko6 vuelven a Lv5
+TEST(box, niveles_viejos_vuelven_a_5) {
+  mockNvsReset();
+  Box b;
+  b.begin();
+  b.add(25, 250, false, true, 0);
+  CHECK_EQ(b.at(0).lvl, (uint16_t)100);
+  BoxMon old = b.at(0);
+  old.lvl = 338;  // como lo guardaba ko6
+  Preferences raw;
+  raw.begin("tpbox", false);
+  raw.putBytes("mons", &old, sizeof(old));
+  Box c;
+  c.begin();
+  CHECK_EQ(c.count(), (uint8_t)1);
+  CHECK_EQ(c.at(0).lvl, (uint16_t)5);
+  Box d;  // y queda guardado
+  d.begin();
+  CHECK_EQ(d.at(0).lvl, (uint16_t)5);
+}

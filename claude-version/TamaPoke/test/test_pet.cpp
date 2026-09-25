@@ -264,36 +264,104 @@ TEST(tick, buen_cuidado_12h_forja_defensa) {
 }
 
 // ---------------------------------------------------------------- niveles
-TEST(level, un_nivel_por_hora_de_juego) {
+// fork KO (ko7): el nivel sale de la EXP (curva n^3, tope 100), no de la edad
+TEST(level, sale_de_la_exp_con_curva_cubica) {
   Pet p;
   makePet(p, 4);
-  CHECK_EQ(p.level(), (uint8_t)1);
-  p.ageMinutes = 59;
-  CHECK_EQ(p.level(), (uint8_t)1);
-  p.ageMinutes = 60;
-  CHECK_EQ(p.level(), (uint8_t)2);
-  p.ageMinutes = 24 * 60;
-  CHECK_EQ(p.level(), (uint8_t)25);
+  CHECK_EQ(p.level(), (uint16_t)1);
+  p.exp = 7;
+  CHECK_EQ(p.level(), (uint16_t)1);
+  p.exp = 8;
+  CHECK_EQ(p.level(), (uint16_t)2);
+  p.exp = expForLevel(16) - 1;
+  CHECK_EQ(p.level(), (uint16_t)15);
+  p.exp = expForLevel(16);
+  CHECK_EQ(p.level(), (uint16_t)16);
+  p.ageMinutes = 999999;  // la edad ya no sube el nivel
+  CHECK_EQ(p.level(), (uint16_t)16);
 }
 
-// Arreglado en v1.8: level() era uint8_t y daba la vuelta a 0 a los ~10,6 dias
-TEST(level, no_desborda_con_mascotas_longevas) {
+TEST(level, tope_en_100) {
   Pet p;
   makePet(p, 4);
-  p.ageMinutes = 254 * 60;
-  uint8_t before = p.level();
-  CHECK_EQ(before, (uint8_t)255);
-  p.ageMinutes = 255 * 60;  // nivel 256 -> deberia seguir subiendo (o saturar)
-  CHECK_MSG(p.level() >= before, "el nivel nunca deberia bajar al envejecer");
+  p.exp = 0xFFFFFFF0u;
+  CHECK_EQ(p.level(), (uint16_t)100);
+  p.exp = expForLevel(100) - 5;
+  p.addExp(0xFFFFFFFFu);  // no desborda
+  CHECK_EQ(p.exp, expForLevel(100));
+  CHECK_EQ(p.level(), (uint16_t)100);
+}
+
+TEST(level, addexp_cuenta_los_niveles_subidos) {
+  Pet p;
+  makePet(p, 4);
+  CHECK_EQ(p.addExp(7), (uint16_t)0);
+  CHECK_EQ(p.addExp(1), (uint16_t)1);                // 8 = Lv2
+  CHECK_EQ(p.addExp(expForLevel(5) - 8), (uint16_t)3);  // Lv5
+  Pet e;
+  mockNvsReset();
+  e.begin();
+  CHECK_EQ(e.addExp(1000), (uint16_t)0);             // el huevo no gana EXP
+  CHECK_EQ(e.exp, (uint32_t)0);
+}
+
+TEST(level, cada_hora_bien_cuidado_da_exp) {
+  Pet p;
+  makePet(p, 4);
+  p.exp = expForLevel(10);
+  uint32_t e0 = p.exp;
+  for (int i = 0; i < 60; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
+  CHECK(p.exp > e0);
+  CHECK_EQ(p.exp - e0, careExp(10));
+  // descuidado (una barra < 40) no gana
+  Pet q;
+  makePet(q, 4);
+  q.exp = expForLevel(10);
+  for (int i = 0; i < 60; i++) { setStats(q, 30, 100, 100, 100); advance(q, 1); }
+  CHECK_EQ(q.exp, expForLevel(10));
+}
+
+TEST(level, ganar_una_batalla_da_exp_y_perder_no) {
+  Pet p;
+  makePet(p, 4);
+  p.battleResult(BATTLE_WILD, true, false, false, 16, 5);
+  CHECK_EQ(p.exp, battleExp(16, 5));
+  CHECK_EQ(p.lastExpGain, battleExp(16, 5));
+  CHECK(p.lastLvlUp > 0);
+  uint32_t e = p.exp;
+  p.battleResult(BATTLE_WILD, false, false, false, 16, 5);
+  CHECK_EQ(p.exp, e);
+  CHECK_EQ(p.lastExpGain, (uint32_t)0);
+  p.battleResult(BATTLE_WILD, false, true, false, 16, 5);  // huir
+  CHECK_EQ(p.exp, e);
+  p.battleResult(BATTLE_WILD, false, false, true, 16, 5);  // capturar
+  CHECK_EQ(p.exp, e + battleExp(16, 5));
+  e = p.exp;
+  p.battleResult(BATTLE_LINK, true, false, false, 16, 5);  // tongsin: la mitad
+  CHECK_EQ(p.exp, e + battleExp(16, 5) / 2);
+}
+
+// el Lv338 de ko6: guardado sin clave "exp" -> Lv1 con la misma especie
+TEST(level, guardado_antiguo_empieza_en_nivel_1) {
+  Pet p;
+  makePet(p, 5);
+  p.ageMinutes = 20160;
+  p.exp = 0;
+  p.saveNow();
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.speciesId, (int16_t)5);
+  CHECK_EQ(q.level(), (uint16_t)1);
+  CHECK_EQ(q.ageMinutes, (uint32_t)20160);
 }
 
 // ---------------------------------------------------------------- evolucion
 TEST(evolve, requiere_nivel_y_buen_cuidado) {
   Pet p;
   makePet(p, 4);  // CHARMANDER evoluciona a nivel 16
-  p.ageMinutes = 14 * 60;  // nivel 15
+  p.exp = expForLevel(15);  // nivel 15
   CHECK(!p.canEvolveNow());
-  p.ageMinutes = 15 * 60;  // nivel 16
+  p.exp = expForLevel(16);  // nivel 16
   CHECK(p.canEvolveNow());
   p.fullness = 39;  // una barra por debajo de 40 lo bloquea
   CHECK(!p.canEvolveNow());
@@ -304,10 +372,10 @@ TEST(evolve, requiere_nivel_y_buen_cuidado) {
 TEST(evolve, cada_descuido_retrasa_un_nivel) {
   Pet p;
   makePet(p, 4);
-  p.ageMinutes = 15 * 60;  // nivel 16
+  p.exp = expForLevel(16);  // nivel 16
   p.careMistakes = 1;
   CHECK(!p.canEvolveNow());
-  p.ageMinutes = 16 * 60;  // nivel 17
+  p.exp = expForLevel(17);  // nivel 17
   CHECK(p.canEvolveNow());
 }
 
@@ -316,14 +384,14 @@ TEST(evolve, muchos_descuidos_no_adelantan_la_evolucion) {
   Pet p;
   makePet(p, 4);       // CHARMANDER: evoluciona a nivel 16
   p.careMistakes = 250;  // 250 descuidos: deberia estar lejisimos de evolucionar
-  p.ageMinutes = 9 * 60;  // nivel 10
+  p.exp = expForLevel(10);  // nivel 10
   CHECK_MSG(!p.canEvolveNow(), "con 250 descuidos no puede evolucionar a nivel 10");
 }
 
 TEST(evolve, no_evoluciona_dormido_ni_de_huevo_ni_en_ceremonia) {
   Pet p;
   makePet(p, 4);
-  p.ageMinutes = 20 * 60;
+  p.exp = expForLevel(21);
   CHECK(p.canEvolveNow());
   p.toggleLight();
   CHECK(!p.canEvolveNow());
@@ -340,7 +408,7 @@ TEST(evolve, no_evoluciona_dormido_ni_de_huevo_ni_en_ceremonia) {
 TEST(evolve, transforma_registra_y_anima) {
   Pet p;
   makePet(p, 4);
-  p.ageMinutes = 20 * 60;
+  p.exp = expForLevel(21);
   p.evolve();
   CHECK_EQ(p.speciesId, (int16_t)5);
   CHECK_EQ(p.prevSpeciesId, (int16_t)4);
@@ -354,7 +422,7 @@ TEST(evolve, transforma_registra_y_anima) {
 TEST(evolve, forma_final_no_evoluciona) {
   Pet p;
   makePet(p, 6);  // CHARIZARD
-  p.ageMinutes = 200 * 60;
+  p.exp = expForLevel(201);
   CHECK(!p.canEvolveNow());
   p.evolve();
   CHECK_EQ(p.speciesId, (int16_t)6);
@@ -365,7 +433,7 @@ TEST(evolve, eevee_se_ramifica_en_134_136) {
     randomSeed(seed);
     Pet p;
     makePet(p, DEX_EEVEE);
-    p.ageMinutes = 40 * 60;
+    p.exp = expForLevel(41);
     CHECK(p.canEvolveNow());
     p.evolve();
     CHECK_RANGE(p.speciesId, (int16_t)134, (int16_t)136);
@@ -376,12 +444,12 @@ TEST(evolve, eevee_se_ramifica_en_134_136) {
 TEST(evolve, boton_de_evolucion_se_pospone_al_declinar) {
   Pet p;
   makePet(p, 4);
-  p.ageMinutes = 15 * 60;  // nivel 16
+  p.exp = expForLevel(16);  // nivel 16
   CHECK(p.wantEvolveButton());
   p.declineEvolve();
   CHECK_MSG(!p.wantEvolveButton(), "'mantener forma' quita el boton");
   CHECK_MSG(p.canEvolveNow(), "pero la evolucion sigue disponible");
-  p.ageMinutes = 16 * 60;  // sube de nivel: se re-ofrece
+  p.exp = expForLevel(17);  // sube de nivel: se re-ofrece
   CHECK(p.wantEvolveButton());
 }
 
@@ -391,11 +459,11 @@ TEST(stats, formula_base_por_genes_mas_nivel_y_entreno) {
   makePet(p, 4);  // CHARMANDER: atk 52, def 43, spe 65
   p.geneAtk = p.geneDef = p.geneSpe = 100;
   p.trAtk = p.trDef = p.trSpe = 0;
-  p.ageMinutes = 0;  // nivel 1
+  p.exp = 0;  // nivel 1
   CHECK_EQ(p.atkStat(), (uint16_t)(52 + 1));
   CHECK_EQ(p.defStat(), (uint16_t)(43 + 1));
   CHECK_EQ(p.speStat(), (uint16_t)(65 + 1));
-  p.ageMinutes = 9 * 60;  // nivel 10
+  p.exp = expForLevel(10);  // nivel 10
   p.trAtk = 20;
   CHECK_EQ(p.atkStat(), (uint16_t)(52 + 10 + 20));
   p.geneAtk = 110;
@@ -663,8 +731,8 @@ TEST(medals, nivel_10_da_medalla) {
   Pet p;
   makePet(p, 4);
   CHECK(!p.hasMedal(MED_LV10));
-  p.ageMinutes = 9 * 60 - 1;
-  advance(p, 1);
+  p.exp = expForLevel(10) - 1;
+  p.addExp(1);
   CHECK(p.hasMedal(MED_LV10));
   CHECK(p.showMedal());
 }
@@ -674,16 +742,16 @@ TEST(medals, en_forma_llega_al_nivel_5) {
   Pet p;
   makePet(p, 4);
   p.weight = 0;
-  p.ageMinutes = 4 * 60 - 1;
-  advance(p, 1);
+  p.exp = expForLevel(5) - 1;
+  p.addExp(1);
   CHECK(p.hasMedal(MED_FIT));
   CHECK_EQ(p.totalMedals, (uint16_t)1);
 
   Pet q;
   makePet(q, 4);
   q.careMistakes = 1;   // un descuido la deja fuera
-  q.ageMinutes = 4 * 60 - 1;
-  advance(q, 1);
+  q.exp = expForLevel(5) - 1;
+  q.addExp(1);
   CHECK(!q.hasMedal(MED_FIT));
 }
 
@@ -691,8 +759,8 @@ TEST(medals, cada_medalla_nueva_suma_al_total) {
   Pet p;
   makePet(p, 4);
   p.weight = 0;
-  p.ageMinutes = 9 * 60 - 1;
-  advance(p, 1);  // cruza nivel 10: MED_LV10 + MED_FIT de golpe
+  p.exp = expForLevel(10) - 1;
+  p.addExp(1);  // cruza nivel 10: MED_LV10 + MED_FIT de golpe
   CHECK(p.hasMedal(MED_LV10));
   CHECK(p.hasMedal(MED_FIT));
   CHECK_MSG(p.totalMedals == 2, "el total cuenta cada bit ganado, no cada evento");

@@ -40,6 +40,7 @@ static const char *const XS[2][X_COUNT] = {
     "Done! Restarting...", "Update failed", "Send update.bin with the web installer",
     "DOUBLE TAP: EXIT",
     "NOW v%s", "FILE v%s", "Same version already",
+    "%lu EXP to next level", "EXP +%lu", "Grew to Lv.%u!", "MAX LEVEL",
   },
   // ---------------- KO ----------------
   {
@@ -76,6 +77,7 @@ static const char *const XS[2][X_COUNT] = {
     "완료! 다시 시작해요", "업데이트 실패", "웹 설치 페이지로 update.bin을 보내주세요",
     "두 번 탭: 나가기",
     "현재 v%s", "파일 v%s", "이미 같은 버전이에요",
+    "다음 레벨까지 %lu EXP", "경험치 +%lu", "레벨 %u 달성!", "최고 레벨!",
   },
 };
 

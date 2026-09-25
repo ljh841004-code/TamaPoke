@@ -237,6 +237,7 @@ void loadFoe(int16_t dex, bool shiny) {
 // fase de la batalla
 enum : uint8_t { BP_INTRO = 0, BP_MENU, BP_PLAY, BP_RESULT };
 uint8_t bPhase = BP_INTRO;
+int bvShakeX = 0, bvShakeY = 0;  // fork KO (ko7): temblor de la escena (critico)
 uint32_t bPhaseT = 0;
 bool bWon = false, bFled = false, bLink = false, bRewarded = false;
 
@@ -323,8 +324,8 @@ void drawBattleBg() {
   if (night) soil = lerp565(soil, C565(0x16, 0x1c, 0x30), 9, 16);
   gfx->fillRect(0, hor, 466, 262 - hor, soil);
   uint16_t pad = lerp565(soil, C565(0x10, 0x18, 0x20), 4, 16);
-  gfx->fillEllipse(316, 160, 78, 16, pad);   // plataforma del rival
-  gfx->fillEllipse(140, 256, 92, 18, pad);   // la mia
+  gfx->fillEllipse(316 + bvShakeX, 160 + bvShakeY, 78, 16, pad);   // plataforma del rival
+  gfx->fillEllipse(140 + bvShakeX, 256 + bvShakeY, 92, 18, pad);   // la mia
   gfx->fillRect(0, 262, 466, 204, UI_BG_DAY);  // panel inferior (mensajes/menu)
 }
 
@@ -361,10 +362,312 @@ void drawHpBox(int x, int y, int w, const char *name, uint16_t lvl, float hp, ui
   }
 }
 
+// ======================================================================
+// fork KO (ko7): efectos de los ataques, uno por tipo. Solo formas simples
+// (circulos, lineas, triangulos) sobre el fondo, sincronizados con la
+// embestida: t 120..380 el proyectil viaja, desde t 350 el impacto en el
+// rival (cuando parpadea). Critico = temblor; muy eficaz = onda de choque.
+// ======================================================================
+
+static uint32_t fxHash(uint32_t a) {
+  a ^= a >> 16; a *= 0x7feb352dU; a ^= a >> 15; a *= 0x846ca68bU; a ^= a >> 16;
+  return a;
+}
+static int fxRnd(uint32_t seed, int span) { return (int)(fxHash(seed) % (uint32_t)(2 * span + 1)) - span; }
+
+// linea gruesa (w px) de a a b
+static void fxLine(int x0, int y0, int x1, int y1, int w, uint16_t c) {
+  int dx = x1 - x0, dy = y1 - y0;
+  bool steep = abs(dy) > abs(dx);
+  for (int k = -(w / 2); k <= w / 2; k++) {
+    if (steep) gfx->drawLine(x0 + k, y0, x1 + k, y1, c);
+    else gfx->drawLine(x0, y0 + k, x1, y1 + k, c);
+  }
+}
+
+// estrella de n rayos (impactos, cristales, chispas)
+static void fxStar(int x, int y, int r0, int r1, int rays, float rot, int w, uint16_t c) {
+  for (int i = 0; i < rays; i++) {
+    float a = rot + i * 6.2832f / rays;
+    float ca = cosf(a), sa = sinf(a);
+    fxLine(x + (int)(ca * r0), y + (int)(sa * r0), x + (int)(ca * r1), y + (int)(sa * r1), w, c);
+  }
+}
+
+static float fxClamp01(float v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+
+// fx: PT_* del ataque (0xFF = placaje). (ax,ay) atacante, (tx,ty) objetivo.
+void drawMoveFx(uint8_t fx, int ax, int ay, int tx, int ty, uint32_t t, bool hit, uint8_t eff) {
+  const uint16_t WHITE = UI_WHITE, YEL = C565(0xff, 0xe0, 0x40), ORA = C565(0xff, 0x8c, 0x1a),
+                 RED = C565(0xe8, 0x38, 0x20);
+  float p = fxClamp01(((float)t - 120) / 260.0f);  // viaje del proyectil
+  bool travel = t >= 120 && t < 380;
+  int k = (int)t - 350;                              // tiempo de impacto
+  bool impact = hit && k >= 0 && k < 600;
+  float f = impact ? k / 600.0f : 0;
+  int px = ax + (int)((tx - ax) * p), py = ay + (int)((ty - ay) * p);
+  uint32_t sd = (uint32_t)bqI * 7919u + (uint32_t)bqT;  // variacion por golpe
+
+  switch (fx) {
+    case PT_FIRE:
+      if (travel)
+        for (int i = 0; i < 3; i++) {
+          float q = fxClamp01(p - i * 0.14f);
+          int x = ax + (int)((tx - ax) * q), y = ay + (int)((ty - ay) * q);
+          gfx->fillCircle(x, y, 8 - i * 2, ORA);
+          gfx->fillCircle(x, y, 4 - i, YEL);
+        }
+      if (impact)
+        for (int i = 0; i < 8; i++) {
+          float ph = ((k + i * 75) % 420) / 420.0f;
+          int x = tx + fxRnd(sd + i, 32), y = ty + 26 - (int)(ph * 80);
+          int r = 3 + (int)(11 * (1 - ph) * (1 - f * 0.6f));
+          gfx->fillCircle(x, y, r, ph < 0.35f ? YEL : ph < 0.7f ? ORA : RED);
+        }
+      break;
+
+    case PT_WATER: {
+      const uint16_t BLU = C565(0x40, 0x90, 0xf0), LBL = C565(0xb0, 0xe0, 0xff);
+      if (travel)
+        for (int i = 0; i < 4; i++) {
+          float q = fxClamp01(p - i * 0.1f);
+          int x = ax + (int)((tx - ax) * q), y = ay + (int)((ty - ay) * q) - (int)(24 * sinf(q * 3.1416f));
+          gfx->fillCircle(x, y, 6, BLU);
+          gfx->fillCircle(x - 2, y - 2, 2, LBL);
+        }
+      if (impact) {
+        gfx->drawCircle(tx, ty, 12 + k / 8, LBL);
+        gfx->drawCircle(tx, ty, 13 + k / 8, LBL);
+        for (int i = 0; i < 9; i++) {
+          float a = i * 0.698f + 0.3f;
+          int d = k / 6;
+          int x = tx + (int)(cosf(a) * d), y = ty - 10 + (int)(sinf(a) * d * 0.7f) + d * d / 90;
+          if (k < 480) gfx->fillCircle(x, y, 5 - k / 160, BLU);
+        }
+      }
+      break;
+    }
+
+    case PT_GRASS: {
+      const uint16_t GRN = C565(0x3c, 0xa8, 0x48), LGR = C565(0x9c, 0xe0, 0x6c);
+      // latigo: la liana crece hasta el rival y vuelve
+      if (t >= 100 && t < 620) {
+        float L = t < 380 ? fxClamp01((t - 100) / 280.0f) : fxClamp01((620 - (float)t) / 240.0f);
+        int lx = ax, ly = ay;
+        for (int s2 = 1; s2 <= 12; s2++) {
+          float q = L * s2 / 12.0f;
+          int x = ax + (int)((tx - ax) * q), y = ay + (int)((ty - ay) * q) + (int)(10 * sinf(q * 12 + t * 0.02f));
+          fxLine(lx, ly, x, y, 4, GRN);
+          lx = x; ly = y;
+        }
+      }
+      if (impact)
+        for (int i = 0; i < 7; i++) {
+          float a = i * 0.9f + f * 4;
+          int d = 10 + k / 7;
+          int x = tx + (int)(cosf(a) * d), y = ty + (int)(sinf(a) * d * 0.8f) + k / 20;
+          if (k < 520) gfx->fillEllipse(x, y, 6, 3, (i & 1) ? GRN : LGR);
+        }
+      break;
+    }
+
+    case PT_ELECTRIC:
+      if (impact && k < 520 && ((k / 45) % 3) != 2) {
+        for (int b = 0; b < 3; b++) {
+          int x = tx + (b - 1) * 26 + fxRnd(sd + b * 31 + k / 45, 8), y = ty - 100;
+          for (int s2 = 0; s2 < 6; s2++) {
+            int nx = tx + (b - 1) * 14 + fxRnd(sd + b * 97 + s2 * 13 + k / 45, 18), ny = y + 20;
+            fxLine(x, y, nx, ny, 5, YEL);
+            gfx->drawLine(x, y, nx, ny, WHITE);
+            x = nx; y = ny;
+          }
+        }
+        fxStar(tx, ty + 10, 6, 20, 8, k * 0.01f, 2, YEL);
+      }
+      if (travel) fxStar(ax, ay, 4, 14, 6, t * 0.03f, 2, YEL);  // carga
+      break;
+
+    case PT_ICE: {
+      const uint16_t CYA = C565(0x80, 0xe0, 0xf8), ICE = C565(0xd8, 0xf6, 0xff);
+      if (t >= 120 && t < 460) {
+        int w = 5 + (int)(3 * sinf(t * 0.05f));
+        fxLine(ax, ay, tx, ty, w + 4, CYA);
+        fxLine(ax, ay, tx, ty, w, ICE);
+      }
+      if (impact)
+        for (int i = 0; i < 6; i++) {
+          int x = tx + fxRnd(sd + i * 5, 38), y = ty + fxRnd(sd + i * 11, 30);
+          int g = (k - i * 40) / 8;
+          if (g <= 0 || k > 540) continue;
+          if (g > 14) g = 14;
+          fxStar(x, y, 0, g, 6, 0.26f, 2, (i & 1) ? CYA : ICE);
+        }
+      break;
+    }
+
+    case PT_FIGHT:
+    case PT_NORMAL:
+    case 0xFF:
+    default: {
+      bool big = fx == PT_FIGHT || fx == PT_NORMAL;
+      if (impact && k < 380) {
+        float g = fxClamp01(k / 160.0f);
+        int r = (int)((big ? 34 : 24) * g) + 6;
+        uint16_t c1 = fx == PT_FIGHT ? ORA : YEL;
+        fxStar(tx, ty, r / 3, r, big ? 10 : 8, 0.2f, 3, c1);
+        if (k < 140) gfx->fillCircle(tx, ty, (140 - k) / 8 + 4, WHITE);
+        if (big) {
+          gfx->drawCircle(tx, ty, r + k / 6, c1);
+          gfx->drawCircle(tx, ty, r + k / 6 + 1, c1);
+        }
+      }
+      break;
+    }
+
+    case PT_POISON: {
+      const uint16_t PUR = C565(0xa0, 0x48, 0xc0), LPU = C565(0xd8, 0xa0, 0xf0);
+      if (travel) fxLine(px - (tx - ax) / 20, py - (ty - ay) / 20, px, py, 3, PUR);
+      if (impact)
+        for (int i = 0; i < 9; i++) {
+          float ph = ((k + i * 60) % 480) / 480.0f;
+          int x = tx + fxRnd(sd + i * 3, 34) + (int)(4 * sinf(ph * 9 + i)), y = ty + 28 - (int)(ph * 90);
+          int r = 4 + (int)(fxHash(sd + i) % 5);
+          gfx->fillCircle(x, y, r, LPU);
+          gfx->drawCircle(x, y, r, PUR);
+        }
+      break;
+    }
+
+    case PT_GROUND: {
+      const uint16_t MUD = C565(0x9c, 0x6c, 0x34), DUST = C565(0xd0, 0xb0, 0x80);
+      if (travel)
+        for (int i = 0; i < 4; i++) {
+          float q = fxClamp01(p - i * 0.08f);
+          int x = ax + (int)((tx - ax) * q) + fxRnd(sd + i, 8);
+          int y = ay + (int)((ty - ay) * q) - (int)(40 * sinf(q * 3.1416f));
+          gfx->fillCircle(x, y, 6 - i, MUD);
+        }
+      if (impact && k < 560) {
+        int d = k / 5;
+        for (int s2 = -1; s2 <= 1; s2 += 2) {
+          gfx->fillEllipse(tx + s2 * (18 + d), ty + 34 - k / 30, 22 - k / 40, 10 - k / 80, DUST);
+        }
+        for (int i = 0; i < 6; i++) {
+          int x = tx + fxRnd(sd + i * 7, 30), y = ty + 10 - (int)(60 * sinf(fxClamp01(k / 500.0f) * 3.1416f)) + fxRnd(sd + i, 12);
+          gfx->fillCircle(x, y, 4, MUD);
+        }
+      }
+      break;
+    }
+
+    case PT_PSYCHIC: {
+      const uint16_t PNK = C565(0xf0, 0x58, 0xa8), LPK = C565(0xf8, 0xb0, 0xd8);
+      if (t < 380) {  // el atacante se concentra
+        int r = 46 - (int)(t / 12);
+        if (r > 10) { gfx->drawCircle(ax, ay, r, LPK); gfx->drawCircle(ax, ay, r - 1, LPK); }
+      }
+      if (impact)
+        for (int i = 0; i < 3; i++) {
+          int r = ((k + i * 110) % 330) / 5 + 8;
+          if (k + i * 110 >= 600) continue;
+          gfx->drawEllipse(tx, ty, r + 6, r, i == 1 ? LPK : PNK);
+          gfx->drawEllipse(tx, ty, r + 7, r + 1, i == 1 ? LPK : PNK);
+        }
+      break;
+    }
+
+    case PT_BUG: {
+      const uint16_t LGR = C565(0xc8, 0xe8, 0x70), WHT = WHITE;
+      int dx = tx - ax, dy = ty - ay;
+      for (int i = 0; i < 4; i++) {
+        float q = ((float)t - 120 - i * 70) / 200.0f;
+        if (q < 0 || q > 1) continue;
+        int x = ax + (int)(dx * q) + fxRnd(sd + i, 10), y = ay + (int)(dy * q) + fxRnd(sd + i * 3, 10);
+        fxLine(x - dx / 10, y - dy / 10, x, y, 4, LGR);
+        gfx->fillCircle(x, y, 3, WHT);
+      }
+      if (impact && k < 450)
+        for (int i = 0; i < 4; i++) {
+          int d = k - i * 70;
+          if (d < 0 || d > 200) continue;
+          fxStar(tx + fxRnd(sd + i * 9, 26), ty + fxRnd(sd + i * 4, 22), 3, 9 + d / 12, 4, 0.78f, 3, LGR);
+        }
+      break;
+    }
+
+    case PT_ROCK: {
+      const uint16_t RCK = C565(0x98, 0x88, 0x70), RKD = C565(0x60, 0x54, 0x44);
+      if (hit && t >= 250 && t < 950)
+        for (int i = 0; i < 4; i++) {
+          int s0 = 250 + i * 90, d = (int)t - s0;
+          if (d < 0) continue;
+          int x = tx + (i - 1) * 20 - 10 + fxRnd(sd + i, 6);
+          int y = d < 220 ? ty - 150 + d * 150 / 220 : ty + (d - 220) / 12;
+          if (d > 420) continue;
+          int r = 9 + (i & 1) * 3;
+          gfx->fillCircle(x, y, r, RKD);
+          gfx->fillCircle(x - 2, y - 2, r - 3, RCK);
+          if (d >= 220 && d < 300) fxStar(x, y + r, 2, 10, 5, 3.4f, 1, RCK);
+        }
+      break;
+    }
+
+    case PT_GHOST: {
+      const uint16_t DPU = C565(0x48, 0x30, 0x70), PUR = C565(0x88, 0x60, 0xc0);
+      if (impact && k < 560)
+        for (int i = 0; i < 8; i++) {
+          float a = i * 0.785f + k * 0.012f;
+          int d = 44 - k / 16;
+          int x = tx + (int)(cosf(a) * d), y = ty + (int)(sinf(a) * d * 0.7f);
+          gfx->fillCircle(x, y, 7 - i / 3, (i & 1) ? DPU : PUR);
+        }
+      if (travel) gfx->fillEllipse(px, py, 10, 6, DPU);  // sombra que se desliza
+      break;
+    }
+
+    case PT_DRAGON: {
+      const uint16_t DBL = C565(0x50, 0x48, 0xe0), DPU = C565(0x98, 0x50, 0xe8);
+      if (travel) {
+        gfx->fillCircle(px, py, 11, DPU);
+        gfx->fillCircle(px, py, 6, DBL);
+      }
+      if (impact && k < 580)
+        for (int i = 0; i < 10; i++) {
+          float a = i * 0.628f + k * 0.01f;
+          float ph = ((k + i * 40) % 400) / 400.0f;
+          int d = 30 + (int)(10 * ph);
+          int x = tx + (int)(cosf(a) * d), y = ty + (int)(sinf(a) * d * 0.6f) - (int)(ph * 30);
+          gfx->fillCircle(x, y, 3 + (int)(7 * (1 - ph)), i % 3 == 0 ? RED : (i & 1) ? DBL : DPU);
+        }
+      break;
+    }
+  }
+
+  // muy eficaz: onda de choque blanca que se abre desde el objetivo
+  if (impact && eff >= 4 && k < 260) {
+    int r = 24 + k * 2 / 5;
+    for (int w = 0; w < 3; w++) gfx->drawCircle(tx, ty, r + w, WHITE);
+    if (k > 60) gfx->drawCircle(tx, ty, r - 22, WHITE);
+  }
+}
+
+// temblor de la escena durante el impacto de un critico
+void updateShake(uint32_t now) {
+  bvShakeX = bvShakeY = 0;
+  if (bPhase != BP_PLAY || bqI >= bqN) return;
+  const BEvent &e = bq[bqI];
+  if (e.kind != EV_HIT || !e.crit || !e.eff) return;
+  int k = (int)(now - bqT) - 350;
+  if (k < 0 || k >= 360) return;
+  int amp = 7 * (360 - k) / 360 + 1;
+  bvShakeX = ((k / 30) & 1) ? amp : -amp;
+  bvShakeY = ((k / 45) & 1) ? amp / 2 : -amp / 2;
+}
+
 // dibuja los dos Pokemon; anima al que actua segun el evento en curso
 void drawBattlers() {
   uint32_t now = millis();
-  int meX = 140, meG = 250, foeX = 316, foeG = 156;
+  int meX = 140 + bvShakeX, meG = 250 + bvShakeY, foeX = 316 + bvShakeX, foeG = 156 + bvShakeY;
   uint8_t meAct = PMD_IDLE, foeAct = PMD_IDLE;
   bool meHide = false, foeHide = false, meSil = false, foeSil = false;
   uint32_t t = now - bqT;
@@ -427,6 +730,17 @@ void drawBattlers() {
       if (th) drawThumb(th, meX - GAL_CELL / 2, meG - GAL_CELL, 3, meSil);
     }
   }
+  // fork KO (ko7): efecto del ataque encima de los dos
+  if (bPhase == BP_PLAY && bqI < bqN) {
+    const BEvent &e = bq[bqI];
+    if (e.kind == EV_HIT || e.kind == EV_MISS) {
+      bool me = evIsMe(e.side);
+      uint8_t fx = e.move == BA_TYPE ? (me ? bvMeType : bvFoeType) : 0xFF;
+      int ax = me ? 140 : 316, ay = me ? 200 : 116, tx = me ? 316 : 140, ty = me ? 116 : 200;
+      drawMoveFx(fx, ax + bvShakeX, ay + bvShakeY, tx + bvShakeX, ty + bvShakeY, t,
+                 e.kind == EV_HIT && e.eff, e.eff);
+    }
+  }
 }
 
 void drawBattleMsg() {
@@ -482,6 +796,7 @@ void renderBattleView() {
   if (fabsf(bvMeTgt - bvMeHp) < 0.5f) bvMeHp = bvMeTgt;
   if (fabsf(bvFoeTgt - bvFoeHp) < 0.5f) bvFoeHp = bvFoeTgt;
 
+  updateShake(now);
   drawBattleBg();
   drawBattlers();
   drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, false);
@@ -492,12 +807,24 @@ void renderBattleView() {
     gfx->fillRoundRect(60, 270, 346, 128, 16, good ? UI_BAR_WARN : UI_WHITE);
     gfx->drawRoundRect(60, 270, 346, 128, 16, UI_INK);
     const char *big = bFled ? XT(X_FLED) : bCaught ? XT(X_GOTCHA) : bWon ? XT(X_WIN) : XT(X_LOSE);
-    drawFit(big, 284, 320, UI_INK, bFled ? 2 : 4);
+    drawFit(big, 280, 320, UI_INK, bFled ? 2 : 4);
+    int ly = 322;
+    if (good && pet.lastExpGain) {  // fork KO (ko7): EXP ganada (y nivel nuevo)
+      char ex[64];
+      int k = snprintf(ex, sizeof(ex), XT(X_EXP_GAIN_FMT), (unsigned long)pet.lastExpGain);
+      if (pet.lastLvlUp && k > 0 && k < (int)sizeof(ex) - 2) {
+        strcpy(ex + k, "  ");
+        snprintf(ex + k + 2, sizeof(ex) - k - 2, XT(X_LVUP_FMT), pet.level());
+      }
+      drawFit(ex, ly, 330, pet.lastLvlUp ? UI_EXP : UI_INK, 2);
+      ly += 26;
+    }
     if (good && !bLink) {  // fork KO (ko4): objetos y caja
-      drawFit(bWon ? XT(X_REWARD_ITEMS) : XT(X_REWARD), 330, 320, UI_INK, 2);
-      if (bBoxMsg >= 0) drawFit(XT((XId)bBoxMsg), 358, 320, bBoxMsg == X_BOX_FULL ? UI_BAR_BAD : UI_INK, 2);
-    } else if (good) {
-      drawFit(XT(X_REWARD), 340, 320, UI_INK, 2);
+      if (ly < 374) { drawFit(bWon ? XT(X_REWARD_ITEMS) : XT(X_REWARD), ly, 320, UI_INK, 2); ly += 26; }
+      if (bBoxMsg >= 0 && ly <= 374)
+        drawFit(XT((XId)bBoxMsg), ly, 320, bBoxMsg == X_BOX_FULL ? UI_BAR_BAD : UI_INK, 2);
+    } else if (good && ly < 374) {
+      drawFit(XT(X_REWARD), ly, 320, UI_INK, 2);
     }
   } else {
     drawBattleMsg();
@@ -597,8 +924,9 @@ void finishBattle(bool won, bool fled, bool caught) {
   bPhaseT = millis();
   if (!bRewarded) {
     bRewarded = true;
-    pet.battleResult(bLink ? BATTLE_LINK : BATTLE_WILD, won, fled, caught);
-    sfxPlay(won || caught ? SFX_MEDAL : SFX_BYE);
+    pet.battleResult(bLink ? BATTLE_LINK : BATTLE_WILD, won, fled, caught, bFoe.dex, bFoe.lvl);
+    bvMeLvl = pet.level();  // fork KO (ko7): la caja de vida ensena el nivel nuevo
+    sfxPlay(pet.lastLvlUp ? SFX_LEVEL : won || caught ? SFX_MEDAL : SFX_BYE);  // ko7: subida de nivel
     // fork KO: el capturado va siempre a la caja; el vencido, solo a veces
     // (ko5: 1 de cada 5 "quiere unirse"; si no, la pokeball no servia de nada)
     bool joins = won && (uint32_t)random(100) < BOX_JOIN_PCT;
@@ -904,7 +1232,7 @@ void updateLink() {
   LinkState st = linkState();
   TradePet got;
   if (linkTakeTrade(got)) {
-    if (pet.importTrade(got)) {
+    if (pet.importTrade(got, linkPartner().lvl)) {
       linkTradeApplied = true;
       if (pet.evolving()) evoPmd.load(pet.prevSpeciesId, pet.shiny);
       sfxPlay(SFX_HATCH);

@@ -36,6 +36,7 @@ void Pet::newEgg() {
   hygiene = 100;
   poops = 0;
   ageMinutes = 0;
+  exp = 0;
   careMistakes = 0;
   mistakeCooldown = 0;
   sleeping = false;
@@ -137,12 +138,13 @@ void Pet::tick() {
       joy = dropTo(joy, 1, 35);
     }
     if (ageMinutes % 3 == 0) hygiene = dropTo(hygiene, 1, 45);
-    checkMedals();  // aun puede cruzar un nivel por edad mientras duerme
+    checkMedals();
     pendingSave = true;  // fork KO (ko4): se guarda cada minuto
     return;
   }
 
-  if (ageMinutes % MINUTES_PER_LEVEL == 0) sfxPlay(SFX_LEVEL);  // subio de nivel (despierto)
+  // fork KO (ko7): cada hora despierto y bien cuidado da EXP (1/4 de nivel)
+  if (ageMinutes % 60 == 0 && lowestStat() >= 40) addExp(careExp(level()));
 
   fullness = clamp100(fullness - 2);
   energy = clamp100(energy - 1);
@@ -214,6 +216,7 @@ void Pet::flushSave() {
   prefs.putUChar("wgt", weight);
   prefs.putUChar("tdef", trDef);
   prefs.putUInt("age", ageMinutes);
+  prefs.putUInt("exp", exp);
   prefs.putUChar("mist", careMistakes);
   prefs.putBool("sleep", sleeping);
   prefs.putUChar("bond", bond);
@@ -431,11 +434,32 @@ void Pet::hatch() {
 // evolucion 1 nivel, y ademas tiene que estar bien cuidado en ese momento
 // (ninguna estadistica por debajo de 40). NO evoluciona sola: la dispara el
 // usuario tocando al bicho (evolve()), para que vea la transformacion.
+uint16_t Pet::evolveNeed() const {
+  if (isEgg()) return 0;
+  uint16_t lv = evoLevel(speciesId);
+  if (!lv) return 0;
+  lv += careMistakes;
+  return lv > LEVEL_MAX ? LEVEL_MAX : lv;  // al tope sigue siendo alcanzable
+}
+
 bool Pet::canEvolveNow() const {
   if (isEgg() || sleeping || ceremony != CER_NONE) return false;
-  const DexEntry &d = DEX_TBL[speciesId];
-  if (d.evolvesTo == 0) return false;
-  return level() >= (uint16_t)d.evolveLevel + careMistakes && lowestStat() >= 40;
+  uint16_t need = evolveNeed();
+  return need && level() >= need && lowestStat() >= 40;
+}
+
+uint16_t Pet::addExp(uint32_t x) {
+  if (isEgg() || !x) return 0;
+  uint16_t before = level();
+  uint32_t top = expForLevel(LEVEL_MAX);
+  exp = (exp >= top || x >= top - exp) ? top : exp + x;
+  uint16_t up = level() - before;
+  if (up) {
+    if (!sleeping) sfxPlay(SFX_LEVEL);
+    checkMedals();
+    pendingSave = true;
+  }
+  return up;
 }
 
 void Pet::evolve() {
@@ -642,6 +666,7 @@ void Pet::save() {
   prefs.putBool("stpk", starterPick);
   prefs.putBytes("dexsh", dexShinyReg, sizeof(dexShinyReg));
   prefs.putUInt("age", ageMinutes);
+  prefs.putUInt("exp", exp);
   prefs.putShort("dexn", speciesId);
   prefs.putShort("eggT2", eggTarget);
   prefs.putUChar("crack", eggTaps);
@@ -694,6 +719,9 @@ void Pet::load() {
   starterPick = prefs.getBool("stpk", false);
   prefs.getBytes("dexsh", dexShinyReg, sizeof(dexShinyReg));
   ageMinutes = prefs.getUInt("age", 0);
+  // fork KO (ko7): guardados de antes (nivel = horas, hasta Lv338+) empiezan
+  // en Lv1 con la misma especie
+  exp = prefs.getUInt("exp", 0);
   if (prefs.isKey("dexn")) {
     speciesId = prefs.getShort("dexn", -1);
     eggTarget = prefs.getShort("eggT2", 4);
@@ -741,7 +769,10 @@ uint16_t Pet::hpStat() const {
 
 static uint8_t addCap(uint8_t v, uint8_t d) { return (v + d > 100) ? 100 : v + d; }
 
-void Pet::battleResult(uint8_t kind, bool won, bool fled, bool caught) {
+void Pet::battleResult(uint8_t kind, bool won, bool fled, bool caught,
+                       int16_t foeDex, uint16_t foeLvl) {
+  lastExpGain = 0;
+  lastLvlUp = 0;
   if (isEgg() || ceremony != CER_NONE) return;
   if (kind == BATTLE_LINK) linkBattles++;
   // fork KO (ko4): huir o perder no tiene castigo (ni cansancio ni animo)
@@ -761,6 +792,11 @@ void Pet::battleResult(uint8_t kind, bool won, bool fled, bool caught) {
     joy = clamp100(joy + (kind == BATTLE_LINK ? 15 : 10));
     heartUntil = millis() + HEART_MS;
     addBond(kind == BATTLE_LINK ? 3 : 2);
+    // fork KO (ko7): EXP del rival (en tongsin, la mitad: no se farmea)
+    uint32_t gx = battleExp(foeDex, foeLvl);
+    if (kind == BATTLE_LINK) gx /= 2;
+    lastExpGain = gx;
+    lastLvlUp = addExp(gx);
     if (kind == BATTLE_WILD && won) {
       wildWins++;
       balls = balls > 97 ? 99 : balls + 2;      // fork KO: +2 pokeballs
@@ -800,8 +836,9 @@ void Pet::adoptMon(int16_t dex, uint16_t lvl, bool isShiny, uint8_t gA, uint8_t 
   prevSpeciesId = -1;
   shiny = isShiny;
   if (lvl < 1) lvl = 1;
-  if (lvl > 999) lvl = 999;
-  ageMinutes = (uint32_t)(lvl - 1) * MINUTES_PER_LEVEL;
+  if (lvl > LEVEL_MAX) lvl = LEVEL_MAX;
+  exp = expForLevel(lvl);
+  ageMinutes = 0;
   geneAtk = clampGene(gA);
   geneDef = clampGene(gD);
   geneSpe = clampGene(gS);
@@ -838,14 +875,15 @@ void Pet::exportTrade(TradePet &t) const {
 }
 
 
-bool Pet::importTrade(const TradePet &t) {
+bool Pet::importTrade(const TradePet &t, uint16_t lvl) {
   // lo que llega por radio no es de fiar: validar todo antes de tocar nada
   if (t.dex < 1 || t.dex > 151) return false;
   if (!canBattle()) return false;
   speciesId = t.dex;
   prevSpeciesId = -1;
   shiny = t.shiny != 0;
-  ageMinutes = t.ageMinutes > 999UL * MINUTES_PER_LEVEL ? 999UL * MINUTES_PER_LEVEL : t.ageMinutes;
+  ageMinutes = t.ageMinutes > 999UL * 60 ? 999UL * 60 : t.ageMinutes;
+  exp = expForLevel(lvl > LEVEL_MAX ? LEVEL_MAX : (lvl ? lvl : 1));  // fork KO (ko7)
   geneAtk = clampGene(t.geneAtk);
   geneDef = clampGene(t.geneDef);
   geneSpe = clampGene(t.geneSpe);

@@ -11,8 +11,15 @@ void Box::begin() {
   if (c > BOX_MAX) c = 0;
   if (c && prefs.getBytes("mons", mons, sizeof(BoxMon) * c) != sizeof(BoxMon) * c) c = 0;
   // nada invalido entra en juego aunque la NVS venga danada
-  for (uint8_t i = 0; i < c; i++)
-    if (mons[i].dex >= 1 && mons[i].dex <= 151) mons[n++] = mons[i];
+  bool fixed = false;
+  for (uint8_t i = 0; i < c; i++) {
+    if (mons[i].dex < 1 || mons[i].dex > 151) continue;
+    // fork KO (ko7): tope nivel 100. Los de ko6 (nivel por horas, Lv300+)
+    // vuelven a empezar en Lv5
+    if (mons[i].lvl > 100) { mons[i].lvl = 5; fixed = true; }
+    mons[n++] = mons[i];
+  }
+  if (fixed) save();
 }
 
 void Box::save() {
@@ -25,7 +32,7 @@ bool Box::add(int16_t dex, uint16_t lvl, bool shiny, bool caught, uint32_t epoch
   if (full() || dex < 1 || dex > 151) return false;
   BoxMon &m = mons[n++];
   m.dex = dex;
-  m.lvl = lvl < 1 ? 1 : (lvl > 999 ? 999 : lvl);
+  m.lvl = lvl < 1 ? 1 : (lvl > 100 ? 100 : lvl);
   m.flags = (shiny ? BOXF_SHINY : 0) | (caught ? BOXF_CAUGHT : 0);
   m.geneAtk = 90 + random(21);
   m.geneDef = 90 + random(21);

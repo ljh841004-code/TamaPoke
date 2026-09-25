@@ -32,7 +32,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko6.2"
+#define FW_VERSION "1.17-ko7"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -260,7 +260,10 @@ void setup() {
     if (seen > seed) seed = seen;
     rtcSetEpoch(seed);
     e = rtcEpoch();
-    gRtcWasLost = true;
+    // fork KO (ko7): solo si habia una hora guardada de verdad se sabe desde
+    // cuando aplicar el tiempo apagado. Con la fecha fija de siembra, el NTP
+    // aplicaba meses de "ausencia" (tope 2 semanas = Lv338 con el nivel viejo)
+    gRtcWasLost = seen > 1767225600UL;
     Serial.printf("RTC sin hora: sembrado en %u%s\n", seed,
                   seen > 1767225600UL ? " (desde la ultima hora guardada)" : "");
   }
@@ -442,7 +445,7 @@ void handleSerial() {
     }
     Serial.println("DONE");
   } else if (line.startsWith("LVL ")) {
-    pet.ageMinutes = (uint32_t)line.substring(4).toInt() * MINUTES_PER_LEVEL;
+    pet.exp = expForLevel((uint16_t)line.substring(4).toInt());  // fork KO (ko7)
     Serial.println("DONE");
   } else if (line.startsWith("TIME ")) {
     uint32_t e = (uint32_t)line.substring(5).toInt();
@@ -2036,14 +2039,17 @@ void renderCardProgress() {
   setCur(centerX(lv, 5), 86);
   printT(lv);
 
-  // barra de progreso al siguiente nivel (1 nivel = 60 min de juego)
-  uint8_t into = pet.ageMinutes % MINUTES_PER_LEVEL;
+  // barra de EXP hasta el siguiente nivel (fork KO, ko7: batallas + cuidado)
+  uint16_t L = pet.level();
+  uint32_t lo = expForLevel(L), hi = expForLevel(L + 1);
+  uint32_t into = pet.exp > lo ? pet.exp - lo : 0, span = hi > lo ? hi - lo : 1;
   int bx = 93, bw = 280, by = 158, bh = 22;
   gfx->fillRoundRect(bx, by, bw, bh, 6, UI_TRACK);
-  int fw = (bw - 4) * into / MINUTES_PER_LEVEL;
-  if (fw > 0) gfx->fillRoundRect(bx + 2, by + 2, fw, bh - 4, 5, UI_BAR_OK);
-  char nx[32];
-  snprintf(nx, sizeof(nx), T(S_NEXT_LVL_FMT), MINUTES_PER_LEVEL - into, pet.level() + 1);
+  int fw = L >= LEVEL_MAX ? bw - 4 : (int)((uint64_t)(bw - 4) * into / span);
+  if (fw > 0) gfx->fillRoundRect(bx + 2, by + 2, fw, bh - 4, 5, UI_EXP);
+  char nx[40];
+  if (L >= LEVEL_MAX) snprintf(nx, sizeof(nx), "%s", XT(X_MAX_LVL));
+  else snprintf(nx, sizeof(nx), XT(X_EXP_NEXT_FMT), (unsigned long)(span - into));
   gfx->setTextColor(UI_INK);
   setSize(2);
   setCur(centerX(nx, 2), by + 32);
@@ -2059,7 +2065,7 @@ void renderCardProgress() {
   if (d.evolvesTo == 0) {
     evo = T(S_FINAL_FORM);
   } else {
-    int needed = d.evolveLevel + pet.careMistakes;
+    int needed = pet.evolveNeed();
     if (pet.level() >= needed) {
       if (pet.lowestStat() >= 40) { evo = T(S_EVO_READY); evoCol = UI_BAR_OK; }
       else { evo = T(S_EVO_BLOCKED); evoCol = UI_BAR_BAD; }
@@ -2231,7 +2237,7 @@ void renderDexDetail() {
     drawFit(l, 234, 360, UI_INK, 2);
     if (d.evolvesTo) {
       int16_t nx = d.evolvesTo;
-      snprintf(l, sizeof(l), XT(X_EVO_FMT), dexDiscovered(nx) ? dexName(nx) : "???", d.evolveLevel);
+      snprintf(l, sizeof(l), XT(X_EVO_FMT), dexDiscovered(nx) ? dexName(nx) : "???", evoLevel(dx));
     } else {
       strncpy(l, XT(X_EVO_FINAL), sizeof(l) - 1);
       l[sizeof(l) - 1] = 0;
