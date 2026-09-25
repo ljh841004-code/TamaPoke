@@ -6,6 +6,7 @@
 #include <USBMSC.h>
 #include "esp32-hal-tinyusb.h"  // tud_disconnect / tud_connect
 #include <SD_MMC.h>
+#include "sdmmc_cmd.h"  // sdmmc_read_sectors / sdmmc_write_sectors
 #include <atomic>
 #include "sd_lock.h"
 #include "sdmon.h"
@@ -19,29 +20,37 @@ static std::atomic<bool> gActive{false}, gSeen{false}, gEjected{false};
 // espere a la lectura/escritura en curso antes de desmontar la tarjeta.
 static SemaphoreHandle_t ioMutex = nullptr;
 
+// ko5.1: la tarjeta entera por bloque (varios sectores en un solo comando SD).
+// Con readRAW() se leia de 512 en 512: cada peticion de 4 KB del PC eran 8
+// comandos, y Windows, que al abrir la unidad lee decenas de MB (FAT, huecos
+// libres), se quedaba "cargando". _card es protected en SDMMCFS: una clase
+// derivada puede nombrarlo con un puntero a miembro (C++ valido, sin trucos).
+struct SdCardPeek : fs::SDMMCFS {
+  static sdmmc_card_t *card(fs::SDMMCFS &fs) { return fs.*(&SdCardPeek::_card); }
+};
+static std::atomic<uint32_t> gReadKB{0}, gWriteKB{0}, gErrors{0};
+
 static int32_t onRead(uint32_t lba, uint32_t offset, void *buffer, uint32_t bufsize) {
   if (!gActive.load() || xSemaphoreTake(ioMutex, portMAX_DELAY) != pdTRUE) return -1;
   int32_t r = bufsize;
-  uint32_t sec = SD_MMC.sectorSize();
-  if (!gActive.load() || !sec) r = -1;
-  for (uint32_t x = 0; r >= 0 && x < bufsize / sec; x++)
-    if (!SD_MMC.readRAW((uint8_t *)buffer + x * sec, lba + x)) r = -1;
+  sdmmc_card_t *c = SdCardPeek::card(SD_MMC);
+  if (!gActive.load() || !c || bufsize % 512) r = -1;
+  else if (sdmmc_read_sectors(c, buffer, lba, bufsize / 512) != ESP_OK) r = -1;
   xSemaphoreGive(ioMutex);
-  if (r >= 0) gSeen = true;
+  if (r >= 0) { gSeen = true; gReadKB += bufsize / 1024; }
+  else gErrors++;
   return r;
 }
 
 static int32_t onWrite(uint32_t lba, uint32_t offset, uint8_t *buffer, uint32_t bufsize) {
   if (!gActive.load() || xSemaphoreTake(ioMutex, portMAX_DELAY) != pdTRUE) return -1;
   int32_t r = bufsize;
-  uint32_t sec = SD_MMC.sectorSize();
-  if (!gActive.load() || !sec || sec > 512) r = -1;
-  static uint8_t blk[512];  // copia alineada, como el ejemplo SD2USBMSC del core
-  for (uint32_t x = 0; r >= 0 && x < bufsize / sec; x++) {
-    memcpy(blk, buffer + x * sec, sec);
-    if (!SD_MMC.writeRAW(blk, lba + x)) r = -1;
-  }
+  sdmmc_card_t *c = SdCardPeek::card(SD_MMC);
+  if (!gActive.load() || !c || bufsize % 512) r = -1;
+  else if (sdmmc_write_sectors(c, buffer, lba, bufsize / 512) != ESP_OK) r = -1;
   xSemaphoreGive(ioMutex);
+  if (r >= 0) gWriteKB += bufsize / 1024;
+  else gErrors++;
   return r;
 }
 
@@ -88,6 +97,7 @@ bool usbDiskStart() {
   msc.begin(sectors, sec);
   gSeen = false;
   gEjected = false;
+  gReadKB = gWriteKB = gErrors = 0;
   gActive = true;
   msc.mediaPresent(true);
   usbReenumerate();
@@ -115,6 +125,9 @@ void usbDiskStop() {
 bool usbDiskActive() { return gActive.load(); }
 bool usbDiskHostSeen() { return gSeen.load(); }
 bool usbDiskEjected() { return gEjected.load(); }
+void usbDiskStats(uint32_t *readKB, uint32_t *writeKB, uint32_t *errors) {
+  *readKB = gReadKB.load(); *writeKB = gWriteKB.load(); *errors = gErrors.load();
+}
 
 #else  // USB CDC/JTAG por hardware: sin MSC
 
@@ -124,5 +137,6 @@ void usbDiskStop() {}
 bool usbDiskActive() { return false; }
 bool usbDiskHostSeen() { return false; }
 bool usbDiskEjected() { return false; }
+void usbDiskStats(uint32_t *readKB, uint32_t *writeKB, uint32_t *errors) { *readKB = *writeKB = *errors = 0; }
 
 #endif

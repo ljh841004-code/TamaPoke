@@ -234,7 +234,13 @@ void renderUsb() {
   drawFit(XT(X_USB_3), 198, 360, UI_INK, 2);
   bool seen = usbDiskHostSeen();
   drawFit(XT(seen ? X_USB_SEEN : X_USB_WAIT), 262, 340, seen ? UI_BAR_OK : UI_BAR_WARN, 2);
-  drawBtn(133, USB_BTN_Y, 200, 50, UI_BAR_OK, UI_WHITE, XT(X_USB_DONE));
+  // ko5.1: cuanto ha leido/escrito el PC y los errores (para diagnosticar)
+  uint32_t rk, wk, er;
+  usbDiskStats(&rk, &wk, &er);
+  char st[48];
+  snprintf(st, sizeof(st), "R %lu KB  W %lu KB  ERR %lu", (unsigned long)rk, (unsigned long)wk, (unsigned long)er);
+  drawFit(st, 292, 340, er ? UI_BAR_BAD : UI_INK, 1);
+  drawBtn(133, USB_BTN_Y + 8, 200, 50, UI_BAR_OK, UI_WHITE, XT(X_USB_DONE));
   gfx->flush();
 }
 

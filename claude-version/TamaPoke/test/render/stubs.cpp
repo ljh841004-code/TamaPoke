@@ -112,6 +112,7 @@ void usbDiskStop() {}
 bool usbDiskActive() { return false; }
 bool usbDiskHostSeen() { return true; }
 bool usbDiskEjected() { return false; }
+void usbDiskStats(uint32_t *r, uint32_t *w, uint32_t *e) { *r = 12840; *w = 4930; *e = 0; }
 
 // ---- Preferences en memoria (la misma de los tests) ----
 #include "build/prefs_impl.inc"

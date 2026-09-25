@@ -40,7 +40,7 @@ static const char *const XS[2][X_COUNT] = {
     "FINAL FORM", "FIRST SEEN %02u/%02u", "MET %u  CAUGHT %u", "RAISED BEFORE", "Not discovered yet",
     "It wants to join you!", "SD UPDATE", "SD CARD UPDATE", "No update.bin on the SD card",
     "Use the app file (0x10000)", "update.bin  %u KB", "UPDATE", "CANCEL", "Updating... do not power off",
-    "Done! Restarting...", "Update failed", "Copy update.bin to the SD card root",
+    "Done! Restarting...", "Update failed", "Put update.bin in the SD root or mons/",
     "DOUBLE TAP: EXIT",
   },
   // ---------------- KO ----------------
@@ -78,7 +78,7 @@ static const char *const XS[2][X_COUNT] = {
     "최종 진화형", "처음 발견 %02u/%02u", "만남 %u  포획 %u", "키운 적 있어요", "아직 발견하지 못했어요",
     "동료가 되고 싶어 해요!", "SD 업데이트", "SD카드로 업데이트", "SD카드에 update.bin이 없어요",
     "app 파일(0x10000용)을 넣어주세요", "update.bin  %u KB", "업데이트", "취소", "업데이트 중... 전원을 끄지 마세요",
-    "완료! 다시 시작해요", "업데이트 실패", "SD카드 맨 위 폴더에 update.bin을 넣어주세요",
+    "완료! 다시 시작해요", "업데이트 실패", "update.bin을 SD카드 맨 위나 mons 폴더에",
     "두 번 탭: 나가기",
   },
 };
