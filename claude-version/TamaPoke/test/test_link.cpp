@@ -167,3 +167,18 @@ TEST(link, paquetes_basura_se_ignoran) {
   x.core.receive(src, m, a.now);
   CHECK_EQ(x.core.state(), (LinkState)LS_SEARCH);
 }
+
+// ko6.1: en la placa el loop toma `now` ANTES de procesar el toque que llama a
+// start() con millis() (unos ms despues). El primer poll llega con un now algo
+// menor que t0: la resta sin signo daba ~49 dias y la busqueda se daba por
+// perdida al instante ("conexion perdida" nada mas abrir tongsin).
+TEST(link, poll_con_now_anterior_al_inicio_no_pierde_la_busqueda) {
+  Air a;
+  Node n;
+  a.nodes = { &n };
+  startNode(n, a, 1, LINK_BATTLE, petOf(4, 10), 7);
+  n.core.poll(a.now - 5);  // el now del loop, tomado antes del toque
+  CHECK_EQ(n.core.state(), LS_SEARCH);
+  run(a, 1000);
+  CHECK_EQ(n.core.state(), LS_SEARCH);  // sigue buscando (nadie mas en el aire)
+}

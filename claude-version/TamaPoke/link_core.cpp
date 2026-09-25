@@ -1,6 +1,12 @@
 // Maquina de estados del tongsin (ver link_core.h y link.h).
 #include "link_core.h"
 
+// ms transcurridos desde t, CON signo. ko6.1: el loop de la placa toma `now`
+// antes de procesar el toque que llama a start() con millis(), asi que el
+// primer poll puede llegar con now < t0; la resta sin signo daba ~49 dias y
+// la busqueda se daba por perdida al instante.
+static inline int32_t since(uint32_t now, uint32_t t) { return (int32_t)(now - t); }
+
 static bool sameMac(const uint8_t *a, const uint8_t *b) { return memcmp(a, b, 6) == 0; }
 static bool zeroMac(const uint8_t *a) {
   for (int i = 0; i < 6; i++)
@@ -112,19 +118,19 @@ void LinkCore::poll(uint32_t now) {
 
   // emision periodica
   if (declineLeft) {
-    if (now - lastTx >= 100) {
+    if (since(now, lastTx) >= 100) {
       send(MSG_DECLINE, now);
       declineLeft--;
     }
-  } else if (st == LS_TRADE_WAIT || (st == LS_TRADE_DONE && now - doneAt < LINK_AFTER_DONE_MS)) {
-    if (now - lastTx >= LINK_HELLO_MS) send(MSG_ACCEPT, now);
+  } else if (st == LS_TRADE_WAIT || (st == LS_TRADE_DONE && since(now, doneAt) < (int32_t)LINK_AFTER_DONE_MS)) {
+    if (since(now, lastTx) >= (int32_t)LINK_HELLO_MS) send(MSG_ACCEPT, now);
   } else if (st == LS_SEARCH || st == LS_READY) {
-    if (now - lastTx >= LINK_HELLO_MS) send(MSG_HELLO, now);
+    if (since(now, lastTx) >= (int32_t)LINK_HELLO_MS) send(MSG_HELLO, now);
   }
 
   // tiempos muertos
-  if (st == LS_SEARCH && !havePeer && now - t0 > LINK_SEARCH_MS) st = LS_LOST;
+  if (st == LS_SEARCH && !havePeer && since(now, t0) > (int32_t)LINK_SEARCH_MS) st = LS_LOST;
   if ((st == LS_SEARCH || st == LS_READY || st == LS_TRADE_WAIT) && havePeer &&
-      now - lastRx > LINK_SILENCE_MS)
+      since(now, lastRx) > (int32_t)LINK_SILENCE_MS)
     st = LS_LOST;
 }

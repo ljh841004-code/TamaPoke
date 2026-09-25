@@ -932,6 +932,7 @@ bool battleMusicActive() {
 }
 
 void extraLoop(uint32_t now) {
+  now = millis();  // ko6.1: el toque de este loop ya se proceso (puede haber arrancado algo)
   uint32_t e = netPoll(now);
   if (e) applyNetTime(e);
   linkPoll(now);

@@ -239,11 +239,16 @@ void netStopPortal() {
 
 // ---------------------------------------------------------------- sondeo
 
+// ms transcurridos desde t, CON signo. ko6.1: el portal se abria y se cerraba en
+// el mismo loop: `now` se toma antes del toque que arranca el portal con
+// millis(), la resta sin signo daba ~49 dias y saltaba el tiempo maximo.
+static inline int32_t since(uint32_t now, uint32_t t) { return (int32_t)(now - t); }
+
 uint32_t netPoll(uint32_t now) {
   if (gPortal) {
     gDns->processNextRequest();
     gWeb->handleClient();
-    if (now - gPortalT0 > NET_PORTAL_MS) netStopPortal();
+    if (since(now, gPortalT0) > (int32_t)NET_PORTAL_MS) netStopPortal();
     return 0;
   }
 
@@ -251,7 +256,7 @@ uint32_t netPoll(uint32_t now) {
   if (gAuto && netConfigured() && !linkActive() &&
       (gState == NET_IDLE || gState == NET_OK || gState == NET_FAIL_WIFI || gState == NET_FAIL_NTP)) {
     bool due = !gBootTried ? (now > NET_BOOT_DELAY_MS)
-                           : (now - gLastAutoTry > NET_AUTO_EVERY_MS);
+                           : (since(now, gLastAutoTry) > (int32_t)NET_AUTO_EVERY_MS);
     if (due) {
       gBootTried = true;
       gLastAutoTry = now;
@@ -266,7 +271,7 @@ uint32_t netPoll(uint32_t now) {
       configTime(0, 0, "pool.ntp.org", "time.google.com", "kr.pool.ntp.org");
       gState = NET_NTP;
       gT0 = now;
-    } else if (now - gT0 > NET_CONNECT_MS) {
+    } else if (since(now, gT0) > (int32_t)NET_CONNECT_MS) {
       Serial.println("NET fallo: WiFi");
       radioOff();
       gState = NET_FAIL_WIFI;
@@ -283,7 +288,7 @@ uint32_t netPoll(uint32_t now) {
       Serial.printf("NET hora ok: utc=%lu local=%lu\n", (unsigned long)utc, (unsigned long)local);
       return local;
     }
-    if (now - gT0 > NET_NTP_MS) {
+    if (since(now, gT0) > (int32_t)NET_NTP_MS) {
       Serial.println("NET fallo: NTP");
       esp_sntp_stop();
       radioOff();
