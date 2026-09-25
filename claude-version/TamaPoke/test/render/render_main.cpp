@@ -85,7 +85,6 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); openSound(); render(); shot("16_sound");
   closeAll(); openNet(); render(); shot("18_net");
   closeAll(); openUpdate(); render(); shot("19_update");
-  closeAll(); openUsb(); render(); shot("21_usb");
   updState = UPD_NONE; xScreen = XS_UPD; render(); shot("22_update_nofile");
   closeAll(); galleryOpen = true; galleryDetail = 0; galleryDirty = true; render(); shot("20_dex_grid_hint");
   galleryOpen = false;

@@ -6,7 +6,6 @@
 #include "audio.h"
 
 SemaphoreHandle_t sdMutex = nullptr;
-std::atomic<bool> sdExternal{false};
 
 bool sdReady = false;
 bool sdDirty = false;
@@ -167,14 +166,6 @@ bool sdBegin() {
   return sdMount();
 }
 
-// fork KO: tras usarla el PC como unidad USB, la FAT en cache de la placa ya no
-// vale. Se desmonta y se vuelve a montar; el llamador tiene el sdMutex.
-bool sdRemount() {
-  SD_MMC.end();
-  bool ok = sdMount();
-  sdDirty = true;  // ensureMon() recarga sprite y miniaturas
-  return ok;
-}
 
 bool SdMon::load(uint8_t dexNum, bool shiny) {
   unload();

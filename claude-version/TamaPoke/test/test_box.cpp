@@ -356,7 +356,7 @@ TEST(sdupdate, clasifica_cabeceras) {
 TEST(sdupdate, los_bin_publicados_se_clasifican_bien) {
   // los ficheros reales de la carpeta claude-version (si estan)
   std::vector<uint8_t> app = readFile("../../update.bin");
-  std::vector<uint8_t> full = readFile("../../tamapoke-ko-v1.17-ko5.1.bin");
+  std::vector<uint8_t> full = readFile("../../tamapoke-ko-v1.17-ko6.bin");
   if (app.empty() || full.empty()) return;
   size_t ha = app.size() < UPD_HEAD_LEN ? app.size() : UPD_HEAD_LEN;
   size_t hf = full.size() < UPD_HEAD_LEN ? full.size() : UPD_HEAD_LEN;

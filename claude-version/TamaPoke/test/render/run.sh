@@ -9,7 +9,7 @@ SD="${1:?carpeta de la SD (mons/...)}"
 LIBS="${ARDUINO_LIBS:-$HOME/Arduino/libraries}"
 GFX="$LIBS/GFX_Library_for_Arduino/src"
 CLI="${ARDUINO_CLI:-arduino-cli}"
-FQBN="esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB"
+FQBN="esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB"
 mkdir -p build/shots
 "$CLI" compile --preprocess --fqbn "$FQBN" ../.. > build/sketch_raw.cpp
 # el bus QSPI no existe en el PC: el lienzo solo necesita un "panel" de mentira

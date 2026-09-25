@@ -7,7 +7,6 @@
 #include "../../link.h"
 #include "../../audio.h"
 #include "../../rtcbat.h"
-#include "../../usbdisk.h"
 #include <map>
 #include <vector>
 
@@ -104,15 +103,6 @@ bool usbPresent() { return false; }
 void pwrSetup() {}
 bool pwrShortPressed() { return false; }
 uint8_t pwrPoll() { return 0; }
-
-// ---- unidad USB ----
-bool usbDiskSupported() { return true; }
-bool usbDiskStart() { return true; }
-void usbDiskStop() {}
-bool usbDiskActive() { return false; }
-bool usbDiskHostSeen() { return true; }
-bool usbDiskEjected() { return false; }
-void usbDiskStats(uint32_t *r, uint32_t *w, uint32_t *e) { *r = 12840; *w = 4930; *e = 0; }
 
 // ---- Preferences en memoria (la misma de los tests) ----
 #include "build/prefs_impl.inc"
