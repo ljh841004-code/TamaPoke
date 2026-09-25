@@ -4,6 +4,7 @@
 #if SOC_USB_OTG_SUPPORTED && !ARDUINO_USB_MODE
 #include <USB.h>
 #include <USBMSC.h>
+#include "esp32-hal-tinyusb.h"  // tud_disconnect / tud_connect
 #include <SD_MMC.h>
 #include <atomic>
 #include "sd_lock.h"
@@ -44,6 +45,17 @@ static int32_t onWrite(uint32_t lba, uint32_t offset, uint8_t *buffer, uint32_t 
   return r;
 }
 
+// ko5: el core no avisa al PC de que "se metio la tarjeta" (sin UNIT ATTENTION),
+// y Windows se quedaba con lo que leyo al enchufar: una unidad sin medio, sin
+// tamano y que no se abria. Desconectar y reconectar el USB obliga al PC a
+// volver a enumerar y a leer la capacidad de verdad. (El puerto serie se
+// corta un momento; vuelve solo.)
+static void usbReenumerate() {
+  tud_disconnect();
+  delay(400);
+  tud_connect();
+}
+
 static bool onStartStop(uint8_t power_condition, bool start, bool load_eject) {
   if (load_eject && !start && gActive.load()) gEjected = true;  // "Expulsar" en el PC
   return true;
@@ -78,6 +90,7 @@ bool usbDiskStart() {
   gEjected = false;
   gActive = true;
   msc.mediaPresent(true);
+  usbReenumerate();
   Serial.printf("USBDISK on: %lu sectors\n", (unsigned long)sectors);
   return true;
 }
@@ -86,6 +99,7 @@ void usbDiskStop() {
   if (!gActive.load()) return;
   msc.mediaPresent(false);  // el PC ve la unidad sin medio
   gActive = false;
+  usbReenumerate();          // y la unidad desaparece limpia del explorador
   xSemaphoreTake(ioMutex, portMAX_DELAY);  // espera la E/S en curso del PC
   xSemaphoreGive(ioMutex);
   xSemaphoreTake(sdMutex, portMAX_DELAY);
