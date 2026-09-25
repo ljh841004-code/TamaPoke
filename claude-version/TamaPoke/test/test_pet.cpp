@@ -453,13 +453,14 @@ TEST(train, el_saco_cansa_y_quema_peso) {
   CHECK_EQ(p.energy, (uint8_t)3);
 }
 
-TEST(play, minijuego_entrena_velocidad_y_guarda_record) {
+// fork KO (ko4): la pelota ya no entrena la velocidad (tiene su juego propio)
+TEST(play, minijuego_da_animo_y_guarda_record_sin_entrenar_velocidad) {
   Pet p;
   makePet(p, 4);
   p.joy = 10;
   p.weight = 50;
   p.playResult(20);
-  CHECK_EQ(p.trSpe, (uint8_t)4);
+  CHECK_EQ(p.trSpe, (uint8_t)0);
   CHECK_EQ(p.joy, (uint8_t)45);   // +5 +30 por marcar mas de 15
   CHECK_EQ(p.weight, (uint8_t)10);  // 50 - 20*2
   CHECK_EQ(p.gameHi, (uint16_t)20);

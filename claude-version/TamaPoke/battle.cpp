@@ -142,12 +142,28 @@ static bool doAttack(Battler &at, Battler &df, uint8_t move, uint8_t side, BRng 
   return false;
 }
 
+uint8_t catchChance(const Battler &foe) {
+  uint32_t hpPct = foe.maxHp ? (uint32_t)foe.hp * 100 / foe.maxHp : 100;
+  if (hpPct > 100) hpPct = 100;
+  int ch = 85 - (int)hpPct * 65 / 100;   // vida llena 20%, casi debilitado ~85%
+  uint8_t rar = (foe.dex >= 1 && foe.dex <= DEX_COUNT) ? DEX_TBL[foe.dex].rarity : (uint8_t)R_COMUN;
+  if (rar == R_RARO) ch = ch * 2 / 3;
+  else if (rar == R_LEGENDARIO) ch = ch / 4;
+  if (ch < 3) ch = 3;
+  if (ch > 90) ch = 90;
+  return (uint8_t)ch;
+}
+
+static bool wildOnly(BAct a) { return a == BA_RUN || a == BA_POTION || a == BA_BALL; }
+
 int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
                BEvent *ev, int maxEv, bool canRun) {
   int n = 0;
+  if (actA >= BA_COUNT) actA = BA_TACKLE;
+  if (actB >= BA_COUNT) actB = BA_TACKLE;
   if (!canRun) {
-    if (actA == BA_RUN) actA = BA_TACKLE;
-    if (actB == BA_RUN) actB = BA_TACKLE;
+    if (wildOnly(actA)) actA = BA_TACKLE;
+    if (wildOnly(actB)) actB = BA_TACKLE;
   }
   if (a.hp == 0 || b.hp == 0) return 0;
   Battler *side[2] = { &a, &b };
@@ -165,6 +181,18 @@ int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
         return n < maxEv ? n : maxEv;
       }
       push(ev, maxEv, n, s, EV_RUN_FAIL, BA_RUN, 2, false, 0, a, b);
+    } else if (act[s] == BA_POTION) {  // fork KO: cura la mitad de la vida
+      uint16_t heal = me.maxHp / 2;
+      if (heal < 1) heal = 1;
+      if (me.hp + heal > me.maxHp) heal = me.maxHp - me.hp;
+      me.hp += heal;
+      push(ev, maxEv, n, s, EV_HEAL, BA_POTION, 2, false, heal, a, b);
+    } else if (act[s] == BA_BALL) {    // fork KO: intento de captura
+      if (rng.below(100) < catchChance(op)) {
+        push(ev, maxEv, n, s, EV_CATCH, BA_BALL, 2, false, 0, a, b);
+        return n < maxEv ? n : maxEv;
+      }
+      push(ev, maxEv, n, s, EV_BREAK, BA_BALL, 2, false, 0, a, b);
     } else if (act[s] == BA_GUARD) {
       me.guard = true;
       uint16_t heal = me.maxHp / 10;

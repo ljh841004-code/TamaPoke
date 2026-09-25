@@ -4,6 +4,8 @@
 #include "battle.h"
 #include <string.h>
 
+static uint8_t clampGene(uint8_t g) { return g < 90 ? 90 : (g > 110 ? 110 : g); }
+
 void Pet::begin() {
   prefs.begin("tamapoke", false);
   if (!prefs.getBool("init", false)) {
@@ -97,9 +99,11 @@ void Pet::syncClock(uint32_t nowEpoch) {
 }
 
 void Pet::update(uint32_t nowMs) {
-  // fin de ceremonia: la criatura se va y queda un huevo nuevo
+  // fin de ceremonia: la criatura se va y queda un huevo nuevo. fork KO (ko4):
+  // tras una despedida (ciclo completo) el siguiente sale de la caja si hay
   if (ceremony != CER_NONE && !timeLeft(ceremonyUntil)) {
-    newEgg();
+    bool fromBox = ceremony == CER_FAREWELL && nextPetHook && nextPetHook(*this);
+    if (!fromBox) newEgg();
     return;
   }
   while (nowMs - lastTick >= PET_TICK_MS) {
@@ -134,7 +138,7 @@ void Pet::tick() {
     }
     if (ageMinutes % 3 == 0) hygiene = dropTo(hygiene, 1, 45);
     checkMedals();  // aun puede cruzar un nivel por edad mientras duerme
-    if (++ticksSinceSave >= 5) pendingSave = true;
+    pendingSave = true;  // fork KO (ko4): se guarda cada minuto
     return;
   }
 
@@ -188,15 +192,32 @@ void Pet::tick() {
   // ciclo completo (forma final + 7 dias): la despedida NO salta sola; queda
   // lista (canFarewellNow) y la dispara el usuario con el boton, para que la vea
 
-  // autoguardado periodico: NO escribir a flash aqui (corre dentro del loop,
-  // mientras se anima); solo marcar y dejar que el loop lo vuelque al atenuar
-  if (++ticksSinceSave >= 5) pendingSave = true;
+  // autoguardado: NO escribir a flash aqui (corre dentro del loop); solo
+  // marcar. fork KO (ko4): cada minuto, y el loop lo vuelca en el acto
+  pendingSave = true;
 }
 
-// vuelca el guardado periodico pendiente (lo llama el loop en un momento sin
-// animacion para que el paron de la escritura a flash no se vea)
+// vuelca el guardado periodico pendiente. fork KO (ko4): cada minuto, solo las
+// claves que cambia el paso del tiempo (~12 de las ~50): el guardado completo ya
+// lo hace cada accion. Peor caso de desgaste, suponiendo que la NVS reescribiera
+// todas: ~17k entradas/dia en 5 paginas de 126 -> ~27 borrados/pagina/dia, unos
+// 10 anos para los 100k ciclos de la flash.
 void Pet::flushSave() {
-  if (pendingSave) save();
+  if (!pendingSave) return;
+  pendingSave = false;
+  ticksSinceSave = 0;
+  prefs.putUChar("full", fullness);
+  prefs.putUChar("joy", joy);
+  prefs.putUChar("ene", energy);
+  prefs.putUChar("hyg", hygiene);
+  prefs.putUChar("poop", poops);
+  prefs.putUChar("wgt", weight);
+  prefs.putUChar("tdef", trDef);
+  prefs.putUInt("age", ageMinutes);
+  prefs.putUChar("mist", careMistakes);
+  prefs.putBool("sleep", sleeping);
+  prefs.putUChar("bond", bond);
+  if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
 }
 
 // quedan miembros sin registrar en la linea evolutiva de esta base?
@@ -471,8 +492,8 @@ void Pet::feedCandy() {
 
 void Pet::playResult(uint8_t score) {
   if (ceremony != CER_NONE || isEgg()) return;
-  uint8_t v = trSpe + score / 5;  // jugar entrena la velocidad
-  trSpe = v > 100 ? 100 : v;
+  // fork KO (ko4): la velocidad ya se entrena con su juego propio (trainSpeed);
+  // la pelota queda como juego de animo
   joy = clamp100(joy + 5 + (score > 15 ? 30 : score * 2));
   energy = dropTo(energy, 10 + score / 2, 5);
   fullness = dropTo(fullness, 5, 5);
@@ -502,6 +523,48 @@ uint8_t Pet::trainStrength(uint16_t hits) {
   joy = clamp100(joy + 6);
   if (hits >= 20) heartUntil = millis() + HEART_MS;
   if (hits > strHi) strHi = hits;   // record de golpes
+  addBond(2);
+  registerCare();
+  save();
+  return gain;
+}
+
+// fork KO (ko4): comun a los entrenamientos: sube la stat con tope por sesion
+// y cansa igual que el saco. Devuelve lo que de verdad subio.
+static uint8_t trainGain(uint8_t &tr, uint16_t raw) {
+  uint8_t gain = raw > 18 ? 18 : (uint8_t)raw;
+  uint8_t antes = tr;
+  uint16_t v = (uint16_t)tr + gain;
+  tr = v > 100 ? 100 : (uint8_t)v;
+  return tr - antes;
+}
+
+uint8_t Pet::trainDefense(uint16_t blocked) {
+  if (ceremony != CER_NONE || isEgg()) return 0;
+  uint8_t gain = trainGain(trDef, blocked / 2);  // ~2 pokeballs paradas = 1 punto
+  energy = dropTo(energy, 12, 5);
+  fullness = dropTo(fullness, 5, 5);
+  int burn = (int)weight - blocked / 2;
+  weight = burn > 0 ? burn : 0;
+  joy = clamp100(joy + 6);
+  if (blocked >= 15) heartUntil = millis() + HEART_MS;
+  if (blocked > defHi) defHi = blocked;
+  addBond(2);
+  registerCare();
+  save();
+  return gain;
+}
+
+uint8_t Pet::trainSpeed(uint16_t hits) {
+  if (ceremony != CER_NONE || isEgg()) return 0;
+  uint8_t gain = trainGain(trSpe, hits);  // 1 acierto = 1 punto (15 rondas)
+  energy = dropTo(energy, 12, 5);
+  fullness = dropTo(fullness, 5, 5);
+  int burn = (int)weight - hits;
+  weight = burn > 0 ? burn : 0;
+  joy = clamp100(joy + 6);
+  if (hits >= 10) heartUntil = millis() + HEART_MS;
+  if (hits > speHi) speHi = hits;
   addBond(2);
   registerCare();
   save();
@@ -601,6 +664,10 @@ void Pet::save() {
   prefs.putUShort("lwin", linkWins);
   prefs.putUShort("lbat", linkBattles);
   prefs.putUShort("trd", trades);
+  prefs.putUChar("balls", balls);
+  prefs.putUChar("potn", potions);
+  prefs.putUShort("dhi", defHi);
+  prefs.putUShort("vhi", speHi);
 }
 
 void Pet::load() {
@@ -657,6 +724,10 @@ void Pet::load() {
   linkWins = prefs.getUShort("lwin", 0);
   linkBattles = prefs.getUShort("lbat", 0);
   trades = prefs.getUShort("trd", 0);
+  balls = prefs.getUChar("balls", 5);   // partidas anteriores a ko4: kit inicial
+  potions = prefs.getUChar("potn", 2);
+  defHi = prefs.getUShort("dhi", 0);
+  speHi = prefs.getUShort("vhi", 0);
   // siembra: la mascota actual cuenta como criada (guardados antiguos)
   if (speciesId >= 1) registerSpecies(speciesId);
 }
@@ -670,17 +741,18 @@ uint16_t Pet::hpStat() const {
 
 static uint8_t addCap(uint8_t v, uint8_t d) { return (v + d > 100) ? 100 : v + d; }
 
-void Pet::battleResult(uint8_t kind, bool won, bool fled) {
+void Pet::battleResult(uint8_t kind, bool won, bool fled, bool caught) {
   if (isEgg() || ceremony != CER_NONE) return;
-  // pelear cansa y da hambre, se gane o se pierda
-  energy = dropTo(energy, kind == BATTLE_WILD ? 8 : 6, 0);
-  fullness = dropTo(fullness, 4, 0);
   if (kind == BATTLE_LINK) linkBattles++;
-  if (fled) {
+  // fork KO (ko4): huir o perder no tiene castigo (ni cansancio ni animo)
+  if (fled || (!won && !caught && kind == BATTLE_WILD)) {
     save();
     return;
   }
-  if (won) {
+  // pelear cansa y da hambre
+  energy = dropTo(energy, kind == BATTLE_WILD ? 8 : 6, 0);
+  fullness = dropTo(fullness, 4, 0);
+  if (won || caught) {
     // la batalla entrena las tres stats un poco (el saco y el minijuego siguen
     // siendo la forma rapida de subir FUE y VEL)
     trAtk = addCap(trAtk, 2);
@@ -689,8 +761,13 @@ void Pet::battleResult(uint8_t kind, bool won, bool fled) {
     joy = clamp100(joy + (kind == BATTLE_LINK ? 15 : 10));
     heartUntil = millis() + HEART_MS;
     addBond(kind == BATTLE_LINK ? 3 : 2);
-    if (kind == BATTLE_WILD) wildWins++;
-    else linkWins++;
+    if (kind == BATTLE_WILD && won) {
+      wildWins++;
+      balls = balls > 97 ? 99 : balls + 2;      // fork KO: +2 pokeballs
+      potions = potions > 97 ? 99 : potions + 2;  // y +2 pociones
+    } else if (kind == BATTLE_LINK) {
+      linkWins++;
+    }
   } else {
     // perder contra un amigo tambien divierte; contra un salvaje, desanima
     if (kind == BATTLE_LINK) joy = clamp100(joy + 5);
@@ -698,6 +775,53 @@ void Pet::battleResult(uint8_t kind, bool won, bool fled) {
     addBond(1);
   }
   registerCare();
+  save();
+}
+
+bool Pet::useBall() {
+  if (!balls) return false;
+  balls--;
+  save();
+  return true;
+}
+
+bool Pet::usePotion() {
+  if (!potions) return false;
+  potions--;
+  save();
+  return true;
+}
+
+void Pet::adoptMon(int16_t dex, uint16_t lvl, bool isShiny, uint8_t gA, uint8_t gD, uint8_t gS) {
+  if (dex < 1 || dex > 151) { newEgg(); return; }
+  ceremony = CER_NONE;
+  neglectTicks = 0;
+  speciesId = dex;
+  prevSpeciesId = -1;
+  shiny = isShiny;
+  if (lvl < 1) lvl = 1;
+  if (lvl > 999) lvl = 999;
+  ageMinutes = (uint32_t)(lvl - 1) * MINUTES_PER_LEVEL;
+  geneAtk = clampGene(gA);
+  geneDef = clampGene(gD);
+  geneSpe = clampGene(gS);
+  trAtk = trDef = trSpe = 0;
+  fullness = 80; joy = 80; energy = 80; hygiene = 100;
+  poops = 0; weight = 0;
+  careMistakes = 0; mistakeCooldown = 0;
+  sleeping = false;
+  berryKnown = false;
+  bond = 0; bondToday = 0;
+  medals = 0; newMedal = 0;
+  nick[0] = 0;
+  evoDeclinedLv = 0; farDeclinedAge = 0;
+  goodTicks = 0;
+  eggTaps = 0;
+  eatUntil = 0;
+  heartUntil = millis() + HEART_MS;
+  registerSpecies(speciesId);  // criado = registrado en la pokedex
+  checkMedals();
+  sfxPlay(SFX_HATCH);
   save();
 }
 
@@ -713,7 +837,6 @@ void Pet::exportTrade(TradePet &t) const {
   t.nick[sizeof(t.nick) - 1] = 0;
 }
 
-static uint8_t clampGene(uint8_t g) { return g < 90 ? 90 : (g > 110 ? 110 : g); }
 
 bool Pet::importTrade(const TradePet &t) {
   // lo que llega por radio no es de fiar: validar todo antes de tocar nada

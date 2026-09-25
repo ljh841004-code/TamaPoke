@@ -18,3 +18,6 @@ bool usbPresent();
 // la pulsacion corta la captura el firmware (pantalla on/off)
 void pwrSetup();
 bool pwrShortPressed();  // sondear en el loop
+// fork KO (ko4): bit 0 = pulsacion corta, bit 1 = pulsacion larga (salta ~1,5 s
+// antes del apagado por hardware de los 4 s: da tiempo a guardar)
+uint8_t pwrPoll();

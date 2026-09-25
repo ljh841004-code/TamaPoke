@@ -296,6 +296,17 @@ class TestBuffersDeTexto(unittest.TestCase):
         self.assertGreater(revisadas, 10, 'el patron de snprintf ya no encuentra las llamadas')
 
 
+def fuera_de_ks(texto):
+    """Silabas hangul que NO estan en KS X 1001 (ni en korean2 ni en hangul_ks.h).
+
+    Ojo: el codec euc-kr de Python codifica TODAS las silabas; las que no son de
+    KS X 1001 salen como secuencias de 8 bytes en vez de 2. Por eso no basta con
+    que encode() no falle.
+    """
+    return sorted({ch for ch in re.findall('[\uac00-\ud7a3]', texto)
+                   if len(ch.encode('euc-kr')) != 2})
+
+
 class TestCadenasDelFork(unittest.TestCase):
     """i18n_ext.cpp (fork KO): todo el hangul tiene que estar en la fuente.
 
@@ -313,7 +324,16 @@ class TestCadenasDelFork(unittest.TestCase):
         self.assertGreater(len(hangul), 40)
         for t in hangul:
             with self.subTest(cadena=t):
-                t.encode('euc-kr')  # lanza UnicodeEncodeError si falta una silaba
+                self.assertEqual(fuera_de_ks(t), [], t)
+
+    def test_todo_el_coreano_del_firmware_tiene_glifo_noto(self):
+        # ko4: hangul_ks.h solo trae KS X 1001. Una silaba de fuera no se pinta.
+        for nombre in ('i18n.cpp', 'i18n_ext.cpp', 'dex.h', 'TamaPoke.ino', 'ui_extra.ino', 'train.ino'):
+            ruta = os.path.join(ROOT, nombre)
+            if not os.path.exists(ruta):
+                continue
+            with open(ruta, encoding='utf-8') as fh:
+                self.assertEqual(fuera_de_ks(fh.read()), [], nombre)
 
     def test_ino_sin_literales_no_ascii_en_modulos_nuevos(self):
         for nombre in ('link.cpp', 'battle.cpp'):  # net.cpp lleva la web del portal (UTF-8 para el movil)

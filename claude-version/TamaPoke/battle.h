@@ -8,7 +8,9 @@
 #include <stdint.h>
 
 // acciones de un turno
-enum BAct : uint8_t { BA_TACKLE = 0, BA_TYPE, BA_GUARD, BA_RUN, BA_COUNT };
+// fork KO (ko4): BA_POTION y BA_BALL solo en batallas salvajes (canRun); en
+// tongsin se tratan como placaje, igual que huir
+enum BAct : uint8_t { BA_TACKLE = 0, BA_TYPE, BA_GUARD, BA_RUN, BA_POTION, BA_BALL, BA_COUNT };
 
 // eventos que la UI reproduce en orden
 enum BEvKind : uint8_t {
@@ -18,6 +20,9 @@ enum BEvKind : uint8_t {
   EV_RUN_OK,     // huye con exito
   EV_RUN_FAIL,   // no pudo huir
   EV_FAINT,      // se debilita
+  EV_HEAL,       // bebe una pocion: dmg = vida recuperada
+  EV_CATCH,      // la pokeball atrapa al rival (fin de la batalla)
+  EV_BREAK,      // el rival se escapa de la pokeball
 };
 
 struct Battler {
@@ -70,6 +75,10 @@ BAct battleAi(const Battler &self, const Battler &foe, BRng &rng, uint8_t whim =
 // canRun: solo en batallas salvajes (en tongsin BA_RUN se trata como placaje)
 int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
                BEvent *ev, int maxEv, bool canRun);
+
+// fork KO (ko4): probabilidad (%) de capturar al rival con una pokeball. Sube
+// cuanta menos vida le quede; los raros cuestan mas y los legendarios mucho mas.
+uint8_t catchChance(const Battler &foe);
 
 // batalla completa entre dos IA (tongsin). Devuelve ganador: 0 = a, 1 = b.
 // ev puede ser nullptr (solo el resultado); nEv recibe cuantos eventos se escribieron.

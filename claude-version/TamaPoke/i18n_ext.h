@@ -28,10 +28,27 @@ enum XId : uint8_t {
   // unidad USB (SD en el PC)
   X_USB_BTN, X_USB_TITLE, X_USB_1, X_USB_2, X_USB_3, X_USB_WAIT, X_USB_SEEN,
   X_USB_DONE, X_USB_FAIL, X_USB_NA,
+  // ko4: objetos y captura
+  X_POTION_FMT, X_BALL_FMT, X_NO_POTION, X_NO_BALL, X_THREW, X_CAUGHT, X_BROKE, X_HEALED,
+  X_TO_BOX, X_BOX_FULL, X_REWARD_ITEMS, X_GOTCHA,
+  // ko4: caja
+  X_BOX_TITLE_FMT, X_BOX_BTN, X_BOX_EMPTY, X_BOX_HINT, X_BOX_NEXT, X_RELEASE, X_CLOSE,
+  X_CAUGHT_TAG, X_WON_TAG, X_FROM_BOX, X_ITEMS_FMT, X_RELEASE_Q,
+  // ko4: entrenamiento
+  X_TRAIN_BTN, X_TRAIN_TITLE, X_TR_ATK, X_TR_DEF, X_TR_SPE, X_TR_PLAY, X_BEST_FMT,
+  X_TR_DEF_HINT, X_TR_SPE_HINT, X_BLOCKED_FMT, X_SPE_RESULT_FMT, X_DEF_GAIN_FMT, X_SPE_GAIN_FMT,
+  X_NICE, X_MISS,
+  // ko4: sonido
+  X_SOUND_TITLE, X_VOL_BGM, X_VOL_CRY, X_VOL_SYS, X_SOUND_ON, X_SOUND_OFF, X_VOL_DONE,
+  // ko4: pokedex
+  X_RARITY_EVO, X_RARITY_COMMON, X_RARITY_RARE, X_RARITY_LEGEND, X_BASE_FMT, X_EVO_FMT,
+  X_EVO_FINAL, X_FIRST_FMT, X_SEEN_FMT, X_RAISED, X_UNKNOWN,
   X_COUNT
 };
 
 const char *XT(XId id);
+// nombre del tipo PT_* (fork KO, ko4: ficha de la pokedex)
+const char *typeName(uint8_t type);
 // nombre del movimiento: BA_TACKLE / BA_TYPE (este segun el tipo PT_*)
 const char *moveName(uint8_t move, uint8_t type);
 // rellena out con la plantilla id, sustituyendo {1}/{2} y las particulas

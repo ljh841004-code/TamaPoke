@@ -605,7 +605,7 @@ ACCENT = {"TYPE_FUEGO": '#e8503a', "TYPE_PLANTA": '#3c8a4c', "TYPE_AGUA": '#4f93
 
 UI_COLORS = {
     'UI_BG_DAY': '#f2efe1', 'UI_BG_NIGHT': '#141828',
-    'UI_INK': '#2a2a36', 'UI_INK_NIGHT': '#d8dcf0',
+    'UI_INK': '#000000', 'UI_INK_NIGHT': '#d8dcf0',
     'UI_TRACK': '#d8d2bd',
     'UI_BAR_OK': '#58b868', 'UI_BAR_WARN': '#e8a23c', 'UI_BAR_BAD': '#e8503a',
     'UI_WHITE': '#ffffff',

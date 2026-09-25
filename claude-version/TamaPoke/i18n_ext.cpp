@@ -26,6 +26,18 @@ static const char *const XS[2][X_COUNT] = {
     "USB DRIVE (SD)", "USB DRIVE", "SD card is open on the PC", "Put sounds in the mons folder",
     "When done: eject on the PC", "Waiting for PC...", "PC connected",
     "DONE", "Can't open SD card", "No USB drive in this build",
+    "POTION %u", "BALL %u", "No potions left", "No Poke Balls left", "You threw a Poke Ball!",
+    "Gotcha! {1} was caught!", "Oh no! {1} broke free!", "{1} recovered HP!",
+    "Sent to the box", "The box is full", "BALLS +2  POTIONS +2", "GOTCHA!",
+    "BOX %u/%u", "BOX", "Empty", "Win or catch in battle", "Next partner comes from here",
+    "RELEASE", "CLOSE", "CAUGHT", "WON", "{1} came out of the box!", "BALLS %u  POTIONS %u",
+    "Release it?",
+    "TRAIN", "TRAINING", "ATTACK: RAPID TAPS", "DEFENSE: FALLING BALLS", "SPEED: QUICK TAP",
+    "BALL GAME (JOY)", "BEST %u", "Tap the falling balls!", "Tap the ball when it shows!",
+    "BLOCKED %u", "HITS %u/15", "DEF +%u", "SPD +%u", "NICE!", "MISSED",
+    "SOUND", "MUSIC", "CRIES", "SYSTEM", "SOUND ON", "SOUND OFF", "DONE",
+    "EVOLVED", "COMMON", "RARE", "LEGEND", "HP %u  AT %u  DF %u  SP %u", "EVOLVES: %s Lv%u",
+    "FINAL FORM", "FIRST SEEN %02u/%02u", "MET %u  CAUGHT %u", "RAISED BEFORE", "Not discovered yet",
   },
   // ---------------- KO ----------------
   {
@@ -48,6 +60,18 @@ static const char *const XS[2][X_COUNT] = {
     "USB 드라이브 (SD카드)", "USB 드라이브", "PC에서 SD카드가 열렸어요", "음원은 mons 폴더에 넣으세요",
     "끝나면 PC에서 꺼내기", "PC 연결 기다리는 중...", "PC 연결됨",
     "끝내기", "SD카드를 열 수 없어요", "이 펌웨어는 USB 드라이브 미지원",
+    "물약 %u", "볼 %u", "물약이 없어요", "포켓볼이 없어요", "포켓볼을 던졌다!",
+    "신난다! {1}{을} 잡았다!", "앗! {1}{이} 빠져나왔다!", "{1}의 체력이 회복됐다!",
+    "보관함으로 보냈어요", "보관함이 가득 찼어요", "포켓볼 +2  물약 +2", "잡았다!",
+    "보관함 %u/%u", "보관함", "비어 있어요", "배틀에서 이기거나 잡으면 들어와요", "다음 육성 포켓몬은 여기서 나와요",
+    "놓아주기", "닫기", "포획", "승리", "보관함에서 {1}{이} 나왔다!", "포켓볼 %u   물약 %u",
+    "놓아줄까요?",
+    "훈련", "훈련 선택", "공격: 빠르게 연타", "방어: 떨어지는 볼 막기", "속도: 나타난 볼 터치",
+    "공놀이 (기분)", "최고 %u", "떨어지는 볼을 터치!", "볼이 나타나면 터치!",
+    "막은 볼 %u개", "성공 %u/15", "방어 +%u", "속도 +%u", "좋아!", "놓쳤다",
+    "소리 설정", "배경음", "포켓몬 목소리", "시스템음", "소리 켜짐", "소리 꺼짐", "완료",
+    "진화형", "흔함", "희귀", "전설", "HP %u  공 %u  방 %u  속 %u", "진화: %s (Lv.%u)",
+    "최종 진화형", "처음 발견 %02u/%02u", "만남 %u  포획 %u", "키운 적 있어요", "아직 발견하지 못했어요",
   },
 };
 
@@ -60,7 +84,21 @@ static const char *const MOVES_KO[PT_COUNT] = {
   "독침", "진흙뿌리기", "염동력", "바늘미사일", "돌떨구기", "핥기", "용의분노",
 };
 
+static const char *const TYPES_EN[PT_COUNT] = {
+  "NORMAL", "FIRE", "WATER", "GRASS", "ELECTRIC", "ICE", "FIGHTING",
+  "POISON", "GROUND", "PSYCHIC", "BUG", "ROCK", "GHOST", "DRAGON",
+};
+static const char *const TYPES_KO[PT_COUNT] = {
+  "노말", "불꽃", "물", "풀", "전기", "얼음", "격투",
+  "독", "땅", "에스퍼", "벌레", "바위", "고스트", "드래곤",
+};
+
 static inline bool isKo() { return gLang == LANG_KO; }
+
+const char *typeName(uint8_t type) {
+  if (type >= PT_COUNT) type = PT_NORMAL;
+  return isKo() ? TYPES_KO[type] : TYPES_EN[type];
+}
 
 const char *XT(XId id) {
   if (id >= X_COUNT) return "";

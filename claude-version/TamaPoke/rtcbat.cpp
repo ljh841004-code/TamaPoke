@@ -84,8 +84,16 @@ void pwrSetup() {
   if (!pmuOk) return;
   pmu.setPowerKeyPressOffTime(XPOWERS_POWEROFF_4S);
   pmu.disableIRQ(XPOWERS_AXP2101_ALL_IRQ);
-  pmu.enableIRQ(XPOWERS_AXP2101_PKEY_SHORT_IRQ);
+  pmu.enableIRQ(XPOWERS_AXP2101_PKEY_SHORT_IRQ | XPOWERS_AXP2101_PKEY_LONG_IRQ);
   pmu.clearIrqStatus();
+}
+
+uint8_t pwrPoll() {
+  if (!pmuOk) return 0;
+  pmu.getIrqStatus();
+  uint8_t r = (pmu.isPekeyShortPressIrq() ? 1 : 0) | (pmu.isPekeyLongPressIrq() ? 2 : 0);
+  if (r) pmu.clearIrqStatus();
+  return r;
 }
 
 bool pwrShortPressed() {

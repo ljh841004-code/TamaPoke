@@ -98,6 +98,11 @@ public:
   uint16_t linkWins = 0;   // victorias en tongsin (ESP-NOW)
   uint16_t linkBattles = 0;
   uint16_t trades = 0;     // intercambios completados
+  // fork KO (ko4): objetos de batalla y records de los entrenamientos nuevos
+  uint8_t balls = 5;       // pokeballs (se ganan 2 por victoria salvaje)
+  uint8_t potions = 2;     // pociones: curan la mitad de la vida en batalla
+  uint16_t defHi = 0;      // record del entrenamiento de defensa (pokeballs paradas)
+  uint16_t speHi = 0;      // record del entrenamiento de velocidad (reflejos)
 
   void begin();                 // carga estado de NVS (o crea el primer huevo)
   void update(uint32_t nowMs);  // llamar en cada loop()
@@ -109,8 +114,10 @@ public:
   bool lovesBerry(uint8_t color) const {
     return !isEgg() && (speciesId % 3) == color;  // gusto oculto por especie
   }
-  void playResult(uint8_t score);  // recompensa del minijuego (entrena VEL)
+  void playResult(uint8_t score);  // recompensa del juego de pelota (solo animo desde ko4)
   uint8_t trainStrength(uint16_t hits);  // saco de entrenamiento (entrena FUE)
+  uint8_t trainDefense(uint16_t blocked);  // fork KO: pokeballs que caen (entrena DEF)
+  uint8_t trainSpeed(uint16_t hits);       // fork KO: reflejos izq/dcha (entrena VEL)
 
   // stats de combate: base real de gen 1 x genes + nivel + entrenamiento
   uint16_t atkStat() const;
@@ -124,7 +131,15 @@ public:
     return !isEgg() && !sleeping && ceremony == CER_NONE && !evolving() && !starterPick;
   }
   bool tooTiredToBattle() const { return energy < 15; }
-  void battleResult(uint8_t kind, bool won, bool fled);  // aplica premio/coste
+  // aplica premio/coste. caught: capturado con pokeball (premio de victoria sin
+  // objetos). Perder o huir no cuesta nada (fork KO, ko4).
+  void battleResult(uint8_t kind, bool won, bool fled, bool caught = false);
+  bool useBall();    // gasta una pokeball (false si no quedan)
+  bool usePotion();  // gasta una pocion
+  // fork KO (ko4): el siguiente a criar sale de la caja (tras la despedida)
+  void adoptMon(int16_t dex, uint16_t lvl, bool shiny, uint8_t gA, uint8_t gD, uint8_t gS);
+  // lo llama update() al acabar una DESPEDIDA; si devuelve false, huevo nuevo
+  bool (*nextPetHook)(Pet &) = nullptr;
   void exportTrade(TradePet &t) const;
   bool importTrade(const TradePet &t);  // recibe el Pokemon del otro (evoluciona si toca)
   static bool tradeEvolves(int16_t dex) {  // Kadabra, Machoke, Graveler, Haunter
@@ -196,10 +211,11 @@ public:
   bool showMilestone() const { return timeLeft(milestoneUntil) > 0; }
   int careBonus() const;  // mejora del huevo por racha + vinculo
 
-  // guardado periodico diferido: tick() marca pendiente y el loop lo vuelca
-  // cuando la pantalla esta atenuada/apagada (la escritura a flash congela
-  // ~1s ambos cores: asi no se ve ni corta el tactil)
+  // guardado periodico: tick() lo marca cada minuto de juego y el loop lo
+  // vuelca en el acto (fork KO, ko4: antes esperaba a que la pantalla se
+  // atenuara y un corte de luz perdia hasta varios minutos)
   bool savePending() const { return pendingSave; }
+  void saveNow() { save(); }  // boton de encendido, apagado, etc.
   // ultima hora real persistida; sirve para resembrar un RTC que perdio la hora
   uint32_t savedEpoch() { return prefs.getUInt("seen", 0); }
   void flushSave();

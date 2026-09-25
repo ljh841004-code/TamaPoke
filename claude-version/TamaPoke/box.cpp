@@ -1,0 +1,88 @@
+#include "box.h"
+#include <string.h>
+
+// ---------------------------------------------------------------- caja
+
+void Box::begin() {
+  memset(mons, 0, sizeof(mons));
+  n = 0;
+  prefs.begin("tpbox", false);
+  uint8_t c = prefs.getUChar("n", 0);
+  if (c > BOX_MAX) c = 0;
+  if (c && prefs.getBytes("mons", mons, sizeof(BoxMon) * c) != sizeof(BoxMon) * c) c = 0;
+  // nada invalido entra en juego aunque la NVS venga danada
+  for (uint8_t i = 0; i < c; i++)
+    if (mons[i].dex >= 1 && mons[i].dex <= 151) mons[n++] = mons[i];
+}
+
+void Box::save() {
+  prefs.putUChar("n", n);
+  if (n) prefs.putBytes("mons", mons, sizeof(BoxMon) * n);
+  else prefs.remove("mons");
+}
+
+bool Box::add(int16_t dex, uint16_t lvl, bool shiny, bool caught, uint32_t epoch) {
+  if (full() || dex < 1 || dex > 151) return false;
+  BoxMon &m = mons[n++];
+  m.dex = dex;
+  m.lvl = lvl < 1 ? 1 : (lvl > 999 ? 999 : lvl);
+  m.flags = (shiny ? BOXF_SHINY : 0) | (caught ? BOXF_CAUGHT : 0);
+  m.geneAtk = 90 + random(21);
+  m.geneDef = 90 + random(21);
+  m.geneSpe = 90 + random(21);
+  m.epoch = epoch;
+  save();
+  return true;
+}
+
+bool Box::take(uint8_t i, BoxMon &out) {
+  if (i >= n) return false;
+  out = mons[i];
+  return release(i);
+}
+
+bool Box::release(uint8_t i) {
+  if (i >= n) return false;
+  memmove(&mons[i], &mons[i + 1], sizeof(BoxMon) * (n - i - 1));
+  n--;
+  save();
+  return true;
+}
+
+int Box::pickRandom() const { return n ? (int)random(n) : -1; }
+
+// ---------------------------------------------------------------- pokedex
+
+void DexLog::begin() {
+  memset(first, 0, sizeof(first));
+  memset(seenN, 0, sizeof(seenN));
+  memset(caughtN, 0, sizeof(caughtN));
+  prefs.begin("tpdex", false);
+  if (prefs.getBytes("first", first, sizeof(first)) != sizeof(first)) memset(first, 0, sizeof(first));
+  if (prefs.getBytes("seen", seenN, sizeof(seenN)) != sizeof(seenN)) memset(seenN, 0, sizeof(seenN));
+  if (prefs.getBytes("caught", caughtN, sizeof(caughtN)) != sizeof(caughtN)) memset(caughtN, 0, sizeof(caughtN));
+}
+
+void DexLog::save() {
+  prefs.putBytes("first", first, sizeof(first));
+  prefs.putBytes("seen", seenN, sizeof(seenN));
+  prefs.putBytes("caught", caughtN, sizeof(caughtN));
+}
+
+void DexLog::mark(int16_t dex, uint32_t epoch) {
+  if (!first[dex - 1] && epoch) first[dex - 1] = epoch;
+  if (seenN[dex - 1] < 65535) seenN[dex - 1]++;
+}
+
+void DexLog::seen(int16_t dex, uint32_t epoch) {
+  if (!ok(dex)) return;
+  mark(dex, epoch);
+  save();
+}
+
+void DexLog::caught(int16_t dex, uint32_t epoch) {
+  if (!ok(dex)) return;
+  if (!first[dex - 1] && epoch) first[dex - 1] = epoch;
+  if (caughtN[dex - 1] < 65535) caughtN[dex - 1]++;
+  save();
+}

@@ -8,7 +8,7 @@
 // Se engancha al sketch principal solo por funciones (extraRender, extraTap,
 // extraSwipe, extraLoop...), para tocar lo minimo el fichero original.
 
-enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_USB };
+enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_USB, XS_BOX, XS_VOL };
 uint8_t xScreen = XS_NONE;
 
 // aviso breve en la pantalla principal
@@ -167,7 +167,7 @@ void renderNet() {
   drawBtn(NET_BTN_X, NET_AUTO_Y, NET_BTN_W, NET_BTN_H, netAuto() ? UI_WHITE : UI_TRACK, UI_INK,
           netAuto() ? XT(X_AUTO_ON) : XT(X_AUTO_OFF));
   drawBtn(NET_USB_X, NET_USB_Y, NET_USB_W, NET_USB_H, 0x8C1F, UI_WHITE, XT(X_USB_BTN));
-  drawFit(XT(X_TAP_CLOSE), 420, 220, UI_TRACK, 2);
+  drawFit(XT(X_TAP_CLOSE), 420, 220, UI_INK, 2);
   gfx->flush();
 }
 
@@ -261,6 +261,9 @@ char bvMeName[32], bvFoeName[40];
 bool bvFoeShiny = false;
 char bvL1[80] = "", bvL2[64] = "";
 bool bvMeFainted = false, bvFoeFainted = false;  // ya se reprodujo su desmayo
+bool bvFoeCaught = false;  // fork KO (ko4): el rival ya esta dentro de la pokeball
+bool bCaught = false;      // la batalla acabo en captura
+int8_t bBoxMsg = -1;       // XId del aviso de la caja en el resultado (-1 = nada)
 PmdMon foePmd;
 int16_t foePmdDex = 0;       // que especie tiene cargada foePmd
 bool foePmdShiny = false;
@@ -311,11 +314,23 @@ void evMessages(const BEvent &e) {
     case EV_RUN_OK: strncpy(bvL1, XT(X_FLED), sizeof(bvL1) - 1); break;
     case EV_RUN_FAIL: strncpy(bvL1, XT(X_CANT_RUN), sizeof(bvL1) - 1); break;
     case EV_FAINT: txFmt(bvL1, sizeof(bvL1), X_FAINTED, who); break;
+    case EV_HEAL: txFmt(bvL1, sizeof(bvL1), X_HEALED, who); break;
+    case EV_CATCH:
+      strncpy(bvL1, XT(X_THREW), sizeof(bvL1) - 1);
+      txFmt(bvL2, sizeof(bvL2), X_CAUGHT, bvFoeName);
+      break;
+    case EV_BREAK:
+      strncpy(bvL1, XT(X_THREW), sizeof(bvL1) - 1);
+      txFmt(bvL2, sizeof(bvL2), X_BROKE, bvFoeName);
+      break;
   }
   bvL1[sizeof(bvL1) - 1] = 0;
   bvL2[sizeof(bvL2) - 1] = 0;
   if (e.kind == EV_HIT && e.dmg) sfxPlay(SFX_PLAY);
   else if (e.kind == EV_FAINT) sfxPlay(SFX_DENY);
+  else if (e.kind == EV_HEAL) sfxPlay(SFX_HEART);
+  else if (e.kind == EV_CATCH) sfxPlay(SFX_MEDAL);
+  else if (e.kind == EV_BREAK) sfxPlay(SFX_DENY);
 }
 
 void startEvent(int i) {
@@ -323,6 +338,7 @@ void startEvent(int i) {
     if (evIsMe(bq[i - 1].side)) bvMeFainted = true;
     else bvFoeFainted = true;
   }
+  if (i > 0 && i - 1 < bqN && bq[i - 1].kind == EV_CATCH) bvFoeCaught = true;
   bqI = i;
   bqT = millis();
   if (i < bqN) {
@@ -416,10 +432,24 @@ void drawBattlers() {
     } else if (e.kind == EV_RUN_OK && me) {
       meAct = PMD_WALKL;
       meX -= (int)(t / 4);
+    } else if (e.kind == EV_HEAL) {  // fork KO: destellos verdes al curarse
+      for (int k = 0; k < 6; k++) {
+        int py = meG - 20 - (int)((t / 6 + k * 23) % 110);
+        gfx->fillRect(meX - 40 + k * 16, py, 5, 5, UI_BAR_OK);
+      }
+    } else if (e.kind == EV_CATCH || e.kind == EV_BREAK) {  // la pokeball vuela y se agita
+      float f = t < 500 ? t / 500.0f : 1.0f;
+      int bx = meX + (int)((foeX - meX) * f), by = meG - 60 + (int)((foeG - 40 - (meG - 60)) * f) - (int)(60 * sinf(f * 3.14159f));
+      if (t >= 500) {
+        foeHide = !(e.kind == EV_BREAK && t > 900);   // dentro de la bola (sale si falla)
+        bx += (t < 900) ? (int)(6 * sinf(t * 0.05f)) : 0;
+      }
+      if (!(e.kind == EV_BREAK && t > 900)) drawMap(SPR_ICON_PLAY, 16, bx - 16, by - 16, 2, false);
     }
   }
   // debilitados que ya no se ven (tras reproducir su desmayo)
-  bool meGone = bvMeFainted, foeGone = bvFoeFainted;
+  bool meGone = bvMeFainted, foeGone = bvFoeFainted || bvFoeCaught;
+  if (bvFoeCaught) drawMap(SPR_ICON_PLAY, 16, foeX - 16, foeG - 36, 2, false);  // atrapado
 
   if (!foeHide && !foeGone) {
     if (foePmd.loaded) {
@@ -452,27 +482,37 @@ void drawBattleMsg() {
   }
 }
 
-// menu 2x2 de la batalla salvaje
+// menu 3x2 de la batalla salvaje (fork KO, ko4: + pocion y pokeball)
+//   placaje | tecnica | proteger
+//   pocion  | pokeball | huir
 #define BM_Y1 326
 #define BM_Y2 374
 #define BM_H 42
+#define BM_X 92
+#define BM_W 90
+#define BM_GAP 6
+static const uint8_t BM_ACT[2][3] = { { BA_TACKLE, BA_TYPE, BA_GUARD }, { BA_POTION, BA_BALL, BA_RUN } };
+
 void drawBattleMenu() {
   const DexEntry &me = DEX_TBL[bvMeDex];
-  drawBtn(88, BM_Y1, 142, BM_H, UI_WHITE, UI_INK, moveName(BA_TACKLE, bvMeType));
-  drawBtn(236, BM_Y1, 142, BM_H, me.accent, UI_WHITE, moveName(BA_TYPE, bvMeType));
-  drawBtn(100, BM_Y2, 130, BM_H, 0x4C98, UI_WHITE, XT(X_GUARD));
-  drawBtn(236, BM_Y2, 130, BM_H, UI_TRACK, UI_INK, XT(X_RUN));
+  char pot[16], ball[16];
+  snprintf(pot, sizeof(pot), XT(X_POTION_FMT), pet.potions);
+  snprintf(ball, sizeof(ball), XT(X_BALL_FMT), pet.balls);
+  int x0 = BM_X, x1 = BM_X + BM_W + BM_GAP, x2 = BM_X + 2 * (BM_W + BM_GAP);
+  drawBtn(x0, BM_Y1, BM_W, BM_H, UI_WHITE, UI_INK, moveName(BA_TACKLE, bvMeType));
+  drawBtn(x1, BM_Y1, BM_W, BM_H, me.accent, UI_WHITE, moveName(BA_TYPE, bvMeType));
+  drawBtn(x2, BM_Y1, BM_W, BM_H, 0x4C98, UI_WHITE, XT(X_GUARD));
+  drawBtn(x0, BM_Y2, BM_W, BM_H, pet.potions ? UI_BAR_OK : UI_TRACK, pet.potions ? UI_WHITE : UI_INK, pot);
+  drawBtn(x1, BM_Y2, BM_W, BM_H, pet.balls ? UI_BAR_BAD : UI_TRACK, pet.balls ? UI_WHITE : UI_INK, ball);
+  drawBtn(x2, BM_Y2, BM_W, BM_H, UI_TRACK, UI_INK, XT(X_RUN));
 }
 
 int battleMenuHit(int16_t x, int16_t y) {
-  if (y >= BM_Y1 && y < BM_Y1 + BM_H) {
-    if (x >= 88 && x < 230) return BA_TACKLE;
-    if (x >= 236 && x < 378) return BA_TYPE;
-  } else if (y >= BM_Y2 && y < BM_Y2 + BM_H) {
-    if (x >= 100 && x < 230) return BA_GUARD;
-    if (x >= 236 && x < 366) return BA_RUN;
-  }
-  return -1;
+  int row = (y >= BM_Y1 && y < BM_Y1 + BM_H) ? 0 : (y >= BM_Y2 && y < BM_Y2 + BM_H) ? 1 : -1;
+  if (row < 0 || x < BM_X) return -1;
+  int col = (x - BM_X) / (BM_W + BM_GAP);
+  if (col > 2 || (x - BM_X) % (BM_W + BM_GAP) >= BM_W) return -1;
+  return BM_ACT[row][col];
 }
 
 void renderBattleView() {
@@ -490,11 +530,17 @@ void renderBattleView() {
   drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true);
 
   if (bPhase == BP_RESULT) {
-    gfx->fillRoundRect(60, 270, 346, 128, 16, bWon ? UI_BAR_WARN : UI_WHITE);
+    bool good = bWon || bCaught;
+    gfx->fillRoundRect(60, 270, 346, 128, 16, good ? UI_BAR_WARN : UI_WHITE);
     gfx->drawRoundRect(60, 270, 346, 128, 16, UI_INK);
-    const char *big = bFled ? XT(X_FLED) : bWon ? XT(X_WIN) : XT(X_LOSE);
-    drawFit(big, 292, 320, UI_INK, bFled ? 2 : 4);
-    if (bWon) drawFit(XT(X_REWARD), 348, 320, UI_INK, 2);
+    const char *big = bFled ? XT(X_FLED) : bCaught ? XT(X_GOTCHA) : bWon ? XT(X_WIN) : XT(X_LOSE);
+    drawFit(big, 284, 320, UI_INK, bFled ? 2 : 4);
+    if (good && !bLink) {  // fork KO (ko4): objetos y caja
+      drawFit(bWon ? XT(X_REWARD_ITEMS) : XT(X_REWARD), 330, 320, UI_INK, 2);
+      if (bBoxMsg >= 0) drawFit(XT((XId)bBoxMsg), 358, 320, bBoxMsg == X_BOX_FULL ? UI_BAR_BAD : UI_INK, 2);
+    } else if (good) {
+      drawFit(XT(X_REWARD), 340, 320, UI_INK, 2);
+    }
   } else {
     drawBattleMsg();
     if (bPhase == BP_MENU) drawBattleMenu();
@@ -520,6 +566,9 @@ void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool fo
   bqN = bqI = 0;
   bWon = bFled = bRewarded = false;
   bvMeFainted = bvFoeFainted = false;
+  bvFoeCaught = bCaught = false;
+  bBoxMsg = -1;
+  dexLog.seen(foe.dex, clockEpoch());  // fork KO (ko4): la pokedex lo registra como visto
 }
 
 // ======================================================================
@@ -568,6 +617,13 @@ void wildTap(int16_t x, int16_t y) {
   if (bPhase != BP_MENU) return;
   int a = battleMenuHit(x, y);
   if (a < 0) return;
+  // fork KO (ko4): los objetos se gastan al elegirlos; sin existencias no hay turno
+  if (a == BA_POTION && !pet.usePotion()) {
+    strncpy(bvL1, XT(X_NO_POTION), sizeof(bvL1) - 1); bvL2[0] = 0; sfxPlay(SFX_DENY); return;
+  }
+  if (a == BA_BALL && !pet.useBall()) {
+    strncpy(bvL1, XT(X_NO_BALL), sizeof(bvL1) - 1); bvL2[0] = 0; sfxPlay(SFX_DENY); return;
+  }
   sfxPlay(SFX_TAP);
   BAct foeAct = battleAi(bFoe, bMe, bRng, 35);  // el salvaje es algo torpe
   bqN = battleTurn(bMe, bFoe, (BAct)a, foeAct, bRng, bq, BATTLE_MAX_EVENTS, true);
@@ -576,15 +632,22 @@ void wildTap(int16_t x, int16_t y) {
   startEvent(0);
 }
 
-void finishBattle(bool won, bool fled) {
+void finishBattle(bool won, bool fled, bool caught) {
   bWon = won;
   bFled = fled;
+  bCaught = caught;
   bPhase = BP_RESULT;
   bPhaseT = millis();
   if (!bRewarded) {
     bRewarded = true;
-    pet.battleResult(bLink ? BATTLE_LINK : BATTLE_WILD, won, fled);
-    sfxPlay(won ? SFX_MEDAL : SFX_BYE);
+    pet.battleResult(bLink ? BATTLE_LINK : BATTLE_WILD, won, fled, caught);
+    sfxPlay(won || caught ? SFX_MEDAL : SFX_BYE);
+    // fork KO (ko4): el salvaje vencido o capturado va a la caja
+    if (!bLink && (won || caught)) {
+      uint32_t e = clockEpoch();
+      if (caught) dexLog.caught(bFoe.dex, e);
+      bBoxMsg = box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, caught, e) ? X_TO_BOX : X_BOX_FULL;
+    }
   }
 }
 
@@ -608,12 +671,15 @@ void updateWild() {
     }
   } else if (bPhase == BP_PLAY) {
     if (stepEvents()) {
-      bool fled = false;
-      for (int i = 0; i < bqN; i++)
+      bool fled = false, caught = false;
+      for (int i = 0; i < bqN; i++) {
         if (bq[i].kind == EV_RUN_OK) fled = true;
-      if (fled) finishBattle(false, true);
-      else if (bMe.hp == 0) finishBattle(false, false);
-      else if (bFoe.hp == 0) finishBattle(true, false);
+        if (bq[i].kind == EV_CATCH) caught = true;
+      }
+      if (caught) finishBattle(false, false, true);
+      else if (fled) finishBattle(false, true, false);
+      else if (bMe.hp == 0) finishBattle(false, false, false);
+      else if (bFoe.hp == 0) finishBattle(true, false, false);
       else {
         bPhase = BP_MENU;
         txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
@@ -701,7 +767,7 @@ void renderLinkMenu() {
   char rec[48];
   snprintf(rec, sizeof(rec), XT(X_RECORD_FMT), pet.wildWins, pet.linkWins, pet.linkBattles, pet.trades);
   drawFit(rec, 306, 340, UI_INK, 2);
-  drawFit(XT(X_TAP_CLOSE), 400, 300, UI_TRACK, 2);
+  drawFit(XT(X_TAP_CLOSE), 400, 300, UI_INK, 2);
   gfx->flush();
 }
 
@@ -779,7 +845,7 @@ void updateLinkBattle() {
   if (bPhase == BP_INTRO) {
     if (now - bPhaseT > 2500) { bPhase = BP_PLAY; startEvent(0); }
   } else if (bPhase == BP_PLAY) {
-    if (stepEvents()) finishBattle(bWon, false);
+    if (stepEvents()) finishBattle(bWon, false, false);
   } else if (bPhase == BP_RESULT) {
     if (now - bPhaseT > 3800) closeLink();
   }
@@ -792,8 +858,8 @@ void renderLinkSearch(const char *title) {
   int ph = (millis() / 250) % 4;
   for (int i = 0; i < 3; i++) gfx->fillCircle(CX - 24 + i * 24, 312, 6, i < ph ? UI_BAR_BAD : UI_TRACK);
   drawFit(XT(X_LINK_SEARCH), 336, 340, UI_INK, 2);
-  drawFit(XT(X_LINK_HINT), 100, 340, UI_TRACK, 2);
-  drawFit(XT(X_TAP_CLOSE), 400, 300, UI_TRACK, 2);
+  drawFit(XT(X_LINK_HINT), 100, 340, UI_INK, 2);
+  drawFit(XT(X_TAP_CLOSE), 400, 300, UI_INK, 2);
 }
 
 #define LT_YES_X 103
@@ -926,6 +992,8 @@ bool extraRender() {
     case XS_LINKMENU: renderLinkMenu(); return true;
     case XS_LINK: renderLink(); return true;
     case XS_USB: renderUsb(); return true;
+    case XS_BOX: renderBox(); return true;    // ko4 (ui_more.ino)
+    case XS_VOL: renderSound(); return true;  // ko4 (ui_more.ino)
     default: return false;
   }
 }
@@ -937,6 +1005,8 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_LINKMENU: linkMenuTap(x, y); return true;
     case XS_LINK: linkTap(x, y); return true;
     case XS_USB: usbTap(x, y); return true;
+    case XS_BOX: boxTap(x, y); return true;
+    case XS_VOL: soundTap(x, y); return true;
     default: return false;
   }
 }
@@ -946,6 +1016,8 @@ bool extraSwipe() {
   if (xScreen == XS_NET) { closeNet(); return true; }
   if (xScreen == XS_LINKMENU) { xScreen = XS_NONE; return true; }
   if (xScreen == XS_USB && usbFail >= 0) { xScreen = XS_NET; return true; }  // activa: solo el boton
+  if (xScreen == XS_BOX) { boxSwipe(); return true; }
+  if (xScreen == XS_VOL) { xScreen = XS_NONE; clockOpen = true; return true; }
   return xScreen != XS_NONE;  // batalla / tongsin: se ignoran
 }
 

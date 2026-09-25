@@ -9,7 +9,7 @@
 
 #define UI_BG_DAY 0xF77C  // #f2efe1
 #define UI_BG_NIGHT 0x10C5  // #141828
-#define UI_INK 0x2946  // #2a2a36
+#define UI_INK 0x0000  // #000000
 #define UI_INK_NIGHT 0xDEFE  // #d8dcf0
 #define UI_TRACK 0xDE97  // #d8d2bd
 #define UI_BAR_OK 0x5DCD  // #58b868
