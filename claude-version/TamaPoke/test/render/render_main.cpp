@@ -111,6 +111,10 @@ int main(int argc, char **argv) {
   pet.fullness = 72; pet.joy = 88; pet.energy = 54; pet.hygiene = 23;
   pet.balls = 5; pet.potions = 2;
   ensureMon();
+  // WIFI_TAP_CHECK: tocar la pildora WiFi del reloj abre la red
+  openClock(); onTap(233, 311);
+  printf("  wifi tap: clockOpen=%d xScreen=%d (XS_NET=%d)\n", clockOpen, xScreen, XS_NET);
+  xScreen = XS_NONE;
   scenes(true, "");
   scenes(false, "_en");
   return 0;
