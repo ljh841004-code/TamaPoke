@@ -20,6 +20,23 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import prep_cries  # noqa: E402  (lector/remuestreo/escritor de WAV)
 
 
+def resample_hq(mono, rate):
+    """con numpy+scipy: filtro anti-aliasing (resample_poly); si no, el lineal
+    de prep_cries (vale, pero a 16 kHz los agudos de la musica suenan asperos)"""
+    try:
+        from math import gcd
+
+        import numpy as np
+        from scipy.signal import resample_poly
+    except ImportError:
+        return prep_cries.resample(mono, rate)
+    if rate == prep_cries.RATE:
+        return list(mono)
+    g = gcd(prep_cries.RATE, rate)
+    y = resample_poly(np.asarray(mono, dtype=np.float64), prep_cries.RATE // g, rate // g)
+    return y.tolist()
+
+
 def main(argv):
     if len(argv) < 2:
         print(__doc__)
@@ -29,7 +46,7 @@ def main(argv):
     out_dir = os.path.join('sd_music', 'mons')
     os.makedirs(out_dir, exist_ok=True)
     mono, rate = prep_cries.read_wav(src)
-    pcm = prep_cries.resample(mono, rate)
+    pcm = resample_hq(mono, rate)
     # suave: -1 dB de techo para que al mezclar con gritos y efectos no sature
     peak = max((abs(v) for v in pcm), default=0)
     if peak > 0.89:

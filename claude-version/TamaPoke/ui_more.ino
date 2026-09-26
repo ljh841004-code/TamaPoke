@@ -12,6 +12,22 @@
 #define BOX_NAV_Y 352
 uint8_t boxPage = 0;
 int16_t boxSel = -1;          // indice en la caja con la ficha abierta, -1 = lista
+
+// ko10.4: la lista se ve ordenada por numero de pokedex (los repetidos quedan
+// juntos; entre iguales, el mas antiguo primero). Solo cambia el orden de la
+// vista: la caja guardada no se toca. boxView(k) = indice real del k-esimo
+static uint8_t boxOrd[BOX_MAX];
+static void boxSortView() {
+  uint8_t n = box.count();
+  for (uint8_t i = 0; i < n; i++) boxOrd[i] = i;
+  for (uint8_t i = 1; i < n; i++) {  // insercion (estable), n <= 60
+    uint8_t v = boxOrd[i];
+    int j = i - 1;
+    while (j >= 0 && box.at(boxOrd[j]).dex > box.at(v).dex) { boxOrd[j + 1] = boxOrd[j]; j--; }
+    boxOrd[j + 1] = v;
+  }
+}
+static uint8_t boxView(int k) { return boxOrd[k]; }
 uint32_t boxConfirmUntil = 0; // segundo toque en "soltar" para confirmar
 
 static uint8_t boxPages() { return box.count() ? (box.count() + BOX_ROWS - 1) / BOX_ROWS : 1; }
@@ -90,10 +106,11 @@ void renderBox() {
     drawFit(XT(X_BOX_NEXT), 248, 360, UI_INK, 2);
   }
   if (boxPage >= boxPages()) boxPage = boxPages() - 1;
+  boxSortView();
   for (int r = 0; r < BOX_ROWS; r++) {
-    int i = boxPage * BOX_ROWS + r;
-    if (i >= box.count()) break;
-    const BoxMon &m = box.at(i);
+    int k = boxPage * BOX_ROWS + r;
+    if (k >= box.count()) break;
+    const BoxMon &m = box.at(boxView(k));
     int y = BOX_ROW_Y + r * (BOX_ROW_H + BOX_ROW_GAP);
     // ko10.4: repetidos: fondo de color por especie y "xN" (cuantos hay en la caja)
     uint8_t same = 0;
@@ -175,8 +192,9 @@ void boxTap(int16_t x, int16_t y) {
   if (x < 73 || x >= 393 || y < BOX_ROW_Y) return;
   int r = (y - BOX_ROW_Y) / (BOX_ROW_H + BOX_ROW_GAP);
   if (r >= BOX_ROWS || (y - BOX_ROW_Y) % (BOX_ROW_H + BOX_ROW_GAP) >= BOX_ROW_H) return;
-  int i = boxPage * BOX_ROWS + r;
-  if (i < box.count()) { boxSel = i; audioCry(box.at((uint8_t)i).dex); }  // ko9.1: su grito
+  int k = boxPage * BOX_ROWS + r;
+  boxSortView();
+  if (k < box.count()) { boxSel = boxView(k); audioCry(box.at((uint8_t)boxSel).dex); }  // ko9.1: su grito
 }
 
 // tras la despedida (forma final) el siguiente compañero sale de la caja
