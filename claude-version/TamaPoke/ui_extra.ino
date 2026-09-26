@@ -929,9 +929,11 @@ void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool fo
 // ======================================================================
 
 uint32_t wildAlertUntil = 0;   // aviso "! yasaeng !" en la pantalla principal
+// ko9.1: el aviso se va a los 30 s si nadie lo toca (antes 5 min)
+#define WILD_ALERT_MS 30000UL
 uint32_t wildNextRoll = 0;
 
-void triggerWildAlert() { wildAlertUntil = millis() + 5UL * 60UL * 1000UL; }
+void triggerWildAlert() { wildAlertUntil = millis() + WILD_ALERT_MS; }
 
 bool battleAllowed(bool toast) {
   if (!pet.canBattle()) { if (toast) showToast(XT(X_CANT_NOW)); sfxPlay(SFX_DENY); return false; }
@@ -1077,7 +1079,7 @@ void rollWildEncounter(uint32_t now) {
   if (!pet.canBattle() || pet.energy < 30 || screenOff) return;
   if (pet.wantEvolveButton() || pet.canRunawayNow() || pet.wantFarewellButton()) return;
   if (random(100) < 3) {  // ~1 vez cada media hora-hora despierto
-    wildAlertUntil = now + 5UL * 60UL * 1000UL;
+    wildAlertUntil = now + WILD_ALERT_MS;
     sfxPlay(SFX_HEART);
   }
 }
