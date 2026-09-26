@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko8)
+# TamaPoke KO (v1.17-ko9)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -143,6 +143,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ PC 테스트 130개 통과 (AddressSanitizer 포함): 배틀 계산, 타입 상성, 교환 데이터 검증,
   한국어 조사(은/는, 이/가…), **두 기기 통신 프로토콜을 패킷 60% 손실 상황까지 시뮬레이션**
 - ✅ 실제 Arduino_GFX 그리기 코드를 PC에서 돌려 화면 캡처로 레이아웃 확인 (한국어/영어)
+- ✅ ko9: 컴파일 2.68MB / 3MB, PC 테스트 175개 (좋아하는 음식 4종, 육성 시간 레벨업 30분×레벨 등)
 - ✅ ko8: 컴파일 2.68MB / 3MB (글꼴 약 1MB), PC 테스트 174개 (+7: WiFi 선택 순서, WiFi 5개 기억,
   새로 시작, 천지인 조합 3종, 한글 이름 교환) + 파이썬 23개. WiFi QR은 PC에서 그린 화면을 OpenCV로 읽어 확인
 - ✅ ko7: 컴파일 1.83MB / 3MB, PC 테스트 167개 (+9: 경험치 곡선, Lv.100 상한, 배틀/시간 EXP,
