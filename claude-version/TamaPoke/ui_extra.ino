@@ -1030,27 +1030,41 @@ void startWildIn(uint8_t region) {
 // aviso de salvaje en la pantalla principal: en la region de mi Pokemon
 void startWild() { startWildIn(petRegion()); }
 
-// ---- ko10.1: pantalla "a donde vamos?" (4x4 regiones)
-#define RG_X 48
-#define RG_Y 118
-#define RG_W 88
-#define RG_H 50
-#define RG_GAP 6
-#define RG_BACK_Y 350
+// ---- ko10.1: pantalla "a donde vamos?": 2 paginas de 8 regiones (2x4, botones
+// grandes para no fallar el toque). Se pasa de pagina deslizando o con las flechas
+#define RG_PER_PAGE 8
+#define RG_X 78
+#define RG_Y 104
+#define RG_W 150
+#define RG_H 52
+#define RG_GAPX 10
+#define RG_GAPY 10
+#define RG_ARROW_Y 222
+#define RG_DOTS_Y 356
+#define RG_BACK_Y 372
+uint8_t regionPage = 0;
 
 void openRegionPick() {
   if (!battleAllowed(true)) return;
   xScreen = XS_REGION;
   cardOpen = false;
+  regionPage = petRegion() / RG_PER_PAGE;  // empieza en la pagina de mi region
   sfxPlay(SFX_TAP);
+}
+
+static void drawRegionArrow(int x, bool left) {
+  uint16_t c = UI_INK;
+  if (left) gfx->fillTriangle(x + 8, RG_ARROW_Y - 14, x + 8, RG_ARROW_Y + 14, x - 8, RG_ARROW_Y, c);
+  else      gfx->fillTriangle(x - 8, RG_ARROW_Y - 14, x - 8, RG_ARROW_Y + 14, x + 8, RG_ARROW_Y, c);
 }
 
 void renderRegionPick() {
   screenBase();
-  drawFit(XT(X_REGION_Q), 62, 300, UI_INK, 3);
+  drawFit(XT(X_REGION_Q), 52, 300, UI_INK, 3);
   uint8_t mine = petRegion();
-  for (int i = 0; i < REGION_COUNT; i++) {
-    int x = RG_X + (i % 4) * (RG_W + RG_GAP), y = RG_Y + (i / 4) * (RG_H + RG_GAP);
+  for (int k = 0; k < RG_PER_PAGE; k++) {
+    int i = regionPage * RG_PER_PAGE + k;
+    int x = RG_X + (k % 2) * (RG_W + RG_GAPX), y = RG_Y + (k / 2) * (RG_H + RG_GAPY);
     uint16_t bg = BIOME_SOIL[i];
     int lum = ((bg >> 11) & 31) * 2 + ((bg >> 5) & 63) * 2 + (bg & 31);  // aprox. 0..250
     uint16_t fg = lum > 150 ? UI_INK : UI_WHITE;
@@ -1059,21 +1073,45 @@ void renderRegionPick() {
       uint16_t o = C565(0xff, 0x8a, 0x1a);
       gfx->drawRoundRect(x - 2, y - 2, RG_W + 4, RG_H + 4, 13, o);
       gfx->drawRoundRect(x - 3, y - 3, RG_W + 6, RG_H + 6, 14, o);
-      gfx->fillCircle(x + RG_W - 7, y + 7, 5, o);
+      gfx->fillCircle(x + RG_W - 9, y + 9, 5, o);
     }
+  }
+  if (regionPage > 0) drawRegionArrow(40, true);
+  if (regionPage < 1) drawRegionArrow(426, false);
+  for (int p = 0; p < 2; p++) {
+    int x = CX - 13 + p * 26;
+    if (p == regionPage) gfx->fillCircle(x, RG_DOTS_Y, 5, UI_INK);
+    else gfx->drawCircle(x, RG_DOTS_Y, 4, UI_INK);
   }
   drawBtn(CX - 80, RG_BACK_Y, 160, 44, UI_TRACK, UI_INK, T(S_BACK));
   gfx->flush();
 }
 
+static void regionTurn(int to) {
+  if (to < 0 || to > 1 || to == regionPage) return;
+  regionPage = (uint8_t)to;
+  sfxPlay(SFX_TAP);
+}
+
+// deslizar a los lados: pagina (izquierda avanza, como la ficha)
+bool regionSwipe(int dir) {
+  if (xScreen != XS_REGION) return false;
+  regionTurn((int)regionPage + (dir > 0 ? -1 : 1));
+  return true;
+}
+
 void regionTap(int16_t x, int16_t y) {
   if (inRect(x, y, CX - 80, RG_BACK_Y, 160, 44)) { sfxPlay(SFX_TAP); xScreen = XS_NONE; return; }
+  if (y >= RG_ARROW_Y - 40 && y < RG_ARROW_Y + 40) {  // flechas (zona amplia)
+    if (x < RG_X - 4) { regionTurn(regionPage - 1); return; }
+    if (x >= RG_X + 2 * RG_W + RG_GAPX + 4) { regionTurn(regionPage + 1); return; }
+  }
   if (x < RG_X || y < RG_Y) return;
-  int cx = (x - RG_X) / (RG_W + RG_GAP), cy = (y - RG_Y) / (RG_H + RG_GAP);
-  if (cx > 3 || cy > 3) return;
-  if ((x - RG_X) % (RG_W + RG_GAP) >= RG_W || (y - RG_Y) % (RG_H + RG_GAP) >= RG_H) return;  // hueco
+  int cx = (x - RG_X) / (RG_W + RG_GAPX), cy = (y - RG_Y) / (RG_H + RG_GAPY);
+  if (cx > 1 || cy > 3) return;
+  if ((x - RG_X) % (RG_W + RG_GAPX) >= RG_W || (y - RG_Y) % (RG_H + RG_GAPY) >= RG_H) return;  // hueco
   xScreen = XS_NONE;
-  startWildIn((uint8_t)(cy * 4 + cx));
+  startWildIn((uint8_t)(regionPage * RG_PER_PAGE + cy * 2 + cx));
 }
 
 void endBattleScreen() {

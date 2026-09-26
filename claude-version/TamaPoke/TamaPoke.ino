@@ -35,7 +35,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko10"
+#define FW_VERSION "1.17-ko10.1"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -705,6 +705,7 @@ void onSwipeV(int dir) {
 // deslizar: dir +1 = hacia la derecha
 void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
+  if (regionSwipe(dir)) return;       // ko10.1: paginas de regiones
   if (extraSwipe()) return;           // fork KO: pantallas nuevas
   if (trainMenuSwipe(dir)) return;    // ko9.1: menu de entrenamiento <-> batallas
   if (trainingSwipe()) return;        // fork KO (ko4): entrenamiento

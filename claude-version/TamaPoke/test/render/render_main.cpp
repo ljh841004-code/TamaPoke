@@ -141,7 +141,7 @@ static void scenes(bool ko, const char *sfx) {
   // ko10.1: elegir region y encuentros
   {
     closeAll(); pet.energy = 80;
-    openRegionPick(); render(); shot("44_region_pick");
+    openRegionPick(); regionPage = 0; render(); shot("44_region_pick"); regionPage = 1; render(); shot("44b_region_pick2");
     gMockEpoch = 1772459100u; pet.lastSeenEpoch = gMockEpoch;  // lluvia (marzo)
     startWildIn(6);
     foePmd.unload();
