@@ -119,6 +119,13 @@ static void scenes(bool ko, const char *sfx) {
   render(); shot("13_dex_detail");
   galleryDetail = 52; galleryPmd.load(52, false);
   render(); shot("14_dex_unknown");
+  // ko10: gen 2 en la pokedex
+  galleryDetail = 0; galleryPage = 11; galleryDirty = true;
+  for (int16_t d : { 172, 175, 176, 179, 181, 196, 197, 208, 212 }) dexLog.seen(d, gMockEpoch);
+  render(); shot("30_dex_gen2_grid");
+  galleryPage = 15; galleryDirty = true; render(); shot("31_dex_gen2_last");
+  galleryDetail = 197; galleryPmd.load(197, false); render(); shot("32_dex_umbreon");
+  galleryDetail = 0; galleryPage = 0;
   // sonido y hora
   closeAll(); openClock(); render(); shot("15_clock_settings");
   closeAll(); openSound(); render(); shot("16_sound");

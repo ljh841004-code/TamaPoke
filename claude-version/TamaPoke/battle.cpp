@@ -3,25 +3,28 @@
 #include "dex.h"
 #include <string.h>
 
-// Tabla de tipos gen 1 (atacante x defensor), en mitades: 0 inmune, 1 poco
-// eficaz, 2 normal, 4 muy eficaz. Solo hay tipo primario (dex_data.py no lleva
-// segundo tipo) y no existe "volador": los voladores de gen 1 son normales aqui.
-// Orden: NOR FUE AGU PLA ELE HIE LUC VEN TIE PSI BIC ROC FAN DRA
+// Tabla de tipos de gen 2 (atacante x defensor), en mitades: 0 inmune, 1 poco
+// eficaz, 2 normal, 4 muy eficaz. Solo hay tipo primario y no existe "volador"
+// (los voladores son normales aqui). ko10: + SINIESTRO y ACERO, y los cambios de
+// gen 2 (fantasma -> psiquico x2, bicho <-> veneno, hielo -> fuego x0,5).
+// Orden: NOR FUE AGU PLA ELE HIE LUC VEN TIE PSI BIC ROC FAN DRA SIN ACE
 static const uint8_t TYPE_CHART[PT_COUNT][PT_COUNT] = {
-  /* NOR */ { 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0, 2 },
-  /* FUE */ { 2, 1, 1, 4, 2, 4, 2, 2, 2, 2, 4, 1, 2, 1 },
-  /* AGU */ { 2, 4, 1, 1, 2, 2, 2, 2, 4, 2, 2, 4, 2, 1 },
-  /* PLA */ { 2, 1, 4, 1, 2, 2, 2, 1, 4, 2, 1, 4, 2, 1 },
-  /* ELE */ { 2, 2, 4, 1, 1, 2, 2, 2, 0, 2, 2, 2, 2, 1 },
-  /* HIE */ { 2, 2, 1, 4, 2, 1, 2, 2, 4, 2, 2, 2, 2, 4 },
-  /* LUC */ { 4, 2, 2, 2, 2, 4, 2, 1, 2, 1, 1, 4, 0, 2 },
-  /* VEN */ { 2, 2, 2, 4, 2, 2, 2, 1, 1, 2, 4, 1, 1, 2 },
-  /* TIE */ { 2, 4, 2, 1, 4, 2, 2, 4, 2, 2, 1, 4, 2, 2 },
-  /* PSI */ { 2, 2, 2, 2, 2, 2, 4, 4, 2, 1, 2, 2, 2, 2 },
-  /* BIC */ { 2, 1, 2, 4, 2, 2, 1, 4, 2, 4, 2, 2, 1, 2 },
-  /* ROC */ { 2, 4, 2, 2, 2, 4, 1, 2, 1, 2, 4, 2, 2, 2 },
-  /* FAN */ { 0, 2, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 4, 2 },
-  /* DRA */ { 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4 },
+  /* NOR */ { 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0, 2, 2, 1 },
+  /* FUE */ { 2, 1, 1, 4, 2, 4, 2, 2, 2, 2, 4, 1, 2, 1, 2, 4 },
+  /* AGU */ { 2, 4, 1, 1, 2, 2, 2, 2, 4, 2, 2, 4, 2, 1, 2, 2 },
+  /* PLA */ { 2, 1, 4, 1, 2, 2, 2, 1, 4, 2, 1, 4, 2, 1, 2, 1 },
+  /* ELE */ { 2, 2, 4, 1, 1, 2, 2, 2, 0, 2, 2, 2, 2, 1, 2, 2 },
+  /* HIE */ { 2, 1, 1, 4, 2, 1, 2, 2, 4, 2, 2, 2, 2, 4, 2, 1 },
+  /* LUC */ { 4, 2, 2, 2, 2, 4, 2, 1, 2, 1, 1, 4, 0, 2, 4, 4 },
+  /* VEN */ { 2, 2, 2, 4, 2, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2, 0 },
+  /* TIE */ { 2, 4, 2, 1, 4, 2, 2, 4, 2, 2, 1, 4, 2, 2, 2, 4 },
+  /* PSI */ { 2, 2, 2, 2, 2, 2, 4, 4, 2, 1, 2, 2, 2, 2, 0, 1 },
+  /* BIC */ { 2, 1, 2, 4, 2, 2, 1, 1, 2, 4, 2, 2, 1, 2, 4, 1 },
+  /* ROC */ { 2, 4, 2, 2, 2, 4, 1, 2, 1, 2, 4, 2, 2, 2, 2, 1 },
+  /* FAN */ { 0, 2, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 4, 2, 1, 1 },
+  /* DRA */ { 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 2, 1 },
+  /* SIN */ { 2, 2, 2, 2, 2, 2, 1, 2, 2, 4, 2, 2, 4, 2, 1, 1 },
+  /* ACE */ { 2, 1, 1, 2, 1, 4, 2, 2, 2, 2, 2, 4, 2, 2, 2, 1 },
 };
 
 uint8_t typeEff(uint8_t atkType, uint8_t defType) {
@@ -77,17 +80,13 @@ uint32_t careMinutesForLevel(uint16_t lvl) {
   return lvl >= LEVEL_MAX ? 0 : 30UL * lvl;
 }
 
-static bool hasPreEvo(int16_t dex) {
-  for (int16_t d = 1; d <= DEX_COUNT; d++)
-    if (DEX_TBL[d].evolvesTo == dex && d != DEX_EEVEE) return true;
-  return false;
-}
+static bool hasPreEvo(int16_t dex) { return dexPrevo(dex) != 0; }
 
 uint8_t evoLevel(int16_t dex) {
   if (dex < 1 || dex > DEX_COUNT) return 0;
   const DexEntry &e = DEX_TBL[dex];
   if (!e.evolvesTo) return 0;
-  bool nextEvolves = dex != DEX_EEVEE && DEX_TBL[e.evolvesTo].evolvesTo != 0;
+  bool nextEvolves = DEX_TBL[e.evolvesTo].evolvesTo != 0;  // ramas (Eevee...): todas finales
   if (nextEvolves) return 16;                          // base de 3 fases
   if (hasPreEvo(dex)) return e.evolveLevel < 20 ? 20 : e.evolveLevel;  // intermedia
   return e.evolveLevel;                                // linea de 2 fases
@@ -112,7 +111,9 @@ Battler makeWild(uint16_t petLvl, BRng &rng) {
   // sube por su linea evolutiva segun el nivel
   for (int guard = 0; guard < 3 && DEX_TBL[dex].evolvesTo; guard++) {
     if (lv < evoLevel(dex)) break;
-    dex = (dex == DEX_EEVEE) ? (int16_t)(134 + rng.below(3)) : (int16_t)DEX_TBL[dex].evolvesTo;
+    int16_t opts[8];
+    int k = dexEvoOptions(dex, opts);
+    dex = opts[k > 1 ? rng.below(k) : 0];  // ramas: una al azar
   }
   const DexEntry &e = DEX_TBL[dex];
   uint8_t gA = 90 + rng.below(21), gD = 90 + rng.below(21), gS = 90 + rng.below(21);

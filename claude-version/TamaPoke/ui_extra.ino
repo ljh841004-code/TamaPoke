@@ -693,6 +693,41 @@ void drawMoveFx(uint8_t fx, int ax, int ay, int tx, int ty, uint32_t t, bool hit
       break;
     }
 
+    case PT_DARK: {  // ko10: mordisco: dos filas de colmillos que se cierran
+      const uint16_t DK = C565(0x38, 0x30, 0x40), WH = UI_WHITE;
+      if (impact && k < 420) {
+        int gap = k < 160 ? 40 - k / 4 : 0;
+        // fauces oscuras detras de los colmillos: se leen sobre cualquier cielo
+        gfx->fillRoundRect(tx - 44, ty - 34 - gap, 88, 20, 8, DK);
+        gfx->fillRoundRect(tx - 44, ty + 14 + gap, 88, 20, 8, DK);
+        for (int i = -2; i <= 2; i++) {
+          int x = tx + i * 14;
+          gfx->fillTriangle(x - 7, ty - 26 - gap, x + 7, ty - 26 - gap, x, ty - 8 - gap, WH);
+          gfx->fillTriangle(x - 7, ty + 26 + gap, x + 7, ty + 26 + gap, x, ty + 8 + gap, WH);
+        }
+        gfx->drawRoundRect(tx - 42, ty - 32 - gap, 84, 64 + 2 * gap, 12, DK);
+        if (k >= 160 && k < 260) fxStar(tx, ty, 6, 28, 8, 0.4f, 2, DK);
+      }
+      if (travel) gfx->fillCircle(px, py, 8, DK);
+      break;
+    }
+
+    case PT_STEEL: {  // ko10: garra metalica: tres zarpazos plateados con brillo
+      const uint16_t MT = C565(0x58, 0x62, 0x78), SH = UI_WHITE;
+      if (impact && k < 480)
+        for (int i = 0; i < 3; i++) {
+          int d = k - i * 60;
+          if (d < 0 || d > 260) continue;
+          float f2 = fxClamp01(d / 120.0f);
+          int x0 = tx - 34 + i * 22, y0 = ty - 34;
+          int x1 = x0 + (int)(40 * f2), y1 = y0 + (int)(68 * f2);
+          fxLine(x0, y0, x1, y1, 7, MT);
+          fxLine(x0 + 1, y0, x1 + 1, y1, 2, SH);
+        }
+      if (impact && k >= 200 && k < 320) fxStar(tx + 10, ty - 10, 2, 16, 4, 0.78f, 2, SH);
+      break;
+    }
+
     case PT_DRAGON: {
       const uint16_t DBL = C565(0x50, 0x48, 0xe0), DPU = C565(0x98, 0x50, 0xe8);
       if (travel) {

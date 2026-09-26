@@ -42,6 +42,8 @@ private:
 
 class DexLog {
 public:
+  // ko10: 251 especies (gen 1 + 2). Los guardados de 151 se leen y se amplian.
+  static const int N = 251;
   void begin();  // espacio "tpdex"
   void seen(int16_t dex, uint32_t epoch);   // aparece en batalla / tongsin
   void caught(int16_t dex, uint32_t epoch); // capturado (tambien cuenta como visto)
@@ -52,9 +54,9 @@ public:
   void wipe();   // fork KO (ko8): [nuevo comienzo]
 private:
   Preferences prefs;
-  uint32_t first[151];
-  uint16_t seenN[151], caughtN[151];
-  static bool ok(int16_t dex) { return dex >= 1 && dex <= 151; }
+  uint32_t first[N];
+  uint16_t seenN[N], caughtN[N];
+  static bool ok(int16_t dex) { return dex >= 1 && dex <= N; }
   void mark(int16_t dex, uint32_t epoch);
   void save();
 };

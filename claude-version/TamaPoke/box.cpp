@@ -13,7 +13,7 @@ void Box::begin() {
   // nada invalido entra en juego aunque la NVS venga danada
   bool fixed = false;
   for (uint8_t i = 0; i < c; i++) {
-    if (mons[i].dex < 1 || mons[i].dex > 151) continue;
+    if (mons[i].dex < 1 || mons[i].dex > DexLog::N) continue;
     // fork KO (ko7): tope nivel 100. Los de ko6 (nivel por horas, Lv300+)
     // vuelven a empezar en Lv5
     if (mons[i].lvl > 100) { mons[i].lvl = 5; fixed = true; }
@@ -29,7 +29,7 @@ void Box::save() {
 }
 
 bool Box::add(int16_t dex, uint16_t lvl, bool shiny, bool caught, uint32_t epoch) {
-  if (full() || dex < 1 || dex > 151) return false;
+  if (full() || dex < 1 || dex > DexLog::N) return false;
   BoxMon &m = mons[n++];
   m.dex = dex;
   m.lvl = lvl < 1 ? 1 : (lvl > 100 ? 100 : lvl);
@@ -71,9 +71,14 @@ void DexLog::begin() {
   memset(seenN, 0, sizeof(seenN));
   memset(caughtN, 0, sizeof(caughtN));
   prefs.begin("tpdex", false);
-  if (prefs.getBytes("first", first, sizeof(first)) != sizeof(first)) memset(first, 0, sizeof(first));
-  if (prefs.getBytes("seen", seenN, sizeof(seenN)) != sizeof(seenN)) memset(seenN, 0, sizeof(seenN));
-  if (prefs.getBytes("caught", caughtN, sizeof(caughtN)) != sizeof(caughtN)) memset(caughtN, 0, sizeof(caughtN));
+  // ko10: se aceptan los de 151 (ko4-ko9) y los de 251; lo demas, corrupto
+  auto load = [&](const char *k, void *buf, size_t el, size_t cap) {
+    size_t n = prefs.getBytes(k, buf, cap);
+    if (n != 151 * el && n != cap) memset(buf, 0, cap);
+  };
+  load("first", first, sizeof(first[0]), sizeof(first));
+  load("seen", seenN, sizeof(seenN[0]), sizeof(seenN));
+  load("caught", caughtN, sizeof(caughtN[0]), sizeof(caughtN));
 }
 
 void DexLog::wipe() {

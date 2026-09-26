@@ -49,7 +49,15 @@ def ascii_up(s):
     return s.upper()
 
 
+DEX_MAX = 251  # fork KO (ko10): gen 1 + gen 2
+
+
 def fetch(num):
+    # POKEAPI_CACHE=carpeta con sp/<num>.json (descargas previas): sin red
+    cache = os.environ.get('POKEAPI_CACHE')
+    if cache and os.path.exists(os.path.join(cache, 'sp', f'{num}.json')):
+        with open(os.path.join(cache, 'sp', f'{num}.json'), encoding='utf-8') as fh:
+            return json.load(fh)
     url = f'https://pokeapi.co/api/v2/pokemon-species/{num}/'
     for intento in range(4):
         r = subprocess.run(['curl', '-s', '--max-time', '25', '-A', 'Mozilla/5.0', url],
@@ -62,7 +70,7 @@ def fetch(num):
 
 def main():
     out = {}
-    for num in range(1, 152):
+    for num in range(1, DEX_MAX + 1):
         d = fetch(num)
         names = {n['language']['name']: n['name'] for n in d['names']}
         en = ascii_up(names['en'])
@@ -81,7 +89,7 @@ def main():
         if dif:
             out[num] = dif
         if num % 25 == 0:
-            print(f'  {num}/151...')
+            print(f'  {num}/{DEX_MAX}...')
         time.sleep(0.05)
 
     path = os.path.join(os.path.dirname(__file__), 'dex_names.py')

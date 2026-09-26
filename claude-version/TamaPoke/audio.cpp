@@ -250,7 +250,7 @@ void audioResumeAfterUpload() {
   if (uploadRequest.load() & 1u) uploadRequest.fetch_add(1);
 }
 void audioCry(uint16_t dex) {
-  if (!gOn.load() || gSleeping.load() || !levels[1].load() || dex < 1 || dex > 151) return;
+  if (!gOn.load() || gSleeping.load() || !levels[1].load() || dex < 1 || dex > 251) return;  // ko10: gen 1 + 2
   char path[32]; snprintf(path, sizeof(path), "/mons/cry%03u.wav", dex);
   queueWav(path, 2);
 }

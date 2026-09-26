@@ -34,7 +34,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko9.1"
+#define FW_VERSION "1.17-ko10"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -84,7 +84,8 @@ PmdMon galleryPmd;  // sprite grande de la vista detalle de la galeria (PMD/TPK2
 // galeria pokedex
 bool galleryOpen = false;
 bool galleryDirty = false;
-int galleryPage = 0;        // 10 paginas de 16
+int galleryPage = 0;        // 16 paginas de 16 (ko10: 251 especies)
+#define GAL_PAGES ((DEX_COUNT + 15) / 16)
 int16_t galleryDetail = 0;  // dex en vista detalle, 0 = rejilla
 
 bool screenOff = false;       // pulsacion corta del boton PWR
@@ -537,8 +538,8 @@ void handleSerial() {
     delay(100);
     ESP.restart();
   } else if (line == "REG") {
-    Serial.printf("pokedex %u/151:", pet.registeredCount());
-    for (int i = 1; i <= 151; i++)
+    Serial.printf("pokedex %u/%u:", pet.registeredCount(), (unsigned)DEX_COUNT);
+    for (int i = 1; i <= DEX_COUNT; i++)
       if (pet.isRegistered(i)) Serial.printf(" %d", i);
     Serial.println();
     Serial.println("DONE");
@@ -728,7 +729,7 @@ void onSwipe(int dir) {
     galleryPmd.unload();
     return;
   }
-  if (np > 9) np = 9;
+  if (np > GAL_PAGES - 1) np = GAL_PAGES - 1;
   if (np != galleryPage) {
     galleryPage = np;
     galleryDirty = true;
@@ -2434,7 +2435,7 @@ bool dexDiscovered(int16_t dex) { return pet.isRegistered(dex) || dexLog.wasSeen
 
 uint16_t dexDiscoveredCount() {
   uint16_t n = 0;
-  for (int16_t d = 1; d <= 151; d++)
+  for (int16_t d = 1; d <= DEX_COUNT; d++)
     if (dexDiscovered(d)) n++;
   return n;
 }
@@ -2514,7 +2515,7 @@ void renderGallery() {
   for (int r = 0; r < 4; r++) {
     for (int c = 0; c < 4; c++) {
       int16_t dex = galleryPage * 16 + r * 4 + c + 1;
-      if (dex > 151) break;
+      if (dex > DEX_COUNT) break;
       int x = GAL_X + c * GAL_CELL, y = GAL_Y + r * GAL_CELL;
       const uint8_t *t = thumbs.get(dex);
       if (t) {
@@ -2536,10 +2537,13 @@ void renderGallery() {
     }
   }
   drawFit(XT(X_DEX_EXIT), 410, 220, UI_INK, 1);  // ko5
-  // puntos de pagina
-  for (int i = 0; i < 10; i++) {
-    if (i == galleryPage) gfx->fillCircle(170 + i * 14, 436, 4, UI_INK);
-    else gfx->drawCircle(170 + i * 14, 436, 3, UI_INK);
+  // puntos de pagina (ko10: 16 paginas; mas juntos para caber abajo del circulo;
+  // los de gen 2 en color de acento)
+  for (int i = 0; i < GAL_PAGES; i++) {
+    int x = CX - (GAL_PAGES - 1) * 5 + i * 10;
+    uint16_t col = i * 16 + 1 > 151 ? UI_BAR_WARN : UI_INK;
+    if (i == galleryPage) gfx->fillCircle(x, 436, 4, col);
+    else gfx->drawCircle(x, 436, 2, col);
   }
   gfx->flush();
 }
@@ -2579,7 +2583,7 @@ void galleryTap(int16_t x, int16_t y) {
   int c = (x - GAL_X) / GAL_CELL, r = (y - GAL_Y) / GAL_CELL;
   if (c > 3 || r > 3) return;
   int16_t dex = galleryPage * 16 + r * 4 + c + 1;
-  if (dex > 151) return;
+  if (dex > DEX_COUNT) return;
   galleryDetail = dex;
   galleryPmd.load(dex, pet.isShinyRegistered(dex));
   // ko9.1: los ya vistos o criados dicen su nombre; los "???" no

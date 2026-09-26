@@ -96,19 +96,23 @@ static const char *const XS[2][X_COUNT] = {
 static const char *const MOVES_EN[PT_COUNT] = {
   "HEADBUTT", "EMBER", "WATER GUN", "VINE WHIP", "THUNDERSHOCK", "ICE BEAM", "KARATE CHOP",
   "POISON STING", "MUD-SLAP", "CONFUSION", "PIN MISSILE", "ROCK THROW", "LICK", "DRAGON RAGE",
+  "BITE", "METAL CLAW",  // ko10: siniestro, acero
 };
 static const char *const MOVES_KO[PT_COUNT] = {
   "박치기", "불꽃세례", "물대포", "덩굴채찍", "전기쇼크", "냉동빔", "태권당수",
   "독침", "진흙뿌리기", "염동력", "바늘미사일", "돌떨구기", "핥기", "용의분노",
+  "물기", "메탈크로우",
 };
 
 static const char *const TYPES_EN[PT_COUNT] = {
   "NORMAL", "FIRE", "WATER", "GRASS", "ELECTRIC", "ICE", "FIGHTING",
   "POISON", "GROUND", "PSYCHIC", "BUG", "ROCK", "GHOST", "DRAGON",
+  "DARK", "STEEL",
 };
 static const char *const TYPES_KO[PT_COUNT] = {
   "노말", "불꽃", "물", "풀", "전기", "얼음", "격투",
   "독", "땅", "에스퍼", "벌레", "바위", "고스트", "드래곤",
+  "악", "강철",
 };
 
 static inline bool isKo() { return gLang == LANG_KO; }

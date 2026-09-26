@@ -54,6 +54,11 @@ struct __attribute__((packed)) TradePet {
   char nick[20];  // ko8: apodo en hangul (UTF-8, hasta 6 silabas); antes 12
 };
 
+// ko10: pokedex de gen 1 + gen 2 (dex.h: DEX_COUNT). Los bitmaps crecen de 19
+// a 32 bytes; los guardados viejos (19) se leen igual (el resto queda a 0).
+#define PET_DEX_MAX 251
+#define PET_DEX_BYTES ((PET_DEX_MAX + 7) / 8)
+
 // batallas: de donde viene el resultado
 enum : uint8_t { BATTLE_WILD = 0, BATTLE_LINK };
 
@@ -73,15 +78,15 @@ public:
   bool shiny = false;       // variante de color rara (se sortea en el huevo)
   uint32_t ageMinutes = 0;     // edad (despedida); el nivel sale de exp
   uint32_t exp = 0;            // fork KO (ko7): experiencia (nivel = levelForExp)
-  int16_t speciesId = -1;      // numero de Pokedex (1-151), -1 = huevo
+  int16_t speciesId = -1;      // numero de Pokedex (1-251), -1 = huevo
   int16_t prevSpeciesId = -1;  // para la animacion de evolucion
   uint8_t careMistakes = 0;   // descuidos: cada uno retrasa la evolucion 1 nivel
   bool sleeping = false;
   uint32_t lastSeenEpoch = 0;   // ultima hora RTC vista (para progresion offline)
   uint8_t ceremony = CER_NONE;  // despedida/escapada/liberacion en curso
   uint8_t lastEnd = CER_NONE;   // como acabo la anterior (afecta al huevo)
-  uint8_t dexReg[19] = { 0 };       // pokedex de criados (bitmap 151 bits)
-  uint8_t dexShinyReg[19] = { 0 };  // criados en version shiny
+  uint8_t dexReg[PET_DEX_BYTES] = { 0 };       // pokedex de criados (bitmap)
+  uint8_t dexShinyReg[PET_DEX_BYTES] = { 0 };  // criados en version shiny
   // racha de cuidado diario (del jugador: persiste entre crianzas)
   uint16_t streak = 0, bestStreak = 0;
   uint32_t lastCareDay = 0;
@@ -156,9 +161,18 @@ public:
   bool (*nextPetHook)(Pet &) = nullptr;
   void exportTrade(TradePet &t) const;
   bool importTrade(const TradePet &t, uint16_t lvl = 1);  // recibe el Pokemon del otro (evoluciona si toca)
-  static bool tradeEvolves(int16_t dex) {  // Kadabra, Machoke, Graveler, Haunter
-    return dex == 64 || dex == 67 || dex == 75 || dex == 93;
+  // evolucion por intercambio: a que especie (0 = ninguna). Gen 1: Kadabra,
+  // Machoke, Graveler, Haunter. ko10 (gen 2): Onix, Scyther, Seadra, Porygon,
+  // Poliwhirl (Politoed) y Slowpoke (Slowking)
+  static int16_t tradeTarget(int16_t dex) {
+    switch (dex) {
+      case 64: return 65;   case 67: return 68;   case 75: return 76;   case 93: return 94;
+      case 95: return 208;  case 123: return 212; case 117: return 230; case 137: return 233;
+      case 61: return 186;  case 79: return 199;
+      default: return 0;
+    }
   }
+  static bool tradeEvolves(int16_t dex) { return tradeTarget(dex) != 0; }
   void toggleLight();  // dormir / despertar
   void clean();
   void caress();  // tocar al bicho
@@ -200,10 +214,10 @@ public:
   // nivel necesario para evolucionar (con el retraso de los descuidos; 0 = final)
   uint16_t evolveNeed() const;
   bool isRegistered(int16_t dex) const {
-    return dex >= 1 && dex <= 151 && (dexReg[(dex - 1) >> 3] & (1 << ((dex - 1) & 7)));
+    return dex >= 1 && dex <= PET_DEX_MAX && (dexReg[(dex - 1) >> 3] & (1 << ((dex - 1) & 7)));
   }
   bool isShinyRegistered(int16_t dex) const {
-    return dex >= 1 && dex <= 151 && (dexShinyReg[(dex - 1) >> 3] & (1 << ((dex - 1) & 7)));
+    return dex >= 1 && dex <= PET_DEX_MAX && (dexShinyReg[(dex - 1) >> 3] & (1 << ((dex - 1) & 7)));
   }
   uint16_t registeredCount() const;
   bool lineHasUnregistered(int16_t base) const;

@@ -23,3 +23,6 @@ test/render/build/
 # gritos descargados con tools/get_cries.py: (c) Nintendo, no se suben
 sd_cries/
 cry*.wav
+
+# ko10: sprites empaquetados (se entregan aparte para la SD)
+tools/sdcard/

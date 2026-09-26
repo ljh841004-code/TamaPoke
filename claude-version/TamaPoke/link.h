@@ -29,7 +29,8 @@ struct __attribute__((packed)) LinkPet {
 
 // 2 (ko8): el apodo del intercambio pasa de 12 a 20 bytes (hangul). Con otro
 // tamano de mensaje la version 1 ni se oye (se descarta por longitud).
-#define LINK_PROTO_VER 2
+// 3 (ko10): especies de gen 2 (152-251); un ko9 no sabria que hacer con ellas
+#define LINK_PROTO_VER 3
 
 void linkStart(LinkMode mode, const LinkPet &mine);
 void linkStop();

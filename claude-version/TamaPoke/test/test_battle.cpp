@@ -53,10 +53,11 @@ TEST(battle, salvaje_acorde_al_nivel) {
     CHECK(w.lvl >= 16 && w.lvl <= 21);
     CHECK(w.hp == w.maxHp && w.hp > 0);
     CHECK_MSG(DEX_TBL[w.dex].rarity != R_LEGENDARIO, "sin legendarios por debajo de Nv.40");
-    // a nivel 17-22 no puede salir una forma que exija evolucionar a 36
+    // a nivel 16-21 no puede salir una forma que exija evolucionar a 36 (las
+    // que salen directas, como Pikachu con su bebe Pichu, no cuentan: ko10)
     int16_t d = w.dex;
-    for (int16_t b = 1; b <= DEX_COUNT; b++)
-      if (DEX_TBL[b].evolvesTo == d && b != DEX_EEVEE) CHECK(evoLevel(b) <= w.lvl);
+    int16_t b = dexPrevo(d);
+    if (b && DEX_TBL[d].rarity == R_EVO) CHECK(evoLevel(b) <= w.lvl);
   }
   Battler low = makeWild(1, rng);
   CHECK(low.lvl >= 2);

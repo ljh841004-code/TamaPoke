@@ -42,8 +42,8 @@ TEST(box, rechaza_dex_invalido_y_se_llena) {
   Box b;
   b.begin();
   CHECK(!b.add(0, 5, false, false, 0));
-  CHECK(!b.add(152, 5, false, false, 0));
-  for (int i = 0; i < BOX_MAX; i++) CHECK(b.add(1 + i % 151, 5, false, false, 0));
+  CHECK(!b.add(252, 5, false, false, 0));  // ko10: 251 especies
+  for (int i = 0; i < BOX_MAX; i++) CHECK(b.add(1 + i % 251, 5, false, false, 0));
   CHECK(b.full());
   CHECK(!b.add(4, 5, false, false, 0));  // llena: no pisa a nadie
   CHECK_EQ(b.count(), (uint8_t)BOX_MAX);
@@ -583,4 +583,98 @@ TEST(trade, apodo_en_hangul_viaja_y_se_filtra) {
   memcpy(t.nick, bad, sizeof(bad) - 1);
   CHECK(b.importTrade(t, 10));
   CHECK_EQ(std::string(b.nick), std::string("AB가"));
+}
+
+// ---------------------------------------------------------------- ko10: gen 2
+TEST(gen2, guardado_de_151_se_lee_en_251) {
+  mockNvsReset();
+  Preferences raw;
+  raw.begin("tamapoke", false);
+  uint8_t old[19] = { 0 };
+  old[0] = 0x0F;           // 1-4 criados
+  old[18] = 0x40;          // 151 (Mew)
+  raw.putBytes("dexreg", old, sizeof(old));
+  raw.putBool("init", true);
+  raw.putShort("dexn", 4);
+  Pet p;
+  p.begin();
+  CHECK(p.isRegistered(1) && p.isRegistered(4) && p.isRegistered(151));
+  CHECK(!p.isRegistered(152) && !p.isRegistered(251));
+  CHECK_EQ(p.registeredCount(), (uint16_t)5);
+  // registro de la pokedex (vistos/capturados) de 151 entradas
+  Preferences dx;
+  dx.begin("tpdex", false);
+  uint16_t seen[151] = { 0 };
+  seen[24] = 3;  // Pikachu visto 3 veces
+  dx.putBytes("seen", seen, sizeof(seen));
+  DexLog d;
+  d.begin();
+  CHECK_EQ(d.seenCount(25), (uint16_t)3);
+  CHECK_EQ(d.seenCount(200), (uint16_t)0);
+  d.seen(200, 1000);  // y ya guarda en el formato nuevo
+  DexLog e;
+  e.begin();
+  CHECK_EQ(e.seenCount(200), (uint16_t)1);
+  CHECK_EQ(e.seenCount(25), (uint16_t)3);
+}
+
+TEST(gen2, ramas_bebes_e_intercambios) {
+  int16_t o[8];
+  CHECK_EQ(dexEvoOptions(133, o), 5);                 // Eevee
+  CHECK_EQ(dexEvoOptions(236, o), 3);                 // Tyrogue
+  CHECK_EQ(dexEvoOptions(79, o), 2);                  // Slowpoke: Slowbro / Slowking
+  CHECK_EQ(dexPrevo(25), (int16_t)172);               // Pikachu <- Pichu
+  CHECK_EQ(dexPrevo(169), (int16_t)42);               // Crobat <- Golbat
+  CHECK_EQ(DEX_FAM[172], (uint8_t)25);                // Pichu comparte familia con Pikachu
+  CHECK_EQ(DEX_FAM[197], (uint8_t)133);
+  CHECK_EQ(Pet::tradeTarget(95), (int16_t)208);       // Onix -> Steelix
+  CHECK_EQ(Pet::tradeTarget(61), (int16_t)186);       // Poliwhirl -> Politoed
+  CHECK_EQ(Pet::tradeTarget(1), (int16_t)0);
+  // niveles: bebe de linea de 3 a 16, la final a su nivel
+  CHECK_EQ(evoLevel(172), (uint8_t)16);               // Pichu
+  CHECK_EQ(evoLevel(25), (uint8_t)30);                // Pikachu
+  CHECK_EQ(evoLevel(41), (uint8_t)16);                // Zubat (ahora linea de 3)
+  CHECK_EQ(evoLevel(236), (uint8_t)20);               // Tyrogue
+  CHECK_EQ(evoLevel(152), (uint8_t)16);               // Chikorita
+  CHECK_EQ(evoLevel(153), (uint8_t)32);
+  // tipos nuevos de gen 2
+  CHECK_EQ(DEX_TBL[197].ptype, (uint8_t)PT_DARK);
+  CHECK_EQ(DEX_TBL[208].ptype, (uint8_t)PT_STEEL);
+  CHECK_EQ(typeEff(PT_FIGHT, PT_DARK), (uint8_t)4);
+  CHECK_EQ(typeEff(PT_PSYCHIC, PT_DARK), (uint8_t)0);
+  CHECK_EQ(typeEff(PT_FIRE, PT_STEEL), (uint8_t)4);
+  CHECK_EQ(typeEff(PT_POISON, PT_STEEL), (uint8_t)0);
+  CHECK_EQ(typeEff(PT_GHOST, PT_PSYCHIC), (uint8_t)4);
+  CHECK_EQ(typeEff(PT_ICE, PT_FIRE), (uint8_t)1);     // gen 2: hielo poco eficaz contra fuego
+}
+
+TEST(gen2, favorita_de_pichu_igual_que_pikachu) {
+  Pet p;
+  mockNvsReset();
+  p.begin();
+  p.speciesId = 25;
+  uint8_t f = p.favFood();
+  p.speciesId = 172;
+  CHECK_EQ(p.favFood(), f);
+  p.speciesId = 26;
+  CHECK_EQ(p.favFood(), f);
+}
+
+TEST(gen2, intercambio_evoluciona_onix_y_acepta_dex_nuevos) {
+  Pet a;
+  mockNvsReset();
+  a.begin();
+  if (a.awaitingStarter()) a.chooseStarter(4);
+  a.eggTap(); a.eggTap(); a.eggTap();
+  TradePet t;
+  a.exportTrade(t);
+  t.dex = 95;
+  CHECK(a.importTrade(t, 30));
+  CHECK_EQ(a.speciesId, (int16_t)208);
+  mockAdvanceMillis(EVOLVE_ANIM_MS + 1);  // durante la animacion no se intercambia
+  t.dex = 251;
+  CHECK(a.importTrade(t, 30));
+  CHECK_EQ(a.speciesId, (int16_t)251);
+  t.dex = 252;
+  CHECK(!a.importTrade(t, 30));
 }

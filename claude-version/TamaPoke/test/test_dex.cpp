@@ -113,9 +113,11 @@ TEST(dex, toda_especie_es_alcanzable) {
     int cur = d, guard = 0;
     while (cur >= 1 && cur <= N && guard++ < 6) {
       reach[cur] = true;
-      if (cur == DEX_EEVEE) {  // rama especial del codigo del juego
-        reach[134] = reach[135] = reach[136] = true;
-        break;
+      int16_t opts[8];  // ko10: ramas (Eevee, Tyrogue, Slowpoke...)
+      int k = dexEvoOptions((int16_t)cur, opts);
+      for (int i = 1; i < k; i++) {
+        reach[opts[i]] = true;
+        if (DEX_TBL[opts[i]].evolvesTo) reach[DEX_TBL[opts[i]].evolvesTo] = true;
       }
       if (DEX_TBL[cur].evolvesTo == 0) break;
       cur = DEX_TBL[cur].evolvesTo;
@@ -219,7 +221,7 @@ TEST(dex, dexName_fuera_de_rango_no_revienta) {
     gLang = (Lang)lang;
     CHECK_STREQ(dexName(0), DEX_TBL[0].name);
     CHECK_STREQ(dexName(-1), DEX_TBL[0].name);
-    CHECK_STREQ(dexName(152), DEX_TBL[0].name);
+    CHECK_STREQ(dexName(DEX_COUNT + 1), DEX_TBL[0].name);
     CHECK_STREQ(dexName(30000), DEX_TBL[0].name);
   }
   gLang = LANG_DEFAULT;

@@ -4,6 +4,8 @@
 #include "battle.h"
 #include <string.h>
 
+static_assert(PET_DEX_MAX == DEX_COUNT, "pet.h y dex.h no cuadran");
+
 static uint8_t clampGene(uint8_t g) { return g < 90 ? 90 : (g > 110 ? 110 : g); }
 
 void Pet::begin() {
@@ -224,22 +226,24 @@ void Pet::flushSave() {
 }
 
 // quedan miembros sin registrar en la linea evolutiva de esta base?
+// ko10: recorre las ramas (Eevee, Tyrogue, Slowpoke...) con dexEvoOptions
 bool Pet::lineHasUnregistered(int16_t base) const {
-  int16_t cur = base;
-  for (int guard = 0; cur >= 1 && cur <= 151 && guard < 6; guard++) {
+  int16_t stack[16];
+  int n = 0;
+  stack[n++] = base;
+  for (int guard = 0; n > 0 && guard < 32; guard++) {
+    int16_t cur = stack[--n];
+    if (cur < 1 || cur > DEX_COUNT) continue;
     if (!isRegistered(cur)) return true;
-    if (cur == DEX_EEVEE) {
-      for (int16_t b = 134; b <= 136; b++)
-        if (!isRegistered(b)) return true;
-      return false;
-    }
-    cur = DEX_TBL[cur].evolvesTo;
+    int16_t opts[8];
+    int k = dexEvoOptions(cur, opts);
+    for (int i = 0; i < k && n < 16; i++) stack[n++] = opts[i];
   }
   return false;
 }
 
 uint8_t Pet::eggRarity() const {
-  return (eggTarget >= 1 && eggTarget <= 151) ? DEX_TBL[eggTarget].rarity : R_COMUN;
+  return (eggTarget >= 1 && eggTarget <= DEX_COUNT) ? DEX_TBL[eggTarget].rarity : R_COMUN;
 }
 
 // elige la especie del huevo: tirada de rareza (mejorada por una despedida
@@ -264,9 +268,9 @@ int16_t Pet::pickEggSpecies() {
   // si la pokedex del tier esta completa, vale cualquiera del tier
   for (int pass = 0; pass < 2; pass++) {
     for (int t = tier; t >= R_COMUN; t--) {
-      int16_t cand[80];
+      int16_t cand[DEX_COUNT];
       int n = 0;
-      for (int16_t d = 1; d <= 151 && n < 80; d++) {
+      for (int16_t d = 1; d <= DEX_COUNT; d++) {
         if (DEX_TBL[d].rarity != t) continue;
         if (pass == 0 && !lineHasUnregistered(d)) continue;
         cand[n++] = d;
@@ -278,7 +282,7 @@ int16_t Pet::pickEggSpecies() {
 }
 
 void Pet::registerSpecies(int16_t dex) {
-  if (dex < 1 || dex > 151) return;
+  if (dex < 1 || dex > DEX_COUNT) return;
   dexReg[(dex - 1) >> 3] |= (1 << ((dex - 1) & 7));
   if (shiny) dexShinyReg[(dex - 1) >> 3] |= (1 << ((dex - 1) & 7));
 }
@@ -369,7 +373,7 @@ uint16_t Pet::speStat() const {
 
 uint16_t Pet::registeredCount() const {
   uint16_t n = 0;
-  for (int i = 1; i <= 151; i++)
+  for (int i = 1; i <= DEX_COUNT; i++)
     if (isRegistered(i)) n++;
   return n;
 }
@@ -499,14 +503,14 @@ void Pet::evolve() {
   const DexEntry &d = DEX_TBL[speciesId];
   prevSpeciesId = speciesId;
   int16_t next = d.evolvesTo;
-  if (speciesId == DEX_EEVEE) {
-    // rama de Eevee: prefiere la evolucion que falte en la pokedex
-    int16_t opts[3];
-    int n = 0;
-    for (int16_t b = 134; b <= 136; b++)
-      if (!isRegistered(b)) opts[n++] = b;
-    next = n > 0 ? opts[random(n)] : (int16_t)(134 + random(3));
-  }
+  // ramas (Eevee, Tyrogue, Slowpoke, Poliwhirl, Gloom): al azar, prefiriendo
+  // la que falte en la pokedex (ko10: generico, antes solo Eevee)
+  int16_t opts[8], nuevas[8];
+  int n = dexEvoOptions(speciesId, opts), m = 0;
+  for (int i = 0; i < n; i++)
+    if (!isRegistered(opts[i])) nuevas[m++] = opts[i];
+  if (m) next = nuevas[random(m)];
+  else if (n > 1) next = opts[random(n)];
   speciesId = next;
   registerSpecies(speciesId);
   sfxPlay(SFX_EVOLVE);
@@ -535,21 +539,11 @@ void Pet::feedBerry(uint8_t color) {
   save();
 }
 
-// forma base de la linea evolutiva (Eevee para 134-136)
-static int16_t lineBase(int16_t dex) {
-  for (int guard = 0; guard < 4; guard++) {
-    int16_t prev = 0;
-    for (int16_t d = 1; d <= 151 && !prev; d++)
-      if (DEX_TBL[d].evolvesTo == dex || (d == DEX_EEVEE && dex >= 134 && dex <= 136)) prev = d;
-    if (!prev) break;
-    dex = prev;
-  }
-  return dex;
-}
-
+// ko10: la familia es el dex mas bajo de toda la linea (DEX_FAM): con los bebes
+// de gen 2 (Pichu, Cleffa...) la favorita sigue siendo la de siempre
 uint8_t Pet::favFood() const {
-  if (speciesId < 1 || speciesId > 151) return 0;
-  return (uint8_t)(lineBase(speciesId) % 4);
+  if (speciesId < 1 || speciesId > DEX_COUNT) return 0;
+  return (uint8_t)(DEX_FAM[speciesId] % 4);
 }
 
 void Pet::feedCandy() {
@@ -907,7 +901,7 @@ bool Pet::usePotion() {
 }
 
 void Pet::adoptMon(int16_t dex, uint16_t lvl, bool isShiny, uint8_t gA, uint8_t gD, uint8_t gS) {
-  if (dex < 1 || dex > 151) { newEgg(); return; }
+  if (dex < 1 || dex > DEX_COUNT) { newEgg(); return; }
   ceremony = CER_NONE;
   neglectTicks = 0;
   speciesId = dex;
@@ -955,7 +949,7 @@ void Pet::exportTrade(TradePet &t) const {
 
 bool Pet::importTrade(const TradePet &t, uint16_t lvl) {
   // lo que llega por radio no es de fiar: validar todo antes de tocar nada
-  if (t.dex < 1 || t.dex > 151) return false;
+  if (t.dex < 1 || t.dex > DEX_COUNT) return false;
   if (!canBattle()) return false;
   speciesId = t.dex;
   prevSpeciesId = -1;
@@ -1009,10 +1003,10 @@ bool Pet::importTrade(const TradePet &t, uint16_t lvl) {
   eatUntil = heartUntil = 0;
   trades++;
   registerSpecies(speciesId);
-  // evolucion por intercambio (Kadabra, Machoke, Graveler, Haunter), como en gen 1
+  // evolucion por intercambio (Kadabra, Machoke, Graveler, Haunter y los de gen 2)
   if (tradeEvolves(speciesId)) {
     prevSpeciesId = speciesId;
-    speciesId = DEX_TBL[speciesId].evolvesTo;
+    speciesId = tradeTarget(speciesId);
     registerSpecies(speciesId);
     sfxPlay(SFX_EVOLVE);
     evolveUntil = millis() + EVOLVE_ANIM_MS;

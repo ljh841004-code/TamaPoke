@@ -44,7 +44,8 @@ class TestDexData(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from dex_data import DEX, TYPE_ACCENTS, CLASSIC, RARE, LEGENDARY, SLUGS
+        from dex_data import DEX, TYPE_ACCENTS, CLASSIC, RARE, LEGENDARY, SLUGS, EVO_ALT
+        cls.EVO_ALT = EVO_ALT
         from dex_stats import BASE_STATS
         from dex_names import LOCAL_NAMES
         cls.DEX, cls.ACCENTS, cls.CLASSIC = DEX, TYPE_ACCENTS, CLASSIC
@@ -52,10 +53,11 @@ class TestDexData(unittest.TestCase):
         cls.STATS, cls.NAMES = BASE_STATS, LOCAL_NAMES
         cls.byNum = {row[0]: row for row in DEX}
 
-    def test_estan_las_151_especies_sin_huecos_ni_repetidos(self):
+    def test_estan_las_251_especies_sin_huecos_ni_repetidos(self):
+        # ko10: gen 1 + gen 2
         nums = [row[0] for row in self.DEX]
-        self.assertEqual(len(nums), 151)
-        self.assertEqual(sorted(nums), list(range(1, 152)))
+        self.assertEqual(len(nums), 251)
+        self.assertEqual(sorted(nums), list(range(1, 252)))
 
     def test_los_slugs_son_unicos_y_en_minusculas(self):
         slugs = [row[1] for row in self.DEX]
@@ -97,8 +99,20 @@ class TestDexData(unittest.TestCase):
         for tipo, col in self.ACCENTS.items():
             self.assertRegex(col, r'^#[0-9a-fA-F]{6}$', f'color raro en {tipo}: {col}')
 
+    def evolucionadas(self):
+        # ko10: lo que solo sale por evolucion. Los gen 1 con "bebe" de gen 2
+        # (Pikachu, Hitmonlee...) siguen saliendo de huevo como antes
+        edges = [(row[0], row[4]) for row in self.DEX if row[4]] + list(self.EVO_ALT)
+        return {to for fr, to in edges if not (fr > 151 and to <= 151)}
+
+    def test_las_ramas_son_de_especies_reales(self):
+        for fr, to in self.EVO_ALT:
+            self.assertIn(fr, self.byNum)
+            self.assertIn(to, self.byNum)
+            self.assertTrue(self.byNum[fr][4], f'{fr} tiene rama pero no evolucion principal')
+
     def test_las_rarezas_apuntan_a_formas_base(self):
-        evolucionadas = {row[4] for row in self.DEX if row[4]}
+        evolucionadas = self.evolucionadas()
         for num in sorted(self.RARE | self.LEGENDARY):
             self.assertIn(num, self.byNum, f'rareza para una especie inexistente: {num}')
             self.assertNotIn(num, evolucionadas,
@@ -106,12 +120,12 @@ class TestDexData(unittest.TestCase):
         self.assertFalse(self.RARE & self.LEGENDARY, 'una especie no puede ser rara y legendaria')
 
     def test_los_iniciales_clasicos_existen(self):
-        evolucionadas = {row[4] for row in self.DEX if row[4]}
+        evolucionadas = self.evolucionadas()
         for num in self.CLASSIC:
             self.assertIn(num, self.byNum, f'inicial inexistente: {num}')
             self.assertNotIn(num, evolucionadas, f'{self.byNum[num][2]} no puede ser inicial')
 
-    def test_hay_stats_base_de_las_151(self):
+    def test_hay_stats_base_de_todas(self):
         for num in self.byNum:
             self.assertIn(num, self.STATS, f'faltan stats de {self.byNum[num][2]}')
             hp, atk, dfn, spe = self.STATS[num]
