@@ -67,6 +67,7 @@ static void scenes(bool ko, const char *sfx) {
   // entrenamiento
   closeAll(); openTrainMenu();
   render(); shot("04_train_menu");
+  trainMenuPage = 1; render(); shot("04b_train_menu_battle"); trainMenuPage = 0;
   closeAll(); startDefense();
   for (int i = 0; i < 70; i++) { tick(85); render(); }
   defensePress((int16_t)defBall[0].x, (int16_t)defBall[0].y);

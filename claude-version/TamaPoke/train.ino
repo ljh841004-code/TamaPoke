@@ -11,6 +11,7 @@
 // trainingFast / trainingPress / trainingSwipe (como ui_extra.ino).
 
 bool trainMenuOpen = false;
+uint8_t trainMenuPage = 0;   // ko9.1: 0 entrenamiento, 1 batallas
 uint32_t trainMsgUntil = 0;  // aviso en el menu ("demasiado cansado")
 const char *trainMsg = nullptr;
 
@@ -49,14 +50,26 @@ void openTrainMenu() {
   if (pet.isEgg() || pet.ceremony) return;
   cardOpen = false;
   trainMenuOpen = true;
+  trainMenuPage = 0;  // ko9.1: siempre empieza en entrenamiento
   trainMsgUntil = 0;
 }
 
 // ---------- menu ----------
+// ko9.1: dos paginas (deslizar a los lados): 0 entrenamiento, 1 batallas
+// (yasaeng y tongsin, los mismos que en la ficha > Batalla, que siguen alli)
+#define TRB_Y1 118   // botones de la pagina de batallas
+#define TRB_Y2 196
+#define TRB_H 64
 
-void renderTrainMenu() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+static void drawTrainMenuDots() {
+  for (int i = 0; i < 2; i++) {
+    int x = CX - 13 + i * 26;
+    if (i == trainMenuPage) gfx->fillCircle(x, 370, 5, UI_INK);
+    else gfx->drawCircle(x, 370, 4, UI_INK);
+  }
+}
+
+static void renderTrainPage() {
   drawFit(XT(X_TRAIN_TITLE), 44, 300, UI_INK, 3);
   static const XId LABEL[4] = { X_TR_ATK, X_TR_DEF, X_TR_SPE, X_TR_PLAY };
   const uint16_t COL[4] = { UI_BAR_BAD, 0x4C98, UI_BAR_WARN, UI_BAR_OK };
@@ -76,13 +89,61 @@ void renderTrainMenu() {
     setCur(TRM_X + 26, y + 34);
     printT(b);
   }
-  if (timeLeft(trainMsgUntil) && trainMsg) drawFit(trainMsg, 344, 320, UI_BAR_BAD, 2);
-  else drawFit(XT(X_TRAIN_QUIT_HINT), 356, 260, C565(0x60, 0x68, 0x70), 1);
-  drawFit(T(S_BACK), 384, 220, UI_INK, 2);
+  if (!(timeLeft(trainMsgUntil) && trainMsg))
+    drawFit(XT(X_TRAIN_QUIT_HINT), 340, 260, C565(0x60, 0x68, 0x70), 1);
+}
+
+static void renderBattlePage() {
+  drawFit(T(S_BATTLE), 44, 300, UI_INK, 3);
+  drawBtn(TRM_X, TRB_Y1, TRM_W, TRB_H, UI_BAR_OK, UI_WHITE, XT(X_WILD_BTN));
+  drawBtn(TRM_X, TRB_Y2, TRM_W, TRB_H, 0x4C98, UI_WHITE, XT(X_LINK_BTN));
+  char rec[48];
+  snprintf(rec, sizeof(rec), XT(X_RECORD_FMT), pet.wildWins, pet.linkWins, pet.linkBattles, pet.trades);
+  drawFit(rec, 282, 320, UI_INK, 2);
+}
+
+void renderTrainMenu() {
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  if (trainMenuPage == 0) renderTrainPage();
+  else renderBattlePage();
+  if (timeLeft(trainMsgUntil) && trainMsg) drawFit(trainMsg, 336, 320, UI_BAR_BAD, 2);
+  drawTrainMenuDots();
+  drawFit(T(S_BACK), 390, 220, UI_INK, 2);
   gfx->flush();
 }
 
+// deslizar a los lados cambia de pagina; mas alla de los extremos, cierra
+bool trainMenuSwipe(int dir) {
+  if (!trainMenuOpen) return false;
+  int p = (int)trainMenuPage + (dir > 0 ? -1 : 1);  // izquierda avanza (como la ficha)
+  if (p < 0 || p > 1) trainMenuOpen = false;
+  else { trainMenuPage = (uint8_t)p; trainMsgUntil = 0; sfxPlay(SFX_TAP); }
+  return true;
+}
+
+static void battlePageTap(int16_t x, int16_t y) {
+  if (x < TRM_X || x >= TRM_X + TRM_W) { trainMenuOpen = false; return; }
+  bool wild = y >= TRB_Y1 && y < TRB_Y1 + TRB_H, link = y >= TRB_Y2 && y < TRB_Y2 + TRB_H;
+  if (!wild && !link) {
+    if (y < TRB_Y1 || y > 380) trainMenuOpen = false;
+    return;
+  }
+  if (wild) {
+    // mismos motivos que battleAllowed(), pero el aviso sale aqui en el menu
+    if (!pet.canBattle()) { trainMsg = XT(X_CANT_NOW); trainMsgUntil = millis() + 2500; sfxPlay(SFX_DENY); return; }
+    if (pet.tooTiredToBattle()) { trainMsg = XT(X_TOO_TIRED); trainMsgUntil = millis() + 2500; sfxPlay(SFX_DENY); return; }
+    trainMenuOpen = false;
+    startWild();
+  } else {
+    trainMenuOpen = false;
+    openLinkMenu();
+    sfxPlay(SFX_TAP);
+  }
+}
+
 void trainMenuTap(int16_t x, int16_t y) {
+  if (trainMenuPage == 1) { battlePageTap(x, y); return; }
   if (x < TRM_X || x >= TRM_X + TRM_W || y < TRM_Y) { trainMenuOpen = false; return; }
   int i = (y - TRM_Y) / (TRM_H + TRM_GAP);
   if (i > 3) { trainMenuOpen = false; return; }
