@@ -100,26 +100,37 @@ static void scenes(bool ko, const char *sfx) {
       shot(n);
     }
   }
-  // ko10.4: el mismo tipo en sus tres fases (basico / medio / definitivo)
-  for (int ty : { (int)PT_WATER, (int)PT_FIRE, (int)PT_ELECTRIC, (int)PT_GRASS }) {
-    for (int tier = 0; tier < 3; tier++) {
-      bPhase = BP_PLAY; bqAisMe = true; bqN = 1; bqI = 0;
-      memset(&bq[0], 0, sizeof(bq[0]));
-      bq[0].side = 0; bq[0].kind = EV_HIT; bq[0].move = BA_TYPE;
-      bq[0].eff = 2; bq[0].dmg = 5; bq[0].hpA = bMe.hp; bq[0].hpB = bFoe.hp;
-      bvMeType = (uint8_t)ty; bvMeTier = (uint8_t)tier;
-      txFmt(bvL1, sizeof(bvL1), X_USED, bvMeName, moveName(BA_TYPE, (uint8_t)ty, (uint8_t)tier));
-      bvL2[0] = 0;
-      bqT = gMockMillis;
-      for (uint32_t at : { 300u, 520u }) {
-        gMockMillis = bqT + at;
-        render();
-        snprintf(n, sizeof(n), "tier_%02d_%d_%u", ty, tier, at);
-        shot(n);
+  // ko10.4: cada linea evolutiva con su propio ataque en sus tres fases
+  {
+    int16_t keepSp = pet.speciesId;
+    static const int16_t LINES[4][3] = { { 7, 8, 9 }, { 4, 5, 6 }, { 172, 25, 26 }, { 1, 2, 3 } };
+    for (auto &line : LINES) {
+      for (int tier = 0; tier < 3; tier++) {
+        int16_t d = line[tier];
+        pet.speciesId = d;
+        pmd.load((uint8_t)d, false);
+        bMe = makeBattler(d, 30, 60, 60, 60);
+        bvSetup(bMe, bFoe, nullptr, false);
+        bPhase = BP_PLAY; bqAisMe = true; bqN = 1; bqI = 0;
+        memset(&bq[0], 0, sizeof(bq[0]));
+        bq[0].side = 0; bq[0].kind = EV_HIT; bq[0].move = BA_TYPE;
+        bq[0].eff = 2; bq[0].dmg = 5; bq[0].hpA = bMe.hp; bq[0].hpB = bFoe.hp;
+        txFmt(bvL1, sizeof(bvL1), X_USED, bvMeName, moveName(BA_TYPE, bvMeType, bvMeTier));
+        bvL2[0] = 0;
+        bqT = gMockMillis;
+        for (uint32_t at : { 300u, 520u }) {
+          gMockMillis = bqT + at;
+          render();
+          snprintf(n, sizeof(n), "tier_%03d_%u", d, at);
+          shot(n);
+        }
       }
     }
+    pet.speciesId = keepSp;
+    pmd.load((uint8_t)keepSp, pet.shiny);
+    bMe = makeBattler(keepSp, pet.level(), pet.atkStat(), pet.defStat(), pet.speStat());
+    bvSetup(bMe, bFoe, nullptr, false);
   }
-  bvMeTier = 0;
   bq[0].crit = true; bq[0].eff = 4; bq[0].move = BA_TACKLE; bqT = gMockMillis;
   gMockMillis = bqT + 480; render(); shot("fx_crit_super");
   bPhase = BP_MENU; bqN = 0;
