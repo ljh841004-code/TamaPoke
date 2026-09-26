@@ -28,6 +28,7 @@
 #include "link.h"      // fork KO: tongsin ESP-NOW
 #include "cji.h"        // fork KO (ko8): teclado coreano cheonjiin
 #include "font_ko.h"    // fork KO (ko8): Noto Sans KR suavizada (hangul + ASCII), 16-60 px
+#include "weather.h"    // fork KO (ko10.1): estaciones y tiempo segun la fecha
 #include "box.h"        // fork KO (ko4): bogwanham y registro de la pokedex
 #include "sdupdate.h"   // fork KO (ko5): actualizar desde /update.bin de la SD
 #include <qrcode.h>     // fork KO (ko8): QR del portal WiFi (componente espressif/qrcode del core)
@@ -882,14 +883,26 @@ int sceneHour() {
   return e ? (int)((e / 3600) % 24) : 13;
 }
 
-// suelo de cada bioma de dia (de noche se mezcla hacia el azul nocturno)
-static const uint16_t BIOME_SOIL[6] = {
-  C565(0x7e, 0xc0, 0x7f),  // 0 pradera
-  C565(0xdc, 0xca, 0x94),  // 1 playa (arena)
-  C565(0x4f, 0x8a, 0x55),  // 2 bosque
-  C565(0x8a, 0x55, 0x44),  // 3 volcan
-  C565(0xa8, 0x90, 0x6a),  // 4 montana
-  C565(0xe6, 0xee, 0xf5),  // 5 nieve
+// suelo de cada escenario de dia (de noche se mezcla hacia el azul nocturno).
+// ko10.1: uno por tipo (tools/gen_dex.py TYPE_BIOME)
+#define BIOME_N 16
+static const uint16_t BIOME_SOIL[BIOME_N] = {
+  C565(0x7e, 0xc0, 0x7f),  //  0 pradera (normal)
+  C565(0xdc, 0xca, 0x94),  //  1 playa (agua)
+  C565(0x4f, 0x8a, 0x55),  //  2 bosque (planta)
+  C565(0x8a, 0x55, 0x44),  //  3 volcan (fuego)
+  C565(0xa8, 0x90, 0x6a),  //  4 montana (roca)
+  C565(0xe6, 0xee, 0xf5),  //  5 nieve (hielo)
+  C565(0xa6, 0xb0, 0x78),  //  6 central electrica (electrico)
+  C565(0xc4, 0xa5, 0x74),  //  7 dojo (lucha)
+  C565(0x76, 0x6c, 0x84),  //  8 pantano (veneno)
+  C565(0xe8, 0xc6, 0x80),  //  9 desierto (tierra)
+  C565(0xd4, 0xc4, 0xdc),  // 10 ruinas (psiquico)
+  C565(0x8c, 0xcc, 0x66),  // 11 jardin (bicho)
+  C565(0x5e, 0x5a, 0x6e),  // 12 cementerio (fantasma)
+  C565(0x6a, 0x96, 0x78),  // 13 valle del dragon (dragon)
+  C565(0x86, 0x88, 0x92),  // 14 ciudad (siniestro)
+  C565(0x7a, 0x6e, 0x66),  // 15 mina (acero)
 };
 
 void drawClouds(uint32_t now, uint16_t col) {
@@ -904,77 +917,351 @@ void drawClouds(uint32_t now, uint16_t col) {
 
 uint16_t gSkyTop = 0, gSkyBot = 0;  // fork KO (ko4): el reloj grande se tine con el cielo
 
-void drawScene(uint8_t biome, uint32_t now, bool night) {
-  int h = sceneHour();
+// ko10.1: tiempo de ahora (lluvia a ratos, nieve solo en invierno, sol de verano)
+uint8_t sceneWeather() { return weatherAt(pet.lastSeenEpoch); }
+
+static uint16_t nightDim(uint16_t c, bool night) {
+  return night ? lerp565(c, C565(0x16, 0x1c, 0x30), 9, 16) : c;
+}
+
+// colores del cielo segun la hora y el tiempo
+void skyColors(int h, bool night, uint8_t wx, uint16_t &top, uint16_t &bot) {
+  bool wet = wx == WX_RAIN || wx == WX_SNOW;
+  if (night) {
+    if (wet) { top = C565(0x10, 0x12, 0x18); bot = C565(0x26, 0x2a, 0x36); }
+    else     { top = C565(0x0c, 0x12, 0x24); bot = C565(0x1e, 0x26, 0x46); }
+  } else if (wx == WX_RAIN) { top = C565(0x6e, 0x7a, 0x88); bot = C565(0xa8, 0xb2, 0xbc); }
+  else if (wx == WX_SNOW)   { top = C565(0xa4, 0xb0, 0xc0); bot = C565(0xe2, 0xe8, 0xee); }
+  else if (h < 8)  { top = C565(0xd1, 0x6a, 0x86); bot = C565(0xf3, 0xb8, 0x7c); }  // amanecer
+  else if (h < 18) {
+    if (wx == WX_SUNNY) { top = C565(0x3a, 0x9c, 0xe8); bot = C565(0xb8, 0xe4, 0xf6); }  // verano
+    else                { top = C565(0x8f, 0xc8, 0xea); bot = C565(0xdc, 0xee, 0xe6); }  // dia
+  } else { top = C565(0xc7, 0x5a, 0x4a); bot = C565(0xf0, 0xae, 0x64); }  // atardecer
+}
+
+// cielo: bandas de color y, si "astros", sol/luna/estrellas (en batalla no:
+// ahi estan las fichas de vida y el rival)
+void drawSky(int hor, int h, bool night, uint8_t wx, uint32_t now, bool astros) {
   uint16_t top, bot;
-  if (night)            { top = C565(0x0c, 0x12, 0x24); bot = C565(0x1e, 0x26, 0x46); }
-  else if (h < 8)       { top = C565(0xd1, 0x6a, 0x86); bot = C565(0xf3, 0xb8, 0x7c); }  // amanecer
-  else if (h < 18)      { top = C565(0x8f, 0xc8, 0xea); bot = C565(0xdc, 0xee, 0xe6); }  // dia
-  else                  { top = C565(0xc7, 0x5a, 0x4a); bot = C565(0xf0, 0xae, 0x64); }  // atardecer
+  skyColors(h, night, wx, top, bot);
   gSkyTop = top; gSkyBot = bot;
-
-  // cielo en bandas
-  for (int y = 0; y < HORIZON; y += 8)
-    gfx->fillRect(0, y, 466, 8, lerp565(top, bot, y, HORIZON));
-
-  // sol o luna
+  for (int y = 0; y < hor; y += 8)
+    gfx->fillRect(0, y, 466, (y + 8 > hor) ? hor - y : 8, lerp565(top, bot, y, hor));
+  if (wx == WX_RAIN || wx == WX_SNOW) {  // nubarrones, sin sol ni luna
+    uint16_t c1 = night ? C565(0x2c, 0x30, 0x3a) : (wx == WX_RAIN ? C565(0x5c, 0x64, 0x70) : C565(0xc4, 0xcc, 0xd6));
+    drawClouds(now / 2 + 9000, lerp565(c1, top, 6, 16));
+    drawClouds(now, c1);
+    return;
+  }
+  if (!astros) {
+    if (!night && h >= 8 && h < 18) drawClouds(now, C565(0xff, 0xff, 0xff));
+    return;
+  }
   if (night) {
     gfx->fillCircle(360, 78, 24, C565(0xe8, 0xee, 0xf5));
-    gfx->fillCircle(370, 72, 22, lerp565(top, bot, 78, HORIZON));  // creciente
-    for (auto &st : STARS) gfx->fillRect(st[0], st[1], 4, 4, UI_WHITE);
+    gfx->fillCircle(370, 72, 22, lerp565(top, bot, 78, hor));  // creciente
+    for (auto &st : STARS)
+      if (st[1] + 4 < hor) gfx->fillRect(st[0], st[1], 4, 4, UI_WHITE);
   } else if (h < 18) {
-    gfx->fillCircle(360, 84, 26, h < 8 ? C565(0xff, 0xd9, 0x8a) : C565(0xff, 0xe7, 0x9f));
-    drawClouds(now, C565(0xff, 0xff, 0xff));
+    if (wx == WX_SUNNY && h >= 8) {  // sol de verano: grande y con rayos que giran
+      uint16_t ray = C565(0xff, 0xe0, 0x70);
+      float a0 = (now % 12000) / 12000.0f * 6.2832f;
+      for (int k = 0; k < 12; k++) {
+        float a = a0 + k * 0.5236f;
+        float c = cosf(a), s = sinf(a);
+        int x0 = 360 + (int)(c * 40), y0 = 84 + (int)(s * 40);
+        int x1 = 360 + (int)(c * 56), y1 = 84 + (int)(s * 56);
+        gfx->drawLine(x0, y0, x1, y1, ray);
+        gfx->drawLine(x0 + 1, y0, x1 + 1, y1, ray);
+        gfx->drawLine(x0, y0 + 1, x1, y1 + 1, ray);
+      }
+      gfx->fillCircle(360, 84, 34, C565(0xff, 0xf0, 0xa0));
+      gfx->fillCircle(360, 84, 30, C565(0xff, 0xd6, 0x4a));
+    } else {
+      gfx->fillCircle(360, 84, 26, h < 8 ? C565(0xff, 0xd9, 0x8a) : C565(0xff, 0xe7, 0x9f));
+      drawClouds(now, C565(0xff, 0xff, 0xff));
+    }
   } else {
-    gfx->fillCircle(233, HORIZON - 6, 34, C565(0xff, 0xf1, 0xc8));  // sol poniente
+    gfx->fillCircle(233, hor - 6, 34, C565(0xff, 0xf1, 0xc8));  // sol poniente
   }
+}
 
-  // mar de la playa: una franja de agua sobre la arena
-  uint16_t soil = BIOME_SOIL[biome < 6 ? biome : 0];
-  if (night) soil = lerp565(soil, C565(0x16, 0x1c, 0x30), 9, 16);
-  if (biome == 1) {
+static void drawPine(int x, int hor, int hgt, uint16_t c) {
+  gfx->fillTriangle(x, hor - hgt * 46 / 60, x - 16, hor, x + 16, hor, c);
+  gfx->fillTriangle(x, hor - hgt, x - 12, hor - hgt * 28 / 60, x + 12, hor - hgt * 28 / 60, c);
+}
+
+static void drawBareTree(int x, int base, uint16_t c) {
+  gfx->fillRect(x - 3, base - 50, 6, 52, c);
+  gfx->drawLine(x, base - 34, x - 18, base - 52, c); gfx->drawLine(x + 1, base - 34, x - 17, base - 52, c);
+  gfx->drawLine(x, base - 42, x + 16, base - 60, c); gfx->drawLine(x + 1, base - 42, x + 17, base - 60, c);
+  gfx->drawLine(x, base - 24, x + 14, base - 34, c); gfx->drawLine(x, base - 23, x + 14, base - 33, c);
+}
+
+// suelo y detalles de cada escenario, entre "hor" (horizonte) y "bottom"
+void drawBiome(uint8_t biome, int hor, int bottom, uint32_t now, bool night, uint8_t wx) {
+  if (biome >= BIOME_N) biome = 0;
+  uint8_t season = wxSeason(wxMonth(pet.lastSeenEpoch));
+  uint16_t soil = BIOME_SOIL[biome];
+  if (wx == WX_RAIN) soil = lerp565(soil, C565(0x50, 0x58, 0x60), 4, 16);  // mojado
+  if (wx == WX_SNOW) soil = lerp565(soil, C565(0xf4, 0xf8, 0xff), 8, 16);  // nevado
+  soil = nightDim(soil, night);
+  uint16_t dk = lerp565(soil, C565(0x10, 0x18, 0x20), night ? 11 : 7, 16);
+
+  // ---- al fondo, detras del suelo
+  if (biome == 1) {  // playa: franja de mar con olas
     uint16_t sea = night ? C565(0x1c, 0x34, 0x52) : C565(0x4f, 0x96, 0xc4);
-    gfx->fillRect(0, HORIZON - 26, 466, 26, sea);
+    gfx->fillRect(0, hor - 26, 466, 26, sea);
     for (int i = 0; i < 3; i++) {
-      int wy = HORIZON - 22 + i * 7;
+      int wy = hor - 22 + i * 7;
       uint16_t fc = night ? C565(0x3a, 0x58, 0x78) : C565(0xbf, 0xe6, 0xf5);
       gfx->fillRect(60 + ((now / 60 + i * 30) % 60), wy, 26, 2, fc);
       gfx->fillRect(300 - ((now / 60 + i * 20) % 60), wy, 26, 2, fc);
     }
+  } else if (biome == 3) {  // volcan: cono con lava y humo
+    uint16_t cone = nightDim(C565(0x5a, 0x3a, 0x34), night);
+    gfx->fillTriangle(330, hor - 84, 220, hor, 440, hor, cone);
+    gfx->fillRect(316, hor - 84, 28, 6, C565(0xff, 0x6a, 0x2a));
+    gfx->fillTriangle(322, hor - 78, 338, hor - 78, 330, hor - 54, C565(0xff, 0x9b, 0x3a));
+    uint16_t smoke = night ? C565(0x3a, 0x3e, 0x48) : C565(0x9a, 0x94, 0x94);
+    for (int k = 0; k < 3; k++) {
+      int t = (int)((now / 40 + k * 26) % 78);
+      gfx->fillCircle(330 + t / 3 - k * 4, hor - 92 - t / 2, 7 + t / 10, smoke);
+    }
+  } else if (biome == 4) {  // montana: cumbres (nevadas en invierno)
+    gfx->fillTriangle(140, hor - 50, 60, hor, 220, hor, dk);
+    gfx->fillTriangle(330, hor - 38, 250, hor, 410, hor, dk);
+    if (season == SEASON_WINTER) {
+      uint16_t cap = nightDim(C565(0xf2, 0xf6, 0xfa), night);
+      gfx->fillTriangle(140, hor - 50, 124, hor - 40, 156, hor - 40, cap);
+      gfx->fillTriangle(330, hor - 38, 314, hor - 30, 346, hor - 30, cap);
+    }
+  } else if (biome == 6) {  // central electrica: torres y cables
+    uint16_t steel = nightDim(C565(0x5a, 0x60, 0x6a), night);
+    for (int x : { 90, 380 }) {
+      gfx->drawLine(x - 14, hor + 4, x, hor - 80, steel); gfx->drawLine(x - 13, hor + 4, x + 1, hor - 80, steel);
+      gfx->drawLine(x + 14, hor + 4, x, hor - 80, steel); gfx->drawLine(x + 13, hor + 4, x - 1, hor - 80, steel);
+      gfx->fillRect(x - 22, hor - 62, 44, 3, steel);
+      gfx->fillRect(x - 16, hor - 42, 32, 3, steel);
+      gfx->drawLine(x - 10, hor - 42, x + 6, hor - 62, steel);
+      gfx->drawLine(x + 10, hor - 42, x - 6, hor - 62, steel);
+    }
+    uint16_t wire = nightDim(C565(0x30, 0x34, 0x3a), night);
+    for (int dy : { -61, -41 }) {  // cables con comba
+      int y0 = hor + dy;
+      gfx->drawLine(0, y0 + 10, 68, y0, wire);
+      gfx->drawLine(112, y0, 235, y0 + 16, wire);
+      gfx->drawLine(235, y0 + 16, 358, y0, wire);
+      gfx->drawLine(402, y0, 466, y0 + 10, wire);
+    }
+    if ((now / 700) % 4 == 0) {  // chispa
+      uint16_t sp = C565(0xff, 0xe8, 0x40);
+      int sx = 160, sy = hor - 50;
+      gfx->drawLine(sx, sy, sx + 6, sy - 8, sp); gfx->drawLine(sx + 6, sy - 8, sx + 2, sy - 8, sp);
+      gfx->drawLine(sx + 2, sy - 8, sx + 8, sy - 16, sp);
+    }
+  } else if (biome == 7) {  // dojo: casa de madera con tejado y poste
+    uint16_t wall = nightDim(C565(0xec, 0xdc, 0xb4), night);
+    uint16_t roof = nightDim(C565(0x7a, 0x34, 0x2a), night);
+    uint16_t wood = nightDim(C565(0x6a, 0x46, 0x2c), night);
+    gfx->fillRect(40, hor - 44, 120, 46, wall);
+    gfx->fillTriangle(24, hor - 44, 60, hor - 70, 60, hor - 44, roof);
+    gfx->fillRect(60, hor - 70, 80, 26, roof);
+    gfx->fillTriangle(176, hor - 44, 140, hor - 70, 140, hor - 44, roof);
+    gfx->fillRect(84, hor - 30, 32, 32, wood);  // puerta
+    for (int x : { 48, 146 }) gfx->fillRect(x, hor - 44, 6, 46, wood);
+    gfx->fillRoundRect(386, hor - 50, 16, 62, 5, wood);
+    gfx->fillRect(370, hor - 38, 48, 5, wood);
+    gfx->fillRect(374, hor - 22, 40, 5, wood);
+  } else if (biome == 9) {  // desierto: dunas
+    gfx->fillEllipse(120, hor + 6, 170, 30, lerp565(soil, C565(0xff, 0xf0, 0xc8), 4, 16));
+    gfx->fillEllipse(380, hor + 8, 150, 24, lerp565(soil, C565(0x90, 0x60, 0x30), 3, 16));
+  } else if (biome == 10) {  // ruinas: columnas de piedra
+    uint16_t stone = nightDim(C565(0xf0, 0xea, 0xf4), night);
+    uint16_t line = lerp565(stone, C565(0x80, 0x70, 0x90), 6, 16);
+    static const int16_t COLX[4] = { 60, 110, 340, 390 };
+    for (int k = 0; k < 4; k++) {
+      int x = COLX[k];
+      int top = hor - (k == 3 ? 36 : 70);  // la ultima, rota
+      gfx->fillRect(x, top, 22, hor - top + 2, stone);
+      gfx->drawFastVLine(x + 7, top + 4, hor - top - 4, line);
+      gfx->drawFastVLine(x + 14, top + 4, hor - top - 4, line);
+      gfx->fillRect(x - 4, top - 6, 30, 6, stone);
+    }
+    gfx->fillRect(52, hor - 84, 86, 8, stone);  // dintel sobre las dos primeras
+  } else if (biome == 12) {  // cementerio: arbol seco
+    drawBareTree(410, hor + 2, dk);
+  } else if (biome == 13) {  // valle del dragon: acantilados y cascada
+    uint16_t rock = nightDim(C565(0x7a, 0x84, 0x92), night);
+    uint16_t edge = lerp565(rock, UI_WHITE, night ? 2 : 5, 16);
+    gfx->fillRect(40, hor - 60, 164, 62, rock);
+    gfx->fillTriangle(0, hor, 40, hor - 60, 40, hor, rock);
+    gfx->fillRect(40, hor - 60, 164, 5, edge);
+    gfx->fillRect(262, hor - 60, 164, 62, rock);
+    gfx->fillTriangle(466, hor, 426, hor - 60, 426, hor, rock);
+    gfx->fillRect(262, hor - 60, 164, 5, edge);
+    uint16_t fall = night ? C565(0x3a, 0x5a, 0x86) : C565(0x9a, 0xd2, 0xf0);
+    uint16_t foam = night ? C565(0x70, 0x8c, 0xb0) : UI_WHITE;
+    gfx->fillRect(204, hor - 60, 58, 62, fall);
+    for (int k = 0; k < 6; k++) {
+      int y = hor - 60 + (int)((now / 12 + k * 17) % 52);
+      gfx->fillRect(208 + k * 9, y, 3, 10, foam);
+    }
+  } else if (biome == 14) {  // ciudad: edificios con ventanas
+    uint16_t bld = night ? C565(0x1a, 0x1e, 0x2e) : C565(0x5a, 0x60, 0x74);
+    uint16_t win = night ? C565(0xff, 0xd8, 0x6a) : C565(0xb4, 0xc8, 0xd8);
+    static const int16_t B[][3] = { {10,40,70}, {56,50,100}, {112,36,60}, {316,44,90}, {366,50,120}, {420,46,76} };
+    for (auto &b : B) {
+      gfx->fillRect(b[0], hor - b[2], b[1], b[2] + 2, bld);
+      for (int wy = hor - b[2] + 8; wy < hor - 8; wy += 14)
+        for (int wxp = b[0] + 6; wxp + 6 < b[0] + b[1]; wxp += 12)
+          if (!night || ((wxp * 7 + wy * 3) % 5) < 3) gfx->fillRect(wxp, wy, 6, 7, win);
+    }
+  } else if (biome == 15) {  // mina: colina con boca de cueva
+    uint16_t hillc = nightDim(C565(0x5c, 0x52, 0x4c), night);
+    gfx->fillEllipse(340, hor, 130, 56, hillc);
+    gfx->fillEllipse(80, hor, 110, 34, hillc);
+    gfx->fillEllipse(340, hor + 2, 32, 34, C565(0x10, 0x0c, 0x0c));
+    uint16_t beam = nightDim(C565(0x8a, 0x5c, 0x34), night);
+    gfx->fillRect(304, hor - 34, 6, 36, beam);
+    gfx->fillRect(370, hor - 34, 6, 36, beam);
+    gfx->fillRect(300, hor - 38, 80, 6, beam);
   }
 
-  // suelo
-  gfx->fillRect(0, HORIZON, 466, 466 - HORIZON, soil);
-  uint16_t hill = lerp565(soil, night ? C565(0x0c, 0x12, 0x24) : C565(0xff, 0xff, 0xff), 3, 16);
-  gfx->fillRoundRect(-60, HORIZON - 14, 586, 60, 30, hill);
+  // ---- suelo
+  gfx->fillRect(0, hor, 466, bottom - hor, soil);
+  if (biome != 13 && biome != 15) {
+    uint16_t hill = lerp565(soil, night ? C565(0x0c, 0x12, 0x24) : C565(0xff, 0xff, 0xff), 3, 16);
+    gfx->fillRoundRect(-60, hor - 14, 586, 60, 30, hill);
+  }
+  if (biome == 13) {  // valle: laguna donde cae la cascada
+    uint16_t lake = night ? C565(0x2a, 0x44, 0x6a) : C565(0x6a, 0xb4, 0xdc);
+    gfx->fillEllipse(233, hor + 8, 90, 12, lake);
+    gfx->fillEllipse(233, hor + 2, 36, 5, night ? C565(0x70, 0x8c, 0xb0) : UI_WHITE);
+  }
 
-  // detalles del bioma
-  uint16_t dk = lerp565(soil, C565(0x10, 0x18, 0x20), night ? 11 : 7, 16);
-  if (biome == 2) {  // bosque: coniferas en silueta
-    for (int tx : { 60, 150, 360, 416 }) {
-      gfx->fillTriangle(tx, HORIZON - 46, tx - 16, HORIZON, tx + 16, HORIZON, dk);
-      gfx->fillTriangle(tx, HORIZON - 60, tx - 12, HORIZON - 28, tx + 12, HORIZON - 28, dk);
-    }
-  } else if (biome == 3) {  // volcan: rocas y brasas
-    gfx->fillTriangle(70, HORIZON, 40, HORIZON + 30, 100, HORIZON + 30, dk);
-    gfx->fillTriangle(400, HORIZON + 4, 372, HORIZON + 30, 430, HORIZON + 30, dk);
-    if (!night)
-      for (int e = 0; e < 4; e++)
-        gfx->fillRect(120 + e * 70, HORIZON + 8 + (e % 2) * 6, 4, 4, C565(0xff, 0x9b, 0x3a));
-  } else if (biome == 4) {  // montana: cumbres al fondo
-    gfx->fillTriangle(140, HORIZON - 50, 60, HORIZON, 220, HORIZON, dk);
-    gfx->fillTriangle(330, HORIZON - 38, 250, HORIZON, 410, HORIZON, dk);
-  } else if (biome == 5 && !night) {  // nieve: copos cayendo
-    for (int f = 0; f < 10; f++) {
-      int fx = (f * 53 + now / 40) % 466;
-      int fy = (f * 90 + now / 18) % HORIZON;
-      gfx->fillRect(fx, fy, 3, 3, UI_WHITE);
-    }
-  } else if (biome == 0) {  // pradera: matas de hierba
+  // ---- detalles sobre el suelo
+  if (biome == 0) {  // pradera: matas de hierba y florecillas
     for (int gx : { 80, 175, 300, 395 })
       for (int b = -1; b <= 1; b++)
-        gfx->fillRect(gx + b * 5, HORIZON + 6, 2, 8 + (b == 0 ? 4 : 0), dk);
+        gfx->fillRect(gx + b * 5, hor + 6, 2, 8 + (b == 0 ? 4 : 0), dk);
+    uint16_t fl = nightDim(C565(0xff, 0xf6, 0xd0), night);
+    for (int fx : { 130, 240, 350 }) gfx->fillCircle(fx, hor + 12, 3, fl);
+  } else if (biome == 2) {  // bosque: coniferas en silueta
+    for (int tx : { 60, 150, 360, 416 }) drawPine(tx, hor, 60, dk);
+  } else if (biome == 3) {  // volcan: rocas y brasas
+    gfx->fillTriangle(70, hor, 40, hor + 30, 100, hor + 30, dk);
+    gfx->fillTriangle(400, hor + 4, 372, hor + 30, 430, hor + 30, dk);
+    for (int e = 0; e < 4; e++)
+      gfx->fillRect(120 + e * 70, hor + 8 + (e % 2) * 6, 4, 4, C565(0xff, 0x9b, 0x3a));
+  } else if (biome == 5) {  // nieve: abetos escarchados y bloques de hielo
+    uint16_t frost = nightDim(C565(0x9c, 0xb8, 0xcc), night);
+    for (int tx : { 70, 400 }) drawPine(tx, hor, 56, frost);
+    uint16_t ice = nightDim(C565(0xb4, 0xdc, 0xf0), night);
+    gfx->fillTriangle(150, hor + 14, 170, hor - 6, 186, hor + 14, ice);
+    gfx->fillTriangle(300, hor + 12, 312, hor - 2, 326, hor + 12, ice);
+  } else if (biome == 8) {  // pantano: charcos morados, burbujas y arboles secos
+    uint16_t goo = nightDim(C565(0x7a, 0x44, 0x9a), night);
+    uint16_t bub = nightDim(C565(0xd0, 0x9c, 0xf0), night);
+    gfx->fillEllipse(140, hor + 16, 60, 9, goo);
+    gfx->fillEllipse(330, hor + 22, 70, 10, goo);
+    for (int k = 0; k < 4; k++) {
+      int t = (int)((now / 30 + k * 30) % 120);
+      if (t < 45) gfx->drawCircle((k & 1 ? 310 : 120) + k * 10, hor + 16 - t / 3, 2 + t / 15, bub);
+    }
+    drawBareTree(40, hor + 4, dk);
+    drawBareTree(430, hor + 4, dk);
+  } else if (biome == 9) {  // desierto: cactus
+    uint16_t cac = nightDim(C565(0x4a, 0x8a, 0x4e), night);
+    for (int x : { 70, 400 }) {
+      gfx->fillRoundRect(x - 6, hor - 40, 12, 52, 6, cac);
+      gfx->fillRoundRect(x - 20, hor - 26, 8, 18, 4, cac);
+      gfx->fillRect(x - 20, hor - 12, 16, 6, cac);
+      gfx->fillRoundRect(x + 12, hor - 32, 8, 16, 4, cac);
+      gfx->fillRect(x + 4, hor - 20, 16, 6, cac);
+    }
+  } else if (biome == 10) {  // ruinas: orbes psiquicos flotando
+    uint16_t orb = nightDim(C565(0xf0, 0x90, 0xd0), night);
+    for (int k = 0; k < 3; k++) {
+      int y = hor - 100 + (int)(8 * sinf(now / 600.0f + k * 2.1f));
+      gfx->fillCircle(170 + k * 60, y, 5, orb);
+    }
+  } else if (biome == 11) {  // jardin: arbol y flores de colores
+    uint16_t leaf = nightDim(C565(0x3e, 0x8a, 0x44), night);
+    uint16_t trunk = nightDim(C565(0x6a, 0x46, 0x2c), night);
+    gfx->fillRect(64, hor - 40, 10, 50, trunk);
+    gfx->fillCircle(69, hor - 56, 26, leaf);
+    gfx->fillCircle(50, hor - 42, 18, leaf);
+    gfx->fillCircle(90, hor - 42, 18, leaf);
+    static const uint16_t FL[3] = { C565(0xf0, 0x50, 0x60), C565(0xff, 0xd8, 0x40), C565(0xf4, 0x90, 0xd0) };
+    for (int k = 0; k < 9; k++) {
+      int fx = 130 + k * 34, fy = hor + 8 + (k % 3) * 8;
+      gfx->fillCircle(fx, fy, 4, nightDim(FL[k % 3], night));
+      gfx->fillCircle(fx, fy, 1, nightDim(C565(0xff, 0xf8, 0xe0), night));
+    }
+  } else if (biome == 12) {  // cementerio: lapidas y fuegos fatuos
+    uint16_t tomb = nightDim(C565(0x9a, 0x98, 0xa6), night);
+    for (int k = 0; k < 4; k++) {
+      int x = 50 + k * 80, y = hor + (k % 2) * 8;
+      gfx->fillRoundRect(x, y - 30, 26, 36, 10, tomb);
+      gfx->fillRect(x + 11, y - 24, 4, 14, dk);
+      gfx->fillRect(x + 6, y - 20, 14, 4, dk);
+    }
+    uint16_t wisp = C565(0x8a, 0x9c, 0xff);
+    for (int k = 0; k < 2; k++) {
+      int x = 150 + k * 170 + (int)(10 * sinf(now / 500.0f + k));
+      int y = hor - 44 + (int)(6 * sinf(now / 330.0f + k * 3));
+      gfx->fillCircle(x, y + 6, 3, lerp565(wisp, soil, 6, 16));
+      gfx->fillCircle(x, y, 5, wisp);
+    }
+  } else if (biome == 14) {  // ciudad: marcas de la carretera
+    uint16_t mark = nightDim(C565(0xf0, 0xe8, 0xc0), night);
+    for (int x = 10; x < 466; x += 60) gfx->fillRect(x, hor + 22, 30, 4, mark);
+  } else if (biome == 15) {  // mina: vias y brillos de metal
+    uint16_t rail = nightDim(C565(0x9c, 0xa4, 0xae), night);
+    uint16_t tie = nightDim(C565(0x5a, 0x40, 0x2c), night);
+    for (int k = 0; k < 5; k++) {
+      int y = hor + 6 + k * 7, half = 10 + k * 5;
+      gfx->fillRect(340 - half - 6, y, 2 * half + 12, 3, tie);
+    }
+    gfx->drawLine(332, hor + 2, 310, hor + 40, rail); gfx->drawLine(333, hor + 2, 311, hor + 40, rail);
+    gfx->drawLine(348, hor + 2, 370, hor + 40, rail); gfx->drawLine(347, hor + 2, 369, hor + 40, rail);
+    for (int k = 0; k < 3; k++)
+      if ((now / 400 + k) % 3 == 0) {
+        int x = 60 + k * 70, y = hor + 14 + (k % 2) * 10;
+        gfx->drawFastHLine(x - 4, y, 9, UI_WHITE);
+        gfx->drawFastVLine(x, y - 4, 9, UI_WHITE);
+      }
   }
+}
+
+// lluvia o nieve por encima de todo el escenario (0..bottom)
+void drawWeather(uint8_t wx, int bottom, uint32_t now, bool night) {
+  if (wx == WX_RAIN) {
+    uint16_t c = night ? C565(0x6a, 0x80, 0x9a) : C565(0xdc, 0xe6, 0xf0);
+    for (int i = 0; i < 36; i++) {
+      int x = (int)((i * 53 + now / 12) % 486);
+      int y = (int)((i * 97 + now / 2) % (uint32_t)bottom);
+      if (y + 14 > bottom) continue;
+      gfx->drawLine(x, y, x - 4, y + 14, c);
+    }
+  } else if (wx == WX_SNOW) {
+    uint16_t c = night ? C565(0xb0, 0xba, 0xcc) : UI_WHITE;
+    for (int f = 0; f < 28; f++) {
+      int sz = (f % 4) ? 3 : 4;
+      int fy = (int)((f * 90 + now / (18 + (f % 3) * 4)) % (uint32_t)bottom);
+      int fx = (f * 53 + 466 + (int)(10 * sinf(now / 700.0f + f))) % 466;
+      if (fy + sz > bottom) continue;
+      gfx->fillRect(fx, fy, sz, sz, c);
+    }
+  }
+}
+
+void drawScene(uint8_t biome, uint32_t now, bool night) {
+  uint8_t wx = sceneWeather();
+  drawSky(HORIZON, sceneHour(), night, wx, now, true);
+  drawBiome(biome, HORIZON, 466, now, night, wx);
+  drawWeather(wx, 466, now, night);
 }
 
 // ---------- reloj grande de fondo (fork KO, ko4) ----------
@@ -1679,7 +1966,7 @@ void drawGameScene() {
   if (night)
     for (auto &st : STARS) gfx->fillRect(st[0], st[1], 4, 4, UI_WHITE);
   uint8_t bio = pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome;
-  uint16_t soil = BIOME_SOIL[bio < 6 ? bio : 0];
+  uint16_t soil = BIOME_SOIL[bio < BIOME_N ? bio : 0];
   if (night) soil = lerp565(soil, C565(0x16, 0x1c, 0x30), 9, 16);
   gfx->fillRect(0, hor, 466, 466 - hor, soil);
 }

@@ -380,24 +380,24 @@ void startEvent(int i) {
   }
 }
 
-// cielo segun la hora + suelo del bioma de mi Pokemon + dos plataformas
+// cielo segun la hora y el tiempo + escenario + dos plataformas.
+// ko10.1: en salvaje, el escenario es el del rival (su tipo/habitat); en
+// tongsin, el de mi Pokemon
 void drawBattleBg() {
   int hh = sceneHour();
   bool night = hh < 6 || hh >= 20;
-  uint16_t top, bot;
-  if (night)        { top = C565(0x0c, 0x12, 0x24); bot = C565(0x1e, 0x26, 0x46); }
-  else if (hh < 8)  { top = C565(0xd1, 0x6a, 0x86); bot = C565(0xf3, 0xb8, 0x7c); }
-  else if (hh < 18) { top = C565(0x8f, 0xc8, 0xea); bot = C565(0xdc, 0xee, 0xe6); }
-  else              { top = C565(0xc7, 0x5a, 0x4a); bot = C565(0xf0, 0xae, 0x64); }
+  uint8_t wx = sceneWeather();
+  int16_t who = bLink ? (pet.isEgg() ? 0 : pet.speciesId) : bvFoeDex;
+  uint8_t bio = (who >= 1 && who <= DEX_COUNT) ? DEX_TBL[who].biome : 0;
+  uint32_t now = millis();
   int hor = 150;
-  for (int y = 0; y < hor; y += 8) gfx->fillRect(0, y, 466, 8, lerp565(top, bot, y, hor));
-  uint8_t bio = pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome;
-  uint16_t soil = BIOME_SOIL[bio < 6 ? bio : 0];
-  if (night) soil = lerp565(soil, C565(0x16, 0x1c, 0x30), 9, 16);
-  gfx->fillRect(0, hor, 466, 262 - hor, soil);
+  drawSky(hor, hh, night, wx, now, false);
+  drawBiome(bio, hor, 262, now, night, wx);
+  uint16_t soil = nightDim(BIOME_SOIL[bio < BIOME_N ? bio : 0], night);
   uint16_t pad = lerp565(soil, C565(0x10, 0x18, 0x20), 4, 16);
   gfx->fillEllipse(316 + bvShakeX, 160 + bvShakeY, 78, 16, pad);   // plataforma del rival
   gfx->fillEllipse(140 + bvShakeX, 256 + bvShakeY, 92, 18, pad);   // la mia
+  drawWeather(wx, 262, now, night);
   gfx->fillRect(0, 262, 466, 204, UI_BG_DAY);  // panel inferior (mensajes/menu)
 }
 

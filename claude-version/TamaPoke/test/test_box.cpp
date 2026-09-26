@@ -6,6 +6,7 @@
 #include "../battle.h"
 #include "../pet.h"
 #include "../dex.h"
+#include "../weather.h"
 #include <string.h>
 
 static void freshPet(Pet &p, int16_t dex) {
@@ -677,4 +678,35 @@ TEST(gen2, intercambio_evoluciona_onix_y_acepta_dex_nuevos) {
   CHECK_EQ(a.speciesId, (int16_t)251);
   t.dex = 252;
   CHECK(!a.importTrade(t, 30));
+}
+
+// ---------------------------------------------------------------- tiempo (ko10.1)
+TEST(weather, mes_y_estacion_desde_la_fecha) {
+  CHECK_EQ((int)wxMonth(1790343900u), 9);   // 25-09-2026
+  CHECK_EQ((int)wxMonth(1767225600u), 1);   // 01-01-2026 00:00
+  CHECK_EQ((int)wxMonth(1767225599u), 12);  // 31-12-2025 23:59
+  CHECK_EQ((int)wxMonth(1709164800u), 2);   // 29-02-2024 (bisiesto)
+  CHECK_EQ((int)wxMonth(1709251200u), 3);   // 01-03-2024
+  CHECK_EQ((int)wxSeason(1), (int)SEASON_WINTER);
+  CHECK_EQ((int)wxSeason(12), (int)SEASON_WINTER);
+  CHECK_EQ((int)wxSeason(7), (int)SEASON_SUMMER);
+  CHECK_EQ((int)wxSeason(4), (int)SEASON_SPRING);
+  CHECK_EQ((int)wxSeason(10), (int)SEASON_AUTUMN);
+}
+
+TEST(weather, nieve_solo_en_invierno_y_sol_solo_en_verano) {
+  CHECK_EQ((int)weatherAt(0), (int)WX_CLEAR);  // sin reloj
+  int rain = 0, snow = 0, sunny = 0, blocks = 0;
+  // un ano entero desde el 01-01-2026, bloque a bloque
+  for (uint32_t e = 1767225600u; e < 1767225600u + 365u * 86400u; e += WX_BLOCK_S) {
+    uint8_t w = weatherAt(e), s = wxSeason(wxMonth(e));
+    blocks++;
+    if (w == WX_SNOW) { snow++; CHECK_EQ((int)s, (int)SEASON_WINTER); }
+    if (w == WX_SUNNY) { sunny++; CHECK_EQ((int)s, (int)SEASON_SUMMER); }
+    if (w == WX_RAIN) { rain++; CHECK((int)s != (int)SEASON_WINTER); }
+    CHECK_EQ((int)weatherAt(e + 3600), (int)w);  // estable dentro del bloque
+  }
+  CHECK(snow > 0 && rain > 0 && sunny > 0);
+  // "de vez en cuando": entre el 8% y el 30% de los bloques
+  CHECK_RANGE((rain + snow) * 100 / blocks, 8, 30);
 }

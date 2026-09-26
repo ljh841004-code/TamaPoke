@@ -103,6 +103,41 @@ static void scenes(bool ko, const char *sfx) {
   bvFoeCaught = true;
   render(); shot("09_battle_caught");
   bPhase = BP_NEXT; bPhaseT = gMockMillis; render(); shot("09b_battle_next");
+  // ko10.1: escenario de la batalla salvaje = habitat del rival; tiempo por fecha
+  {
+    auto rep = [](int bio) -> int16_t {
+      for (int16_t d = 1; d <= DEX_COUNT; d++)
+        if (DEX_TBL[d].biome == bio && !(d >= 138 && d <= 141)) return d;
+      return 1;
+    };
+    bPhase = BP_MENU; bvFoeCaught = false; bvFoeFainted = false;
+    for (int bio : { 6, 12, 13, 14 }) {
+      bvFoeDex = rep(bio);
+      render(); snprintf(n, sizeof(n), "40_battle_bio%02d", bio); shot(n);
+    }
+    struct { uint32_t e; const char *tag; } WX[] = {
+      { 1772459100u, "rain" }, { 1767275100u, "snow" }, { 1780321500u, "sunny" },
+      { 1772459100u + 9 * 3600, "night_clear" },
+    };
+    for (auto &w : WX) {
+      gMockEpoch = w.e; pet.lastSeenEpoch = w.e;
+      render(); snprintf(n, sizeof(n), "41_battle_%s", w.tag); shot(n);
+    }
+    closeAll();
+    int16_t keep = pet.speciesId;
+    gMockEpoch = 1790343900; pet.lastSeenEpoch = gMockEpoch;
+    for (int bio = 0; bio < 16; bio++) {
+      pet.speciesId = rep(bio);
+      render(); snprintf(n, sizeof(n), "42_main_bio%02d", bio); shot(n);
+    }
+    pet.speciesId = rep(0);
+    for (auto &w : WX) {
+      gMockEpoch = w.e; pet.lastSeenEpoch = w.e;
+      render(); snprintf(n, sizeof(n), "43_main_%s", w.tag); shot(n);
+    }
+    pet.speciesId = keep;
+    gMockEpoch = 1790343900; pet.lastSeenEpoch = gMockEpoch;
+  }
   // caja
   closeAll();
   box.add(16, 14, false, false, gMockEpoch - 86400);

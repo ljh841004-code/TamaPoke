@@ -17,15 +17,17 @@ def rgb565(hexcol):
     return (r >> 3) << 11 | (g >> 2) << 5 | (b >> 3)
 
 
-# bioma de fondo por tipo (la luz la pone la hora real del RTC)
-# 0 PRADERA, 1 PLAYA, 2 BOSQUE, 3 VOLCAN, 4 MONTANA, 5 NIEVE
+# bioma de fondo por tipo (la luz la pone la hora real del RTC; el tiempo, la fecha)
+# ko10.1: un escenario propio para cada tipo
+#  0 PRADERA   1 PLAYA    2 BOSQUE   3 VOLCAN     4 MONTANA  5 NIEVE    6 CENTRAL ELECTRICA
+#  7 DOJO      8 PANTANO  9 DESIERTO 10 RUINAS   11 JARDIN  12 CEMENTERIO
+# 13 VALLE DEL DRAGON (cascada)  14 CIUDAD DE NOCHE  15 MINA
 TYPE_BIOME = {
-    'agua': 1, 'planta': 2, 'bicho': 2, 'fuego': 3,
-    'roca': 4, 'tierra': 4, 'dragon': 1, 'hielo': 5,  # los dragones gen1 (Dratini) viven en el agua
-    'normal': 0, 'electrico': 0, 'lucha': 0, 'veneno': 0,
-    'psiquico': 0, 'fantasma': 0,
-    'siniestro': 0, 'acero': 4,  # ko10
+    'normal': 0, 'agua': 1, 'planta': 2, 'fuego': 3, 'roca': 4, 'hielo': 5,
+    'electrico': 6, 'lucha': 7, 'veneno': 8, 'tierra': 9, 'psiquico': 10,
+    'bicho': 11, 'fantasma': 12, 'dragon': 13, 'siniestro': 14, 'acero': 15,
 }
+BIOME_COUNT = 16
 
 # tipo (primario, gen 1) para las batallas: indice en PT_* de dex.h
 TYPE_ENUM = ['normal', 'fuego', 'agua', 'planta', 'electrico', 'hielo', 'lucha',
@@ -59,7 +61,7 @@ def main():
         "  uint8_t rarity;       // sale de huevo si > 0\n"
         "  uint16_t accent;      // color RGB565 del tipo para la UI\n"
         "  uint8_t bHp, bAtk, bDef, bSpe;  // base stats reales de gen 1\n"
-        "  uint8_t biome;        // 0 pradera 1 playa 2 bosque 3 volcan 4 montana 5 nieve\n"
+        "  uint8_t biome;        // escenario 0..15 (ver drawBiome en TamaPoke.ino)\n"
         "  uint8_t ptype;        // tipo primario PT_* (batallas)\n"
         "};\n\n")
     # formas base = las que no son evolucion de nadie (las ramas tambien lo son).

@@ -159,9 +159,24 @@ TEST(dex, las_stats_base_son_plausibles) {
     const DexEntry &e = DEX_TBL[d];
     CHECK_MSG(e.bHp > 0 && e.bAtk > 0 && e.bDef > 0 && e.bSpe > 0,
               std::string("stat base a cero en ") + e.name);
-    CHECK_MSG(e.biome <= 5, std::string("bioma desconocido en ") + e.name);
+    CHECK_MSG(e.biome <= 15, std::string("bioma desconocido en ") + e.name);
     CHECK_MSG(e.rarity <= R_LEGENDARIO, std::string("rareza desconocida en ") + e.name);
   }
+}
+
+TEST(dex, cada_tipo_tiene_su_escenario) {
+  // ko10.1: 16 tipos -> 16 escenarios (salvo los fosiles marinos, que van a la playa)
+  int8_t seen[16];
+  memset(seen, -1, sizeof(seen));
+  for (int d = 1; d <= N; d++) {
+    const DexEntry &e = DEX_TBL[d];
+    if (d >= 138 && d <= 141) { CHECK_EQ((int)e.biome, 1); continue; }
+    if (seen[e.ptype] < 0) seen[e.ptype] = (int8_t)e.biome;
+    CHECK_EQ((int)seen[e.ptype], (int)e.biome);
+  }
+  bool used[16] = { false };
+  for (int t = 0; t < 16; t++)
+    if (seen[t] >= 0) { CHECK_MSG(!used[seen[t]], "dos tipos con el mismo escenario"); used[seen[t]] = true; }
 }
 
 TEST(dex, la_rama_de_eevee_cuadra_con_el_codigo) {
