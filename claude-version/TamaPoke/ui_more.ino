@@ -129,6 +129,11 @@ void boxSwipe() {  // deslizar: cierra la ficha, o la caja si estaba en la lista
 
 void boxTap(int16_t x, int16_t y) {
   if (boxSel >= 0) {  // ficha: soltar (dos toques) o cerrar
+    // ko9.1: tocar al Pokemon repite su grito
+    if (y >= 80 && y < 200 && x >= 120 && x < 346) {
+      audioCry(box.at((uint8_t)boxSel).dex);
+      return;
+    }
     if (y >= 300 && y < 348 && x >= 93 && x < 229) {
       if (timeLeft(boxConfirmUntil)) {
         box.release((uint8_t)boxSel);
@@ -156,7 +161,7 @@ void boxTap(int16_t x, int16_t y) {
   int r = (y - BOX_ROW_Y) / (BOX_ROW_H + BOX_ROW_GAP);
   if (r >= BOX_ROWS || (y - BOX_ROW_Y) % (BOX_ROW_H + BOX_ROW_GAP) >= BOX_ROW_H) return;
   int i = boxPage * BOX_ROWS + r;
-  if (i < box.count()) { boxSel = i; sfxPlay(SFX_TAP); }
+  if (i < box.count()) { boxSel = i; audioCry(box.at((uint8_t)i).dex); }  // ko9.1: su grito
 }
 
 // tras la despedida (forma final) el siguiente compañero sale de la caja

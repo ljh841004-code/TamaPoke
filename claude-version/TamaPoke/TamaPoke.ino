@@ -520,6 +520,11 @@ void handleSerial() {
   } else if (line == "RUN") {
     pet.startRunaway();
     Serial.println("DONE");
+  } else if (line.startsWith("CRY ")) {  // ko9.1: probar un grito de la SD (CRY 25)
+    int n = line.substring(4).toInt();
+    Serial.printf("/mons/cry%03d.wav\n", n);  // si no suena: LS para ver si esta y su tamano
+    audioCry((uint16_t)n);
+    Serial.println("DONE");
   } else if (line == "BEEP") {
     sfxPlay(SFX_HATCH);  // prueba de audio
     Serial.println("DONE");
@@ -2553,8 +2558,13 @@ void galleryTap(int16_t x, int16_t y) {
     return;
   }
   lastTap = now;
-  if (galleryDetail) {  // volver a la rejilla
-    galleryDetail = 0;
+  if (galleryDetail) {
+    // ko9.1: tocar al Pokemon repite su grito (solo si ya se conoce)
+    if (y >= 100 && y < 230 && x >= 120 && x < 346 && dexDiscovered(galleryDetail)) {
+      audioCry(galleryDetail);
+      return;
+    }
+    galleryDetail = 0;  // volver a la rejilla
     galleryPmd.unload();
     galleryDirty = true;
     return;
@@ -2572,7 +2582,9 @@ void galleryTap(int16_t x, int16_t y) {
   if (dex > 151) return;
   galleryDetail = dex;
   galleryPmd.load(dex, pet.isShinyRegistered(dex));
-  sfxPlay(SFX_TAP);
+  // ko9.1: los ya vistos o criados dicen su nombre; los "???" no
+  if (dexDiscovered(dex)) audioCry(dex);
+  else sfxPlay(SFX_TAP);
 }
 
 void drawBattery() {
