@@ -63,6 +63,10 @@ static void scenes(bool ko, const char *sfx) {
   kbOpen = false;
   closeAll(); startSack(); tick(300); render(); shot("25_sack");
   closeAll(); startGame(); tick(300); render(); shot("26_ball_game");
+  // ko10.4: 3 pelotas cayendo a la vez (un rato despues de empezar)
+  for (int f = 0; f < 36; f++) { tick(85); render(); }
+  shot("26b_ball_game_3balls");
+  gameOpen = false;
   closeAll();
   // entrenamiento
   closeAll(); openTrainMenu();

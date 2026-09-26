@@ -111,7 +111,9 @@ bool gameOpen = false;
 uint32_t gameOverUntil = 0;
 uint32_t gameStartMs = 0;        // ko9.2: el juego dura 30 s (y 3 vidas)
 #define GAME_MS 30000UL
-float ballX, ballY, ballVX, ballVY, gamePetX;
+// ko10.4: 3 pelotas a la vez (antes 1: demasiado facil)
+#define GAME_BALLS 3
+float ballX[GAME_BALLS], ballY[GAME_BALLS], ballVX[GAME_BALLS], ballVY[GAME_BALLS], gamePetX;
 uint32_t lastGameStep = 0;  // ultima llamada a stepGame(): fisica por tiempo real, no por frame
 uint8_t gameScore, gameMisses;
 float hitX, hitY;             // ultimo golpe (anillo de impacto)
@@ -1816,34 +1818,44 @@ void startGame() {
   hitTime = 0;
   gamePetX = 233;
   lastGameStep = millis();
-  respawnBall();
+  // caen del cielo a alturas distintas para que no lleguen las tres a la vez
+  for (int i = 0; i < GAME_BALLS; i++) respawnBall(i, -30 - i * 90);
 }
 
-void respawnBall() {
-  ballX = 150 + random(166);
-  ballY = 96;
-  float sp = 1.6f + gameScore * 0.05f;  // mas viva segun avanzas
-  if (sp > 4.0f) sp = 4.0f;
-  ballVX = random(2) ? sp : -sp;
-  ballVY = 0;
+// una pelota nueva cae desde arriba (y < 0: aun fuera de la pantalla)
+void respawnBall(int i, float y) {
+  static const int16_t LANE[GAME_BALLS] = { 130, 233, 336 };
+  ballX[i] = LANE[i] - 30 + random(61);
+  ballY[i] = y;
+  float sp = 0.6f + gameScore * 0.03f;  // mas viva segun avanzas
+  if (sp > 2.5f) sp = 2.5f;
+  ballVX[i] = random(2) ? sp : -sp;
+  ballVY[i] = 0;
 }
 
 void gameTap(int16_t x, int16_t y) {
   if (gameOverUntil) return;
-  float dx = ballX - x, dy = ballY - y;
-  if (dx * dx + dy * dy < 74 * 74) {  // toque a la bola!
-    gameScore++;
-    sfxPlay(SFX_PLAY);
-    // golpe mas suave: impulso moderado que crece poco a poco con la puntuacion
-    float lift = 6.6f + (gameScore > 16 ? 3.5f : gameScore * 0.22f);
-    ballVY = -lift;
-    ballVX += dx * 0.12f;
-    if (ballVX > 6.5f) ballVX = 6.5f;
-    if (ballVX < -6.5f) ballVX = -6.5f;
-    hitX = ballX;
-    hitY = ballY;
-    hitTime = millis();
+  // la pelota mas cercana al dedo (solo una por toque)
+  int best = -1;
+  float bd = 74 * 74;
+  for (int i = 0; i < GAME_BALLS; i++) {
+    float dx = ballX[i] - x, dy = ballY[i] - y;
+    float d = dx * dx + dy * dy;
+    if (ballY[i] > 0 && d < bd) { bd = d; best = i; }
   }
+  if (best < 0) return;
+  float dx = ballX[best] - x;
+  gameScore++;
+  sfxPlay(SFX_PLAY);
+  // golpe mas suave: impulso moderado que crece poco a poco con la puntuacion
+  float lift = 6.6f + (gameScore > 16 ? 3.5f : gameScore * 0.22f);
+  ballVY[best] = -lift;
+  ballVX[best] += dx * 0.12f;
+  if (ballVX[best] > 6.5f) ballVX[best] = 6.5f;
+  if (ballVX[best] < -6.5f) ballVX[best] = -6.5f;
+  hitX = ballX[best];
+  hitY = ballY[best];
+  hitTime = millis();
 }
 
 void stepGame() {
@@ -1858,39 +1870,47 @@ void stepGame() {
   if (k > 3.0f) k = 3.0f;  // frame anormalmente tardio: no dar un salto enorme
   lastGameStep = now;
 
-  float grav = 0.40f + gameScore * 0.013f;  // cae un poco mas rapido cada vez
-  if (grav > 0.80f) grav = 0.80f;
-  ballVY += grav * k;
-  ballX += ballVX * k;
-  ballY += ballVY * k;
-  // rebote en la pared circular
-  float dx = ballX - CX, dy = ballY - CY;
-  float d = sqrtf(dx * dx + dy * dy);
-  if (d > 205) {
-    float nx = dx / d, ny = dy / d;
-    float dot = ballVX * nx + ballVY * ny;
-    if (dot > 0) {
-      ballVX = (ballVX - 2 * dot * nx) * 0.85f;
-      ballVY = (ballVY - 2 * dot * ny) * 0.85f;
-    }
-    ballX = CX + nx * 205;
-    ballY = CY + ny * 205;
-  }
-  // ko9.2: fin por tiempo (30 s) o por 3 caidas; mientras quede vida, otra bola
+  // ko10.4: con 3 pelotas cae algo mas despacio que con una
+  float grav = 0.30f + gameScore * 0.008f;  // cae un poco mas rapido cada vez
+  if (grav > 0.65f) grav = 0.65f;
   bool timeUp = now - gameStartMs >= GAME_MS;
-  bool fell = ballY > 384;
-  if (fell && !timeUp) {
-    if (++gameMisses >= 3) timeUp = true;
-    else respawnBall();
+  int low = 0;  // la pelota mas baja (la que persigue el bicho)
+  for (int i = 0; i < GAME_BALLS; i++) {
+    ballVY[i] += grav * k;
+    ballX[i] += ballVX[i] * k;
+    ballY[i] += ballVY[i] * k;
+    // rebote en la pared circular (solo ya dentro de la pantalla)
+    float dx = ballX[i] - CX, dy = ballY[i] - CY;
+    float d = sqrtf(dx * dx + dy * dy);
+    if (ballY[i] > 0 && d > 205) {
+      float nx = dx / d, ny = dy / d;
+      float dot = ballVX[i] * nx + ballVY[i] * ny;
+      if (dot > 0) {
+        ballVX[i] = (ballVX[i] - 2 * dot * nx) * 0.85f;
+        ballVY[i] = (ballVY[i] - 2 * dot * ny) * 0.85f;
+      }
+      ballX[i] = CX + nx * 205;
+      ballY[i] = CY + ny * 205;
+    } else if (ballX[i] < 40 || ballX[i] > 426) {  // aun arriba: que no se salga por los lados
+      ballVX[i] = -ballVX[i];
+      ballX[i] = ballX[i] < 40 ? 40 : 426;
+    }
+    // ko9.2: cada pelota que toca el suelo gasta una vida y vuelve a caer del cielo
+    if (ballY[i] > 384 && !timeUp) {
+      if (++gameMisses >= 3) timeUp = true;
+      else respawnBall(i, -40);
+    }
+    if (ballY[i] > ballY[low]) low = i;
   }
+  // ko9.2: fin por tiempo (30 s) o por 3 caidas
   if (timeUp) {
     gameNewHi = pet.playResult(gameScore);  // record: animo + energia; si no, algo de energia
     sfxPlay(gameNewHi ? SFX_MEDAL : SFX_LEVEL);
     gameOverUntil = millis() + 4000;
     return;
   }
-  // el bicho la sigue por abajo
-  float chase = (ballX - gamePetX) * 0.12f;
+  // el bicho sigue por abajo a la pelota mas baja
+  float chase = (ballX[low] - gamePetX) * 0.12f;
   if (chase > 7) chase = 7;
   if (chase < -7) chase = -7;
   gamePetX += chase * k;
@@ -2080,7 +2100,9 @@ void renderGame() {
   drawTimeBar(el < GAME_MS ? GAME_MS - el : 0, GAME_MS, 120);
 
   if (pmd.loaded) {
-    uint8_t act = (ballX > gamePetX + 4) ? PMD_WALKR : (ballX < gamePetX - 4) ? PMD_WALKL : PMD_IDLE;
+    int low = 0;
+    for (int i = 1; i < GAME_BALLS; i++) if (ballY[i] > ballY[low]) low = i;
+    uint8_t act = (ballX[low] > gamePetX + 4) ? PMD_WALKR : (ballX[low] < gamePetX - 4) ? PMD_WALKL : PMD_IDLE;
     if (!pmd.has(act)) act = PMD_IDLE;
     drawPmdAct(act, (int)gamePetX, 394, millis(), true, false, 3);
   } else if (mon.loaded) {
@@ -2106,8 +2128,9 @@ void renderGame() {
     gfx->drawCircle((int)hitX, (int)hitY, rad - 2, C565(0xff, 0xd9, 0x8a));
   }
 
-  // la pokeball
-  drawMap(SPR_ICON_PLAY, 16, (int)ballX - 24, (int)ballY - 24, 3, false);
+  // las pokeballs (las que aun caen desde fuera se ven al entrar)
+  for (int i = 0; i < GAME_BALLS; i++)
+    if (ballY[i] > -24) drawMap(SPR_ICON_PLAY, 16, (int)ballX[i] - 24, (int)ballY[i] - 24, 3, false);
 
   gfx->flush();
 }
