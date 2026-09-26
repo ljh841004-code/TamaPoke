@@ -1,4 +1,4 @@
-# TamaPoke KO v1.17-ko10.8 (클로드 버전)
+# TamaPoke KO v1.17-ko10.8.1 (클로드 버전)
 
 > 이 폴더는 **클로드(Claude) 버전**이에요. 저장소 루트의 TamaPoke v1.23과는 따로 관리하는 별도 갈래예요.
 > v1.23의 어드벤처·컬렉션 기능은 이 버전에 없어요. (소리와 한글 글꼴은 옮겨 왔어요)
@@ -14,9 +14,9 @@
 | 파일 | 내용 |
 |---|---|
 | `update.bin` | **SD카드 업데이트용**. 웹 설치 페이지로 보내고 [SD 업데이트] (아래 A) |
-| `tamapoke-ko-v1.17-ko10.8-app-0xe000.bin` | **esptool 업데이트용**. 주소 **0xe000**. 포켓몬은 그대로 남아요 |
-| `tamapoke-ko-v1.17-ko10.8.bin` | **새로 설치용** 통합 이미지. 주소 **0x0**. 저장 데이터가 초기화돼요 |
-| `TamaPoke_v1.17-ko10.8_정리.txt` | 기능·사용법 요약 메모 |
+| `tamapoke-ko-v1.17-ko10.8.1-app-0xe000.bin` | **esptool 업데이트용**. 주소 **0xe000**. 포켓몬은 그대로 남아요 |
+| `tamapoke-ko-v1.17-ko10.8.1.bin` | **새로 설치용** 통합 이미지. 주소 **0x0**. 저장 데이터가 초기화돼요 |
+| `TamaPoke_v1.17-ko10.8.1_정리.txt` | 기능·사용법 요약 메모 |
 | `TamaPoke/` | 전체 소스 (Arduino 스케치 폴더). 자세한 설명은 `TamaPoke/README_KO.md` |
 
 ## SD카드에 파일 넣기 (울음소리, 배경음, update.bin)
@@ -36,11 +36,11 @@
 
 ### B. esptool로
 1. Chrome/Edge에서 [ESP Tool (esptool-js)](https://espressif.github.io/esptool-js/) → Baudrate **115200** → Connect → 포트 선택
-2. 주소 **`0xe000`**에 `tamapoke-ko-v1.17-ko10.8-app-0xe000.bin` → Program (**Erase Flash 누르지 않기**)
+2. 주소 **`0xe000`**에 `tamapoke-ko-v1.17-ko10.8.1-app-0xe000.bin` → Program (**Erase Flash 누르지 않기**)
    (0x10000이 아니라 0xe000: SD 업데이트 뒤에도 esptool로 올린 펌웨어가 켜지게 부팅 선택 정보를 같이 써요.
    이 파일을 0x10000이나 0x0에 올리면 켜지지 않아요)
-3. 처음 설치하거나 초기화하고 싶다면: 주소 `0x0`에 `tamapoke-ko-v1.17-ko10.8.bin`
-4. 끝나면 USB를 뽑고 전원 버튼을 6초 눌러 껐다 켜기. 시계 화면 아래쪽에 `v1.17-ko10.8`이 보이면 성공
+3. 처음 설치하거나 초기화하고 싶다면: 주소 `0x0`에 `tamapoke-ko-v1.17-ko10.8.1.bin`
+4. 끝나면 USB를 뽑고 전원 버튼을 6초 눌러 껐다 켜기. 시계 화면 아래쪽에 `v1.17-ko10.8.1`이 보이면 성공
 
 > **ko3~ko5.1에서 ko6으로 올릴 때만** esptool이 바로 연결되지 않아요 (그 버전들의 USB 방식 때문).
 > 장치 관리자에서 COM 번호 확인 → esptool 창을 닫고 PowerShell에서
@@ -72,6 +72,22 @@
 얼음: 냉동빔과 얼음 결정, 독: 거품, 땅: 진흙과 흙먼지, 에스퍼: 고리, 벌레: 바늘, 바위: 떨어지는 돌,
 고스트: 그림자, 드래곤: 푸른 불꽃, 노말·격투·몸통박치기: 충격). **급소**는 화면이 흔들리고,
 **효과가 굉장했다**는 흰 충격파가 퍼져요. 모습은 `screenshots/21_battle_fx.png`.
+
+## ko10.8.1: 화살표로 메뉴 이동
+
+드래그가 가끔 탭으로 처리돼서(예: 스탯 카드가 닫힘) 메뉴를 보기 어려웠던 문제 때문에, **화면 가장자리 화살표를 눌러서** 이동할 수 있게 했어요. 드래그도 그대로 돼요.
+
+| 화면 | ◀ 왼쪽 | ▶ 오른쪽 | 맨 아래 |
+|---|---|---|---|
+| 기본 화면 | 도감 | 시간/설정 | ▲ 스탯 카드 |
+| 스탯 카드 (5쪽) | 이전 쪽 | 다음 쪽 | ▼ 닫기 |
+| 도감 | 이전 쪽 (첫 쪽에선 나가기) | 다음 쪽 | ▼ 나가기 |
+| 훈련 / 배틀 메뉴 | 훈련 쪽 | 배틀 쪽 | ▼ 닫기 |
+
+- 기본 화면 아래 버튼 4개를 조금 위로 올려 ▲와 안 겹치게 했어요
+- 도감의 "두 번 탭: 나가기" 글자는 뺐어요 (두 번 탭은 그대로 동작)
+- SD카드 그림은 ko10.8 것 그대로 (`tamapoke-ko10.8-sprites.zip`)
+- 모습: `screenshots/01_main.png`, `03c_card_profile.png`, `12_dex_grid.png`, `04_train_menu.png`
 
 ## ko10.8: 기본 화면 행동, 새 포켓몬 동작(SD), 빠른 터치
 
@@ -287,7 +303,7 @@
 2. **Espressif Flash Download Tool** (Windows 프로그램, 인터넷 필요 없음): ESP32-S3 선택 →
    파일과 주소(위 표) 입력 → START
 3. **esptool (파이썬)**: `pip install esptool` →
-   `esptool --chip esp32s3 write-flash 0xe000 tamapoke-ko-v1.17-ko10.8-app-0xe000.bin`
+   `esptool --chip esp32s3 write-flash 0xe000 tamapoke-ko-v1.17-ko10.8.1-app-0xe000.bin`
 4. **Arduino IDE**로 `TamaPoke/` 소스를 직접 올리기 (`TamaPoke/README_KO.md`의 설정 참고)
 5. **SD카드에 파일 보내기**: SD카드를 빼서 PC에 꽂고 `mons` 폴더에 직접 복사하거나,
    `.bin` 파일(update.bin 등)은 `TamaPoke/tools/sdcard/mons/`에 두고
@@ -309,6 +325,7 @@ SD카드 `mons` 폴더에 `bgm.wav`(평소), `battle_wild.wav`(배틀 중), `cry
 
 ## 버전 기록
 
+- **ko10.8.1** – 화면 가장자리 화살표로 메뉴 이동 (기본 화면·스탯 카드·도감·훈련 메뉴)
 - **ko10.8** – 기본 화면 행동(기술 연습·심심해·말풍선·날씨·쓰다듬기), SD 그림 새 동작 4개, 터치 별도 작업(빠른 연타)
 - **ko10.7** – 공격 훈련 샌드백 버티기, 훈련 보상(경험치 5% / 기록 갱신 20% + 사탕 1)
 - **ko10.6** – 12시간 잘 돌보면 실수 -1, 방어 훈련 목숨 3개(무제한), 속도 훈련 반응속도 점수
