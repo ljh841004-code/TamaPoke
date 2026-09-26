@@ -107,8 +107,12 @@ void Pet::update(uint32_t nowMs) {
   // fin de ceremonia: la criatura se va y queda un huevo nuevo. fork KO (ko4):
   // tras una despedida (ciclo completo) el siguiente sale de la caja si hay
   if (ceremony != CER_NONE && !timeLeft(ceremonyUntil)) {
-    bool fromBox = ceremony == CER_FAREWELL && nextPetHook && nextPetHook(*this);
-    if (!fromBox) newEgg();
+    // ko10.5: despedida o soltarlo = criado (su familia no vuelve en los huevos);
+    // la escapada no cuenta. La interfaz lo guarda en la caja y deja elegir
+    uint8_t how = ceremony;
+    if (how != CER_RUNAWAY && !isEgg()) markFamRaised(speciesId);
+    if (endHook) endHook(*this, how);
+    newEgg();
     return;
   }
   while (nowMs - lastTick >= PET_TICK_MS) {
@@ -268,12 +272,14 @@ int16_t Pet::pickEggSpecies() {
 
   // candidatos del tier con linea incompleta; si no hay, baja de tier;
   // si la pokedex del tier esta completa, vale cualquiera del tier
-  for (int pass = 0; pass < 2; pass++) {
+  // ko10.5: pases 0-1 sin familias ya criadas; el 2 (todo criado) sin limite
+  for (int pass = 0; pass < 3; pass++) {
     for (int t = tier; t >= R_COMUN; t--) {
       int16_t cand[DEX_COUNT];
       int n = 0;
       for (int16_t d = 1; d <= DEX_COUNT; d++) {
         if (DEX_TBL[d].rarity != t) continue;
+        if (pass < 2 && isFamRaised(d)) continue;
         if (pass == 0 && !lineHasUnregistered(d)) continue;
         cand[n++] = d;
       }
@@ -281,6 +287,25 @@ int16_t Pet::pickEggSpecies() {
     }
   }
   return CLASSIC_DEX[random(NUM_CLASSIC_DEX)];  // inalcanzable, por si acaso
+}
+
+bool Pet::isFamRaised(int16_t dex) const {
+  if (dex < 1 || dex > DEX_COUNT) return false;
+  int f = DEX_FAM[dex];
+  return famRaised[(f - 1) >> 3] & (1 << ((f - 1) & 7));
+}
+
+void Pet::markFamRaised(int16_t dex) {
+  if (dex < 1 || dex > DEX_COUNT) return;
+  int f = DEX_FAM[dex];
+  famRaised[(f - 1) >> 3] |= (uint8_t)(1 << ((f - 1) & 7));
+  pendingSave = true;
+}
+
+bool Pet::allFamsRaised() const {
+  for (int16_t d = 1; d <= DEX_COUNT; d++)
+    if (DEX_FAM[d] == d && !isFamRaised(d)) return false;
+  return true;
 }
 
 void Pet::registerSpecies(int16_t dex) {
@@ -788,6 +813,7 @@ void Pet::save() {
   prefs.putBool("stpk", starterPick);
   prefs.putBytes("dexsh", dexShinyReg, sizeof(dexShinyReg));
   prefs.putBytes("candy", candy, sizeof(candy));  // ko10.4
+  prefs.putBytes("famr", famRaised, sizeof(famRaised));  // ko10.5
   prefs.putBool("scharm", shinyCharm);
   prefs.putUChar("badge", badges);  // ko10.4
   prefs.putUInt("dday", dailyDoneDay);
@@ -871,6 +897,17 @@ void Pet::load() {
   sleeping = prefs.getBool("sleep", false);
   lastEnd = prefs.getUChar("lend", CER_NONE);
   prefs.getBytes("dexreg", dexReg, sizeof(dexReg));
+  // ko10.5: familias criadas. Guardados de antes: lo registrado (criado) cuenta
+  // como criado, salvo la familia del que se esta criando ahora
+  if (prefs.getBytes("famr", famRaised, sizeof(famRaised)) != sizeof(famRaised)) {
+    memset(famRaised, 0, sizeof(famRaised));
+    int16_t cur = prefs.isKey("dexn") ? prefs.getShort("dexn", -1) : -1;
+    for (int16_t d = 1; d <= DEX_COUNT; d++)
+      if (isRegistered(d) && !(cur >= 1 && cur <= DEX_COUNT && DEX_FAM[d] == DEX_FAM[cur])) {
+        int f = DEX_FAM[d];
+        famRaised[(f - 1) >> 3] |= (uint8_t)(1 << ((f - 1) & 7));
+      }
+  }
   streak = prefs.getUShort("strk", 0);
   bestStreak = prefs.getUShort("bstrk", 0);
   lastCareDay = prefs.getUInt("cday", 0);

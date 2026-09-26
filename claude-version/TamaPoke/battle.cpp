@@ -83,6 +83,16 @@ uint32_t careMinutesForLevel(uint16_t lvl) {
 
 static bool hasPreEvo(int16_t dex) { return dexPrevo(dex) != 0; }
 
+int16_t dexFirstForm(int16_t dex) {
+  if (dex < 1 || dex > DEX_COUNT) return dex;
+  for (int guard = 0; guard < 4; guard++) {
+    int16_t p = dexPrevo(dex);
+    if (!p) break;
+    dex = p;
+  }
+  return dex;
+}
+
 uint8_t moveTier(int16_t dex) {
   if (dex < 1 || dex > DEX_COUNT) return 0;
   bool pre = hasPreEvo(dex), post = DEX_TBL[dex].evolvesTo != 0;

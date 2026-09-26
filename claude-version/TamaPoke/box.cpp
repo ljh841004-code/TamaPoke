@@ -42,6 +42,19 @@ bool Box::add(int16_t dex, uint16_t lvl, bool shiny, bool caught, uint32_t epoch
   return true;
 }
 
+bool Box::addRaised(int16_t dex, uint16_t lvl, bool shiny, uint8_t gA, uint8_t gD, uint8_t gS,
+                    uint32_t epoch) {
+  if (full() || dex < 1 || dex > DexLog::N) return false;
+  BoxMon &m = mons[n++];
+  m.dex = dex;
+  m.lvl = lvl < 1 ? 1 : (lvl > 100 ? 100 : lvl);
+  m.flags = (shiny ? BOXF_SHINY : 0) | BOXF_RAISED;
+  m.geneAtk = gA; m.geneDef = gD; m.geneSpe = gS;
+  m.epoch = epoch;
+  save();
+  return true;
+}
+
 bool Box::take(uint8_t i, BoxMon &out) {
   if (i >= n) return false;
   out = mons[i];

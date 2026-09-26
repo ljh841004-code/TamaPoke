@@ -112,6 +112,9 @@ BAct battleAi(const Battler &self, const Battler &foe, BRng &rng, uint8_t whim =
 // evoluciones: 1 (legendarios 2). Ej.: Squirtle 0 (Pistola Agua), Wartortle 1
 // (Hidropulso), Blastoise 2 (Hidrobomba). Solo cambia nombre y efecto, no el dano
 uint8_t moveTier(int16_t dex);
+// ko10.5: primera forma de su linea (siguiendo las preevoluciones: Raichu ->
+// Pichu, Hitmonchan -> Tyrogue, Blastoise -> Squirtle)
+int16_t dexFirstForm(int16_t dex);
 
 // ko10.4: tiempo de la batalla (WX_* de weather.h). Lluvia: agua x1,5, fuego x0,5;
 // sol: fuego x1,5, agua x0,5; nieve: hielo x1,5. battleAuto (tongsin) usa siempre buen tiempo

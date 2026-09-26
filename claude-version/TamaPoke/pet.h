@@ -181,8 +181,16 @@ public:
   bool usePotion();  // gasta una pocion
   // fork KO (ko4): el siguiente a criar sale de la caja (tras la despedida)
   void adoptMon(int16_t dex, uint16_t lvl, bool shiny, uint8_t gA, uint8_t gD, uint8_t gS);
-  // lo llama update() al acabar una DESPEDIDA; si devuelve false, huevo nuevo
-  bool (*nextPetHook)(Pet &) = nullptr;
+  // ko10.5: lo llama update() al acabar una ceremonia (how = CER_*), ANTES de
+  // poner el huevo nuevo: la interfaz guarda al que se va en la caja y abre la
+  // eleccion del siguiente (nuevo huevo o uno de la caja)
+  void (*endHook)(Pet &, uint8_t how) = nullptr;
+  // ko10.5: familias ya criadas (bit = DEX_FAM). Los huevos nuevos no repiten
+  // familia mientras quede alguna sin criar; al empezar de cero se borra todo
+  uint8_t famRaised[PET_DEX_BYTES] = { 0 };
+  bool isFamRaised(int16_t dex) const;
+  void markFamRaised(int16_t dex);
+  bool allFamsRaised() const;
   void exportTrade(TradePet &t) const;
   bool importTrade(const TradePet &t, uint16_t lvl = 1);  // recibe el Pokemon del otro (evoluciona si toca)
   // evolucion por intercambio: a que especie (0 = ninguna). Gen 1: Kadabra,

@@ -35,7 +35,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko10.4"
+#define FW_VERSION "1.17-ko10.5"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -258,7 +258,7 @@ void setup() {
   pet.begin();
   box.begin();
   dexLog.begin();
-  pet.nextPetHook = nextFromBox;  // tras la despedida, el siguiente sale de la caja
+  pet.endHook = onPetEnd;  // ko10.5: el que se va a la caja; luego se elige el siguiente
   sdBegin();
   thumbs.load();
 

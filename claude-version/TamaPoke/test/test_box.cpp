@@ -252,53 +252,83 @@ TEST(train, defensa_y_velocidad_suben_con_tope_y_record) {
   CHECK_EQ(q.speHi, (uint16_t)12);
 }
 
-// ---------------------------------------------------------------- siguiente
+// ---------------------------------------------------------------- siguiente (ko10.5)
 static Box *gHookBox = nullptr;
-static bool fromBox(Pet &pet) {
-  int i = gHookBox->pickRandom();
-  BoxMon m;
-  if (i < 0 || !gHookBox->take((uint8_t)i, m)) return false;
-  pet.adoptMon(m.dex, m.lvl, m.flags & BOXF_SHINY, m.geneAtk, m.geneDef, m.geneSpe);
-  return true;
+static uint8_t gHookHow = 0xFF;
+static void endHookTest(Pet &p, uint8_t how) {
+  gHookHow = how;
+  if (how != CER_RUNAWAY)
+    gHookBox->addRaised(p.speciesId, p.level(), p.shiny, p.geneAtk, p.geneDef, p.geneSpe, 0);
 }
 
-TEST(next, tras_la_despedida_sale_uno_de_la_caja) {
-  Pet p;
-  freshPet(p, 4);
-  Box b;
-  b.begin();
-  b.add(25, 21, false, true, 0);
-  gHookBox = &b;
-  p.nextPetHook = fromBox;
-  p.startFarewell();
-  mockAdvanceMillis(CEREMONY_MS + 10);
-  p.update(millis());
-  CHECK_EQ(p.speciesId, (int16_t)25);
-  CHECK_EQ(p.level(), (uint16_t)21);
-  CHECK(p.ceremony == CER_NONE);
-  CHECK(p.isRegistered(25));
-  CHECK_EQ(b.count(), (uint8_t)0);  // sale de la caja
-}
-
-TEST(next, caja_vacia_o_escapada_dan_huevo) {
+TEST(next, despedida_guarda_al_criado_y_su_familia_no_vuelve_en_huevos) {
   Pet p;
   freshPet(p, 4);
   Box b;
   b.begin();
   gHookBox = &b;
-  p.nextPetHook = fromBox;
+  gHookHow = 0xFF;
+  p.endHook = endHookTest;
+  p.speciesId = 6;  // Charizard al final del ciclo
   p.startFarewell();
   mockAdvanceMillis(CEREMONY_MS + 10);
   p.update(millis());
-  CHECK(p.isEgg());  // caja vacia
-  // escapada: huevo aunque haya Pokemon en la caja
-  p.eggTap(); p.eggTap(); p.eggTap();
-  b.add(25, 21, false, true, 0);
+  CHECK(p.isEgg());
+  CHECK_EQ((int)gHookHow, (int)CER_FAREWELL);
+  CHECK_EQ(b.count(), (uint8_t)1);
+  CHECK_EQ((int)b.at(0).dex, 6);
+  CHECK(b.at(0).flags & BOXF_RAISED);
+  CHECK(p.isFamRaised(4) && p.isFamRaised(5) && p.isFamRaised(6));
+  for (int i = 0; i < 300; i++) CHECK(!p.isFamRaised(p.pickEggSpecies()));
+  p.eggTap(); p.eggTap(); p.eggTap();  // el huevo puesto tampoco es de la familia criada
+  CHECK(!p.isEgg());
+  CHECK(!p.isFamRaised(p.speciesId));
+  // se guarda
+  p.saveNow();
+  Pet q;
+  q.begin();
+  CHECK(q.isFamRaised(5));
+  CHECK(!q.isFamRaised(7));
+}
+
+TEST(next, escapada_no_cuenta_como_criado_ni_va_a_la_caja) {
+  Pet p;
+  freshPet(p, 4);
+  Box b;
+  b.begin();
+  gHookBox = &b;
+  p.endHook = endHookTest;
   p.startRunaway();
   mockAdvanceMillis(CEREMONY_MS + 10);
   p.update(millis());
   CHECK(p.isEgg());
-  CHECK_EQ(b.count(), (uint8_t)1);
+  CHECK_EQ((int)gHookHow, (int)CER_RUNAWAY);
+  CHECK_EQ(b.count(), (uint8_t)0);
+  CHECK(!p.isFamRaised(4));
+}
+
+TEST(next, de_la_caja_empieza_en_su_primera_forma_a_nivel_1) {
+  Pet p;
+  freshPet(p, 4);
+  p.adoptMon(dexFirstForm(9), 1, true, 110, 104, 97);  // un Blastoise de la caja
+  CHECK_EQ((int)p.speciesId, 7);                  // -> Squirtle
+  CHECK_EQ(p.level(), (uint16_t)1);
+  CHECK(p.shiny);
+  CHECK_EQ((int)p.geneAtk, 110);
+  CHECK_EQ((int)p.geneSpe, 97);
+  CHECK_EQ((int)dexFirstForm(26), 172);  // Raichu -> Pichu
+  CHECK_EQ((int)dexFirstForm(107), 236); // Hitmonchan -> Tyrogue
+  CHECK_EQ((int)dexFirstForm(134), 133); // Vaporeon -> Eevee
+  CHECK_EQ((int)dexFirstForm(143), 143); // Snorlax (sin preevolucion en gen 2)
+}
+
+TEST(next, con_todas_las_familias_criadas_vuelve_a_valer_cualquiera) {
+  Pet p;
+  freshPet(p, 4);
+  for (int16_t d = 1; d <= DEX_COUNT; d++) p.markFamRaised(d);
+  CHECK(p.allFamsRaised());
+  int16_t e = p.pickEggSpecies();
+  CHECK(e >= 1 && e <= DEX_COUNT);
 }
 
 // ---------------------------------------------------------------- guardado

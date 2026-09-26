@@ -239,6 +239,13 @@ static void scenes(bool ko, const char *sfx) {
   box.add(16, 18, false, true, gMockEpoch);   // ko10.4: repetidos (x2 Pidgey)
   openBox(); render(); shot("10_box");
   boxSel = 1; render(); shot("11_box_detail");
+  // ko10.5: fin de un ciclo -> criado a la caja (corona) y eleccion del siguiente
+  boxSel = -1;
+  box.addRaised(6, 36, false, 108, 101, 99, gMockEpoch);
+  pet.markFamRaised(16);  // Pidgey ya criado: en gris
+  render(); shot("11b_box_raised");
+  xScreen = XS_NEXTPICK; nextPage = 0; render(); shot("11c_next_pick");
+  xScreen = XS_BOX;
   // pokedex
   closeAll();
   for (int d : { 16, 19, 25, 129, 133, 143 }) dexLog.seen(d, gMockEpoch - 86400 * 3);
@@ -280,7 +287,7 @@ int main(int argc, char **argv) {
   pet.begin();
   box.begin();
   dexLog.begin();
-  pet.nextPetHook = nextFromBox;
+  pet.endHook = onPetEnd;
   sdBegin();
   thumbs.load();
   pet.syncClock(gMockEpoch);

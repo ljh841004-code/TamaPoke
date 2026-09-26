@@ -11,7 +11,8 @@
 
 #define BOX_MAX 60
 
-enum : uint8_t { BOXF_SHINY = 1, BOXF_CAUGHT = 2 };  // CAUGHT: con pokeball (si no, ganado)
+enum : uint8_t { BOXF_SHINY = 1, BOXF_CAUGHT = 2, BOXF_RAISED = 4 };  // CAUGHT: con pokeball (si no, ganado)
+// ko10.5: RAISED = criado hasta el final (despedida/soltado): corona en la caja
 
 struct __attribute__((packed)) BoxMon {
   int16_t dex;
@@ -29,6 +30,8 @@ public:
   const BoxMon &at(uint8_t i) const { return mons[i < n ? i : 0]; }
   // false si esta llena o el dex no es valido; los genes se sortean (90-110)
   bool add(int16_t dex, uint16_t lvl, bool shiny, bool caught, uint32_t epoch);
+  // ko10.5: el que se acaba de criar, con sus genes y la marca de criado
+  bool addRaised(int16_t dex, uint16_t lvl, bool shiny, uint8_t gA, uint8_t gD, uint8_t gS, uint32_t epoch);
   bool take(uint8_t i, BoxMon &out);  // saca el i-esimo (para criarlo)
   bool release(uint8_t i);            // lo suelta
   int pickRandom() const;             // indice al azar, -1 si vacia

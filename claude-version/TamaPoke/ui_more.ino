@@ -83,7 +83,8 @@ void renderBoxDetail() {
   drawFit(l, 204, 340, UI_INK, 2);
   char date[8];
   boxDate(m.epoch, date, sizeof(date));
-  snprintf(l, sizeof(l), "%s  %s", XT((m.flags & BOXF_CAUGHT) ? X_CAUGHT_TAG : X_WON_TAG), date);
+  snprintf(l, sizeof(l), "%s  %s", XT((m.flags & BOXF_RAISED) ? X_RAISED_TAG
+                                      : (m.flags & BOXF_CAUGHT) ? X_CAUGHT_TAG : X_WON_TAG), date);
   drawFit(l, 232, 340, UI_INK, 2);
   drawFit(XT(X_BOX_NEXT), 262, 360, UI_INK, 1);
   bool conf = timeLeft(boxConfirmUntil) > 0;
@@ -134,11 +135,13 @@ void renderBox() {
     setSize(2);
     setCur(134, y + 6);
     printT(l);
-    snprintf(l, sizeof(l), "Lv.%u  %s", m.lvl, XT((m.flags & BOXF_CAUGHT) ? X_CAUGHT_TAG : X_WON_TAG));
+    snprintf(l, sizeof(l), "Lv.%u  %s", m.lvl, XT((m.flags & BOXF_RAISED) ? X_RAISED_TAG
+                                                 : (m.flags & BOXF_CAUGHT) ? X_CAUGHT_TAG : X_WON_TAG));
     setSize(1);
     setCur(134, y + 28);
     printT(l);
-    if (m.flags & BOXF_CAUGHT) drawMap(SPR_ICON_PLAY, 16, 352, y + 7, 2, false);
+    if (m.flags & BOXF_RAISED) drawCrown(354, y + 14, C565(0xe8, 0xb0, 0x20));  // ko10.5: criado
+    else if (m.flags & BOXF_CAUGHT) drawMap(SPR_ICON_PLAY, 16, 352, y + 7, 2, false);
   }
   // paginas
   if (boxPages() > 1) {
@@ -197,17 +200,117 @@ void boxTap(int16_t x, int16_t y) {
   if (k < box.count()) { boxSel = boxView(k); audioCry(box.at((uint8_t)boxSel).dex); }  // ko9.1: su grito
 }
 
-// tras la despedida (forma final) el siguiente compañero sale de la caja
-bool nextFromBox(Pet &p) {
-  int i = box.pickRandom();
+// ======================================================================
+// ko10.5: fin de un ciclo -> el que se va queda en la caja (corona) y se elige
+// el siguiente: huevo nuevo (familia sin criar, al azar) o uno de la caja
+// (familia sin criar), que vuelve a su primera forma a nivel 1
+// ======================================================================
+bool gNextPickPending = false;
+uint8_t nextPage = 0;
+#define NP_EGG_Y 72
+#define NP_ROW_Y 132
+#define NP_ROW_H 46
+#define NP_ROW_GAP 6
+#define NP_ROWS 4
+#define NP_NAV_Y 346
+
+void onPetEnd(Pet &p, uint8_t how) {
+  if (how == CER_RUNAWAY || p.isEgg()) return;  // escapada: huevo y ya
+  box.addRaised(p.speciesId, p.level(), p.shiny, p.geneAtk, p.geneDef, p.geneSpe, clockEpoch());
+  gNextPickPending = true;
+}
+
+// se puede elegir si su familia no se ha criado (o si ya se criaron todas)
+static bool nextPickable(const BoxMon &m) { return pet.allFamsRaised() || !pet.isFamRaised(m.dex); }
+
+static void drawCrown(int x, int y, uint16_t c) {
+  gfx->fillRect(x, y + 8, 18, 6, c);
+  gfx->fillTriangle(x, y + 8, x + 3, y, x + 6, y + 8, c);
+  gfx->fillTriangle(x + 6, y + 8, x + 9, y - 2, x + 12, y + 8, c);
+  gfx->fillTriangle(x + 12, y + 8, x + 15, y, x + 18, y + 8, c);
+}
+
+static uint8_t nextPages() { return box.count() ? (box.count() + NP_ROWS - 1) / NP_ROWS : 1; }
+
+void renderNextPick() {
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  drawFit(XT(X_NEXT_TITLE), 34, 320, UI_INK, 2);
+  drawBtn(93, NP_EGG_Y, 280, 48, UI_BAR_WARN, UI_INK, XT(X_NEXT_EGG));
+  boxSortView();
+  if (nextPage >= nextPages()) nextPage = nextPages() - 1;
+  for (int r = 0; r < NP_ROWS; r++) {
+    int k = nextPage * NP_ROWS + r;
+    if (k >= box.count()) break;
+    const BoxMon &m = box.at(boxView(k));
+    bool ok = nextPickable(m);
+    int y = NP_ROW_Y + r * (NP_ROW_H + NP_ROW_GAP);
+    gfx->fillRoundRect(73, y, 320, NP_ROW_H, 10, ok ? UI_WHITE : UI_TRACK);
+    gfx->drawRoundRect(73, y, 320, NP_ROW_H, 10, UI_INK);
+    drawThumbAt(m.dex, 102, y + NP_ROW_H / 2, 1, !ok);
+    char l[48];
+    snprintf(l, sizeof(l), "%s%s Lv.%u", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex), m.lvl);
+    gfx->setTextColor(ok ? UI_INK : 0x8410);
+    setSize(2);
+    setCur(130, y + 4);
+    printT(l);
+    char l2[48];
+    if (ok) txFmt(l2, sizeof(l2), X_NEXT_FROM, dexName(dexFirstForm(m.dex)), nullptr);
+    else snprintf(l2, sizeof(l2), "%s", XT(X_NEXT_RAISED));
+    setSize(1);
+    setCur(130, y + 27);
+    printT(l2);
+    if (m.flags & BOXF_RAISED) drawCrown(360, y + 14, C565(0xe8, 0xb0, 0x20));
+  }
+  if (nextPages() > 1) {
+    drawBtn(113, NP_NAV_Y, 60, 34, nextPage ? UI_WHITE : UI_TRACK, UI_INK, "<");
+    drawBtn(293, NP_NAV_Y, 60, 34, nextPage + 1 < nextPages() ? UI_WHITE : UI_TRACK, UI_INK, ">");
+    char pg[12];
+    snprintf(pg, sizeof(pg), "%u/%u", nextPage + 1, nextPages());
+    drawFit(pg, NP_NAV_Y + 8, 100, UI_INK, 2);
+  }
+  drawFit(XT(X_NEXT_HINT), 392, 300, 0x8410, 1);
+  gfx->flush();
+}
+
+void nextPickTap(int16_t x, int16_t y) {
+  if (inRect(x, y, 93, NP_EGG_Y, 280, 48)) {  // el huevo que ya esta puesto
+    sfxPlay(SFX_TAP);
+    xScreen = XS_NONE;
+    return;
+  }
+  if (nextPages() > 1 && y >= NP_NAV_Y && y < NP_NAV_Y + 34) {
+    if (x < CX && nextPage > 0) nextPage--;
+    else if (x >= CX && nextPage + 1 < nextPages()) nextPage++;
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  if (x < 73 || x >= 393 || y < NP_ROW_Y) return;
+  int r = (y - NP_ROW_Y) / (NP_ROW_H + NP_ROW_GAP);
+  if (r >= NP_ROWS || (y - NP_ROW_Y) % (NP_ROW_H + NP_ROW_GAP) >= NP_ROW_H) return;
+  int k = nextPage * NP_ROWS + r;
+  boxSortView();
+  if (k >= box.count()) return;
+  uint8_t idx = boxView(k);
+  if (!nextPickable(box.at(idx))) { sfxPlay(SFX_DENY); return; }
   BoxMon m;
-  if (i < 0 || !box.take((uint8_t)i, m)) return false;
-  p.adoptMon(m.dex, m.lvl, m.flags & BOXF_SHINY, m.geneAtk, m.geneDef, m.geneSpe);
+  if (!box.take(idx, m)) return;
+  // vuelve a su primera forma, a nivel 1; conserva shiny y genes
+  pet.adoptMon(dexFirstForm(m.dex), 1, m.flags & BOXF_SHINY, m.geneAtk, m.geneDef, m.geneSpe);
   char msg[64];
-  txFmt(msg, sizeof(msg), X_FROM_BOX, dexName(m.dex));
+  txFmt(msg, sizeof(msg), X_FROM_BOX, dexName(pet.speciesId));
   showToast(msg);
   toastUntil = millis() + 6000;
-  return true;
+  xScreen = XS_NONE;
+}
+
+// se abre sola al volver a la pantalla principal tras la ceremonia
+void nextPickPoll() {
+  if (!gNextPickPending || xScreen != XS_NONE) return;
+  gNextPickPending = false;
+  if (!pet.isEgg() || !box.count()) return;  // sin caja: huevo y ya
+  nextPage = 0;
+  xScreen = XS_NEXTPICK;
 }
 
 // ======================================================================

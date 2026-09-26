@@ -10,7 +10,8 @@
 
 enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_VOL, XS_UPD, XS_RESET,
                  XS_REGION,    // ko10.1: elegir region antes del salvaje
-                 XS_GYM, XS_DAILY };  // ko10.4: gimnasios y reto del dia
+                 XS_GYM, XS_DAILY,  // ko10.4: gimnasios y reto del dia
+                 XS_NEXTPICK };     // ko10.5: elegir el siguiente tras un ciclo
 uint8_t xScreen = XS_NONE;
 
 // aviso breve en la pantalla principal
@@ -1937,6 +1938,7 @@ void extraLoop(uint32_t now) {
   if (xScreen == XS_NET) lastInteract = now;
   if (xScreen == XS_UPD || xScreen == XS_RESET) lastInteract = now;
   rollWildEncounter(now);
+  nextPickPoll();  // ko10.5
 }
 
 bool extraRender() {
@@ -1952,6 +1954,7 @@ bool extraRender() {
     case XS_REGION: renderRegionPick(); return true;  // ko10.1
     case XS_GYM: renderGyms(); return true;           // ko10.4
     case XS_DAILY: renderDaily(); return true;
+    case XS_NEXTPICK: renderNextPick(); return true;  // ko10.5
     default: return false;
   }
 }
@@ -1969,6 +1972,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_REGION: regionTap(x, y); return true;
     case XS_GYM: gymTap(x, y); return true;
     case XS_DAILY: dailyTap(x, y); return true;
+    case XS_NEXTPICK: nextPickTap(x, y); return true;
     default: return false;
   }
 }
@@ -1981,7 +1985,10 @@ bool extraSwipe() {
   if (xScreen == XS_VOL) { xScreen = XS_NONE; clockOpen = true; return true; }
   if (xScreen == XS_UPD) { xScreen = XS_NET; return true; }
   if (xScreen == XS_RESET) { xScreen = XS_NONE; clockOpen = true; return true; }
-  if (xScreen == XS_REGION || xScreen == XS_GYM || xScreen == XS_DAILY) { xScreen = XS_NONE; return true; }
+  if (xScreen == XS_REGION || xScreen == XS_GYM || xScreen == XS_DAILY || xScreen == XS_NEXTPICK) {
+    xScreen = XS_NONE;  // ko10.5: en la eleccion, cerrar = quedarse el huevo
+    return true;
+  }
   return xScreen != XS_NONE;  // batalla / tongsin: se ignoran
 }
 
