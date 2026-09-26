@@ -569,20 +569,23 @@ void Pet::feedCandy() {
   save();
 }
 
-void Pet::playResult(uint8_t score) {
-  if (ceremony != CER_NONE || isEgg()) return;
-  // fork KO (ko4): la velocidad ya se entrena con su juego propio (trainSpeed);
-  // la pelota queda como juego de animo
-  joy = clamp100(joy + 5 + (score > 15 ? 30 : score * 2));
-  energy = dropTo(energy, 10 + score / 2, 5);
-  fullness = dropTo(fullness, 5, 5);
-  int burn = (int)weight - score * 2;  // el ejercicio quema peso
+bool Pet::playResult(uint8_t score) {
+  if (ceremony != CER_NONE || isEgg()) return false;
+  // fork KO (ko9.2): 30 s y 3 vidas; el premio (animo + energia) solo al batir
+  // el record. Jugar sin record no premia ni cansa. El ejercicio si quema peso.
+  int burn = (int)weight - score * 2;
   weight = burn > 0 ? burn : 0;
-  if (score >= 5) heartUntil = millis() + HEART_MS;
-  if (score > gameHi) gameHi = score;  // nuevo record
-  addBond(2);
+  bool record = score > gameHi;
+  if (record) {
+    gameHi = score;
+    joy = clamp100(joy + 10 + (score > 15 ? 30 : score * 2));
+    energy = clamp100(energy + 10 + (score > 20 ? 10 : score / 2));
+    heartUntil = millis() + HEART_MS;
+    addBond(2);
+  }
   registerCare();
   save();
+  return record;
 }
 
 // saco de entrenamiento: los golpes entrenan la fuerza. Devuelve la subida.

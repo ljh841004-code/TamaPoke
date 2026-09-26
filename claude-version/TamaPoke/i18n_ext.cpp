@@ -46,6 +46,7 @@ static const char *const XS[2][X_COUNT] = {
     "Scan with phone camera", "WiFi", "PASSWORD", "ADDRESS",
     "SPACE", "DEL", "KOREAN",
     "CANDY", "or ~%luh %lum of raising", "or ~%lu min of raising", "Hold 2 s in a game to quit",
+    "JOY + ENERGY UP!", "Beat the record for a bonus",
     "Looking for WiFi...", "AUTO ON", "AUTO OFF", "OPEN WiFi ON", "OPEN WiFi OFF", " +%u",
   },
   // ---------------- KO ----------------
@@ -89,6 +90,7 @@ static const char *const XS[2][X_COUNT] = {
     "카메라로 QR 찍기", "WiFi", "비밀번호", "주소",
     "띄움", "지움", "한글",
     "사탕", "또는 육성 약 %lu시간 %lu분", "또는 육성 약 %lu분", "게임 중 2초 누르면 그만",
+    "기분, 기력 상승!", "최고 기록을 넘으면 기분, 기력 상승",
     "WiFi 찾는 중...", "자동 켬", "자동 끔", "개방 WiFi 켬", "개방 WiFi 끔", " 외 %u개",
   },
 };

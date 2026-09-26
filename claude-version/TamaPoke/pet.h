@@ -122,7 +122,9 @@ public:
   // evolucionar (antes era dex % 3: al evolucionar pasaba a otra baya).
   uint8_t favFood() const;
   bool lovesBerry(uint8_t item) const { return !isEgg() && favFood() == item; }
-  void playResult(uint8_t score);  // recompensa del juego de pelota (solo animo desde ko4)
+  // juego de pelota. ko9.2: SOLO si bate el record sube el animo y la energia
+  // (devuelve true); si no, no pasa nada (ni premio ni cansancio)
+  bool playResult(uint8_t score);
   uint8_t trainStrength(uint16_t hits);  // saco de entrenamiento (entrena FUE)
   uint8_t trainDefense(uint16_t blocked);  // fork KO: pokeballs que caen (entrena DEF)
   uint8_t trainSpeed(uint16_t hits);       // fork KO: reflejos izq/dcha (entrena VEL)

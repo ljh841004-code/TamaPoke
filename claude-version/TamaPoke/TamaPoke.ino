@@ -108,6 +108,8 @@ uint32_t feedMenuUntil = 0;   // selector de comida abierto hasta este millis
 // minijuego "toques": mantener la pokeball en el aire
 bool gameOpen = false;
 uint32_t gameOverUntil = 0;
+uint32_t gameStartMs = 0;        // ko9.2: el juego dura 30 s (y 3 vidas)
+#define GAME_MS 30000UL
 float ballX, ballY, ballVX, ballVY, gamePetX;
 uint32_t lastGameStep = 0;  // ultima llamada a stepGame(): fisica por tiempo real, no por frame
 uint8_t gameScore, gameMisses;
@@ -1479,6 +1481,7 @@ void startGame() {
   gameScore = 0;
   gameMisses = 0;
   gameNewHi = false;
+  gameStartMs = millis();
   hitTime = 0;
   gamePetX = 233;
   lastGameStep = millis();
@@ -1542,15 +1545,18 @@ void stepGame() {
     ballX = CX + nx * 205;
     ballY = CY + ny * 205;
   }
-  if (ballY > 384) {  // al suelo
-    if (++gameMisses >= 3) {
-      gameNewHi = (gameScore > pet.gameHi);
-      pet.playResult(gameScore);  // actualiza el record y da felicidad
-      sfxPlay(gameNewHi && gameScore > 0 ? SFX_MEDAL : SFX_LEVEL);
-      gameOverUntil = millis() + 4000;
-    } else {
-      respawnBall();
-    }
+  // ko9.2: fin por tiempo (30 s) o por 3 caidas; mientras quede vida, otra bola
+  bool timeUp = now - gameStartMs >= GAME_MS;
+  bool fell = ballY > 384;
+  if (fell && !timeUp) {
+    if (++gameMisses >= 3) timeUp = true;
+    else respawnBall();
+  }
+  if (timeUp) {
+    gameNewHi = pet.playResult(gameScore);  // solo con record: animo + energia
+    sfxPlay(gameNewHi ? SFX_MEDAL : SFX_LEVEL);
+    gameOverUntil = millis() + 4000;
+    return;
   }
   // el bicho la sigue por abajo
   float chase = (ballX - gamePetX) * 0.12f;
@@ -1698,7 +1704,7 @@ void renderGame() {
     setCur(centerX(buf, 4), 160);
     printT(buf);
     setSize(2);
-    if (gameNewHi && gameScore > 0) {
+    if (gameNewHi) {
       gfx->setTextColor(UI_BAR_WARN);
       setCur(centerX(T(S_NEW_RECORD), 2), 214);
       printT(T(S_NEW_RECORD));
@@ -1709,10 +1715,9 @@ void renderGame() {
       setCur(centerX(rec, 2), 214);
       printT(rec);
     }
-    const char *msg = gameScore >= 10 ? T(S_GREAT_JOY) : T(S_PLUS_JOY);
-    gfx->setTextColor(ink);
-    setCur(centerX(msg, 2), 250);
-    printT(msg);
+    // ko9.2: el premio solo llega con record
+    const char *msg = gameNewHi ? XT(X_GAME_REWARD) : XT(X_GAME_NO_REWARD);
+    drawFit(msg, 250, 330, gameNewHi ? UI_BAR_OK : ink, 2);
     gfx->flush();
     return;
   }
@@ -1739,6 +1744,9 @@ void renderGame() {
     if (i < 3 - gameMisses) gfx->fillCircle(180 + i * 28, 104, 6, UI_BAR_BAD);
     else gfx->drawCircle(180 + i * 28, 104, 6, UI_TRACK);
   }
+  // ko9.2: tiempo que queda (30 s)
+  uint32_t el = millis() - gameStartMs;
+  drawTimeBar(el < GAME_MS ? GAME_MS - el : 0, GAME_MS, 120);
 
   if (pmd.loaded) {
     uint8_t act = (ballX > gamePetX + 4) ? PMD_WALKR : (ballX < gamePetX - 4) ? PMD_WALKL : PMD_IDLE;
