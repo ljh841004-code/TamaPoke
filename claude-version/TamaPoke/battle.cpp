@@ -72,13 +72,13 @@ uint32_t battleExp(int16_t foeDex, uint16_t foeLvl) {
   if (foeDex < 1 || foeDex > DEX_COUNT) return 0;
   const DexEntry &e = DEX_TBL[foeDex];
   uint32_t yield = ((uint32_t)e.bHp + e.bAtk + e.bDef + e.bSpe) / 3;  // ~50..200
-  uint32_t x = yield * lvlCap(foeLvl) / 4;
+  uint32_t x = yield * lvlCap(foeLvl) * 3 / 16;  // ko10.2: x0,75 (antes /4)
   return x ? x : 1;
 }
 
 uint32_t careMinutesForLevel(uint16_t lvl) {
   if (lvl < 1) lvl = 1;
-  return lvl >= LEVEL_MAX ? 0 : 30UL * lvl;
+  return lvl >= LEVEL_MAX ? 0 : CARE_MIN_PER_LVL * lvl;
 }
 
 static bool hasPreEvo(int16_t dex) { return dexPrevo(dex) != 0; }

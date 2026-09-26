@@ -292,8 +292,11 @@ TEST(battle, exp_de_batalla_crece_con_el_nivel_del_rival) {
   CHECK(battleExp(129, 1) >= 1);
   CHECK_EQ(levelForExp(expForLevel(37)), (uint16_t)37);
   CHECK_EQ(careMinutesForLevel(100), (uint32_t)0);
-  CHECK_EQ(careMinutesForLevel(1), (uint32_t)30);
-  CHECK_EQ(careMinutesForLevel(2), (uint32_t)60);
+  CHECK_EQ(careMinutesForLevel(1), (uint32_t)15);   // ko10.2: 15 min x nivel
+  CHECK_EQ(careMinutesForLevel(2), (uint32_t)30);
+  CHECK_EQ(careMinutesForLevel(35), (uint32_t)525);
+  // ko10.2: EXP de batalla x0,75 (Pidgey Lv10: (40+45+40+56)/3 = 60 -> 60*10*3/16 = 112)
+  CHECK_EQ(battleExp(16, 10), (uint32_t)112);
 }
 
 // ---------------------------------------------------------------- ko10.1: regiones

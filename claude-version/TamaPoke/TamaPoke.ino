@@ -35,7 +35,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko10.1"
+#define FW_VERSION "1.17-ko10.2"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -2512,7 +2512,7 @@ void renderCardProgress() {
   setSize(2);
   setCur(centerX(nx, 2), by + 30);
   printT(nx);
-  // ko9: o solo con el tiempo de crianza (30 min x nivel)
+  // ko9: o solo con el tiempo de crianza (ko10.2: 15 min x nivel)
   if (L < LEVEL_MAX) {
     uint32_t m = pet.careMinutesLeft();
     char tl[48];

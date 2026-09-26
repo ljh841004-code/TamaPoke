@@ -113,7 +113,8 @@ uint16_t levelForExp(uint32_t exp);      // nivel que da esa EXP (1..LEVEL_MAX)
 // EXP de derrotar/capturar a un rival: rendimiento de la especie x nivel / 4
 uint32_t battleExp(int16_t foeDex, uint16_t foeLvl);
 // ko9: tiempo de crianza que cuesta subir del nivel lvl al siguiente sin
-// batallas: 30 min x nivel (1->2 media hora, 2->3 una hora, 3->4 hora y media...)
+// batallas: CARE_MIN_PER_LVL x nivel (ko10.2: 15 min; 1->2 un cuarto de hora, 2->3 media hora...)
+#define CARE_MIN_PER_LVL 15UL  // ko10.2: minutos de crianza por nivel (antes 30)
 uint32_t careMinutesForLevel(uint16_t lvl);
 // nivel al que evoluciona esta especie (0 = forma final). Lineas de 3 fases:
 // la base a 16 y la intermedia a su nivel original (minimo 20). Lineas de 2

@@ -331,24 +331,27 @@ TEST(level, addexp_cuenta_los_niveles_subidos) {
   CHECK_EQ(e.exp, (uint32_t)0);
 }
 
-// ko9: solo con el tiempo, Lv1 -> 2 en 30 min, Lv2 -> 3 en 1 h, Lv3 -> 4 en 1 h 30
-TEST(level, tiempo_de_crianza_30_min_por_nivel) {
-  Pet p;
-  makePet(p, 4);
-  CHECK_EQ(p.careMinutesLeft(), (uint32_t)30);
-  for (int i = 0; i < 29; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
-  CHECK_EQ(p.level(), (uint16_t)1);
-  CHECK_EQ(p.careMinutesLeft(), (uint32_t)1);
-  setStats(p, 100, 100, 100, 100); advance(p, 1);
-  CHECK_EQ(p.level(), (uint16_t)2);
-  CHECK_EQ(p.careMinutesLeft(), (uint32_t)60);
-  for (int i = 0; i < 60; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
-  CHECK_EQ(p.level(), (uint16_t)3);
-  CHECK_EQ(p.careMinutesLeft(), (uint32_t)90);
-  // dormido tambien cuenta
-  p.toggleLight();
-  for (int i = 0; i < 90; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
-  CHECK_EQ(p.level(), (uint16_t)4);
+// ko10.2: solo con el tiempo, Lv1 -> 2 en 15 min, Lv2 -> 3 en 30 min, Lv3 -> 4 en 45 min
+// (antes 30 min x nivel). Vale para cualquier Pokemon, no depende de la especie
+TEST(level, tiempo_de_crianza_15_min_por_nivel) {
+  for (int16_t dex : { 4, 7, 147 }) {
+    Pet p;
+    makePet(p, dex);
+    CHECK_EQ(p.careMinutesLeft(), (uint32_t)15);
+    for (int i = 0; i < 14; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
+    CHECK_EQ(p.level(), (uint16_t)1);
+    CHECK_EQ(p.careMinutesLeft(), (uint32_t)1);
+    setStats(p, 100, 100, 100, 100); advance(p, 1);
+    CHECK_EQ(p.level(), (uint16_t)2);
+    CHECK_EQ(p.careMinutesLeft(), (uint32_t)30);
+    for (int i = 0; i < 30; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
+    CHECK_EQ(p.level(), (uint16_t)3);
+    CHECK_EQ(p.careMinutesLeft(), (uint32_t)45);
+    // dormido tambien cuenta
+    p.toggleLight();
+    for (int i = 0; i < 45; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
+    CHECK_EQ(p.level(), (uint16_t)4);
+  }
   // descuido total (una barra <= 10): ese tiempo no cuenta
   Pet q;
   makePet(q, 4);
@@ -359,9 +362,22 @@ TEST(level, tiempo_de_crianza_30_min_por_nivel) {
   makePet(r, 4);
   r.exp = expForLevel(10);
   uint32_t m0 = r.careMinutesLeft();
-  CHECK_EQ(m0, (uint32_t)300);
+  CHECK_EQ(m0, (uint32_t)150);
   r.addExp((expForLevel(11) - expForLevel(10)) / 2);
-  CHECK(r.careMinutesLeft() >= 149 && r.careMinutesLeft() <= 151);  // la mitad del camino
+  CHECK(r.careMinutesLeft() >= 74 && r.careMinutesLeft() <= 76);  // la mitad del camino
+}
+
+// ko10.2: un Pokemon a medio nivel con la cuenta de crianza de antes no pierde nada
+TEST(level, cuenta_de_crianza_antigua_sigue_valiendo) {
+  Pet p;
+  makePet(p, 7);
+  p.exp = expForLevel(16);
+  // con la regla vieja (30 min) a Lv16 llevaba 20 min acumulados; ahora sube antes
+  uint32_t span = expForLevel(17) - expForLevel(16);
+  p.careAcc = span * 20;
+  setStats(p, 100, 100, 100, 100); advance(p, 1);
+  CHECK_EQ(p.level(), (uint16_t)16);
+  CHECK(p.careMinutesLeft() <= 15u * 16 - 20);
 }
 
 TEST(level, ganar_una_batalla_da_exp_y_perder_no) {
