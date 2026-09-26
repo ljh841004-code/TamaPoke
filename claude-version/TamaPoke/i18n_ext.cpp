@@ -47,6 +47,7 @@ static const char *const XS[2][X_COUNT] = {
     "SPACE", "DEL", "KOREAN",
     "CANDY", "or ~%luh %lum of raising", "or ~%lu min of raising", "Hold 2 s in a game to quit",
     "JOY + ENERGY UP!", "Beat the record for a bonus",
+    "Look for another Pokemon?", "KEEP GOING", "EXIT",
     "Looking for WiFi...", "AUTO ON", "AUTO OFF", "OPEN WiFi ON", "OPEN WiFi OFF", " +%u",
   },
   // ---------------- KO ----------------
@@ -91,6 +92,7 @@ static const char *const XS[2][X_COUNT] = {
     "띄움", "지움", "한글",
     "사탕", "또는 육성 약 %lu시간 %lu분", "또는 육성 약 %lu분", "게임 중 2초 누르면 그만",
     "기분, 기력 상승!", "최고 기록을 넘으면 기분, 기력 상승",
+    "다른 포켓몬을 계속 만날까요?", "계속 만나기", "나가기",
     "WiFi 찾는 중...", "자동 켬", "자동 끔", "개방 WiFi 켬", "개방 WiFi 끔", " 외 %u개",
   },
 };

@@ -102,6 +102,7 @@ static void scenes(bool ko, const char *sfx) {
   finishBattle(false, false, true);
   bvFoeCaught = true;
   render(); shot("09_battle_caught");
+  bPhase = BP_NEXT; bPhaseT = gMockMillis; render(); shot("09b_battle_next");
   // caja
   closeAll();
   box.add(16, 14, false, false, gMockEpoch - 86400);

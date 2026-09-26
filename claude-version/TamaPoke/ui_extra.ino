@@ -303,7 +303,11 @@ void loadFoe(int16_t dex, bool shiny) {
 }
 
 // fase de la batalla
-enum : uint8_t { BP_INTRO = 0, BP_MENU, BP_PLAY, BP_RESULT };
+// BP_NEXT (ko9.2, solo salvajes): tras el resultado, "seguir buscando o salir"
+enum : uint8_t { BP_INTRO = 0, BP_MENU, BP_PLAY, BP_RESULT, BP_NEXT };
+#define BN_Y 330      // botones de BP_NEXT
+#define BN_H 50
+#define BN_MS 15000UL // sin elegir en 15 s, vuelve a la pantalla principal
 uint8_t bPhase = BP_INTRO;
 int bvShakeX = 0, bvShakeY = 0;  // fork KO (ko7): temblor de la escena (critico)
 uint32_t bPhaseT = 0;
@@ -905,7 +909,13 @@ void renderBattleView() {
   drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true);  // ko9: rival con numeros
   drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true);
 
-  if (bPhase == BP_RESULT) {
+  if (bPhase == BP_NEXT) {
+    gfx->fillRoundRect(40, 266, 386, 56, 12, UI_WHITE);
+    gfx->drawRoundRect(40, 266, 386, 56, 12, UI_INK);
+    drawFit(XT(X_NEXT_Q), 284, 370, UI_INK, 2);
+    drawBtn(83, BN_Y, 146, BN_H, UI_BAR_OK, UI_WHITE, XT(X_NEXT_GO));
+    drawBtn(237, BN_Y, 146, BN_H, UI_TRACK, UI_INK, XT(X_NEXT_EXIT));
+  } else if (bPhase == BP_RESULT) {
     bool good = bWon || bCaught;
     gfx->fillRoundRect(60, 270, 346, 128, 16, good ? UI_BAR_WARN : UI_WHITE);
     gfx->drawRoundRect(60, 270, 346, 128, 16, UI_INK);
@@ -1003,6 +1013,9 @@ void endBattleScreen() {
 
 void wildTap(int16_t x, int16_t y) {
   if (bPhase == BP_INTRO) { bPhaseT = 0; return; }  // saltar la intro
+  // ko9.2: tocar el resultado pasa ya a la pregunta
+  if (bPhase == BP_RESULT && millis() - bPhaseT > 800) { bPhase = BP_NEXT; bPhaseT = millis(); return; }
+  if (bPhase == BP_NEXT) { wildNextTap(x, y); return; }
   if (bPhase != BP_MENU) return;
   int a = battleMenuHit(x, y);
   if (a < 0) return;
@@ -1080,7 +1093,26 @@ void updateWild() {
       }
     }
   } else if (bPhase == BP_RESULT) {
-    if (now - bPhaseT > 3800) endBattleScreen();
+    if (now - bPhaseT > 3800) { bPhase = BP_NEXT; bPhaseT = now; }  // ko9.2: preguntar
+  } else if (bPhase == BP_NEXT) {
+    if (now - bPhaseT > BN_MS) endBattleScreen();
+  }
+}
+
+// ko9.2: tras un salvaje, seguir con otro al azar o volver
+static void wildNextTap(int16_t x, int16_t y) {
+  if (y < BN_Y || y >= BN_Y + BN_H) return;
+  if (x >= 83 && x < 229) {            // seguir
+    if (!pet.canBattle() || pet.tooTiredToBattle()) {
+      endBattleScreen();
+      battleAllowed(true);             // aviso en la pantalla principal (cansado...)
+      return;
+    }
+    foePmd.unload();
+    startWild();
+  } else if (x >= 237 && x < 383) {    // salir
+    sfxPlay(SFX_TAP);
+    endBattleScreen();
   }
 }
 
@@ -1361,7 +1393,7 @@ void updateLink() {
 // resultado: al acabar vuelve /mons/bgm.wav
 bool battleMusicActive() {
   bool fighting = xScreen == XS_WILD || (xScreen == XS_LINK && linkBattleStarted);
-  return fighting && bPhase != BP_RESULT;
+  return fighting && bPhase != BP_RESULT && bPhase != BP_NEXT;
 }
 
 void extraLoop(uint32_t now) {
