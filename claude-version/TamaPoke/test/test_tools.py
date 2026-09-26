@@ -307,6 +307,66 @@ def fuera_de_ks(texto):
                    if len(ch.encode('euc-kr')) != 2})
 
 
+class TestPrepCries(unittest.TestCase):
+    """ko9.1: tools/prep_cries.py deja WAV que el cargador de audio.cpp acepta"""
+
+    @staticmethod
+    def firmware_acepta(datos):
+        # las mismas comprobaciones que queueWav() en audio.cpp
+        import struct
+        h = datos[:44]
+        u16 = lambda p: struct.unpack('<H', h[p:p + 2])[0]
+        u32 = lambda p: struct.unpack('<I', h[p:p + 4])[0]
+        n = u32(40)
+        return (h[:4] == b'RIFF' and h[8:16] == b'WAVEfmt ' and u32(16) == 16 and u16(20) == 1
+                and u16(22) == 1 and u32(24) == 16000 and u16(34) == 16 and h[36:40] == b'data'
+                and n and n % 2 == 0 and n <= 16000 * 2 * 30 and n <= len(datos) - 44)
+
+    def test_convierte_formatos_raros_y_nombres(self):
+        import math, struct, tempfile, importlib.util
+        spec = importlib.util.spec_from_file_location('prep', os.path.join(ROOT, 'tools', 'prep_cries.py'))
+        prep = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(prep)
+
+        def wav(path, rate, ch, bits, tag=1, extra=b''):
+            n = rate // 4
+            frames = bytearray()
+            for i in range(n):
+                v = 0.5 * math.sin(2 * math.pi * 440 * i / rate)
+                for _ in range(ch):
+                    if tag == 3:
+                        frames += struct.pack('<f', v)
+                    elif bits == 8:
+                        frames += bytes([int(128 + v * 127)])
+                    elif bits == 24:
+                        frames += int(v * 8388607).to_bytes(3, 'little', signed=True)
+                    else:
+                        frames += struct.pack('<h', int(v * 32767))
+            fmt = struct.pack('<HHIIHH', tag, ch, rate, rate * ch * bits // 8, ch * bits // 8, bits)
+            body = b'WAVE' + b'fmt ' + struct.pack('<I', len(fmt)) + fmt + extra
+            body += b'data' + struct.pack('<I', len(frames)) + bytes(frames)
+            with open(path, 'wb') as fh:
+                fh.write(b'RIFF' + struct.pack('<I', len(body)) + body)
+
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as out:
+            lista = b'LIST' + struct.pack('<I', 4) + b'INFO'
+            wav(os.path.join(src, '1.wav'), 44100, 2, 16, extra=lista)
+            wav(os.path.join(src, '025.wav'), 48000, 1, 24)
+            wav(os.path.join(src, '133 eevee.wav'), 22050, 2, 32, tag=3)
+            wav(os.path.join(src, 'cry_151.wav'), 8000, 1, 8)
+            wav(os.path.join(src, '999.wav'), 16000, 1, 16)
+            with open(os.path.join(src, '7.wav'), 'wb') as fh:
+                fh.write(b'no soy un wav')
+            prep.main(['prep', src, out])
+            hechos = sorted(os.listdir(os.path.join(out, 'mons')))
+            self.assertEqual(hechos, ['cry001.wav', 'cry025.wav', 'cry133.wav', 'cry151.wav'])
+            for nombre in hechos:
+                with open(os.path.join(out, 'mons', nombre), 'rb') as fh:
+                    datos = fh.read()
+                self.assertTrue(self.firmware_acepta(datos), nombre)
+                self.assertAlmostEqual((len(datos) - 44) / 2 / 16000, 0.25, delta=0.01)
+
+
 class TestCadenasDelFork(unittest.TestCase):
     """i18n_ext.cpp (fork KO): todo el hangul tiene que estar en la fuente.
 

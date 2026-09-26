@@ -128,6 +128,10 @@
 SD카드 `mons` 폴더에 `bgm.wav`(평소), `battle_wild.wav`(배틀 중), `cry001.wav`~`cry151.wav`(울음소리).
 형식은 **16kHz 모노 16비트 WAV**, 변환 방법은 `TamaPoke/README_KO.md`의 "SD카드 소리"를 보세요.
 
+직접 구한 울음소리: 번호로 된 WAV 파일(`1.wav`, `025.wav`, `133 이브이.wav` …)이 있으면
+`python TamaPoke/tools/prep_cries.py 받은폴더` → `sd_cries/mons/cry001.wav` …로 이름과 형식(16kHz 모노 16비트)을
+맞춰 줘요 (Python만 있으면 돼요). 만들어진 `mons` 폴더를 SD카드에 복사하면 끝이에요.
+
 최신 울음소리: `TamaPoke/tools/get_cries.py`를 실행하면 PokeAPI에서 1~151번의 최신 울음소리를 받아
 `mons/cry001.wav`~`cry151.wav`로 변환해요 (Python + ffmpeg 필요). 게임 원본 음원(© Nintendo/Game Freak)이라
 **개인용으로만** 쓰고 저장소에는 올리지 않아요.
