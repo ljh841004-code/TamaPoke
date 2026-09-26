@@ -35,7 +35,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko10.2"
+#define FW_VERSION "1.17-ko10.3"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -649,6 +649,10 @@ void handleTouch() {
     swallowGesture = (dimStage > 0) || screenOff;  // si estaba a oscuras, solo despierta
     screenOff = false;
     lastInteract = millis();
+    // ko10.3: la pelota se golpea al APOYAR el dedo (antes al levantarlo: con la
+    // bola moviendose, el golpe llegaba tarde o se perdia y parecia que el juego
+    // se trababa). Mantener 2 s sigue sirviendo para salir.
+    if (gameOpen && !swallowGesture && !gameOverUntil) gameTap(x, y);
   } else if (pressed) {  // sigue apoyado
     tXl = x;
     tYl = y;
@@ -786,10 +790,7 @@ void onTap(int16_t x, int16_t y) {
     }
     return;
   }
-  if (gameOpen) {
-    gameTap(x, y);
-    return;
-  }
+  if (gameOpen) return;  // ko10.3: el golpe ya se dio al apoyar el dedo
   if (choiceKind) {          // dialogo de decision: boton accion (arriba) / mantener (abajo)
     bool b1 = (x >= 93 && x <= 373 && y >= 206 && y <= 258);  // accion
     bool b2 = (x >= 93 && x <= 373 && y >= 268 && y <= 320);  // mantener / quedaros
@@ -1883,7 +1884,7 @@ void stepGame() {
     else respawnBall();
   }
   if (timeUp) {
-    gameNewHi = pet.playResult(gameScore);  // solo con record: animo + energia
+    gameNewHi = pet.playResult(gameScore);  // record: animo + energia; si no, algo de energia
     sfxPlay(gameNewHi ? SFX_MEDAL : SFX_LEVEL);
     gameOverUntil = millis() + 4000;
     return;
@@ -2045,8 +2046,8 @@ void renderGame() {
       setCur(centerX(rec, 2), 214);
       printT(rec);
     }
-    // ko9.2: el premio solo llega con record
-    const char *msg = gameNewHi ? XT(X_GAME_REWARD) : XT(X_GAME_NO_REWARD);
+    // ko9.2: el premio grande solo con record; ko10.3: si no, un poco de energia
+    const char *msg = gameNewHi ? XT(X_GAME_REWARD) : gameScore ? XT(X_GAME_SMALL) : XT(X_GAME_NO_REWARD);
     drawFit(msg, 250, 330, gameNewHi ? UI_BAR_OK : ink, 2);
     gfx->flush();
     return;

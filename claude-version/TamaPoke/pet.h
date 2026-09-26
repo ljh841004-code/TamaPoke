@@ -1,4 +1,5 @@
 #pragma once
+#define GAME_SMALL_ENERGY 5  // ko10.3: juego de pelota sin record (con al menos 1 toque)
 #include <Arduino.h>
 #include <Preferences.h>
 #include "battle.h"  // fork KO (ko7): curva de EXP y niveles de evolucion
@@ -124,7 +125,7 @@ public:
   bool lovesBerry(uint8_t item) const { return !isEgg() && favFood() == item; }
   // juego de pelota. ko9.2: SOLO si bate el record sube el animo y la energia
   // (devuelve true); si no, no pasa nada (ni premio ni cansancio)
-  bool playResult(uint8_t score);
+  bool playResult(uint8_t score);  // true = record (animo + energia); si no, un poco de energia
   uint8_t trainStrength(uint16_t hits);  // saco de entrenamiento (entrena FUE)
   uint8_t trainDefense(uint16_t blocked);  // fork KO: pokeballs que caen (entrena DEF)
   uint8_t trainSpeed(uint16_t hits);       // fork KO: reflejos izq/dcha (entrena VEL)

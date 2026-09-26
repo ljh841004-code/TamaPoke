@@ -584,7 +584,7 @@ TEST(train, el_saco_cansa_y_quema_peso) {
 
 // fork KO (ko4): la pelota ya no entrena la velocidad (tiene su juego propio)
 // ko9.2: solo el record premia (animo + energia); sin record, ni premio ni cansancio
-TEST(play, minijuego_premia_solo_el_record) {
+TEST(play, minijuego_record_da_animo_y_energia_y_si_no_poca_energia) {
   Pet p;
   makePet(p, 4);
   p.joy = 10;
@@ -601,10 +601,14 @@ TEST(play, minijuego_premia_solo_el_record) {
   uint8_t j = p.joy, e = p.energy;
   CHECK(!p.playResult(5));
   CHECK_MSG(p.gameHi == 20, "un resultado peor no baja el record");
-  CHECK_EQ(p.joy, j);
-  CHECK_EQ(p.energy, e);
+  CHECK_EQ(p.joy, j);                                  // ko10.3: sin record, animo igual
+  CHECK_EQ(p.energy, (uint8_t)(e + GAME_SMALL_ENERGY));  // ... pero un poco de energia
   CHECK(!p.playResult(20));         // igualar no es batir
   CHECK_EQ(p.joy, j);
+  CHECK_EQ(p.energy, (uint8_t)(e + 2 * GAME_SMALL_ENERGY));
+  e = p.energy;
+  CHECK(!p.playResult(0));          // sin ningun toque: nada
+  CHECK_EQ(p.energy, e);
 }
 
 TEST(play, jugar_sube_felicidad_y_cansa) {

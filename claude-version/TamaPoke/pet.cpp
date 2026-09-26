@@ -571,8 +571,9 @@ void Pet::feedCandy() {
 
 bool Pet::playResult(uint8_t score) {
   if (ceremony != CER_NONE || isEgg()) return false;
-  // fork KO (ko9.2): 30 s y 3 vidas; el premio (animo + energia) solo al batir
-  // el record. Jugar sin record no premia ni cansa. El ejercicio si quema peso.
+  // fork KO (ko9.2): 30 s y 3 vidas; el premio grande (animo + energia) solo al
+  // batir el record. ko10.3: sin record, si ha dado al menos un toque, un poco de
+  // energia (GAME_SMALL_ENERGY). Nunca cansa. El ejercicio si quema peso.
   int burn = (int)weight - score * 2;
   weight = burn > 0 ? burn : 0;
   bool record = score > gameHi;
@@ -582,6 +583,8 @@ bool Pet::playResult(uint8_t score) {
     energy = clamp100(energy + 10 + (score > 20 ? 10 : score / 2));
     heartUntil = millis() + HEART_MS;
     addBond(2);
+  } else if (score > 0) {
+    energy = clamp100(energy + GAME_SMALL_ENERGY);
   }
   registerCare();
   save();

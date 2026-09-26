@@ -1,4 +1,4 @@
-# TamaPoke KO v1.17-ko10.2 (클로드 버전)
+# TamaPoke KO v1.17-ko10.3 (클로드 버전)
 
 > 이 폴더는 **클로드(Claude) 버전**이에요. 저장소 루트의 TamaPoke v1.23과는 따로 관리하는 별도 갈래예요.
 > v1.23의 어드벤처·컬렉션 기능은 이 버전에 없어요. (소리와 한글 글꼴은 옮겨 왔어요)
@@ -14,9 +14,9 @@
 | 파일 | 내용 |
 |---|---|
 | `update.bin` | **SD카드 업데이트용**. 웹 설치 페이지로 보내고 [SD 업데이트] (아래 A) |
-| `tamapoke-ko-v1.17-ko10.2-app-0xe000.bin` | **esptool 업데이트용**. 주소 **0xe000**. 포켓몬은 그대로 남아요 |
-| `tamapoke-ko-v1.17-ko10.2.bin` | **새로 설치용** 통합 이미지. 주소 **0x0**. 저장 데이터가 초기화돼요 |
-| `TamaPoke_v1.17-ko10.2_정리.txt` | 기능·사용법 요약 메모 |
+| `tamapoke-ko-v1.17-ko10.3-app-0xe000.bin` | **esptool 업데이트용**. 주소 **0xe000**. 포켓몬은 그대로 남아요 |
+| `tamapoke-ko-v1.17-ko10.3.bin` | **새로 설치용** 통합 이미지. 주소 **0x0**. 저장 데이터가 초기화돼요 |
+| `TamaPoke_v1.17-ko10.3_정리.txt` | 기능·사용법 요약 메모 |
 | `TamaPoke/` | 전체 소스 (Arduino 스케치 폴더). 자세한 설명은 `TamaPoke/README_KO.md` |
 
 ## SD카드에 파일 넣기 (울음소리, 배경음, update.bin)
@@ -36,11 +36,11 @@
 
 ### B. esptool로
 1. Chrome/Edge에서 [ESP Tool (esptool-js)](https://espressif.github.io/esptool-js/) → Baudrate **115200** → Connect → 포트 선택
-2. 주소 **`0xe000`**에 `tamapoke-ko-v1.17-ko10.2-app-0xe000.bin` → Program (**Erase Flash 누르지 않기**)
+2. 주소 **`0xe000`**에 `tamapoke-ko-v1.17-ko10.3-app-0xe000.bin` → Program (**Erase Flash 누르지 않기**)
    (0x10000이 아니라 0xe000: SD 업데이트 뒤에도 esptool로 올린 펌웨어가 켜지게 부팅 선택 정보를 같이 써요.
    이 파일을 0x10000이나 0x0에 올리면 켜지지 않아요)
-3. 처음 설치하거나 초기화하고 싶다면: 주소 `0x0`에 `tamapoke-ko-v1.17-ko10.2.bin`
-4. 끝나면 USB를 뽑고 전원 버튼을 6초 눌러 껐다 켜기. 시계 화면 아래쪽에 `v1.17-ko10.2`이 보이면 성공
+3. 처음 설치하거나 초기화하고 싶다면: 주소 `0x0`에 `tamapoke-ko-v1.17-ko10.3.bin`
+4. 끝나면 USB를 뽑고 전원 버튼을 6초 눌러 껐다 켜기. 시계 화면 아래쪽에 `v1.17-ko10.3`이 보이면 성공
 
 > **ko3~ko5.1에서 ko6으로 올릴 때만** esptool이 바로 연결되지 않아요 (그 버전들의 USB 방식 때문).
 > 장치 관리자에서 COM 번호 확인 → esptool 창을 닫고 PowerShell에서
@@ -72,6 +72,13 @@
 얼음: 냉동빔과 얼음 결정, 독: 거품, 땅: 진흙과 흙먼지, 에스퍼: 고리, 벌레: 바늘, 바위: 떨어지는 돌,
 고스트: 그림자, 드래곤: 푸른 불꽃, 노말·격투·몸통박치기: 충격). **급소**는 화면이 흔들리고,
 **효과가 굉장했다**는 흰 충격파가 퍼져요. 모습은 `screenshots/21_battle_fx.png`.
+
+## ko10.3: 공놀이 개선, 시간 화면
+
+- **공놀이 끊김 수정**: 손가락을 **대는 순간** 공을 칩니다 (전에는 손을 뗄 때 판정해서 공이 이미 지나가
+  늦거나 빗나갔어요). 2초 누르고 있으면 그만두기는 그대로
+- **공놀이 보상**: 최고 기록을 넘으면 **기분 + 기력**, 못 넘어도 1번 이상 치면 **기력 +5**
+- **시간 설정 화면**: 시간 숫자부터 아래 버튼·버전 글자까지 조금씩 위로 (버전 글자가 가장자리에 잘리지 않게)
 
 ## ko10.2: 육성 속도 2배
 
@@ -195,7 +202,7 @@
 2. **Espressif Flash Download Tool** (Windows 프로그램, 인터넷 필요 없음): ESP32-S3 선택 →
    파일과 주소(위 표) 입력 → START
 3. **esptool (파이썬)**: `pip install esptool` →
-   `esptool --chip esp32s3 write-flash 0xe000 tamapoke-ko-v1.17-ko10.2-app-0xe000.bin`
+   `esptool --chip esp32s3 write-flash 0xe000 tamapoke-ko-v1.17-ko10.3-app-0xe000.bin`
 4. **Arduino IDE**로 `TamaPoke/` 소스를 직접 올리기 (`TamaPoke/README_KO.md`의 설정 참고)
 5. **SD카드에 파일 보내기**: SD카드를 빼서 PC에 꽂고 `mons` 폴더에 직접 복사하거나,
    `.bin` 파일(update.bin 등)은 `TamaPoke/tools/sdcard/mons/`에 두고
@@ -217,6 +224,7 @@ SD카드 `mons` 폴더에 `bgm.wav`(평소), `battle_wild.wav`(배틀 중), `cry
 
 ## 버전 기록
 
+- **ko10.3** – 공놀이 손 대는 순간 치기(끊김 수정), 기록 미갱신에도 기력 +5, 시간 설정 화면 위로
 - **ko10.2** – 육성 시간 레벨업 레벨×15분(2배 빠르게), 배틀 경험치 ×0.75
 - **ko10.1** – 야생 배틀 지역 고르기(16곳, 2쪽), 공통·지역·시간대·레어 출현, 속성별 배경 16종,
   날씨(비·겨울 눈·여름 햇볕·봄 벚꽃·가을 낙엽), 날짜 표시, 공놀이 30초·3번·기록 갱신 보상, 배틀 후 계속/나가기
