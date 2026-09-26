@@ -256,6 +256,9 @@ void setup() {
   // INT activo-bajo: salta cuando hay datos. Gatea las lecturas I2C (ver loop)
   pinMode(TP_INT, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(TP_INT), touchIsr, FALLING);
+#ifdef ESP_PLATFORM
+  touchTaskStart();  // ko10.8: lector tactil en su tarea (ver handleTouch)
+#endif
 
   pet.begin();
   box.begin();
@@ -597,33 +600,76 @@ bool inPetZone(int16_t x, int16_t y) {
   return x > 110 && x < 356 && y > 95 && y < 310;
 }
 
+// ko10.8: el tactil se lee en su PROPIA tarea (nucleo 0, cada 8 ms) y deja los
+// cambios en una cola. Antes se leia en el loop, y el redibujado (unos 70 ms de
+// cada 85 en los juegos) lo dejaba ciego: al aporrear el saco, si el dedo subia
+// y bajaba mientras se pintaba, los dos toques salian como uno solo y "no
+// contaba" (el saco 4-5 del entrenamiento de ataque pide ya ~3 golpes/s).
+// Wire lleva cerrojo propio en el core 3.x, asi que convive con PMU y RTC.
+struct TouchEv { int16_t x, y; uint8_t pressed; };
+#ifdef ESP_PLATFORM
+static QueueHandle_t gTouchQ = nullptr;
+static volatile bool gTouchHeld = false;
+static volatile int16_t gTouchLX = 0, gTouchLY = 0;
+
+static void touchTask(void *) {
+  bool was = false;
+  int16_t lx = 0, ly = 0;
+  for (;;) {
+    vTaskDelay(pdMS_TO_TICKS(8));
+    // solo tocamos el bus si el chip aviso por INT o si el dedo sigue abajo (hay
+    // que detectar el levantamiento). Leer el CST9217 dormido se colgaba ~1s.
+    if (!gTouchIrq && !was) continue;
+    gTouchIrq = false;
+    // Un ciclo de solo direccion antes de leer: sin esto getPoint() se colgaba
+    // 1000 ms con el chip dormido (issue #16; medido en placa: 5 parones en 60 s
+    // sin esta linea, 0 con ella). No salta lecturas: despierta al chip.
+    Wire.beginTransmission(TOUCH_ADDR);
+    if (Wire.endTransmission() != 0) continue;  // no responde: se reintenta en 8 ms
+    int16_t x, y;
+    bool p = touch.getPoint(&x, &y, 1) > 0;
+    TouchEv e;
+    if (p != was) {  // apoyar/levantar: nunca se pierde (la cola se vacia cada loop)
+      e.x = p ? x : lx; e.y = p ? y : ly; e.pressed = p;
+      xQueueSend(gTouchQ, &e, 0);
+    } else if (p && (abs(x - lx) > 3 || abs(y - ly) > 3) && uxQueueSpacesAvailable(gTouchQ) > 8) {
+      e.x = x; e.y = y; e.pressed = 1;  // arrastre (deslizar); se descarta si va justa
+      xQueueSend(gTouchQ, &e, 0);
+    }
+    if (p) { lx = x; ly = y; }
+    was = p;
+    gTouchLX = lx; gTouchLY = ly;
+    gTouchHeld = was;
+  }
+}
+
+void touchTaskStart() {
+  gTouchQ = xQueueCreate(32, sizeof(TouchEv));
+  xTaskCreatePinnedToCore(touchTask, "touch", 4096, nullptr, 2, nullptr, 0);
+}
+#endif
+
+void touchSample(bool pressed, int16_t x, int16_t y);
+
 // el toque se resuelve al LEVANTAR el dedo para distinguir tap de deslizar
 void handleTouch() {
-  static uint32_t lastPoll = 0;
-  if (millis() - lastPoll < 20) return;  // 50 Hz le sobra a un dedo
-  lastPoll = millis();
-  // solo tocamos el bus si el chip aviso por INT o si el dedo sigue abajo (hay
-  // que detectar el levantamiento). Leer el CST9217 dormido se colgaba ~1s y
-  // congelaba el loop entero; SensorLib no respeta el timeout de Wire.
-  if (!gTouchIrq && !wasPressed) return;
-  gTouchIrq = false;
-  // Un ciclo de solo direccion antes de leer. Sin esto, getPoint() se colgaba
-  // exactamente 1000 ms (el timeout por defecto del driver I2C, que SensorLib no
-  // acota) y congelaba el loop entero: es lo que se percibia como "el minijuego
-  // se congela 2-3 segundos al tocar la bola" (issue #16), porque ahi los toques
-  // son rapidos y seguidos.
-  //
-  // Medido en placa, jugando lo mismo (~470 lecturas, marcador ~50):
-  //   sin esta linea: 5 parones de 1000 ms en 60 s
-  //   con ella:       0
-  // El contador de rechazos salio 0 en ambos casos, asi que NO funciona
-  // saltandose lecturas cuando el chip no contesta: lo que hace es despertarlo,
-  // para que la lectura siguiente no se encuentre el CST9217 dormido.
-  Wire.beginTransmission(TOUCH_ADDR);
-  if (Wire.endTransmission() != 0) return;  // no responde: se reintenta en 20 ms
-  int16_t x, y;
-  bool pressed = touch.getPoint(&x, &y, 1) > 0;
+#ifdef ESP_PLATFORM
+  TouchEv e;
+  bool any = false;
+  while (gTouchQ && xQueueReceive(gTouchQ, &e, 0) == pdTRUE) {
+    any = true;
+    touchSample(e.pressed, e.x, e.y);
+  }
+  // dedo quieto apoyado: sin eventos, pero las pulsaciones largas miden tiempo
+  static uint32_t lastHold = 0;
+  if (!any && wasPressed && gTouchHeld && millis() - lastHold >= 20) {
+    lastHold = millis();
+    touchSample(true, gTouchLX, gTouchLY);
+  }
+#endif
+}
 
+void touchSample(bool pressed, int16_t x, int16_t y) {
   // ko9.1: en los juegos de entrenamiento se abandona MANTENIENDO el dedo 2 s
   // quieto (antes: tocar la franja de arriba, y<72). La pokeball de las 12 del
   // juego de velocidad, las que caen en el de defensa y el saco llegan a esa
