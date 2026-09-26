@@ -158,7 +158,7 @@ struct Btn {
   int16_t cx, cy;
   const char *const *icon;
 };
-// ko10.9: botones de 42x42 (antes 52): con la flecha de la ficha debajo, los de
+// ko10.9: botones de 46x46 (antes 52): con la flecha de la ficha debajo, los de
 // 52 subian hasta pisar las barras. El icono sigue igual (32 px)
 Btn buttons[4] = {
   { 140, 394, SPR_ICON_FOOD },   // comer
@@ -174,7 +174,7 @@ enum : uint8_t { NAV_L = 0, NAV_R, NAV_UP, NAV_DOWN };
 #define NAV_Y 200
 #define NAV_BY 446
 #define NAV_R_ 15
-#define BTN_HALF 21  // boton de 42x42 (ko10.9; antes 52x52)
+#define BTN_HALF 23  // boton de 46x46 (ko10.9; antes 52x52)
 // fork KO: botones de la pagina de combate de la ficha (ko4: rejilla 2x2)
 #define CARD_ROW1_Y 222
 #define CARD_ROW2_Y 270
