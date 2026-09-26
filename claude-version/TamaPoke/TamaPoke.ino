@@ -62,6 +62,7 @@ bool gCjkFont = false;
 #define TOUCH_ADDR 0x5A  // CST9217
 Pet pet;
 Box box;        // fork KO (ko4): Pokemon ganados/capturados
+Box hall("tphall", HALL_MAX);  // ko10.5: los criados hasta el final (corona)
 DexLog dexLog;  // fork KO (ko4): historial de la pokedex
 
 // sprite animado de la SD para la especie actual (si existe el archivo)
@@ -257,6 +258,14 @@ void setup() {
 
   pet.begin();
   box.begin();
+  hall.begin();
+  // ko10.5: los criados que ko10.5 aun guardaba en la caja pasan al salon
+  for (int i = box.count() - 1; i >= 0; i--)
+    if (box.at((uint8_t)i).flags & BOXF_RAISED) {
+      BoxMon m;
+      if (box.take((uint8_t)i, m))
+        hall.addRaised(m.dex, m.lvl, m.flags & BOXF_SHINY, m.geneAtk, m.geneDef, m.geneSpe, m.epoch);
+    }
   dexLog.begin();
   pet.endHook = onPetEnd;  // ko10.5: el que se va a la caja; luego se elige el siguiente
   sdBegin();

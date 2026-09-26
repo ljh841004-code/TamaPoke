@@ -241,9 +241,12 @@ static void scenes(bool ko, const char *sfx) {
   boxSel = 1; render(); shot("11_box_detail");
   // ko10.5: fin de un ciclo -> criado a la caja (corona) y eleccion del siguiente
   boxSel = -1;
-  box.addRaised(6, 36, false, 108, 101, 99, gMockEpoch);
+  hall.addRaised(6, 36, false, 108, 101, 99, gMockEpoch);
+  hall.addRaised(134, 42, true, 104, 99, 107, gMockEpoch);
   pet.markFamRaised(16);  // Pidgey ya criado: en gris
-  render(); shot("11b_box_raised");
+  pet.markFamRaised(6);
+  render(); shot("11a_box_tabs");
+  boxHall = true; render(); shot("11b_box_hall"); boxHall = false;
   xScreen = XS_NEXTPICK; nextPage = 0; render(); shot("11c_next_pick");
   xScreen = XS_BOX;
   // pokedex

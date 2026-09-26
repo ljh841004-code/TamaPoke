@@ -10,30 +10,45 @@
 #define BOX_ROW_H 46
 #define BOX_ROW_GAP 4
 #define BOX_NAV_Y 352
+#define BOX_TAB_Y 34      // ko10.5: pestanas [caja] [corona]
+#define BOX_TAB_H 40
+#define BOX_TAB_W 150
+#define BOX_TAB_X1 80
+#define BOX_TAB_X2 236
 uint8_t boxPage = 0;
 int16_t boxSel = -1;          // indice en la caja con la ficha abierta, -1 = lista
+bool boxHall = false;         // ko10.5: pestana del salon de la fama (corona)
+static Box &cb() { return boxHall ? hall : box; }
 
 // ko10.4: la lista se ve ordenada por numero de pokedex (los repetidos quedan
 // juntos; entre iguales, el mas antiguo primero). Solo cambia el orden de la
 // vista: la caja guardada no se toca. boxView(k) = indice real del k-esimo
-static uint8_t boxOrd[BOX_MAX];
-static void boxSortView() {
-  uint8_t n = box.count();
+static uint8_t boxOrd[BOX_CAP_MAX];
+static void boxSortView(Box &b) {
+  uint8_t n = b.count();
   for (uint8_t i = 0; i < n; i++) boxOrd[i] = i;
-  for (uint8_t i = 1; i < n; i++) {  // insercion (estable), n <= 60
+  for (uint8_t i = 1; i < n; i++) {  // insercion (estable)
     uint8_t v = boxOrd[i];
     int j = i - 1;
-    while (j >= 0 && box.at(boxOrd[j]).dex > box.at(v).dex) { boxOrd[j + 1] = boxOrd[j]; j--; }
+    while (j >= 0 && b.at(boxOrd[j]).dex > b.at(v).dex) { boxOrd[j + 1] = boxOrd[j]; j--; }
     boxOrd[j + 1] = v;
   }
 }
 static uint8_t boxView(int k) { return boxOrd[k]; }
 uint32_t boxConfirmUntil = 0; // segundo toque en "soltar" para confirmar
 
-static uint8_t boxPages() { return box.count() ? (box.count() + BOX_ROWS - 1) / BOX_ROWS : 1; }
+static void drawCrown(int x, int y, uint16_t c) {
+  gfx->fillRect(x, y + 8, 18, 6, c);
+  gfx->fillTriangle(x, y + 8, x + 3, y, x + 6, y + 8, c);
+  gfx->fillTriangle(x + 6, y + 8, x + 9, y - 2, x + 12, y + 8, c);
+  gfx->fillTriangle(x + 12, y + 8, x + 15, y, x + 18, y + 8, c);
+}
+
+static uint8_t boxPages() { return cb().count() ? (cb().count() + BOX_ROWS - 1) / BOX_ROWS : 1; }
 
 void openBox() {
   cardOpen = false;
+  boxHall = false;
   boxPage = 0;
   boxSel = -1;
   boxConfirmUntil = 0;
@@ -71,7 +86,7 @@ static void boxDate(uint32_t e, char *out, size_t n) {
 }
 
 void renderBoxDetail() {
-  const BoxMon &m = box.at(boxSel);
+  const BoxMon &m = cb().at(boxSel);
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
   char head[48];
@@ -86,36 +101,47 @@ void renderBoxDetail() {
   snprintf(l, sizeof(l), "%s  %s", XT((m.flags & BOXF_RAISED) ? X_RAISED_TAG
                                       : (m.flags & BOXF_CAUGHT) ? X_CAUGHT_TAG : X_WON_TAG), date);
   drawFit(l, 232, 340, UI_INK, 2);
-  drawFit(XT(X_BOX_NEXT), 262, 360, UI_INK, 1);
+  drawFit(XT(boxHall ? X_HALL_NOTE : X_BOX_NEXT), 262, 360, UI_INK, 1);
   bool conf = timeLeft(boxConfirmUntil) > 0;
-  drawBtn(93, 300, 136, 48, UI_BAR_BAD, UI_WHITE, XT(conf ? X_RELEASE_Q : X_RELEASE));
-  drawBtn(237, 300, 136, 48, UI_TRACK, UI_INK, XT(X_CLOSE));
+  if (boxHall) {  // ko10.5: los de corona son recuerdos: no se sueltan
+    drawBtn(165, 300, 136, 48, UI_TRACK, UI_INK, XT(X_CLOSE));
+  } else {
+    drawBtn(93, 300, 136, 48, UI_BAR_BAD, UI_WHITE, XT(conf ? X_RELEASE_Q : X_RELEASE));
+    drawBtn(237, 300, 136, 48, UI_TRACK, UI_INK, XT(X_CLOSE));
+  }
   gfx->flush();
 }
 
 void renderBox() {
-  if (boxSel >= 0 && boxSel < box.count()) { renderBoxDetail(); return; }
+  if (boxSel >= 0 && boxSel < cb().count()) { renderBoxDetail(); return; }
   boxSel = -1;
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
-  char head[24];
-  snprintf(head, sizeof(head), XT(X_BOX_TITLE_FMT), box.count(), BOX_MAX);
-  drawFit(head, 40, 300, UI_INK, 3);
-  if (!box.count()) {
+  // ko10.5: dos pestanas: la caja y el salon de la fama (corona)
+  char t1[24], t2[24];
+  snprintf(t1, sizeof(t1), XT(X_BOX_TITLE_FMT), box.count(), BOX_MAX);
+  snprintf(t2, sizeof(t2), XT(X_HALL_TAB_FMT), hall.count());
+  drawBtn(BOX_TAB_X1, BOX_TAB_Y, BOX_TAB_W, BOX_TAB_H, boxHall ? UI_TRACK : UI_BAR_WARN, UI_INK, t1);
+  drawBtn(BOX_TAB_X2, BOX_TAB_Y, BOX_TAB_W, BOX_TAB_H, boxHall ? C565(0xe8, 0xb0, 0x20) : UI_TRACK, UI_INK, t2);
+  drawCrown(BOX_TAB_X2 + 12, BOX_TAB_Y + 12, boxHall ? UI_WHITE : C565(0xe8, 0xb0, 0x20));
+  if (boxHall && !hall.count()) {
+    drawFit(XT(X_HALL_EMPTY), 190, 330, UI_INK, 2);
+  } else if (!boxHall && !box.count()) {
     drawFit(XT(X_BOX_EMPTY), 170, 300, UI_INK, 3);
     drawFit(XT(X_BOX_HINT), 220, 360, UI_INK, 2);
     drawFit(XT(X_BOX_NEXT), 248, 360, UI_INK, 2);
   }
   if (boxPage >= boxPages()) boxPage = boxPages() - 1;
-  boxSortView();
+  Box &b = cb();
+  boxSortView(b);
   for (int r = 0; r < BOX_ROWS; r++) {
     int k = boxPage * BOX_ROWS + r;
-    if (k >= box.count()) break;
-    const BoxMon &m = box.at(boxView(k));
+    if (k >= b.count()) break;
+    const BoxMon &m = b.at(boxView(k));
     int y = BOX_ROW_Y + r * (BOX_ROW_H + BOX_ROW_GAP);
     // ko10.4: repetidos: fondo de color por especie y "xN" (cuantos hay en la caja)
     uint8_t same = 0;
-    for (uint8_t j = 0; j < box.count(); j++) if (box.at(j).dex == m.dex) same++;
+    for (uint8_t j = 0; j < b.count(); j++) if (b.at(j).dex == m.dex) same++;
     static const uint16_t DUP_BG[6] = {
       C565(0xff, 0xe4, 0xec), C565(0xe0, 0xf0, 0xff), C565(0xe6, 0xf8, 0xdc),
       C565(0xff, 0xf2, 0xd0), C565(0xee, 0xe4, 0xff), C565(0xdc, 0xf6, 0xf2),
@@ -164,10 +190,10 @@ void boxTap(int16_t x, int16_t y) {
   if (boxSel >= 0) {  // ficha: soltar (dos toques) o cerrar
     // ko9.1: tocar al Pokemon repite su grito
     if (y >= 80 && y < 200 && x >= 120 && x < 346) {
-      audioCry(box.at((uint8_t)boxSel).dex);
+      audioCry(cb().at((uint8_t)boxSel).dex);
       return;
     }
-    if (y >= 300 && y < 348 && x >= 93 && x < 229) {
+    if (!boxHall && y >= 300 && y < 348 && x >= 93 && x < 229) {  // el salon no suelta
       if (timeLeft(boxConfirmUntil)) {
         pet.addCandy(box.at((uint8_t)boxSel).dex, 1);  // ko10.4: soltar da 1 caramelo
         pet.saveNow();
@@ -185,7 +211,13 @@ void boxTap(int16_t x, int16_t y) {
     }
     return;
   }
-  if (y < 72 || y >= 392) { xScreen = XS_NONE; return; }  // arriba / "atras"
+  // ko10.5: pestanas caja / salon de la fama
+  if (y >= BOX_TAB_Y && y < BOX_TAB_Y + BOX_TAB_H) {
+    if (x >= BOX_TAB_X1 && x < BOX_TAB_X1 + BOX_TAB_W && boxHall) { boxHall = false; boxPage = 0; sfxPlay(SFX_TAP); }
+    else if (x >= BOX_TAB_X2 && x < BOX_TAB_X2 + BOX_TAB_W && !boxHall) { boxHall = true; boxPage = 0; sfxPlay(SFX_TAP); }
+    return;
+  }
+  if (y < BOX_TAB_Y || y >= 392) { xScreen = XS_NONE; return; }  // arriba / "atras"
   if (y >= BOX_NAV_Y && y < BOX_NAV_Y + 36) {
     if (x < CX && boxPage > 0) boxPage--;
     else if (x >= CX && boxPage + 1 < boxPages()) boxPage++;
@@ -196,8 +228,9 @@ void boxTap(int16_t x, int16_t y) {
   int r = (y - BOX_ROW_Y) / (BOX_ROW_H + BOX_ROW_GAP);
   if (r >= BOX_ROWS || (y - BOX_ROW_Y) % (BOX_ROW_H + BOX_ROW_GAP) >= BOX_ROW_H) return;
   int k = boxPage * BOX_ROWS + r;
-  boxSortView();
-  if (k < box.count()) { boxSel = boxView(k); audioCry(box.at((uint8_t)boxSel).dex); }  // ko9.1: su grito
+  Box &bx = cb();
+  boxSortView(bx);
+  if (k < bx.count()) { boxSel = boxView(k); audioCry(bx.at((uint8_t)boxSel).dex); }  // ko9.1: su grito
 }
 
 // ======================================================================
@@ -216,19 +249,13 @@ uint8_t nextPage = 0;
 
 void onPetEnd(Pet &p, uint8_t how) {
   if (how == CER_RUNAWAY || p.isEgg()) return;  // escapada: huevo y ya
-  box.addRaised(p.speciesId, p.level(), p.shiny, p.geneAtk, p.geneDef, p.geneSpe, clockEpoch());
+  hall.addRaised(p.speciesId, p.level(), p.shiny, p.geneAtk, p.geneDef, p.geneSpe, clockEpoch());  // salon
   gNextPickPending = true;
 }
 
 // se puede elegir si su familia no se ha criado (o si ya se criaron todas)
 static bool nextPickable(const BoxMon &m) { return pet.allFamsRaised() || !pet.isFamRaised(m.dex); }
 
-static void drawCrown(int x, int y, uint16_t c) {
-  gfx->fillRect(x, y + 8, 18, 6, c);
-  gfx->fillTriangle(x, y + 8, x + 3, y, x + 6, y + 8, c);
-  gfx->fillTriangle(x + 6, y + 8, x + 9, y - 2, x + 12, y + 8, c);
-  gfx->fillTriangle(x + 12, y + 8, x + 15, y, x + 18, y + 8, c);
-}
 
 static uint8_t nextPages() { return box.count() ? (box.count() + NP_ROWS - 1) / NP_ROWS : 1; }
 
@@ -237,7 +264,7 @@ void renderNextPick() {
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
   drawFit(XT(X_NEXT_TITLE), 34, 320, UI_INK, 2);
   drawBtn(93, NP_EGG_Y, 280, 48, UI_BAR_WARN, UI_INK, XT(X_NEXT_EGG));
-  boxSortView();
+  boxSortView(box);
   if (nextPage >= nextPages()) nextPage = nextPages() - 1;
   for (int r = 0; r < NP_ROWS; r++) {
     int k = nextPage * NP_ROWS + r;
@@ -289,7 +316,7 @@ void nextPickTap(int16_t x, int16_t y) {
   int r = (y - NP_ROW_Y) / (NP_ROW_H + NP_ROW_GAP);
   if (r >= NP_ROWS || (y - NP_ROW_Y) % (NP_ROW_H + NP_ROW_GAP) >= NP_ROW_H) return;
   int k = nextPage * NP_ROWS + r;
-  boxSortView();
+  boxSortView(box);
   if (k >= box.count()) return;
   uint8_t idx = boxView(k);
   if (!nextPickable(box.at(idx))) { sfxPlay(SFX_DENY); return; }
@@ -513,6 +540,7 @@ void doResetGame() {
   renderReset();  // "empezando de nuevo..." antes de reiniciar
   pet.wipeGameKeepSettings();
   box.wipe();
+  hall.wipe();  // ko10.5
   dexLog.wipe();
   sfxPlay(SFX_BYE);
   delay(1200);

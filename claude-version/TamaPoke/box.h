@@ -10,6 +10,8 @@
 #include <Preferences.h>
 
 #define BOX_MAX 60
+#define HALL_MAX 251   // ko10.5: salon de la fama (criados hasta el final): 1 por familia de sobra
+#define BOX_CAP_MAX HALL_MAX
 
 enum : uint8_t { BOXF_SHINY = 1, BOXF_CAUGHT = 2, BOXF_RAISED = 4 };  // CAUGHT: con pokeball (si no, ganado)
 // ko10.5: RAISED = criado hasta el final (despedida/soltado): corona en la caja
@@ -24,9 +26,13 @@ struct __attribute__((packed)) BoxMon {
 
 class Box {
 public:
-  void begin();                 // carga de la NVS (espacio "tpbox")
+  // ko10.5: la misma clase sirve para la caja ("tpbox", 60) y el salon de la
+  // fama con corona ("tphall", 251)
+  explicit Box(const char *ns = "tpbox", uint8_t cap = BOX_MAX) : ns_(ns), cap_(cap) {}
+  void begin();                 // carga de la NVS (espacio ns_)
   uint8_t count() const { return n; }
-  bool full() const { return n >= BOX_MAX; }
+  uint8_t capacity() const { return cap_; }
+  bool full() const { return n >= cap_; }
   const BoxMon &at(uint8_t i) const { return mons[i < n ? i : 0]; }
   // false si esta llena o el dex no es valido; los genes se sortean (90-110)
   bool add(int16_t dex, uint16_t lvl, bool shiny, bool caught, uint32_t epoch);
@@ -38,7 +44,9 @@ public:
   void wipe();                        // fork KO (ko8): [nuevo comienzo]
 private:
   Preferences prefs;
-  BoxMon mons[BOX_MAX];
+  const char *ns_;
+  uint8_t cap_;
+  BoxMon mons[BOX_CAP_MAX];
   uint8_t n = 0;
   void save();
 };

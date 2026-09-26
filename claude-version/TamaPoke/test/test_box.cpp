@@ -830,3 +830,22 @@ TEST(weather, fecha_a_mano_ida_y_vuelta) {
   CHECK_EQ((int)wxDaysInMonth(2026, 2), 28);
   CHECK_EQ((int)wxDaysInMonth(2026, 11), 30);
 }
+
+TEST(box, salon_de_la_fama_aparte_y_con_sitio_para_251) {
+  mockNvsReset();
+  Box b;
+  b.begin();
+  Box h("tphall", HALL_MAX);
+  h.begin();
+  for (int i = 0; i < BOX_MAX; i++) CHECK(b.add(16, 5, false, true, 0));
+  CHECK(b.full());
+  for (int i = 1; i <= 100; i++) CHECK(h.addRaised((int16_t)i, 36, false, 100, 100, 100, 0));  // la caja llena no importa
+  CHECK_EQ((int)h.count(), 100);
+  CHECK(h.at(0).flags & BOXF_RAISED);
+  Box h2("tphall", HALL_MAX);
+  h2.begin();
+  CHECK_EQ((int)h2.count(), 100);  // se guarda en su propio espacio
+  Box b2;
+  b2.begin();
+  CHECK_EQ((int)b2.count(), BOX_MAX);
+}

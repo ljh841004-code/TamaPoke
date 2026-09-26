@@ -6,9 +6,9 @@
 void Box::begin() {
   memset(mons, 0, sizeof(mons));
   n = 0;
-  prefs.begin("tpbox", false);
+  prefs.begin(ns_, false);
   uint8_t c = prefs.getUChar("n", 0);
-  if (c > BOX_MAX) c = 0;
+  if (c > cap_) c = 0;
   if (c && prefs.getBytes("mons", mons, sizeof(BoxMon) * c) != sizeof(BoxMon) * c) c = 0;
   // nada invalido entra en juego aunque la NVS venga danada
   bool fixed = false;
