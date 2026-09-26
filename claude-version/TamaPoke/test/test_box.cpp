@@ -706,7 +706,7 @@ TEST(weather, nieve_solo_en_invierno_y_sol_solo_en_verano) {
     if (w == WX_RAIN) { rain++; CHECK((int)s != (int)SEASON_WINTER); }
     if (w == WX_BLOSSOM) { blossom++; CHECK_EQ((int)s, (int)SEASON_SPRING); }
     if (w == WX_LEAVES) { leaves++; CHECK_EQ((int)s, (int)SEASON_AUTUMN); }
-    CHECK_EQ((int)weatherAt(e + 3600), (int)w);  // estable dentro del bloque
+    CHECK_EQ((int)weatherAt(e + WX_BLOCK_S - 1), (int)w);  // estable dentro del bloque (5 min)
   }
   CHECK(snow > 0 && rain > 0 && sunny > 0 && blossom > 0 && leaves > 0);
   // "de vez en cuando": entre el 8% y el 30% de los bloques

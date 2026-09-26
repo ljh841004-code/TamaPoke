@@ -2,13 +2,14 @@
 // fork KO (ko10.1): estacion y tiempo segun la fecha y hora reales (las del WiFi/RTC).
 // Logica pura (sin pantalla): test/test_box.cpp la prueba en el PC.
 //
-//   - lluvia: de vez en cuando, en bloques de 3 horas (mas en verano: monzon)
+//   - ko10.5: el tiempo cambia cada 5 minutos (antes bloques de 3 horas)
+//   - lluvia: de vez en cuando (mas en verano: monzon)
 //   - nieve: SOLO en invierno (diciembre, enero, febrero); en invierno lo que
 //     seria lluvia cae como nieve
 //   - sol radiante: los dias despejados de verano (junio, julio, agosto)
 //   - (ko10.1) petalos de cerezo: a ratos en primavera (marzo-mayo)
 //   - (ko10.1) hojas de otono: a ratos en otono (septiembre-noviembre)
-// El tiempo sale de la fecha (hash del bloque de 3 horas): no cambia al
+// El tiempo sale de la fecha (hash del bloque de 5 min): no cambia al
 // reiniciar ni parpadea, y dos TamaPoke a la misma hora ven lo mismo.
 // Sin reloj (epoch 0) siempre despejado.
 #include <stdint.h>
@@ -16,7 +17,7 @@
 enum : uint8_t { WX_CLEAR = 0, WX_RAIN, WX_SNOW, WX_SUNNY, WX_BLOSSOM, WX_LEAVES };
 enum : uint8_t { SEASON_SPRING = 0, SEASON_SUMMER, SEASON_AUTUMN, SEASON_WINTER };
 
-#define WX_BLOCK_S (3u * 3600u)
+#define WX_BLOCK_S (5u * 60u)  // ko10.5: cada 5 min (antes 3 h)
 #define WX_DRIFT_CHANCE 35  // % de bloques secos de primavera/otono con petalos/hojas
 
 // fecha (ano, mes 1..12, dia 1..31) y dia de la semana (0 = domingo)
@@ -65,7 +66,7 @@ static inline uint8_t wxSeason(uint8_t month) {
   return SEASON_WINTER;
 }
 
-// probabilidad (%) de que un bloque de 3 horas sea de lluvia/nieve
+// probabilidad (%) de que un bloque de 5 min sea de lluvia/nieve
 static inline uint8_t wxWetChance(uint8_t season) {
   static const uint8_t P[4] = { 15, 25, 12, 20 };  // primavera, verano, otono, invierno
   return P[season & 3];

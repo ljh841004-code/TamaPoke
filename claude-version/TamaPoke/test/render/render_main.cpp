@@ -157,8 +157,8 @@ static void scenes(bool ko, const char *sfx) {
       render(); snprintf(n, sizeof(n), "40_battle_bio%02d", bio); shot(n);
     }
     struct { uint32_t e; const char *tag; } WX[] = {
-      { 1772459100u, "rain" }, { 1767275100u, "snow" }, { 1780321500u, "sunny" },
-      { 1772459100u + 9 * 3600, "night_clear" }, { 1775137500u, "blossom" }, { 1791035100u, "leaves" },
+      { 1772356800u, "rain" }, { 1767273300u, "snow" }, { 1780304400u, "sunny" },
+      { 1772488800u, "rain_night" }, { 1772356200u, "blossom" }, { 1788253500u, "leaves" },
     };
     for (auto &w : WX) {
       gMockEpoch = w.e; pet.lastSeenEpoch = w.e;
@@ -190,7 +190,7 @@ static void scenes(bool ko, const char *sfx) {
     closeAll(); openRegionPick(); regionPage = 1; render(); shot("53_region_locked");
     // gimnasio de Lt. Surge con lluvia: presentacion y resultado con medalla
     closeAll();
-    gMockEpoch = 1772459100u; pet.lastSeenEpoch = gMockEpoch;  // lluvia
+    gMockEpoch = 1772356800u; pet.lastSeenEpoch = gMockEpoch;  // lluvia
     pet.badges = 0x03;
     gymPage = 0; gymTap(GY_X + 10, GY_Y + 2 * (GY_H + GY_GAP) + 10);  // 3er gimnasio
     render(); shot("54_gym_intro");
@@ -207,7 +207,7 @@ static void scenes(bool ko, const char *sfx) {
   {
     closeAll(); pet.energy = 80;
     openRegionPick(); regionPage = 0; render(); shot("44_region_pick"); regionPage = 1; render(); shot("44b_region_pick2");
-    gMockEpoch = 1772459100u; pet.lastSeenEpoch = gMockEpoch;  // lluvia (marzo)
+    gMockEpoch = 1772356800u; pet.lastSeenEpoch = gMockEpoch;  // lluvia (marzo)
     startWildIn(6);
     foePmd.unload();
     bFoe = makeBattler(25, 18, 30, 30, 30); bGroup = WG_REGION;
