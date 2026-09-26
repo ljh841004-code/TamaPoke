@@ -125,7 +125,7 @@ public:
   uint8_t balls = 5;       // pokeballs (se ganan 2 por victoria salvaje)
   uint8_t potions = 2;     // pociones: curan la mitad de la vida en batalla
   uint16_t defHi = 0;      // record del entrenamiento de defensa (pokeballs paradas)
-  uint16_t speHi = 0;      // record del entrenamiento de velocidad (reflejos)
+  uint16_t speHi = 0;      // record del entrenamiento de velocidad (ko10.6: puntos, hasta 1500)
 
   void begin();                 // carga estado de NVS (o crea el primer huevo)
   void update(uint32_t nowMs);  // llamar en cada loop()
@@ -150,7 +150,7 @@ public:
   bool playResult(uint8_t score);  // true = record (animo + energia); si no, un poco de energia
   uint8_t trainStrength(uint16_t hits);  // saco de entrenamiento (entrena FUE)
   uint8_t trainDefense(uint16_t blocked);  // fork KO: pokeballs que caen (entrena DEF)
-  uint8_t trainSpeed(uint16_t hits);       // fork KO: reflejos izq/dcha (entrena VEL)
+  uint8_t trainSpeed(uint16_t hits, uint16_t points);  // fork KO: reflejos (entrena VEL); ko10.6: record en puntos
 
   // stats de combate: base real de gen 1 x genes + nivel + entrenamiento
   uint16_t atkStat() const;

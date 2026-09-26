@@ -241,15 +241,15 @@ TEST(train, defensa_y_velocidad_suben_con_tope_y_record) {
   CHECK_EQ(p.defHi, (uint16_t)10);
   g = p.trainDefense(100);
   CHECK_EQ(g, (uint8_t)18);  // tope por sesion
-  g = p.trainSpeed(12);
+  g = p.trainSpeed(12, 900);
   CHECK_EQ(g, (uint8_t)12);
-  CHECK_EQ(p.speHi, (uint16_t)12);
-  p.trainSpeed(3);
-  CHECK_EQ(p.speHi, (uint16_t)12);  // un resultado peor no baja el record
+  CHECK_EQ(p.speHi, (uint16_t)900);
+  p.trainSpeed(3, 200);
+  CHECK_EQ(p.speHi, (uint16_t)900);  // un resultado peor no baja el record
   Pet q;
   q.begin();
   CHECK_EQ(q.defHi, (uint16_t)100);
-  CHECK_EQ(q.speHi, (uint16_t)12);
+  CHECK_EQ(q.speHi, (uint16_t)900);
 }
 
 // ---------------------------------------------------------------- siguiente (ko10.5)

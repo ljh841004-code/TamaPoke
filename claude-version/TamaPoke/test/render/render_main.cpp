@@ -76,13 +76,21 @@ static void scenes(bool ko, const char *sfx) {
   render(); shot("04_train_menu");
   trainMenuPage = 1; render(); shot("04b_train_menu_battle"); trainMenuPage = 0;
   closeAll(); startDefense();
-  for (int i = 0; i < 70; i++) { tick(85); render(); }
+  for (int i = 0; i < 70; i++) { tick(85); render(); defMissN = 0; }  // que no se acabe
   defensePress((int16_t)defBall[0].x, (int16_t)defBall[0].y);
+  defMissN = 1;  // ko10.6: vidas en lugar de barra de tiempo
   tick(85); render(); shot("05_train_defense");
-  gMockMillis += DEF_MS; render(); tick(85); render(); shot("06_train_defense_result");
+  defScore = 34; defMissN = DEF_LIVES; render(); tick(85); render(); shot("06_train_defense_result");
   closeAll(); startSpeed();
   for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
   tick(200); render(); shot("07_train_speed");
+  // ko10.6: resultado con puntos por reflejos y la media
+  for (int r = 0; r < SPD_ROUNDS; r++) {
+    for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
+    tick(240 + r * 7); speedPress(spdBallX(), spdBallY());
+    for (int i = 0; i < 60 && spdPhase == SP_FEED && !spdOverUntil; i++) { tick(20); render(); }
+  }
+  tick(20); render(); shot("07b_train_speed_result");
   // batalla salvaje
   closeAll(); pet.energy = 80; startWild();
   bPhase = BP_MENU; txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);

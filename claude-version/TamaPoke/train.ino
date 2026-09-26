@@ -2,9 +2,12 @@
 // (se concatena tras TamaPoke.ino)
 //
 //   - Ataque:  saco de golpes (ya existia): toques rapidos en 10 s
-//   - Defensa: caen pokeballs del cielo; tocarlas antes de que lleguen al suelo
-//   - Velocidad: aparece una pokeball a la izquierda o a la derecha un instante;
-//                tocarla a tiempo. 15 rondas, cada vez mas rapido
+//   - Defensa: caen pokeballs del cielo; tocarlas antes de que lleguen al suelo.
+//              ko10.6: sin tiempo, 3 fallos y se acaba (cada vez mas rapido):
+//              antes 20 s daban como mucho 28 y el record no se podia batir
+//   - Velocidad: aparece una pokeball un instante; tocarla a tiempo. 15 rondas,
+//                cada vez mas rapido. ko10.6: puntos por reflejos (hasta 100 por
+//                ronda segun lo rapido que toques): antes el tope era 15/15
 //   - Pelota: el juego de siempre (ahora solo sube el animo)
 //
 // Se engancha a TamaPoke.ino por funciones: trainingRender / trainingTap /
@@ -22,7 +25,7 @@ const char *trainMsg = nullptr;
 #define TRM_GAP 8
 
 // ---------- defensa: pokeballs que caen ----------
-#define DEF_MS 20000UL
+#define DEF_LIVES 3     // ko10.6: fallos permitidos (antes 20 s fijos)
 #define DEF_BALLS 4
 #define DEF_GROUND 360
 bool defOpen = false;
@@ -40,7 +43,9 @@ enum : uint8_t { SP_WAIT = 0, SP_SHOW, SP_FEED };
 bool spdOpen = false;
 uint8_t spdRound = 0, spdPhase = SP_WAIT, spdSide = 0, spdGain = 0;
 uint16_t spdScore = 0;
-uint32_t spdUntil = 0, spdOverUntil = 0;
+uint32_t spdUntil = 0, spdOverUntil = 0, spdShowAt = 0;
+uint8_t spdHits = 0;       // ko10.6: aciertos (entrenan la VEL); spdScore = puntos
+uint32_t spdRtSum = 0;     // suma de reflejos (ms) de los aciertos
 bool spdGood = false, spdNewHi = false;
 
 bool trainingFast() { return defOpen || spdOpen; }  // toques al apoyar el dedo
@@ -177,7 +182,8 @@ void trainMenuTap(int16_t x, int16_t y) {
 
 // ---------- pantalla de resultado comun ----------
 
-void drawTrainResult(const char *score, const char *gain, uint16_t gainCol, bool newHi, uint16_t hi) {
+void drawTrainResult(const char *score, const char *gain, uint16_t gainCol, bool newHi, uint16_t hi,
+                     const char *sub) {
   drawGameScene();
   bool night = sceneHour() < 6 || sceneHour() >= 20;
   uint16_t ink = night ? UI_INK_NIGHT : UI_INK;
@@ -190,6 +196,7 @@ void drawTrainResult(const char *score, const char *gain, uint16_t gainCol, bool
     snprintf(r, sizeof(r), T(S_RECORD_FMT), hi);
     drawFit(r, 262, 320, ink, 2);
   }
+  if (sub) drawFit(sub, 300, 340, ink, 2);  // ko10.6: aciertos y reflejo medio
   gfx->flush();
 }
 
@@ -242,7 +249,7 @@ void stepDefense() {
     for (auto &b : defBall)
       if (!b.on) { b.on = true; b.x = 120 + random(227); b.y = 64; break; }
     int gap = 1000 - (int)(el * 26);
-    defNextSpawn = now + (gap < 430 ? 430 : gap);
+    defNextSpawn = now + (gap < 300 ? 300 : gap);  // ko10.6: sigue apretando
   }
 }
 
@@ -269,10 +276,10 @@ void renderDefense() {
     char s[24], g[20];
     snprintf(s, sizeof(s), XT(X_BLOCKED_FMT), defScore);
     snprintf(g, sizeof(g), XT(X_DEF_GAIN_FMT), defGain);
-    drawTrainResult(s, g, 0x4C98, defNewHi && defScore > 0, pet.defHi);
+    drawTrainResult(s, g, 0x4C98, defNewHi && defScore > 0, pet.defHi, nullptr);
     return;
   }
-  if (now - defStart >= DEF_MS) {  // se acabo: aplicar entrenamiento
+  if (defMissN >= DEF_LIVES) {  // ko10.6: 3 fallos y se acabo: aplicar entrenamiento
     defNewHi = defScore > pet.defHi;
     defGain = pet.trainDefense(defScore);
     sfxPlay(defNewHi ? SFX_MEDAL : SFX_PLAY);
@@ -286,7 +293,10 @@ void renderDefense() {
   char b[8];
   snprintf(b, sizeof(b), "%u", defScore);
   drawFit(b, 22, 200, ink, 4);
-  drawTimeBar(DEF_MS - (now - defStart), DEF_MS, 60);
+  for (int i = 0; i < DEF_LIVES; i++) {  // ko10.6: vidas (como el juego de pelota)
+    if (i < DEF_LIVES - (int)defMissN) gfx->fillCircle(CX - 28 + i * 28, 70, 7, UI_BAR_BAD);
+    else gfx->drawCircle(CX - 28 + i * 28, 70, 7, UI_TRACK);
+  }
   drawTrainPet(CX, PMD_IDLE);
   for (auto &f : defFx) {  // anillo verde al atrapar, rojo al caer
     uint32_t t = now - f.t;
@@ -321,6 +331,8 @@ void startSpeed() {
   spdOpen = true;
   spdRound = 0;
   spdScore = 0;
+  spdHits = 0;
+  spdRtSum = 0;
   spdOverUntil = 0;
   spdNewHi = false;
   spdNextRound();
@@ -337,9 +349,20 @@ static const int8_t SPD_DIR[SPD_POS][2] = { { 0, -10 }, { 7, -7 }, { 10, 0 }, { 
 static int spdBallX() { return SPD_RING_X + SPD_DIR[spdSide % SPD_POS][0] * SPD_RING_R / 10; }
 static int spdBallY() { return SPD_RING_Y + SPD_DIR[spdSide % SPD_POS][1] * SPD_RING_R / 10; }
 
+// ko10.6: puntos por reflejos: 100 - ms/10 (0,25 s = 75), minimo 10
+uint16_t spdPoints(uint32_t rt) {
+  return rt >= 900 ? 10 : (uint16_t)(100 - rt / 10);
+}
+
 static void spdResolve(bool good) {
   spdGood = good;
-  if (good) { spdScore++; sfxPlay(SFX_PLAY); }
+  if (good) {
+    uint32_t rt = millis() - spdShowAt;
+    spdHits++;
+    spdRtSum += rt;
+    spdScore += spdPoints(rt);
+    sfxPlay(SFX_PLAY);
+  }
   else sfxPlay(SFX_DENY);
   spdPhase = SP_FEED;
   spdUntil = millis() + 450;
@@ -356,12 +379,13 @@ void stepSpeed() {
   if (timeLeft(spdUntil)) return;
   if (spdPhase == SP_WAIT) {
     spdPhase = SP_SHOW;
-    spdUntil = millis() + spdWindow();
+    spdShowAt = millis();
+    spdUntil = spdShowAt + spdWindow();
   } else if (spdPhase == SP_SHOW) {
     spdResolve(false);  // no llego a tiempo
   } else if (++spdRound >= SPD_ROUNDS) {
     spdNewHi = spdScore > pet.speHi;
-    spdGain = pet.trainSpeed(spdScore);
+    spdGain = pet.trainSpeed(spdHits, spdScore);
     sfxPlay(spdNewHi ? SFX_MEDAL : SFX_PLAY);
     spdOverUntil = millis() + 3500;
   } else {
@@ -373,9 +397,13 @@ void renderSpeed() {
   if (spdOverUntil) {
     if (!timeLeft(spdOverUntil)) { spdOpen = false; return; }
     char s[24], g[20];
-    snprintf(s, sizeof(s), XT(X_SPE_RESULT_FMT), spdScore);
+    snprintf(s, sizeof(s), XT(X_SPE_PTS_FMT), spdScore);
     snprintf(g, sizeof(g), XT(X_SPE_GAIN_FMT), spdGain);
-    drawTrainResult(s, g, UI_BAR_WARN, spdNewHi && spdScore > 0, pet.speHi);
+    char sub[48];
+    uint32_t avg = spdHits ? spdRtSum / spdHits : 0;
+    snprintf(sub, sizeof(sub), XT(X_SPE_AVG_FMT), (unsigned)spdHits, (unsigned)SPD_ROUNDS,
+             (unsigned)(avg / 1000), (unsigned)(avg % 1000 / 10));
+    drawTrainResult(s, g, UI_BAR_WARN, spdNewHi && spdScore > 0, pet.speHi, sub);
     return;
   }
   stepSpeed();

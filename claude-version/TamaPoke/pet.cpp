@@ -732,7 +732,7 @@ uint8_t Pet::trainDefense(uint16_t blocked) {
   return gain;
 }
 
-uint8_t Pet::trainSpeed(uint16_t hits) {
+uint8_t Pet::trainSpeed(uint16_t hits, uint16_t points) {
   if (ceremony != CER_NONE || isEgg()) return 0;
   uint8_t gain = trainGain(trSpe, hits);  // 1 acierto = 1 punto (15 rondas)
   energy = dropTo(energy, 12, 5);
@@ -741,7 +741,7 @@ uint8_t Pet::trainSpeed(uint16_t hits) {
   weight = burn > 0 ? burn : 0;
   joy = clamp100(joy + 6);
   if (hits >= 10) heartUntil = millis() + HEART_MS;
-  if (hits > speHi) speHi = hits;
+  if (points > speHi) speHi = points;  // ko10.6: el record son los puntos (reflejos)
   addBond(2);
   registerCare();
   save();
@@ -852,7 +852,7 @@ void Pet::save() {
   prefs.putUChar("balls", balls);
   prefs.putUChar("potn", potions);
   prefs.putUShort("dhi", defHi);
-  prefs.putUShort("vhi", speHi);
+  prefs.putUShort("vhp", speHi);  // ko10.6: clave nueva (puntos); el record viejo (aciertos) no vale
 }
 
 void Pet::load() {
@@ -934,7 +934,7 @@ void Pet::load() {
   balls = prefs.getUChar("balls", 5);   // partidas anteriores a ko4: kit inicial
   potions = prefs.getUChar("potn", 2);
   defHi = prefs.getUShort("dhi", 0);
-  speHi = prefs.getUShort("vhi", 0);
+  speHi = prefs.getUShort("vhp", 0);
   // siembra: la mascota actual cuenta como criada (guardados antiguos)
   if (speciesId >= 1) registerSpecies(speciesId);
 }
