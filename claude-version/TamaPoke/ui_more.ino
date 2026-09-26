@@ -136,6 +136,8 @@ void boxTap(int16_t x, int16_t y) {
     }
     if (y >= 300 && y < 348 && x >= 93 && x < 229) {
       if (timeLeft(boxConfirmUntil)) {
+        pet.addCandy(box.at((uint8_t)boxSel).dex, 1);  // ko10.4: soltar da 1 caramelo
+        pet.saveNow();
         box.release((uint8_t)boxSel);
         boxSel = -1;
         boxConfirmUntil = 0;

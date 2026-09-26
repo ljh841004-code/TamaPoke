@@ -30,6 +30,8 @@ void Pet::newEgg() {
   // sorteo shiny: 1/48 base, mejor con despedida y con racha/vinculo altos
   int shinyBase = (lastEnd == CER_FAREWELL ? 24 : 48) - careBonus();
   if (shinyBase < 8) shinyBase = 8;
+  if (shinyCharm) { shinyBase /= 4; shinyCharm = false; }  // ko10.4: caramelos x10
+  if (shinyBase < 2) shinyBase = 2;
   eggShiny = (random(shinyBase) == 0);
   eggTaps = 0;
   fullness = 80;
@@ -569,6 +571,65 @@ void Pet::feedCandy() {
   save();
 }
 
+// ---------------------------------------------------------------- ko10.4: caramelos
+
+uint16_t Pet::candyOf(int16_t dex) const {
+  if (dex < 1 || dex > DEX_COUNT) return 0;
+  return candy[DEX_FAM[dex]];
+}
+
+void Pet::addCandy(int16_t dex, uint16_t n) {
+  if (dex < 1 || dex > DEX_COUNT || !n) return;
+  uint16_t &c = candy[DEX_FAM[dex]];
+  c = (uint32_t)c + n > CANDY_MAX ? CANDY_MAX : c + n;
+  pendingSave = true;
+}
+
+// cambiar un repetido por caramelos: 3, +2 si es shiny, +1 si es de nivel 30 o mas
+uint16_t Pet::dupCandy(bool shinyMon, uint16_t lvl) {
+  return 3 + (shinyMon ? 2 : 0) + (lvl >= 30 ? 1 : 0);
+}
+
+bool Pet::candyCanUse(uint8_t use) const {
+  if (use >= CU_COUNT || isEgg() || ceremony != CER_NONE) return false;
+  if (candyOf(speciesId) < CANDY_COST[use]) return false;
+  switch (use) {
+    case CU_EXP:   return level() < LEVEL_MAX;
+    case CU_GAUGE: return joy < 100 || energy < 100 || fullness < 100;
+    case CU_GENES: return geneAtk < CANDY_GENE_MAX || geneDef < CANDY_GENE_MAX || geneSpe < CANDY_GENE_MAX;
+    case CU_SHINY: return !shinyCharm;
+    case CU_EVO:   return careMistakes > 0;
+  }
+  return false;
+}
+
+bool Pet::candyUse(uint8_t use) {
+  if (!candyCanUse(use)) return false;
+  candy[DEX_FAM[speciesId]] -= CANDY_COST[use];
+  switch (use) {
+    case CU_EXP: {  // media subida de nivel
+      uint16_t L = level();
+      addExp((expForLevel(L + 1) - expForLevel(L) + 1) / 2);
+      break;
+    }
+    case CU_GAUGE:
+      joy = clamp100(joy + 20);
+      energy = clamp100(energy + 20);
+      fullness = clamp100(fullness + 20);
+      break;
+    case CU_GENES: {
+      auto up = [](uint8_t &g) { g = g + 2 > CANDY_GENE_MAX ? CANDY_GENE_MAX : g + 2; };
+      up(geneAtk); up(geneDef); up(geneSpe);
+      break;
+    }
+    case CU_SHINY: shinyCharm = true; break;
+    case CU_EVO:   careMistakes--; break;  // la evolucion llega un nivel antes
+  }
+  heartUntil = millis() + HEART_MS;
+  save();
+  return true;
+}
+
 bool Pet::playResult(uint8_t score) {
   if (ceremony != CER_NONE || isEgg()) return false;
   // fork KO (ko9.2): 30 s y 3 vidas; el premio grande (animo + energia) solo al
@@ -726,6 +787,8 @@ void Pet::save() {
   prefs.putBool("eshy", eggShiny);
   prefs.putBool("stpk", starterPick);
   prefs.putBytes("dexsh", dexShinyReg, sizeof(dexShinyReg));
+  prefs.putBytes("candy", candy, sizeof(candy));  // ko10.4
+  prefs.putBool("scharm", shinyCharm);
   prefs.putUInt("age", ageMinutes);
   prefs.putUInt("exp", exp);
   prefs.putShort("dexn", speciesId);
@@ -779,6 +842,9 @@ void Pet::load() {
   eggShiny = prefs.getBool("eshy", false);
   starterPick = prefs.getBool("stpk", false);
   prefs.getBytes("dexsh", dexShinyReg, sizeof(dexShinyReg));
+  if (prefs.getBytes("candy", candy, sizeof(candy)) != sizeof(candy)) memset(candy, 0, sizeof(candy));
+  for (auto &c : candy) if (c > CANDY_MAX) c = CANDY_MAX;
+  shinyCharm = prefs.getBool("scharm", false);
   ageMinutes = prefs.getUInt("age", 0);
   // fork KO (ko7): guardados de antes (nivel = horas, hasta Lv338+) empiezan
   // en Lv1 con la misma especie

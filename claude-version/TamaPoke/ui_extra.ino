@@ -305,7 +305,15 @@ void loadFoe(int16_t dex, bool shiny) {
 
 // fase de la batalla
 // BP_NEXT (ko9.2, solo salvajes): tras el resultado, "seguir buscando o salir"
-enum : uint8_t { BP_INTRO = 0, BP_MENU, BP_PLAY, BP_RESULT, BP_NEXT };
+// BP_DUP (ko10.4): repetido capturado -> quedarselo (caja) o cambiarlo por caramelos
+enum : uint8_t { BP_INTRO = 0, BP_MENU, BP_PLAY, BP_RESULT, BP_NEXT, BP_DUP };
+#define BD_MS 20000UL  // sin elegir en 20 s: se lo queda (no se pierde nada)
+#define BDUP_KEEP_X 70  // botones de BP_DUP
+#define BDUP_CANDY_X 240
+#define BDUP_W 156
+bool bDupPending = false, bDupCaught = false;
+uint32_t bDupEpoch = 0;
+char bNote[48] = "";   // linea extra bajo "seguir?" (caramelos ganados)
 #define BN_Y 330      // botones de BP_NEXT
 #define BN_H 50
 #define BN_MS 15000UL // sin elegir en 15 s, vuelve a la pantalla principal
@@ -923,10 +931,33 @@ void renderBattleView() {
   drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true);  // ko9: rival con numeros
   drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true);
 
-  if (bPhase == BP_NEXT) {
+  if (bPhase == BP_DUP) {  // ko10.4: repetido
     gfx->fillRoundRect(40, 266, 386, 56, 12, UI_WHITE);
     gfx->drawRoundRect(40, 266, 386, 56, 12, UI_INK);
-    drawFit(XT(X_NEXT_Q), 284, 370, UI_INK, 2);
+    char q[64];
+    txFmt(q, sizeof(q), X_DUP_Q, dexName(bFoe.dex));
+    drawFit(q, 272, 370, UI_INK, 2);
+    char have[40];
+    char nb[8];
+    snprintf(nb, sizeof(nb), "%u", pet.candyOf(bFoe.dex));
+    txFmt(have, sizeof(have), X_CANDY_HAVE, dexName(DEX_FAM[bFoe.dex]), nb);
+    drawFit(have, 298, 370, UI_INK, 1);
+    char kb[32], cb[32];
+    snprintf(kb, sizeof(kb), XT(X_DUP_KEEP), (unsigned)CANDY_KEEP);
+    snprintf(cb, sizeof(cb), XT(X_DUP_CANDY), (unsigned)Pet::dupCandy(bvFoeShiny, bFoe.lvl));
+    bool full = box.full();
+    drawBtn(BDUP_KEEP_X, BN_Y, BDUP_W, BN_H, full ? UI_TRACK : 0x4C98, full ? 0x8410 : UI_WHITE, kb);
+    drawBtn(BDUP_CANDY_X, BN_Y, BDUP_W, BN_H, C565(0xf0, 0x7a, 0xa8), UI_WHITE, cb);
+    if (full) drawFit(XT(X_BOX_FULL), BN_Y + BN_H + 8, 300, UI_BAR_BAD, 1);
+  } else if (bPhase == BP_NEXT) {
+    gfx->fillRoundRect(40, 266, 386, 56, 12, UI_WHITE);
+    gfx->drawRoundRect(40, 266, 386, 56, 12, UI_INK);
+    if (bNote[0]) {  // ko10.4: caramelos recien ganados
+      drawFit(XT(X_NEXT_Q), 270, 370, UI_INK, 2);
+      drawFit(bNote, 298, 370, C565(0xc8, 0x3c, 0x78), 1);
+    } else {
+      drawFit(XT(X_NEXT_Q), 284, 370, UI_INK, 2);
+    }
     drawBtn(83, BN_Y, 146, BN_H, UI_BAR_OK, UI_WHITE, XT(X_NEXT_GO));
     drawBtn(237, BN_Y, 146, BN_H, UI_TRACK, UI_INK, XT(X_NEXT_EXIT));
   } else if (bPhase == BP_RESULT) {
@@ -977,6 +1008,8 @@ void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool fo
   bvL1[0] = bvL2[0] = 0;
   bqN = bqI = 0;
   bWon = bFled = bRewarded = false;
+  bDupPending = false;  // ko10.4
+  bNote[0] = 0;
   bvMeFainted = bvFoeFainted = false;
   bvFoeCaught = bCaught = false;
   bBoxMsg = -1;
@@ -1122,7 +1155,8 @@ void endBattleScreen() {
 void wildTap(int16_t x, int16_t y) {
   if (bPhase == BP_INTRO) { bPhaseT = 0; return; }  // saltar la intro
   // ko9.2: tocar el resultado pasa ya a la pregunta
-  if (bPhase == BP_RESULT && millis() - bPhaseT > 800) { bPhase = BP_NEXT; bPhaseT = millis(); return; }
+  if (bPhase == BP_RESULT && millis() - bPhaseT > 800) { afterResult(); return; }
+  if (bPhase == BP_DUP) { wildDupTap(x, y); return; }
   if (bPhase == BP_NEXT) { wildNextTap(x, y); return; }
   if (bPhase != BP_MENU) return;
   int a = battleMenuHit(x, y);
@@ -1142,6 +1176,53 @@ void wildTap(int16_t x, int16_t y) {
   startEvent(0);
 }
 
+// ko10.4: ya tengo esa especie (en la caja o criandola)?
+bool ownsSpecies(int16_t dex) {
+  if (!pet.isEgg() && pet.speciesId == dex) return true;
+  for (uint8_t i = 0; i < box.count(); i++)
+    if (box.at(i).dex == dex) return true;
+  return false;
+}
+
+// tras el resultado: el repetido (si lo hay) y luego "seguir?"
+static void afterResult() {
+  bPhase = bDupPending ? BP_DUP : BP_NEXT;
+  bPhaseT = millis();
+}
+
+static void dupDecide(bool keep) {
+  if (!bDupPending) return;
+  char fam[40];
+  snprintf(fam, sizeof(fam), "%s", dexName(DEX_FAM[bFoe.dex]));
+  uint16_t got;
+  if (keep) {
+    if (box.full()) { sfxPlay(SFX_DENY); return; }  // caja llena: solo caramelos
+    box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, bDupCaught, bDupEpoch);
+    got = CANDY_KEEP;
+  } else {
+    got = Pet::dupCandy(bvFoeShiny, bFoe.lvl);
+  }
+  pet.addCandy(bFoe.dex, got);
+  pet.saveNow();
+  char n[8];
+  snprintf(n, sizeof(n), "%u", got);
+  char tot[8];
+  snprintf(tot, sizeof(tot), "%u", pet.candyOf(bFoe.dex));
+  txFmt(bNote, sizeof(bNote), X_CANDY_GOT, fam, n);
+  size_t l = strlen(bNote);
+  if (l + 2 < sizeof(bNote)) snprintf(bNote + l, sizeof(bNote) - l, " (%s)", tot);
+  bDupPending = false;
+  sfxPlay(keep ? SFX_TAP : SFX_MEDAL);
+  bPhase = BP_NEXT;
+  bPhaseT = millis();
+}
+
+static void wildDupTap(int16_t x, int16_t y) {
+  if (y < BN_Y || y >= BN_Y + BN_H) return;
+  if (x >= BDUP_KEEP_X && x < BDUP_KEEP_X + BDUP_W) dupDecide(true);
+  else if (x >= BDUP_CANDY_X && x < BDUP_CANDY_X + BDUP_W) dupDecide(false);
+}
+
 void finishBattle(bool won, bool fled, bool caught) {
   bWon = won;
   bFled = fled;
@@ -1156,11 +1237,18 @@ void finishBattle(bool won, bool fled, bool caught) {
     // fork KO: el capturado va siempre a la caja; el vencido, solo a veces
     // (ko5: 1 de cada 5 "quiere unirse"; si no, la pokeball no servia de nada)
     bool joins = won && (uint32_t)random(100) < BOX_JOIN_PCT;
+    bNote[0] = 0;
     if (!bLink && (caught || joins)) {
       uint32_t e = clockEpoch();
       if (caught) dexLog.caught(bFoe.dex, e);
-      bBoxMsg = !box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, caught, e) ? X_BOX_FULL
-                : caught ? X_TO_BOX : X_JOINED;
+      if (ownsSpecies(bFoe.dex)) {  // ko10.4: repetido -> se pregunta tras el resultado
+        bDupPending = true;
+        bDupCaught = caught;
+        bDupEpoch = e;
+      } else {
+        bBoxMsg = !box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, caught, e) ? X_BOX_FULL
+                  : caught ? X_TO_BOX : X_JOINED;
+      }
     }
   }
 }
@@ -1201,7 +1289,9 @@ void updateWild() {
       }
     }
   } else if (bPhase == BP_RESULT) {
-    if (now - bPhaseT > 3800) { bPhase = BP_NEXT; bPhaseT = now; }  // ko9.2: preguntar
+    if (now - bPhaseT > 3800) afterResult();  // ko9.2: preguntar (ko10.4: antes el repetido)
+  } else if (bPhase == BP_DUP) {
+    if (now - bPhaseT > BD_MS) { if (!box.full()) dupDecide(true); else dupDecide(false); }
   } else if (bPhase == BP_NEXT) {
     if (now - bPhaseT > BN_MS) endBattleScreen();
   }
@@ -1501,7 +1591,7 @@ void updateLink() {
 // resultado: al acabar vuelve /mons/bgm.wav
 bool battleMusicActive() {
   bool fighting = xScreen == XS_WILD || (xScreen == XS_LINK && linkBattleStarted);
-  return fighting && bPhase != BP_RESULT && bPhase != BP_NEXT;
+  return fighting && bPhase != BP_RESULT && bPhase != BP_NEXT && bPhase != BP_DUP;
 }
 
 void extraLoop(uint32_t now) {

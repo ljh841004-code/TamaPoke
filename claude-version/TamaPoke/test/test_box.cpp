@@ -724,3 +724,65 @@ TEST(weather, fecha_completa_y_dia_de_la_semana) {
   wxDate(0, &y, &m, &d, &wd);            // jueves 01-01-1970
   CHECK_EQ(y, 1970); CHECK_EQ((int)m, 1); CHECK_EQ((int)d, 1); CHECK_EQ((int)wd, 4);
 }
+
+// ---------------------------------------------------------------- caramelos (ko10.4)
+TEST(candy, por_familia_y_se_guardan) {
+  Pet p;
+  freshPet(p, 7);  // Squirtle
+  CHECK_EQ(p.candyOf(7), (uint16_t)0);
+  p.addCandy(9, 4);                       // Blastoise -> familia de Squirtle
+  CHECK_EQ(p.candyOf(7), (uint16_t)4);
+  CHECK_EQ(p.candyOf(8), (uint16_t)4);
+  CHECK_EQ(p.candyOf(4), (uint16_t)0);    // otra familia
+  p.addCandy(172, 2);                     // Pichu y Pikachu comparten
+  CHECK_EQ(p.candyOf(25), (uint16_t)2);
+  p.addCandy(7, 5000);
+  CHECK_EQ(p.candyOf(7), (uint16_t)CANDY_MAX);
+  p.saveNow();
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.candyOf(7), (uint16_t)CANDY_MAX);
+  CHECK_EQ(q.candyOf(25), (uint16_t)2);
+  CHECK_EQ(Pet::dupCandy(false, 10), (uint16_t)3);
+  CHECK_EQ(Pet::dupCandy(true, 35), (uint16_t)6);
+}
+
+TEST(candy, usos_gastan_y_aplican) {
+  Pet p;
+  freshPet(p, 7);
+  CHECK(!p.candyCanUse(CU_GAUGE));        // sin caramelos
+  p.addCandy(7, 30);
+  // EXP: media subida de nivel
+  uint32_t e0 = p.exp;
+  uint16_t L = p.level();
+  CHECK(p.candyUse(CU_EXP));
+  CHECK_EQ(p.exp, e0 + (expForLevel(L + 1) - expForLevel(L) + 1) / 2);
+  CHECK_EQ(p.candyOf(7), (uint16_t)27);
+  // barras +20
+  p.joy = 50; p.energy = 90; p.fullness = 10;
+  CHECK(p.candyUse(CU_GAUGE));
+  CHECK_EQ(p.joy, (uint8_t)70); CHECK_EQ(p.energy, (uint8_t)100); CHECK_EQ(p.fullness, (uint8_t)30);
+  // genes +2 con tope
+  p.geneAtk = 114; p.geneDef = 100; p.geneSpe = 90;
+  CHECK(p.candyUse(CU_GENES));
+  CHECK_EQ(p.geneAtk, (uint8_t)CANDY_GENE_MAX); CHECK_EQ(p.geneDef, (uint8_t)102); CHECK_EQ(p.geneSpe, (uint8_t)92);
+  // descuidos: solo si hay alguno
+  p.careMistakes = 0;
+  CHECK(!p.candyCanUse(CU_EVO));
+  p.careMistakes = 2;
+  uint16_t need = p.evolveNeed();
+  CHECK(p.candyUse(CU_EVO));
+  CHECK_EQ(p.evolveNeed(), (uint16_t)(need - 1));
+  // shiny: una vez, y el siguiente huevo lo consume
+  CHECK(p.candyUse(CU_SHINY));
+  CHECK(p.shinyCharm);
+  CHECK(!p.candyCanUse(CU_SHINY));
+  p.newEgg();
+  CHECK(!p.shinyCharm);
+  // sin bastantes caramelos no se gasta nada
+  Pet r;
+  freshPet(r, 4);
+  r.addCandy(4, 2);
+  CHECK(!r.candyUse(CU_EXP));
+  CHECK_EQ(r.candyOf(4), (uint16_t)2);
+}

@@ -52,6 +52,7 @@ static void scenes(bool ko, const char *sfx) {
   cardPage = 0; render(); shot("03c_card_profile");
   strcpy(pet.nick, "불꽃이"); render(); shot("03e_card_profile_nick"); pet.nick[0] = 0;
   cardPage = 2; render(); shot("03d_card_medals");
+  pet.addCandy(pet.speciesId, 12); cardPage = 4; render(); shot("03f_card_candy");
   closeAll(); pet.berryKnown = true; feedMenuUntil = gMockMillis + 5000; render(); shot("01b_feed_menu");
   closeAll(); confirmUntil = gMockMillis + 5000; render(); shot("01c_confirm_release"); confirmUntil = 0;
   closeAll(); openLinkMenu(); render(); shot("24_link_menu");
@@ -107,6 +108,11 @@ static void scenes(bool ko, const char *sfx) {
   bvFoeCaught = true;
   render(); shot("09_battle_caught");
   bPhase = BP_NEXT; bPhaseT = gMockMillis; render(); shot("09b_battle_next");
+  // ko10.4: repetido capturado -> caja o caramelos; luego "seguir?" con lo ganado
+  pet.addCandy(bFoe.dex, 4);
+  bDupPending = true; bDupCaught = true; bPhase = BP_DUP; bPhaseT = gMockMillis;
+  render(); shot("09c_battle_dup");
+  dupDecide(false); render(); shot("09d_battle_dup_candy");
   // ko10.1: escenario de la batalla salvaje = habitat del rival; tiempo por fecha
   {
     auto rep = [](int bio) -> int16_t {

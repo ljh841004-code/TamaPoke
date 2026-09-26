@@ -59,6 +59,12 @@ struct __attribute__((packed)) TradePet {
 // a 32 bytes; los guardados viejos (19) se leen igual (el resto queda a 0).
 #define PET_DEX_MAX 251
 #define PET_DEX_BYTES ((PET_DEX_MAX + 7) / 8)
+// ko10.4: usos de los caramelos (de la familia del Pokemon que crias)
+enum : uint8_t { CU_EXP = 0, CU_GAUGE, CU_GENES, CU_SHINY, CU_EVO, CU_COUNT };
+static const uint8_t CANDY_COST[CU_COUNT] = { 3, 1, 5, 10, 5 };
+#define CANDY_MAX 999
+#define CANDY_KEEP 1   // quedarse el repetido (a la caja) da 1 caramelo
+#define CANDY_GENE_MAX 115  // los genes nacen en 90-110; con caramelos hasta 115
 
 // batallas: de donde viene el resultado
 enum : uint8_t { BATTLE_WILD = 0, BATTLE_LINK };
@@ -88,6 +94,11 @@ public:
   uint8_t lastEnd = CER_NONE;   // como acabo la anterior (afecta al huevo)
   uint8_t dexReg[PET_DEX_BYTES] = { 0 };       // pokedex de criados (bitmap)
   uint8_t dexShinyReg[PET_DEX_BYTES] = { 0 };  // criados en version shiny
+  // ko10.4: caramelos por familia (indice = DEX_FAM: el dex mas bajo de la linea).
+  // Se ganan al capturar repetidos (o al soltar de la caja) y se gastan en el
+  // Pokemon que crias si es de esa familia. Del jugador: persisten entre crianzas
+  uint16_t candy[PET_DEX_MAX + 1] = { 0 };
+  bool shinyCharm = false;  // el proximo huevo tiene 4 veces mas opciones de shiny
   // racha de cuidado diario (del jugador: persiste entre crianzas)
   uint16_t streak = 0, bestStreak = 0;
   uint32_t lastCareDay = 0;
@@ -125,6 +136,12 @@ public:
   bool lovesBerry(uint8_t item) const { return !isEgg() && favFood() == item; }
   // juego de pelota. ko9.2: SOLO si bate el record sube el animo y la energia
   // (devuelve true); si no, no pasa nada (ni premio ni cansancio)
+  // ---- ko10.4: caramelos
+  uint16_t candyOf(int16_t dex) const;          // de la familia de dex
+  void addCandy(int16_t dex, uint16_t n);       // tope CANDY_MAX
+  static uint16_t dupCandy(bool shiny, uint16_t lvl);  // por cambiar un repetido
+  bool candyCanUse(uint8_t use) const;          // CU_*: hay caramelos y tiene efecto
+  bool candyUse(uint8_t use);                   // gasta y aplica (false si no se puede)
   bool playResult(uint8_t score);  // true = record (animo + energia); si no, un poco de energia
   uint8_t trainStrength(uint16_t hits);  // saco de entrenamiento (entrena FUE)
   uint8_t trainDefense(uint16_t blocked);  // fork KO: pokeballs que caen (entrena DEF)

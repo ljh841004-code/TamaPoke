@@ -97,6 +97,9 @@ uint8_t nameLen = 0;
 Cji kbCji;               // ko8: silabas en construccion (teclado cheonjiin)
 bool kbKo = true;        // ko8: teclado coreano (true) o alfabeto (false)
 uint8_t cardPage = 0;         // 0 perfil, 1 stats+medallas
+#define CARD_PAGES 5          // ko10.4: + pagina de caramelos
+const char *cardMsg = nullptr;  // ko10.4: aviso breve en la pagina de caramelos
+uint32_t cardMsgUntil = 0;
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 int clockH = 12, clockM = 0;  // hora en edicion
 
@@ -718,7 +721,7 @@ void onSwipe(int dir) {
   if (gameOpen || kbOpen || clockOpen) return;
   if (cardOpen) {  // dentro de la ficha: cambiar entre las 4 paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
-    cardPage = p < 0 ? 0 : (p > 3 ? 3 : p);
+    cardPage = p < 0 ? 0 : (p > CARD_PAGES - 1 ? CARD_PAGES - 1 : p);
     return;
   }
   if (!galleryOpen) {
@@ -778,7 +781,8 @@ void onTap(int16_t x, int16_t y) {
   }
   if (pet.ceremony) return;  // durante la despedida no hay botones
   if (cardOpen) {
-    if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
+    if (cardPage == 4) cardCandyTap(x, y);        // ko10.4: caramelos
+    else if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
     else if (cardPage == 1 && y >= CARD_ROW1_Y && y < CARD_ROW2_Y + CARD_BTN_H &&
              x >= CARD_COL1_X && x < CARD_COL2_X + CARD_COL_W) {
       bool right = x >= CARD_COL2_X - 3;
@@ -2580,18 +2584,59 @@ void renderCardProgress() {
   printT(ms);
 }
 
+// ---- ko10.4: pagina de caramelos (de la familia del Pokemon que crias)
+#define CANDY_ROW_X 83
+#define CANDY_ROW_Y 112
+#define CANDY_ROW_W 300
+#define CANDY_ROW_H 40
+#define CANDY_ROW_GAP 6
+
+void renderCardCandy() {
+  gfx->setTextColor(UI_INK);
+  setSize(3);
+  setCur(centerX(XT(X_CANDY_TITLE), 3), 36);
+  printT(XT(X_CANDY_TITLE));
+  char have[48], nb[8];
+  snprintf(nb, sizeof(nb), "%u", pet.candyOf(pet.speciesId));
+  txFmt(have, sizeof(have), X_CANDY_HAVE, dexName(DEX_FAM[pet.speciesId]), nb);
+  drawFit(have, 78, 320, C565(0xc8, 0x3c, 0x78), 2);
+  static const XId LBL[CU_COUNT] = { X_CU_EXP, X_CU_GAUGE, X_CU_GENES, X_CU_SHINY, X_CU_EVO };
+  for (int i = 0; i < CU_COUNT; i++) {
+    int y = CANDY_ROW_Y + i * (CANDY_ROW_H + CANDY_ROW_GAP);
+    bool ok = pet.candyCanUse((uint8_t)i);
+    char b[48];
+    if (i == CU_SHINY && pet.shinyCharm) snprintf(b, sizeof(b), "%s", XT(X_CU_SHINY_ON));
+    else snprintf(b, sizeof(b), "%s  (%u)", XT(LBL[i]), CANDY_COST[i]);
+    drawBtn(CANDY_ROW_X, y, CANDY_ROW_W, CANDY_ROW_H, ok ? C565(0xf0, 0x7a, 0xa8) : UI_TRACK,
+            ok ? UI_WHITE : 0x8410, b);
+  }
+  if (cardMsg && timeLeft(cardMsgUntil)) drawFit(cardMsg, 346, 300, UI_INK, 1);
+}
+
+static void cardCandyTap(int16_t x, int16_t y) {
+  if (x < CANDY_ROW_X || x >= CANDY_ROW_X + CANDY_ROW_W || y < CANDY_ROW_Y) { cardOpen = false; return; }
+  int i = (y - CANDY_ROW_Y) / (CANDY_ROW_H + CANDY_ROW_GAP);
+  if (i >= CU_COUNT) { cardOpen = false; return; }
+  if ((y - CANDY_ROW_Y) % (CANDY_ROW_H + CANDY_ROW_GAP) >= CANDY_ROW_H) return;  // hueco
+  if (pet.candyUse((uint8_t)i)) { sfxPlay(SFX_HEART); cardMsg = XT(X_CANDY_USED); }  // subir de nivel ya suena en addExp
+  else { sfxPlay(SFX_DENY); cardMsg = XT(X_CANDY_NO); }
+  cardMsgUntil = millis() + 2000;
+}
+
 void renderCard() {
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
   if (cardPage == 0) renderCardProfile();
   else if (cardPage == 1) renderCardStats();
   else if (cardPage == 2) renderCardMedals();
-  else renderCardProgress();
+  else if (cardPage == 3) renderCardProgress();
+  else renderCardCandy();
 
-  // indicador de 4 paginas + ayuda
-  for (int i = 0; i < 4; i++) {
-    if (i == cardPage) gfx->fillCircle(194 + i * 26, 374, 5, UI_INK);
-    else gfx->drawCircle(194 + i * 26, 374, 4, UI_INK);
+  // indicador de paginas + ayuda
+  for (int i = 0; i < CARD_PAGES; i++) {
+    int x = CX - (CARD_PAGES - 1) * 13 + i * 26;
+    if (i == cardPage) gfx->fillCircle(x, 374, 5, UI_INK);
+    else gfx->drawCircle(x, 374, 4, UI_INK);
   }
   gfx->setTextColor(UI_INK);
   setSize(2);
