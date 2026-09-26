@@ -14,6 +14,8 @@
 #define EVOLVE_ANIM_MS 5200UL              // animacion de evolucion (mas larga = mas epica)
 #define CEREMONY_MS 10000UL                // duracion de la despedida en pantalla
 #define FAREWELL_AGE_MIN (3UL * 24 * 60)   // se despide a los 3 dias de juego (en forma final)
+#define TRAIN_EXP_PCT 5        // ko10.7: EXP por entrenar (% del nivel actual)
+#define TRAIN_EXP_PCT_HI 20    // ... y si bate el record (+1 caramelo)
 #define GOOD_CARE_TICKS 720              // ko10.6: 12 h seguidas bien cuidado = +1 DEF y -1 descuido
 #define RUNAWAY_TICKS 60                   // se escapa tras 1 h con TODO a cero
 
@@ -125,6 +127,9 @@ public:
   uint8_t balls = 5;       // pokeballs (se ganan 2 por victoria salvaje)
   uint8_t potions = 2;     // pociones: curan la mitad de la vida en batalla
   uint16_t defHi = 0;      // record del entrenamiento de defensa (pokeballs paradas)
+  // ko10.7: premio de cada sesion de entrenamiento (pantalla de resultado)
+  uint32_t lastTrainExp = 0;
+  uint8_t lastTrainCandy = 0;
   uint16_t speHi = 0;      // record del entrenamiento de velocidad (ko10.6: puntos, hasta 1500)
 
   void begin();                 // carga estado de NVS (o crea el primer huevo)
@@ -148,7 +153,7 @@ public:
   bool candyCanUse(uint8_t use) const;          // CU_*: hay caramelos y tiene efecto
   bool candyUse(uint8_t use);                   // gasta y aplica (false si no se puede)
   bool playResult(uint8_t score);  // true = record (animo + energia); si no, un poco de energia
-  uint8_t trainStrength(uint16_t hits);  // saco de entrenamiento (entrena FUE)
+  uint8_t trainStrength(uint16_t hits, uint16_t bags);  // saco (entrena FUE); ko10.7: record = sacos rotos
   uint8_t trainDefense(uint16_t blocked);  // fork KO: pokeballs que caen (entrena DEF)
   uint8_t trainSpeed(uint16_t hits, uint16_t points);  // fork KO: reflejos (entrena VEL); ko10.6: record en puntos
 
@@ -171,6 +176,7 @@ public:
                     int16_t foeDex = 0, uint16_t foeLvl = 0);
   // fork KO (ko7): suma EXP; devuelve cuantos niveles subio (suena al subir)
   uint16_t addExp(uint32_t x);
+  void trainBonus(bool scored, bool record);  // ko10.7: EXP (+ caramelo si es record)
   // lo que dio la ultima batalla (pantalla de resultado)
   uint32_t lastExpGain = 0;
   uint16_t lastLvlUp = 0;

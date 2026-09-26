@@ -130,6 +130,7 @@ bool gameNewHi = false;
 bool sackOpen = false;
 uint32_t sackUntil = 0, sackOverUntil = 0;
 uint16_t sackHits = 0;
+uint16_t sackBags = 0, sackBagHits = 0;  // ko10.7: sacos rotos y golpes al saco actual
 float sackShake = 0;
 uint8_t sackGain = 0;
 bool sackNewHi = false;
@@ -1938,10 +1939,22 @@ void stepGame() {
 
 // ---------- saco de entrenamiento (entrena la fuerza) ----------
 
+// ko10.7: aguante. Cada saco tiene aguante (golpes) y un plazo; romperlo trae el
+// siguiente, mas duro y con menos tiempo. Si se acaba el plazo, fin. Antes eran
+// 10 s de aporreo y el record lo marcaba solo la velocidad del dedo.
+//   saco i (0..): 6 + i golpes en 4 s - 60 ms * i (minimo 2 s)
+//   -> 1,5 golpes/s al principio, ~5 en el saco 10, ~7 en el 15, ~9 en el 20
+uint16_t sackBagHp(uint16_t i) { return 6 + (i > 60 ? 60 : i); }
+uint32_t sackBagMs(uint16_t i) {
+  int32_t ms = 4000 - 60 * (int32_t)i;
+  return ms < 2000 ? 2000 : (uint32_t)ms;
+}
+
 void startSack() {
   if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
   sackOpen = true;
-  sackUntil = millis() + 10000;
+  sackBags = sackBagHits = 0;
+  sackUntil = millis() + sackBagMs(0) + 700;  // un respiro para empezar
   sackOverUntil = 0;
   sackHits = 0;
   sackShake = 0;
@@ -1949,9 +1962,16 @@ void startSack() {
 }
 
 void sackTap() {
-  if (!timeLeft(sackUntil)) return;  // ya termino el tiempo
+  if (sackOverUntil || !timeLeft(sackUntil)) return;  // ya termino
   sackHits++;
   sackShake = 16;  // sacude el saco
+  if (++sackBagHits >= sackBagHp(sackBags)) {  // roto: el siguiente
+    sackBags++;
+    sackBagHits = 0;
+    sackShake = 30;
+    sackUntil = millis() + sackBagMs(sackBags);
+    sfxPlay(SFX_TAP);
+  }
 }
 
 void drawGameScene();  // prototipo (definida mas abajo)
@@ -1965,38 +1985,20 @@ void renderSack() {
   // pantalla de resultado
   if (sackOverUntil) {
     if (!timeLeft(sackOverUntil)) { sackOpen = false; return; }
-    char b[20];
-    snprintf(b, sizeof(b), T(S_HITS_FMT), sackHits);
-    gfx->setTextColor(ink);
-    setSize(4);
-    setCur(centerX(b, 4), 150);
-    printT(b);
+    char b[24];
     char g[18];
+    char sub[32];
+    snprintf(b, sizeof(b), XT(X_SACK_BAGS_FMT), sackBags);
     snprintf(g, sizeof(g), T(S_STR_GAIN_FMT), sackGain);
-    gfx->setTextColor(UI_BAR_BAD);
-    setSize(3);
-    setCur(centerX(g, 3), 210);
-    printT(g);
-    setSize(2);
-    if (sackNewHi && sackHits > 0) {
-      gfx->setTextColor(UI_BAR_WARN);
-      setCur(centerX(T(S_NEW_RECORD), 2), 256);
-      printT(T(S_NEW_RECORD));
-    } else {
-      char r[18];
-      snprintf(r, sizeof(r), T(S_RECORD_FMT), pet.strHi);
-      gfx->setTextColor(ink);
-      setCur(centerX(r, 2), 256);
-      printT(r);
-    }
-    gfx->flush();
+    snprintf(sub, sizeof(sub), XT(X_SACK_HITS_FMT), sackHits);
+    drawTrainResult(b, g, UI_BAR_BAD, sackNewHi && sackBags > 0, pet.strHi, sub);
     return;
   }
 
-  // se acabaron los 10 s: aplicar entrenamiento
+  // ko10.7: no rompio el saco a tiempo: fin, aplicar entrenamiento
   if (!timeLeft(sackUntil)) {
-    sackNewHi = (sackHits > pet.strHi);
-    sackGain = pet.trainStrength(sackHits);
+    sackNewHi = (sackBags > pet.strHi);
+    sackGain = pet.trainStrength(sackHits, sackBags);
     sfxPlay(sackNewHi ? SFX_MEDAL : SFX_PLAY);
     sackOverUntil = now + 3500;
     gfx->flush();
@@ -2014,23 +2016,23 @@ void renderSack() {
   gfx->drawRoundRect(sx - 42, top, 84, 150, 26, ink);
   gfx->fillRect(sx - 42, top + 70, 84, 4, C565(0x7e, 0x28, 0x28));        // costura
 
-  // contador de golpes
+  // ko10.7: sacos rotos (grande), aguante del saco actual y su plazo
   char buf[8];
-  snprintf(buf, sizeof(buf), "%u", sackHits);
+  snprintf(buf, sizeof(buf), "%u", sackBags);
   gfx->setTextColor(ink);
   setSize(6);
-  setCur(centerX(buf, 6), 268);
+  setCur(centerX(buf, 6), 250);
   printT(buf);
-
-  setSize(2);
-  setCur(centerX(T(S_HIT_FAST), 2), 322);
-  printT(T(S_HIT_FAST));
-
-  // barra de tiempo
-  uint32_t left = sackUntil - now;
-  int bw = 280, fw = (int)((uint32_t)bw * left / 10000);
-  gfx->fillRoundRect(CX - bw / 2, 350, bw, 16, 5, UI_TRACK);
-  if (fw > 2) gfx->fillRoundRect(CX - bw / 2, 350, fw, 16, 5, UI_BAR_OK);
+  uint16_t hp = sackBagHp(sackBags);
+  int bw = 280, hw = (int)((uint32_t)bw * (hp - sackBagHits) / hp);
+  gfx->fillRoundRect(CX - bw / 2, 312, bw, 16, 5, UI_TRACK);
+  if (hw > 2) gfx->fillRoundRect(CX - bw / 2, 312, hw, 16, 5, UI_BAR_BAD);
+  uint32_t left = timeLeft(sackUntil), total = sackBagMs(sackBags);
+  if (left > total) left = total;  // el respiro del principio
+  int fw = (int)((uint32_t)bw * left / total);
+  gfx->fillRoundRect(CX - bw / 2, 340, bw, 12, 5, UI_TRACK);
+  if (fw > 2) gfx->fillRoundRect(CX - bw / 2, 340, fw, 12, 5, UI_BAR_OK);
+  if (sackBags == 0) drawFit(T(S_HIT_FAST), 366, 320, ink, 2);
 
   gfx->flush();
 }

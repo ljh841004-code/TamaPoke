@@ -577,11 +577,36 @@ TEST(stats, el_huevo_no_tiene_stats) {
 TEST(train, saco_da_un_punto_cada_4_golpes_con_tope) {
   Pet p;
   makePet(p, 4);
-  CHECK_EQ(p.trainStrength(0), (uint8_t)0);
-  CHECK_EQ(p.trainStrength(40), (uint8_t)10);
+  CHECK_EQ(p.trainStrength(0, 0), (uint8_t)0);
+  CHECK_EQ(p.trainStrength(40, 4), (uint8_t)10);
   CHECK_EQ(p.trAtk, (uint8_t)10);
-  CHECK_MSG(p.trainStrength(1000) == 18, "tope de 18 por sesion");
-  CHECK_EQ(p.strHi, (uint16_t)1000);
+  CHECK_MSG(p.trainStrength(1000, 25) == 18, "tope de 18 por sesion");
+  CHECK_EQ(p.strHi, (uint16_t)25);  // ko10.7: el record son los sacos rotos
+}
+
+// ko10.7: entrenar siempre da EXP (5% del nivel); batir el record, 20% + 1 caramelo
+TEST(train, premio_de_sesion_y_mas_si_bate_el_record) {
+  Pet p;
+  makePet(p, 4);
+  uint16_t L = p.level();
+  uint32_t step = expForLevel(L + 1) - expForLevel(L);
+  uint16_t c0 = p.candyOf(p.speciesId);
+  p.trainDefense(10);  // primer intento: record (0 -> 10)
+  CHECK_EQ(p.lastTrainExp, step * TRAIN_EXP_PCT_HI / 100 ? step * TRAIN_EXP_PCT_HI / 100 : 1);
+  CHECK_EQ(p.lastTrainCandy, (uint8_t)1);
+  CHECK_EQ(p.candyOf(p.speciesId), (uint16_t)(c0 + 1));
+  p.energy = 100;
+  L = p.level();
+  step = expForLevel(L + 1) - expForLevel(L);
+  p.trainDefense(8);   // peor que el record: solo el premio pequeno
+  CHECK_EQ(p.lastTrainExp, step * TRAIN_EXP_PCT / 100 ? step * TRAIN_EXP_PCT / 100 : 1);
+  CHECK_EQ(p.lastTrainCandy, (uint8_t)0);
+  CHECK_EQ(p.candyOf(p.speciesId), (uint16_t)(c0 + 1));
+  p.trainSpeed(0, 0);  // no hizo nada: sin premio
+  CHECK_EQ(p.lastTrainExp, (uint32_t)0);
+  p.trainStrength(30, 2);  // record de sacos (0 -> 2): caramelo
+  CHECK_EQ(p.lastTrainCandy, (uint8_t)1);
+  CHECK_EQ(p.strHi, (uint16_t)2);
 }
 
 // Arreglado al portar la bateria: trainStrength() devolvia la subida teorica
@@ -590,14 +615,14 @@ TEST(train, el_saco_anuncia_lo_que_de_verdad_sube) {
   makePet(p, 4);
   p.trAtk = 95;
   uint8_t before = p.trAtk;
-  uint8_t gain = p.trainStrength(72);  // 72/4 = 18, pero solo caben 5
+  uint8_t gain = p.trainStrength(72, 3);  // 72/4 = 18, pero solo caben 5
   CHECK_EQ(gain, (uint8_t)(p.trAtk - before));
 }
 
 TEST(train, entrenamiento_topa_en_100) {
   Pet p;
   makePet(p, 4);
-  for (int i = 0; i < 20; i++) p.trainStrength(80);
+  for (int i = 0; i < 20; i++) p.trainStrength(80, 3);
   CHECK_EQ(p.trAtk, (uint8_t)100);
 }
 
@@ -607,12 +632,12 @@ TEST(train, el_saco_cansa_y_quema_peso) {
   p.weight = 40;
   p.energy = 80;
   p.fullness = 80;
-  p.trainStrength(30);
+  p.trainStrength(30, 3);
   CHECK_EQ(p.energy, (uint8_t)68);
   CHECK_EQ(p.fullness, (uint8_t)75);
   CHECK_EQ(p.weight, (uint8_t)30);
   p.energy = 3;  // el suelo protege de dejarlo a cero
-  p.trainStrength(30);
+  p.trainStrength(30, 3);
   CHECK_EQ(p.energy, (uint8_t)3);
 }
 

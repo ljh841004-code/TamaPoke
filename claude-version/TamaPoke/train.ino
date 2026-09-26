@@ -197,6 +197,14 @@ void drawTrainResult(const char *score, const char *gain, uint16_t gainCol, bool
     drawFit(r, 262, 320, ink, 2);
   }
   if (sub) drawFit(sub, 300, 340, ink, 2);  // ko10.6: aciertos y reflejo medio
+  // ko10.7: premio de la sesion (EXP siempre; record = mas EXP + caramelo)
+  char bn[40];
+  bn[0] = 0;
+  if (pet.lastTrainExp && pet.lastTrainCandy)
+    snprintf(bn, sizeof(bn), XT(X_TRAIN_EXP_CANDY_FMT), (unsigned long)pet.lastTrainExp);
+  else if (pet.lastTrainExp) snprintf(bn, sizeof(bn), XT(X_TRAIN_EXP_FMT), (unsigned long)pet.lastTrainExp);
+  else if (pet.lastTrainCandy) snprintf(bn, sizeof(bn), "%s", XT(X_TRAIN_CANDY));
+  if (bn[0]) drawFit(bn, 334, 340, UI_BAR_OK, 2);
   gfx->flush();
 }
 

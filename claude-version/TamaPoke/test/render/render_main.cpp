@@ -64,7 +64,11 @@ static void scenes(bool ko, const char *sfx) {
   render(); shot("27_keyboard_ko");
   kbCommit(); kbKo = false; render(); shot("28_keyboard_abc");
   kbOpen = false;
-  closeAll(); startSack(); tick(300); render(); shot("25_sack");
+  closeAll(); startSack(); tick(300);
+  for (int i = 0; i < 40; i++) { sackTap(); tick(60); }  // ko10.7: unos cuantos sacos rotos
+  render(); shot("25_sack");
+  for (int i = 0; i < 80; i++) { tick(85); render(); }   // se acaba el plazo
+  shot("25b_sack_result");
   closeAll(); startGame(); tick(300); render(); shot("26_ball_game");
   // ko10.4: 3 pelotas cayendo a la vez (un rato despues de empezar)
   for (int f = 0; f < 36; f++) { tick(85); render(); }

@@ -517,6 +517,26 @@ uint32_t Pet::careMinutesLeft() const {
   return (uint32_t)((need + span - 1) / span);
 }
 
+// ko10.7: entrenar siempre da algo: 5% de lo que pide el nivel en EXP; batir el
+// record da 20% y un caramelo de su familia. Cuesta energia (12), asi que no se
+// puede abusar: con la energia llena salen unas 8 sesiones.
+void Pet::trainBonus(bool scored, bool record) {
+  lastTrainExp = 0;
+  lastTrainCandy = 0;
+  if (!scored || isEgg()) return;
+  uint16_t L = level();
+  if (L < LEVEL_MAX) {
+    uint32_t step = expForLevel(L + 1) - expForLevel(L);
+    lastTrainExp = step * (record ? TRAIN_EXP_PCT_HI : TRAIN_EXP_PCT) / 100;
+    if (!lastTrainExp) lastTrainExp = 1;
+    addExp(lastTrainExp);
+  }
+  if (record) {
+    addCandy(speciesId, 1);
+    lastTrainCandy = 1;
+  }
+}
+
 uint16_t Pet::addExp(uint32_t x) {
   if (isEgg() || !x) return 0;
   uint16_t before = level();
@@ -684,8 +704,9 @@ bool Pet::playResult(uint8_t score) {
 }
 
 // saco de entrenamiento: los golpes entrenan la fuerza. Devuelve la subida.
-uint8_t Pet::trainStrength(uint16_t hits) {
+uint8_t Pet::trainStrength(uint16_t hits, uint16_t bags) {
   if (ceremony != CER_NONE || isEgg()) return 0;
+  trainBonus(bags > 0, bags > strHi);
   uint8_t gain = hits / 4;          // ~4 golpes = 1 punto de entrenamiento
   if (gain > 18) gain = 18;         // tope por sesion: la FUE se forja a fuego lento
   uint8_t antes = trAtk;
@@ -699,7 +720,7 @@ uint8_t Pet::trainStrength(uint16_t hits) {
   weight = burn > 0 ? burn : 0;
   joy = clamp100(joy + 6);
   if (hits >= 20) heartUntil = millis() + HEART_MS;
-  if (hits > strHi) strHi = hits;   // record de golpes
+  if (bags > strHi) strHi = bags;   // ko10.7: record de sacos rotos (antes golpes en 10 s)
   addBond(2);
   registerCare();
   save();
@@ -718,6 +739,7 @@ static uint8_t trainGain(uint8_t &tr, uint16_t raw) {
 
 uint8_t Pet::trainDefense(uint16_t blocked) {
   if (ceremony != CER_NONE || isEgg()) return 0;
+  trainBonus(blocked > 0, blocked > defHi);
   uint8_t gain = trainGain(trDef, blocked / 2);  // ~2 pokeballs paradas = 1 punto
   energy = dropTo(energy, 12, 5);
   fullness = dropTo(fullness, 5, 5);
@@ -734,6 +756,7 @@ uint8_t Pet::trainDefense(uint16_t blocked) {
 
 uint8_t Pet::trainSpeed(uint16_t hits, uint16_t points) {
   if (ceremony != CER_NONE || isEgg()) return 0;
+  trainBonus(points > 0, points > speHi);
   uint8_t gain = trainGain(trSpe, hits);  // 1 acierto = 1 punto (15 rondas)
   energy = dropTo(energy, 12, 5);
   fullness = dropTo(fullness, 5, 5);
@@ -843,7 +866,7 @@ void Pet::save() {
   prefs.putUShort("tmedal", totalMedals);
   prefs.putUShort("mstone", lastMilestone);
   prefs.putUShort("ghi", gameHi);
-  prefs.putUShort("shi", strHi);
+  prefs.putUShort("sbh", strHi);  // ko10.7: clave nueva (sacos rotos); el record viejo (golpes) no vale
   prefs.putString("nick", nick);
   prefs.putUShort("wwin", wildWins);
   prefs.putUShort("lwin", linkWins);
@@ -925,7 +948,7 @@ void Pet::load() {
   totalMedals = prefs.getUShort("tmedal", 0);
   lastMilestone = prefs.getUShort("mstone", 0);
   gameHi = prefs.getUShort("ghi", 0);
-  strHi = prefs.getUShort("shi", 0);
+  strHi = prefs.getUShort("sbh", 0);
   prefs.getString("nick", nick, sizeof(nick));
   wildWins = prefs.getUShort("wwin", 0);
   linkWins = prefs.getUShort("lwin", 0);
