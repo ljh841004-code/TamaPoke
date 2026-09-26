@@ -42,6 +42,27 @@ static void scenes(bool ko, const char *sfx) {
   pet.lastSeenEpoch = gMockEpoch;
   render(); shot("02_main_night");
   gMockEpoch = 1790343900; pet.lastSeenEpoch = gMockEpoch;
+  // ko10.8: comportamientos de la pantalla principal
+  {
+    uint8_t j0 = pet.joy, h0 = pet.hygiene;
+    pet.joy = 90; pet.hygiene = 90;  // contento (si no, sale la cara triste)
+    uint8_t m0 = pet.careMistakes; pet.careMistakes = 90;  // sin boton de evolucionar encima
+    beh.mode = 3; beh.act = PMD_ATTACK; beh.t0 = gMockMillis - 1300; beh.until = gMockMillis + 5000;
+    beh.bubble = 0;
+    render(); shot("60_beh_skill");
+    beh.mode = 2; beh.act = pmd.has(PMD_ROTATE) ? PMD_ROTATE : PMD_BREATH; beh.t0 = gMockMillis - 300;
+    beh.until = gMockMillis + 5000; beh.bubble = BUB_BORED; beh.bubbleUntil = gMockMillis + 5000;
+    render(); shot("61_beh_bored");
+    beh.act = PMD_POSE; beh.bubble = BUB_NOTE;
+    render(); shot("62_beh_happy");
+    beh.act = PMD_BREATH; beh.bubble = BUB_HUNGRY;
+    render(); shot("63_beh_hungry");
+    beh.act = PMD_HURT; beh.bubble = BUB_RAIN;
+    render(); shot("64_beh_rain");
+    beh.act = pmd.has(PMD_LAYING) ? PMD_LAYING : PMD_BREATH; beh.bubble = BUB_SUN;
+    render(); shot("65_beh_sun");
+    beh.mode = 0; beh.until = 0; beh.bubble = 0; pet.joy = j0; pet.hygiene = h0; pet.careMistakes = m0;
+  }
   // ficha: combate
   cardOpen = true; cardPage = 1;
   render(); shot("03_card_battle");

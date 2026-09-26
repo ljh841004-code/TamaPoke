@@ -35,7 +35,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko10.7"
+#define FW_VERSION "1.17-ko10.8"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -74,12 +74,17 @@ bool monShinyFor = false;
 
 // comportamiento del bicho en pantalla
 struct {
-  uint8_t mode = 0;     // 0 idle, 1 paseo, 2 gesto one-shot
+  uint8_t mode = 0;     // 0 idle, 1 paseo, 2 gesto one-shot, 3 (ko10.8) practica su ataque
   uint8_t act = PMD_IDLE;
   uint32_t t0 = 0;      // inicio de la animacion en curso
   uint32_t until = 0;   // fin del estado actual
   float x = 233, targetX = 233;
+  uint8_t bubble = 0;       // ko10.8: bocadillo encima (BUB_*)
+  uint32_t bubbleUntil = 0;
 } beh;
+// ko10.8: bocadillos de la pantalla principal
+enum : uint8_t { BUB_NONE = 0, BUB_DOTS, BUB_BORED, BUB_HUNGRY, BUB_DIRTY, BUB_SLEEPY,
+                 BUB_NOTE, BUB_RAIN, BUB_COLD, BUB_SUN };
 #define PET_GROUND 304  // linea de suelo de la mascota
 PmdMon galleryPmd;  // sprite grande de la vista detalle de la galeria (PMD/TPK2, legal)
 
@@ -930,6 +935,7 @@ void onTap(int16_t x, int16_t y) {
     Serial.println("PET");
     pet.caress();
     if (!pet.sleeping) { sfxPlay(SFX_HEART); audioCry(pet.speciesId); }
+    behPetted();  // ko10.8
   }
 }
 
@@ -3504,11 +3510,96 @@ void drawPmdActFit(uint8_t actId, int cx, int groundY, uint32_t t, uint8_t maxS,
   drawPmdActM(pmd, actId, cx, groundY, t, true, false, maxS, fitH);
 }
 
-// elige el siguiente capricho del bicho cuando esta contento
+// ko10.8: gesto de una vez con bocadillo opcional
+static void behOneShot(uint8_t act, uint32_t ms, uint8_t bub) {
+  uint32_t now = millis();
+  beh.mode = 2;
+  beh.act = act;
+  beh.t0 = now;
+  beh.until = now + ms;
+  if (bub) { beh.bubble = bub; beh.bubbleUntil = now + (ms > 2600 ? ms : 2600); }
+}
+
+// primera accion disponible de la lista (PMD_NACTS = ninguna)
+static uint8_t pmdFirst(std::initializer_list<uint8_t> l) {
+  for (uint8_t a : l) if (pmd.has(a)) return a;
+  return PMD_NACTS;
+}
+
+// ko10.8: ataques "a distancia" (sale algo disparado): Shoot si el sprite lo trae
+static bool typeShoots(uint8_t t) {
+  return t == PT_FIRE || t == PT_WATER || t == PT_ELECTRIC || t == PT_ICE || t == PT_PSYCHIC ||
+         t == PT_GHOST || t == PT_DRAGON || t == PT_POISON || t == PT_GRASS;
+}
+
+// elige el siguiente capricho del bicho cuando esta contento.
+// ko10.8: ademas del paseo y los gestos, reacciona a como esta y a lo que pasa:
+//   - necesidad baja (<45): bocadillo con lo que pide (comida, bano, juego, sueno)
+//   - aburrido (3 min sin tocarlo y animo < 70): rueda o se tumba, "que aburrido"
+//   - de noche (22-6 h) despierto: cabecea con Zzz
+//   - tiempo: lluvia = se sacude, nieve = tirita, sol = se tumba al sol
+//   - muy contento (animo >= 80): pose con notas
+//   - con energia: practica su ataque de tipo (carga + ataque + efecto de batalla)
 void behNext() {
   uint32_t now = millis();
   beh.t0 = now;
   int r = random(100);
+  uint32_t idleMs = now - lastInteract;
+  int hh = sceneHour();
+  uint8_t wx = sceneWeather();
+  uint8_t low = pet.lowestStat();
+
+  // 1) pide lo que le falta (la mitad de las veces que se decide algo)
+  if (low < 45 && r < 35) {
+    uint8_t bub = BUB_DOTS;
+    if (low == pet.fullness) bub = BUB_HUNGRY;
+    else if (low == pet.hygiene) bub = BUB_DIRTY;
+    else if (low == pet.joy) bub = BUB_BORED;
+    else if (low == pet.energy) bub = BUB_SLEEPY;
+    uint8_t a = pmdFirst({ PMD_BREATH, PMD_NOD, PMD_IDLE });  // (Sit mira hacia atras)
+    behOneShot(a, 3200, bub);
+    return;
+  }
+  // 2) aburrido: rueda por el suelo o se tumba
+  if (idleMs > 180000UL && pet.joy < 70 && r < 45) {
+    uint8_t a = pmdFirst({ random(2) ? PMD_ROTATE : PMD_LAYING, PMD_ROTATE, PMD_LAYING, PMD_BREATH });
+    if (a != PMD_NACTS) {
+      uint32_t ms = pmdActTotalMs(pmd.acts[a]);
+      if (a == PMD_ROTATE) ms *= 2;           // un par de vueltas
+      if (ms < 2600) ms = 2600;
+      behOneShot(a, ms, BUB_BORED);
+      return;
+    }
+  }
+  // 3) de noche: cabezadas
+  if ((hh >= 22 || hh < 6) && r < 30) {
+    uint8_t a = pmdFirst({ PMD_NOD, PMD_BREATH, PMD_IDLE });
+    behOneShot(a, 3000, BUB_SLEEPY);
+    return;
+  }
+  // 4) el tiempo
+  if (r < 15 && (wx == WX_RAIN || wx == WX_SNOW || wx == WX_SUNNY)) {
+    if (wx == WX_SUNNY) {
+      uint8_t a = pmdFirst({ PMD_LAYING, PMD_BREATH, PMD_POSE });
+      if (a != PMD_NACTS) { behOneShot(a, 3400, BUB_SUN); return; }
+    } else {
+      uint8_t a = pmdFirst({ PMD_HURT, PMD_NOD });  // sacudirse / tiritar
+      if (a != PMD_NACTS) { behOneShot(a, 2600, wx == WX_RAIN ? BUB_RAIN : BUB_COLD); return; }
+    }
+  }
+  // 5) muy contento
+  if (pet.joy >= 80 && r < 25) {
+    uint8_t a = pmdFirst({ PMD_POSE, PMD_NOD });
+    if (a != PMD_NACTS) { behOneShot(a, pmdActTotalMs(pmd.acts[a]) * 2, BUB_NOTE); return; }
+  }
+  // 6) practica su ataque de tipo (con fuerzas)
+  if (pet.energy >= 40 && r >= 80 && pmd.has(PMD_ATTACK)) {
+    beh.mode = 3;
+    beh.act = PMD_ATTACK;
+    beh.until = now + 2600;
+    return;
+  }
+  r = random(100);
   if (r < 35 && (pmd.has(PMD_WALKL) || pmd.has(PMD_WALKR))) {
     beh.mode = 1;  // paseo
     beh.targetX = 150 + random(176);
@@ -3533,6 +3624,95 @@ void behNext() {
     beh.until = now + 2000 + random(3000);
   }
 }
+
+// ko10.8: al acariciarlo reacciona (pose, cabeceo o una vuelta de alegria)
+void behPetted() {
+  if (pet.sleeping || pet.mood() != MOOD_HAPPY) return;
+  uint8_t a = pmdFirst({ random(3) == 0 ? PMD_ROTATE : PMD_POSE, PMD_POSE, PMD_NOD });
+  if (a == PMD_NACTS) return;
+  behOneShot(a, pmdActTotalMs(pmd.acts[a]), BUB_NOTE);
+}
+
+// ko10.8: bocadillo encima del bicho (texto o icono)
+void drawPetBubble(int px) {
+  if (!beh.bubble) return;
+  if (!timeLeft(beh.bubbleUntil)) { beh.bubble = BUB_NONE; return; }
+  const char *txt = nullptr;
+  switch (beh.bubble) {
+    case BUB_DOTS: txt = "..."; break;
+    case BUB_BORED: txt = XT(X_BUB_BORED); break;
+    case BUB_HUNGRY: txt = XT(X_BUB_HUNGRY); break;
+    case BUB_DIRTY: txt = XT(X_BUB_DIRTY); break;
+    case BUB_SLEEPY: txt = "Zzz"; break;
+    case BUB_COLD: txt = XT(X_BUB_COLD); break;
+    default: break;
+  }
+  int w = txt ? textW(txt, 2) + 28 : 60, h = 40;
+  // encima de la cabeza: misma escala que drawPmdAct (alto objetivo 170, zoom 2..5)
+  int top = PET_GROUND - 120;
+  const PmdAct &ia = pmd.acts[PMD_IDLE];
+  if (ia.h) {
+    int sc = 170 / ia.h;
+    sc = sc < 2 ? 2 : sc > 5 ? 5 : sc;
+    top = PET_GROUND - (ia.base ? ia.base : ia.h) * sc;
+  }
+  int bx = px + 30, by = top - h - 10;
+  if (by < 140) by = 140;
+  if (bx + w > 420) bx = px - 40 - w;  // no cabe a la derecha: a la izquierda
+  if (bx < 46) bx = 46;
+  bool right = bx > px;
+  gfx->fillRoundRect(bx, by, w, h, 14, UI_WHITE);
+  gfx->drawRoundRect(bx, by, w, h, 14, UI_INK);
+  int tx = right ? bx + 10 : bx + w - 10;  // colita hacia la cabeza
+  gfx->fillCircle(tx, by + h + 6, 5, UI_WHITE);
+  gfx->drawCircle(tx, by + h + 6, 5, UI_INK);
+  gfx->fillCircle(tx + (right ? -8 : 8), by + h + 15, 3, UI_WHITE);
+  gfx->drawCircle(tx + (right ? -8 : 8), by + h + 15, 3, UI_INK);
+  int cx = bx + w / 2, cy = by + h / 2;
+  if (txt) {
+    gfx->setTextColor(UI_INK);
+    setSize(2);
+    setCur(bx + 14, by + 10);
+    printT(txt);
+    return;
+  }
+  uint32_t t = millis();
+  switch (beh.bubble) {
+    case BUB_NOTE: {  // dos corcheas que bailan
+      int b = (int)(3 * sinf(t / 150.0f));
+      uint16_t c = C565(0xe0, 0x40, 0x80);
+      gfx->fillCircle(cx - 10, cy + 6 + b, 5, c);
+      gfx->fillRect(cx - 6, cy - 10 + b, 3, 16, c);
+      gfx->fillCircle(cx + 10, cy + 4 - b, 5, c);
+      gfx->fillRect(cx + 14, cy - 12 - b, 3, 16, c);
+      gfx->fillRect(cx - 6, cy - 12 + b, 23, 3, c);
+      break;
+    }
+    case BUB_RAIN: {  // gotas
+      uint16_t c = C565(0x40, 0x90, 0xf0);
+      for (int i = 0; i < 3; i++) {
+        int dx = cx - 16 + i * 16, dy = cy - 4 + (int)((t / 60 + i * 7) % 10);
+        gfx->fillCircle(dx, dy + 4, 4, c);
+        gfx->fillTriangle(dx - 4, dy + 3, dx + 4, dy + 3, dx, dy - 6, c);
+      }
+      break;
+    }
+    case BUB_SUN: {  // sol
+      uint16_t c = C565(0xff, 0xb0, 0x20);
+      gfx->fillCircle(cx, cy, 9, c);
+      for (int i = 0; i < 8; i++) {
+        float a = i * 0.785f + t / 900.0f;
+        gfx->drawLine(cx + (int)(12 * cosf(a)), cy + (int)(12 * sinf(a)), cx + (int)(17 * cosf(a)),
+                      cy + (int)(17 * sinf(a)), c);
+      }
+      break;
+    }
+    default: break;
+  }
+}
+
+uint32_t petFxT = 0xFFFFFFFFu;  // ko10.8: tiempo del efecto de la practica (o nada)
+uint8_t petFxType = 0;
 
 void drawPetPMD() {
   uint32_t now = millis();
@@ -3566,14 +3746,38 @@ void drawPetPMD() {
         beh.x += (d > 0 ? 3.0f : -3.0f);
         act = (d > 0) ? PMD_WALKR : PMD_WALKL;
       }
+    } else if (beh.mode == 3) {
+      // ko10.8: practica: carga (si la trae) y luego su ataque de tipo con el
+      // mismo efecto que en batalla, lanzado hacia el lado con mas sitio
+      uint32_t el = now - beh.t0;
+      uint32_t chargeMs = pmd.has(PMD_CHARGE) ? 800 : 0;
+      uint8_t ty = DEX_TBL[pet.speciesId].ptype;
+      if (el < chargeMs) {
+        act = PMD_CHARGE;
+      } else {
+        act = (typeShoots(ty) && pmd.has(PMD_SHOOT)) ? PMD_SHOOT : PMD_ATTACK;
+        loop = false;
+        petFxT = el - chargeMs;
+        petFxType = ty;
+      }
     } else {
-      act = (beh.mode == 2) ? beh.act : PMD_IDLE;
-      loop = false;
+      act = (beh.mode == 2) ? beh.act : (uint8_t)PMD_IDLE;
+      // ko10.8: rodar va en bucle mientras dura (dos vueltas)
+      loop = (beh.mode == 2 && (act == PMD_ROTATE || act == PMD_LAYING));
     }
     if (!pmd.has(act)) act = PMD_IDLE;
   }
 
-  drawPmdAct(act, (int)beh.x, PET_GROUND, now - beh.t0, loop || act == PMD_IDLE, false, 5);
+  drawPmdAct(act, (int)beh.x, PET_GROUND, (beh.mode == 3 && petFxT != 0xFFFFFFFFu) ? petFxT : now - beh.t0,
+             loop || act == PMD_IDLE, false, 5);
+  if (m == MOOD_HAPPY && beh.mode == 3 && petFxT != 0xFFFFFFFFu) {
+    int px = (int)beh.x, dir = px < CX ? 1 : -1;
+    drawMoveFx(petFxType, px + dir * 40, PET_GROUND - 70, px + dir * 175, PET_GROUND - 80, petFxT, true, 2,
+               moveTier(pet.speciesId));
+  }
+  petFxT = 0xFFFFFFFFu;
+  if (m == MOOD_HAPPY) drawPetBubble((int)beh.x);
+  else beh.bubble = BUB_NONE;
 
   if (pet.showHeart()) drawMap(SPR_HEART, 32, (int)beh.x + 50, PET_GROUND - 190, 2, false);
 }

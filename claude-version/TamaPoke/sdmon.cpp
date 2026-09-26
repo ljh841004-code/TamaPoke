@@ -43,36 +43,48 @@ bool PmdMon::load(uint8_t dexNum, bool shiny) {
 
   const uint8_t *p = blob + 7 + palCount * 2;
   const uint8_t *end = blob + size;
-  for (uint8_t i = 0; i < nActs && p + 4 <= end; i++) {
-    uint8_t id = p[0], w = p[1], h = p[2], nf = p[3];
-    p += 4;
-    if (id >= PMD_NACTS || nf > 24) { unload(); return false; }
-    // valida que ms[] y los datos del frame caben en el blob (archivo truncado)
-    uint32_t bytes = (uint32_t)nf * 2 + (uint32_t)w * h * nf;
-    if (w == 0 || h == 0 || nf == 0 || p + bytes > end) { unload(); return false; }
-    PmdAct &a = acts[id];
-    a.w = w;
-    a.h = h;
-    a.frames = nf;
-    for (uint8_t k = 0; k < nf; k++) {
-      a.ms[k] = p[0] | (p[1] << 8);
-      if (a.ms[k] == 0) a.ms[k] = 100;  // nunca 0: pmdFrameAt() giraria sin avanzar
-      p += 2;
+  // ko10.8: tras las nActs normales puede venir un bloque "EXT1" con acciones
+  // extra (rodar, cargar, disparar, tumbarse). Un firmware viejo para en nActs y
+  // no lo ve; este lo lee. Ids desconocidos (sprites de un firmware futuro) se
+  // saltan en vez de rechazar el archivo entero.
+  for (int pass = 0; pass < 2; pass++) {
+    if (pass == 1) {
+      if (p + 5 > end || memcmp(p, "EXT1", 4) != 0) break;
+      nActs = p[4];
+      p += 5;
     }
-    a.data = p;
-    p += (uint32_t)w * h * nf;
-    // fila mas baja con contenido en cualquier frame: anclar por los pies
-    uint8_t base = 1;
-    for (uint8_t f = 0; f < nf; f++) {
-      const uint8_t *fr = a.data + (uint32_t)f * w * h;
-      for (int r = h - 1; r >= 0; r--) {
-        bool any = false;
-        for (int c = 0; c < w && !any; c++)
-          if (fr[r * w + c] != 0xFF) any = true;
-        if (any) { if (r + 1 > base) base = r + 1; break; }
+    for (uint8_t i = 0; i < nActs && p + 4 <= end; i++) {
+      uint8_t id = p[0], w = p[1], h = p[2], nf = p[3];
+      p += 4;
+      if (nf > 24) { unload(); return false; }
+      // valida que ms[] y los datos del frame caben en el blob (archivo truncado)
+      uint32_t bytes = (uint32_t)nf * 2 + (uint32_t)w * h * nf;
+      if (w == 0 || h == 0 || nf == 0 || p + bytes > end) { unload(); return false; }
+      if (id >= PMD_NACTS) { p += bytes; continue; }
+      PmdAct &a = acts[id];
+      a.w = w;
+      a.h = h;
+      a.frames = nf;
+      for (uint8_t k = 0; k < nf; k++) {
+        a.ms[k] = p[0] | (p[1] << 8);
+        if (a.ms[k] == 0) a.ms[k] = 100;  // nunca 0: pmdFrameAt() giraria sin avanzar
+        p += 2;
       }
+      a.data = p;
+      p += (uint32_t)w * h * nf;
+      // fila mas baja con contenido en cualquier frame: anclar por los pies
+      uint8_t base = 1;
+      for (uint8_t f = 0; f < nf; f++) {
+        const uint8_t *fr = a.data + (uint32_t)f * w * h;
+        for (int r = h - 1; r >= 0; r--) {
+          bool any = false;
+          for (int c = 0; c < w && !any; c++)
+            if (fr[r * w + c] != 0xFF) any = true;
+          if (any) { if (r + 1 > base) base = r + 1; break; }
+        }
+      }
+      a.base = base;
     }
-    a.base = base;
   }
   loaded = true;
   Serial.printf("cargado %s (%u KB)\n", path, size / 1024);

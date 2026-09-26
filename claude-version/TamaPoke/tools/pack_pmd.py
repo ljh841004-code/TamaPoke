@@ -15,6 +15,15 @@ Genera /mons/pNNN.bin (y psNNN.bin shiny) en formato TPK2 multi-accion:
 Acciones: 0 Idle, 1 WalkL, 2 WalkR, 3 Sleep, 4 Eat, 5 Hurt, 6 Attack,
 7 Pose, 8 Hop, 9 Nod, 10 DeepBreath, 11 Sit. Las que falten se omiten.
 
+ko10.8: acciones extra para la pantalla principal (12 Rotate = rodar,
+13 Charge = cargar, 14 Shoot = disparar, 15 Laying = tumbarse). Van DESPUES
+de las normales en un bloque aparte, para que un firmware viejo (que rechaza
+ids >= 12) las ignore y siga leyendo el archivo:
+
+  char[4] "EXT1"
+  u8  nExtra
+  por accion: igual que arriba
+
   python3 tools/pack_pmd.py             # los 151, normal + shiny
   python3 tools/pack_pmd.py 7 25        # dex concretos
   python3 tools/pack_pmd.py normal 1 4  # solo normales
@@ -48,6 +57,12 @@ ACTIONS = [
     (9, 'Nod', 0),
     (10, 'DeepBreath', 0),
     (11, 'Sit', 0),
+]
+EXTRA = [
+    (12, 'Rotate', 0),
+    (13, 'Charge', 0),
+    (14, 'Shoot', 0),
+    (15, 'Laying', 0),
 ]
 
 
@@ -99,7 +114,7 @@ def pack(dexnum, shiny=False):
 
     colmap, pal = {}, []
     packed = []
-    for aid, name, row in ACTIONS:
+    for aid, name, row in ACTIONS + EXTRA:
         if name not in anims or anims[name] is None:
             continue
         fw, fh, durs, srcname = anims[name]
@@ -137,13 +152,22 @@ def pack(dexnum, shiny=False):
     path = os.path.join(OUT, f'p{"s" if shiny else ""}{dexnum:03d}.bin')
     with open(path, 'wb') as f:
         f.write(b'TPK2')
-        f.write(struct.pack('<BH', len(packed), len(pal)))
+        f.write(struct.pack('<BH', sum(1 for p in packed if p[0] < 12), len(pal)))
         for r, g, b in pal:
             f.write(struct.pack('<H', rgb565(r, g, b)))
-        for aid, fw, fh, nf, ms, data in packed:
-            f.write(struct.pack('<4B', aid, fw, fh, nf))
-            f.write(struct.pack(f'<{nf}H', *ms))
-            f.write(data)
+        base_acts = [p for p in packed if p[0] < 12]
+        extra = [p for p in packed if p[0] >= 12]
+
+        def put(lst):
+            for aid, fw, fh, nf, ms, data in lst:
+                f.write(struct.pack('<4B', aid, fw, fh, nf))
+                f.write(struct.pack(f'<{nf}H', *ms))
+                f.write(data)
+        put(base_acts)
+        if extra:
+            f.write(b'EXT1')
+            f.write(struct.pack('<B', len(extra)))
+            put(extra)
     kb = os.path.getsize(path) / 1024
     print(f"  -> p{'s' if shiny else ''}{dexnum:03d}.bin: {len(packed)} acciones, "
           f"{len(pal)} colores, {kb:.0f} KB")
