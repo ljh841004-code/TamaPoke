@@ -166,7 +166,7 @@ static void audioTask(void *) {
                 Serial.printf("AUDIO invalid/missing WAV: %s\n", path);
               else {  // ko10.4: la duracion real del fichero (para ver si esta recortado)
                 uint32_t sec = music.lengthBytes() / (SAMPLE_RATE * 2);
-                Serial.printf("AUDIO %s: %u:%02u\n", path, sec / 60, sec % 60);
+                Serial.printf("AUDIO %s: %u:%02u\n", path, (unsigned)(sec / 60), (unsigned)(sec % 60));
                 if (!(request & 1u)) bgmSeconds.store(sec);
               }
             }
