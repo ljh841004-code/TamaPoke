@@ -130,15 +130,28 @@ static const char *const XS[2][X_COUNT] = {
   },
 };
 
-static const char *const MOVES_EN[PT_COUNT] = {
-  "HEADBUTT", "EMBER", "WATER GUN", "VINE WHIP", "THUNDERSHOCK", "ICE BEAM", "KARATE CHOP",
-  "POISON STING", "MUD-SLAP", "CONFUSION", "PIN MISSILE", "ROCK THROW", "LICK", "DRAGON RAGE",
-  "BITE", "METAL CLAW",  // ko10: siniestro, acero
+// ko10.4: tres ataques por tipo segun la fase evolutiva (basico, medio, definitivo)
+static const char *const MOVES_EN[3][PT_COUNT] = {
+  { "HEADBUTT", "EMBER", "WATER GUN", "VINE WHIP", "THUNDERSHOCK", "ICY WIND", "KARATE CHOP",
+    "POISON STING", "MUD-SLAP", "CONFUSION", "PIN MISSILE", "ROCK THROW", "LICK", "TWISTER",
+    "BITE", "METAL CLAW" },
+  { "BODY SLAM", "FLAMETHROWER", "WATER PULSE", "RAZOR LEAF", "THUNDERBOLT", "ICE BEAM", "CROSS CHOP",
+    "SLUDGE", "MAGNITUDE", "PSYBEAM", "FURY CUTTER", "ANCIENTPOWER", "NIGHT SHADE", "DRAGON RAGE",
+    "FAINT ATTACK", "STEEL WING" },
+  { "HYPER BEAM", "FIRE BLAST", "HYDRO PUMP", "SOLARBEAM", "THUNDER", "BLIZZARD", "DYNAMICPUNCH",
+    "SLUDGE BOMB", "EARTHQUAKE", "PSYCHIC", "MEGAHORN", "ROCK SLIDE", "SHADOW BALL", "OUTRAGE",
+    "CRUNCH", "IRON TAIL" },
 };
-static const char *const MOVES_KO[PT_COUNT] = {
-  "박치기", "불꽃세례", "물대포", "덩굴채찍", "전기쇼크", "냉동빔", "태권당수",
-  "독침", "진흙뿌리기", "염동력", "바늘미사일", "돌떨구기", "핥기", "용의분노",
-  "물기", "메탈크로우",
+static const char *const MOVES_KO[3][PT_COUNT] = {
+  { "박치기", "불꽃세례", "물대포", "덩굴채찍", "전기쇼크", "얼다바람", "태권당수",
+    "독침", "진흙뿌리기", "염동력", "바늘미사일", "돌떨구기", "핥기", "회오리",
+    "물기", "메탈크로우" },
+  { "누르기", "화염방사", "물의파동", "잎날가르기", "10만볼트", "냉동빔", "크로스촙",
+    "오물공격", "매그니튜드", "환상빔", "연속자르기", "원시의힘", "나이트헤드", "용의분노",
+    "속여때리기", "강철날개" },
+  { "파괴광선", "불대문자", "하이드로펌프", "솔라빔", "번개", "눈보라", "폭발펀치",
+    "오물폭탄", "지진", "사이코키네시스", "메가혼", "스톤샤워", "섀도볼", "역린",
+    "깨물어부수기", "아이언테일" },
 };
 
 static const char *const TYPES_EN[PT_COUNT] = {
@@ -164,8 +177,9 @@ const char *XT(XId id) {
   return XS[isKo() ? 1 : 0][id];
 }
 
-const char *moveName(uint8_t move, uint8_t type) {
-  if (move == BA_TYPE && type < PT_COUNT) return isKo() ? MOVES_KO[type] : MOVES_EN[type];
+const char *moveName(uint8_t move, uint8_t type, uint8_t tier) {
+  if (tier > 2) tier = 2;
+  if (move == BA_TYPE && type < PT_COUNT) return isKo() ? MOVES_KO[tier][type] : MOVES_EN[tier][type];
   return XT(X_M_TACKLE);
 }
 

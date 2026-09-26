@@ -447,3 +447,18 @@ TEST(daily, igual_todo_el_dia_y_cambia_otro_dia) {
   CHECK(diff > 0);
   for (int i = 0; i < DAILY_TEAM; i++) CHECK(a[i].lvl >= 17 && a[i].lvl <= 24);
 }
+
+TEST(moves, fase_del_ataque_segun_evolucion) {
+  CHECK_EQ((int)moveTier(7), 0);    // Squirtle: Pistola Agua
+  CHECK_EQ((int)moveTier(8), 1);    // Wartortle: Hidropulso
+  CHECK_EQ((int)moveTier(9), 2);    // Blastoise: Hidrobomba
+  CHECK_EQ((int)moveTier(172), 0);  // Pichu (bebe)
+  CHECK_EQ((int)moveTier(25), 1);   // Pikachu
+  CHECK_EQ((int)moveTier(26), 2);   // Raichu
+  CHECK_EQ((int)moveTier(129), 0);  // Magikarp
+  CHECK_EQ((int)moveTier(130), 2);  // Gyarados
+  CHECK_EQ((int)moveTier(128), 1);  // Tauros (sin evoluciones)
+  CHECK_EQ((int)moveTier(150), 2);  // Mewtwo (legendario)
+  CHECK_EQ((int)moveTier(134), 2);  // Vaporeon (rama de Eevee)
+  for (int d = 1; d <= DEX_COUNT; d++) CHECK(moveTier(d) <= 2);
+}

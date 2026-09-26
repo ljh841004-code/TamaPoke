@@ -107,6 +107,12 @@ uint16_t wildPermil(int16_t dex, uint8_t region, uint16_t petLvl, uint8_t hour, 
 // whim = % de veces que elige al azar en vez del mejor golpe
 BAct battleAi(const Battler &self, const Battler &foe, BRng &rng, uint8_t whim = 20);
 
+// ko10.4: nivel del ataque de tipo segun la fase evolutiva (0 basico, 1 medio,
+// 2 definitivo). Basica = primera fase de una linea; final = ultima; sin
+// evoluciones: 1 (legendarios 2). Ej.: Squirtle 0 (Pistola Agua), Wartortle 1
+// (Hidropulso), Blastoise 2 (Hidrobomba). Solo cambia nombre y efecto, no el dano
+uint8_t moveTier(int16_t dex);
+
 // ko10.4: tiempo de la batalla (WX_* de weather.h). Lluvia: agua x1,5, fuego x0,5;
 // sol: fuego x1,5, agua x0,5; nieve: hielo x1,5. battleAuto (tongsin) usa siempre buen tiempo
 void battleSetWeather(uint8_t wx);

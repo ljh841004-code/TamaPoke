@@ -281,6 +281,7 @@ bool bqAisMe = true;   // el lado "a" de los eventos es mi Pokemon
 // lo que se ve en pantalla
 int16_t bvMeDex, bvFoeDex;
 uint8_t bvMeType, bvFoeType;
+uint8_t bvMeTier = 0, bvFoeTier = 0;  // ko10.4: fase del ataque de tipo (moveTier)
 uint16_t bvMeLvl, bvFoeLvl, bvMeMax, bvFoeMax;
 float bvMeHp, bvFoeHp;        // animado
 uint16_t bvMeTgt, bvFoeTgt;   // objetivo
@@ -353,7 +354,7 @@ void evMessages(const BEvent &e) {
   switch (e.kind) {
     case EV_HIT:
     case EV_MISS:
-      txFmt(bvL1, sizeof(bvL1), X_USED, who, moveName(e.move, me ? bvMeType : bvFoeType));
+      txFmt(bvL1, sizeof(bvL1), X_USED, who, moveName(e.move, me ? bvMeType : bvFoeType, me ? bvMeTier : bvFoeTier));
       if (e.kind == EV_MISS) strncpy(bvL2, XT(X_MISSED), sizeof(bvL2) - 1);
       else if (e.eff == 0) strncpy(bvL2, XT(X_NOEFFECT), sizeof(bvL2) - 1);
       else if (e.eff == 4) strncpy(bvL2, XT(X_SUPER), sizeof(bvL2) - 1);
@@ -486,7 +487,20 @@ static void fxStar(int x, int y, int r0, int r1, int rays, float rot, int w, uin
 static float fxClamp01(float v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
 
 // fx: PT_* del ataque (0xFF = placaje). (ax,ay) atacante, (tx,ty) objetivo.
-void drawMoveFx(uint8_t fx, int ax, int ay, int tx, int ty, uint32_t t, bool hit, uint8_t eff) {
+// ko10.4: color de cada tipo para el aura y el estallido de las fases media y final
+static const uint16_t FX_COL[PT_COUNT] = {
+  C565(0xd8, 0xd0, 0xb0), C565(0xff, 0x7a, 0x1a), C565(0x40, 0x90, 0xf0), C565(0x3c, 0xb8, 0x48),
+  C565(0xff, 0xd8, 0x20), C565(0x80, 0xe0, 0xf8), C565(0xe0, 0x60, 0x30), C565(0xa0, 0x48, 0xc0),
+  C565(0xc0, 0x98, 0x50), C565(0xf0, 0x58, 0xa8), C565(0xa8, 0xc8, 0x30), C565(0xa8, 0x90, 0x60),
+  C565(0x70, 0x58, 0xa8), C565(0x70, 0x60, 0xf0), C565(0x60, 0x48, 0x40), C565(0xb0, 0xb8, 0xc8),
+};
+// ataques finales que salen como rayo (Hiperrayo, Hidrobomba, Rayo Solar, Ventisca,
+// Psiquico, Enfado...); el resto usa su efecto propio, mas grande
+static const bool FX_BEAM[PT_COUNT] = {
+  true, true, true, true, false, true, false, true, false, true, false, false, true, true, false, true,
+};
+
+void drawMoveFx(uint8_t fx, int ax, int ay, int tx, int ty, uint32_t t, bool hit, uint8_t eff, uint8_t tier) {
   const uint16_t WHITE = UI_WHITE, YEL = C565(0xff, 0xe0, 0x40), ORA = C565(0xff, 0x8c, 0x1a),
                  RED = C565(0xe8, 0x38, 0x20);
   float p = fxClamp01(((float)t - 120) / 260.0f);  // viaje del proyectil
@@ -767,6 +781,37 @@ void drawMoveFx(uint8_t fx, int ax, int ay, int tx, int ty, uint32_t t, bool hit
     }
   }
 
+  // ko10.4: fase media (aura al cargar + estallido) y final (ademas rayo y estrella grande)
+  if (tier >= 1 && fx < PT_COUNT) {
+    uint16_t c = FX_COL[fx], cl = lerp565(c, WHITE, 8, 16);
+    if (t < 380) {  // aura de carga alrededor del atacante
+      int r = 30 + (int)(6 * sinf(t * 0.04f)) + tier * 6;
+      gfx->drawCircle(ax, ay, r, c);
+      gfx->drawCircle(ax, ay, r + 1, cl);
+      if (tier == 2) { gfx->drawCircle(ax, ay, r + 7, c); gfx->drawCircle(ax, ay, r + 8, c); }
+    }
+    if (tier == 2 && FX_BEAM[fx] && t >= 120 && t < 470) {  // rayo del definitivo
+      float L = fxClamp01((t - 120) / 150.0f);
+      int ex = ax + (int)((tx - ax) * L), ey = ay + (int)((ty - ay) * L);
+      int w = 14 + (int)(4 * sinf(t * 0.08f));
+      fxLine(ax, ay, ex, ey, w + 8, c);
+      fxLine(ax, ay, ex, ey, w, cl);
+      fxLine(ax, ay, ex, ey, w / 3 + 1, WHITE);
+    }
+    if (impact && k < 440) {  // estallido extra en el objetivo
+      float g = fxClamp01(k / 320.0f);
+      int R = (int)((tier == 2 ? 72 : 44) * g) + 10;
+      gfx->drawCircle(tx, ty, R, c);
+      gfx->drawCircle(tx, ty, R + 1, c);
+      gfx->drawCircle(tx, ty, R + 3, cl);
+      if (tier == 1) fxStar(tx, ty, R / 4, R * 2 / 3, 8, k * 0.004f, 2, c);
+      if (tier == 2) {
+        fxStar(tx, ty, R / 3, R, 12, k * 0.004f, 3, cl);
+        if (k < 120) gfx->fillCircle(tx, ty, 26 - k / 6, WHITE);
+      }
+    }
+  }
+
   // muy eficaz: onda de choque blanca que se abre desde el objetivo
   if (impact && eff >= 4 && k < 260) {
     int r = 24 + k * 2 / 5;
@@ -780,10 +825,12 @@ void updateShake(uint32_t now) {
   bvShakeX = bvShakeY = 0;
   if (bPhase != BP_PLAY || bqI >= bqN) return;
   const BEvent &e = bq[bqI];
-  if (e.kind != EV_HIT || !e.crit || !e.eff) return;
+  // ko10.4: tambien tiembla con los ataques definitivos (fase final)
+  bool fin = e.move == BA_TYPE && (evIsMe(e.side) ? bvMeTier : bvFoeTier) == 2;
+  if (e.kind != EV_HIT || !(e.crit || fin) || !e.eff) return;
   int k = (int)(now - bqT) - 350;
   if (k < 0 || k >= 360) return;
-  int amp = 7 * (360 - k) / 360 + 1;
+  int amp = (e.crit ? 7 : 5) * (360 - k) / 360 + 1;
   bvShakeX = ((k / 30) & 1) ? amp : -amp;
   bvShakeY = ((k / 45) & 1) ? amp / 2 : -amp / 2;
 }
@@ -874,7 +921,7 @@ void drawBattlers() {
       uint8_t fx = e.move == BA_TYPE ? (me ? bvMeType : bvFoeType) : 0xFF;
       int ax = me ? 140 : 316, ay = me ? 200 : 116, tx = me ? 316 : 140, ty = me ? 116 : 200;
       drawMoveFx(fx, ax + bvShakeX, ay + bvShakeY, tx + bvShakeX, ty + bvShakeY, t,
-                 e.kind == EV_HIT && e.eff, e.eff);
+                 e.kind == EV_HIT && e.eff, e.eff, e.move == BA_TYPE ? (me ? bvMeTier : bvFoeTier) : 0);
     }
   }
 }
@@ -908,7 +955,7 @@ void drawBattleMenu() {
   snprintf(ball, sizeof(ball), XT(X_BALL_FMT), pet.balls);
   int x0 = BM_X, x1 = BM_X + BM_W + BM_GAP, x2 = BM_X + 2 * (BM_W + BM_GAP);
   drawBtn(x0, BM_Y1, BM_W, BM_H, UI_WHITE, UI_INK, moveName(BA_TACKLE, bvMeType));
-  drawBtn(x1, BM_Y1, BM_W, BM_H, me.accent, UI_WHITE, moveName(BA_TYPE, bvMeType));
+  drawBtn(x1, BM_Y1, BM_W, BM_H, me.accent, UI_WHITE, moveName(BA_TYPE, bvMeType, bvMeTier));
   drawBtn(x2, BM_Y1, BM_W, BM_H, 0x4C98, UI_WHITE, XT(X_GUARD));
   drawBtn(x0, BM_Y2, BM_W, BM_H, pet.potions ? UI_BAR_OK : UI_TRACK, pet.potions ? UI_WHITE : UI_INK, pot);
   drawBtn(x1, BM_Y2, BM_W, BM_H, pet.balls ? UI_BAR_BAD : UI_TRACK, pet.balls ? UI_WHITE : UI_INK, ball);
@@ -1004,6 +1051,7 @@ void renderBattleView() {
 void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool foeShiny) {
   bvMeDex = me.dex; bvFoeDex = foe.dex;
   bvMeType = me.type; bvFoeType = foe.type;
+  bvMeTier = moveTier(me.dex); bvFoeTier = moveTier(foe.dex);
   bvMeLvl = me.lvl; bvFoeLvl = foe.lvl;
   bvMeMax = me.maxHp; bvFoeMax = foe.maxHp;
   bvMeHp = bvMeTgt = me.hp;

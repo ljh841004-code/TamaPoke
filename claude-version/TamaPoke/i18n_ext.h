@@ -80,7 +80,7 @@ const char *XT(XId id);
 // nombre del tipo PT_* (fork KO, ko4: ficha de la pokedex)
 const char *typeName(uint8_t type);
 // nombre del movimiento: BA_TACKLE / BA_TYPE (este segun el tipo PT_*)
-const char *moveName(uint8_t move, uint8_t type);
+const char *moveName(uint8_t move, uint8_t type, uint8_t tier = 0);  // ko10.4: tier = moveTier(dex)
 // rellena out con la plantilla id, sustituyendo {1}/{2} y las particulas
 void txFmt(char *out, size_t n, XId id, const char *a1, const char *a2 = nullptr);
 // lo mismo con una plantilla cualquiera (para los tests)

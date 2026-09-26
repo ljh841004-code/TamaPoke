@@ -83,6 +83,14 @@ uint32_t careMinutesForLevel(uint16_t lvl) {
 
 static bool hasPreEvo(int16_t dex) { return dexPrevo(dex) != 0; }
 
+uint8_t moveTier(int16_t dex) {
+  if (dex < 1 || dex > DEX_COUNT) return 0;
+  bool pre = hasPreEvo(dex), post = DEX_TBL[dex].evolvesTo != 0;
+  if (!pre && !post) return DEX_TBL[dex].rarity == R_LEGENDARIO ? 2 : 1;
+  if (!pre) return 0;          // primera fase (incluye bebes: Pichu)
+  return post ? 1 : 2;         // intermedia / ultima
+}
+
 uint8_t evoLevel(int16_t dex) {
   if (dex < 1 || dex > DEX_COUNT) return 0;
   const DexEntry &e = DEX_TBL[dex];
