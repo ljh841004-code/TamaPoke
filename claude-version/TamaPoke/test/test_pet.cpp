@@ -264,6 +264,25 @@ TEST(tick, descuido_cuenta_una_vez_por_hora) {
   CHECK_EQ(p.careMistakes, (uint8_t)2);
 }
 
+// ko10.9: el dia de crianza cuenta por fecha, no por bloques de 24 h
+TEST(tick, dia_de_crianza_por_fecha) {
+  Pet p;
+  makePet(p, 4);
+  const uint32_t D = 20000u * 86400u;       // un dia cualquiera a las 00:00
+  p.lastSeenEpoch = D + 15 * 3600;          // empieza a las 15:00
+  p.ageMinutes = 0;
+  CHECK_EQ(p.raiseDay(), (uint32_t)1);
+  p.lastSeenEpoch = D + 86400 + 9 * 3600;   // al dia siguiente a las 9:00 (18 h despues)
+  p.ageMinutes = 18 * 60;
+  CHECK_EQ(p.raiseDay(), (uint32_t)2);      // antes salia 1
+  p.lastSeenEpoch = D + 23 * 3600;          // mismo dia, 8 h despues
+  p.ageMinutes = 8 * 60;
+  CHECK_EQ(p.raiseDay(), (uint32_t)1);
+  p.lastSeenEpoch = 0;                      // sin reloj: como antes
+  p.ageMinutes = 1500;
+  CHECK_EQ(p.raiseDay(), (uint32_t)2);
+}
+
 // ko10.9: se apunta la causa del descuido (la barra que cayo) y cuando
 TEST(tick, descuido_apunta_la_causa) {
   Pet p;

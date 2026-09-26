@@ -267,7 +267,16 @@ public:
   bool lineHasUnregistered(int16_t base) const;
   uint8_t eggRarity() const;       // rareza del huevo actual (sin revelar especie)
   int16_t pickEggSpecies();        // publica para poder simular tiradas (EGGS)
-  uint16_t goodCareTicks() const { return goodTicks; }  // ko10.6: racha de buen cuidado (min)
+  uint16_t goodCareTicks() const { return goodTicks; }
+  // ko10.9: dia de crianza por FECHA (hoy - dia en que empezo + 1). Antes eran
+  // bloques de 24 h de edad: empezar a las 15 h y mirar al dia siguiente a las 9 h
+  // seguia diciendo "dia 1". Sin reloj, como antes
+  uint32_t raiseDay() const {
+    if (!lastSeenEpoch) return ageMinutes / 1440 + 1;
+    uint32_t age = ageMinutes * 60u;
+    uint32_t born = age < lastSeenEpoch ? lastSeenEpoch - age : 0;
+    return lastSeenEpoch / 86400u - born / 86400u + 1;
+  }  // ko10.6: racha de buen cuidado (min)
   uint8_t lowestStat() const { return min(min(fullness, joy), min(energy, hygiene)); }
   PetMood mood() const;
   // progreso de la ceremonia de despedida/escapada, 0..1 (para animarla)

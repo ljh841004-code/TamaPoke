@@ -2596,9 +2596,8 @@ void renderCardProfile() {
                       : fav == 1 ? T(S_BERRY_BLUE)
                       : fav == 2 ? T(S_BERRY_GREEN) : XT(X_FOOD_CANDY);
   char info[48];
-  // ko9: dia de crianza (1, 2, 3...) en vez de la edad en dias
-  snprintf(info, sizeof(info), T(S_INFO_FMT), berry,
-           (unsigned long)(pet.ageMinutes / 1440 + 1));
+  // ko9: dia de crianza (1, 2, 3...); ko10.9: por fecha (ver Pet::raiseDay)
+  snprintf(info, sizeof(info), T(S_INFO_FMT), berry, (unsigned long)pet.raiseDay());
   drawFit(info, 298, 380, UI_INK, 3);
 
   drawFit(T(S_RENAME_HINT), 338, 300, UI_INK, 2);
