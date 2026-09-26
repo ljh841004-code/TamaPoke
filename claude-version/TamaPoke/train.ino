@@ -77,7 +77,8 @@ void renderTrainMenu() {
     printT(b);
   }
   if (timeLeft(trainMsgUntil) && trainMsg) drawFit(trainMsg, 344, 320, UI_BAR_BAD, 2);
-  drawFit(T(S_BACK), 380, 220, UI_INK, 2);
+  else drawFit(XT(X_TRAIN_QUIT_HINT), 356, 260, C565(0x60, 0x68, 0x70), 1);
+  drawFit(T(S_BACK), 384, 220, UI_INK, 2);
   gfx->flush();
 }
 
@@ -372,10 +373,12 @@ bool trainingTap(int16_t x, int16_t y) {
 }
 
 void trainingPress(int16_t x, int16_t y) {  // al apoyar el dedo (juegos rapidos)
-  if (y < 72) { defOpen = spdOpen = false; return; }  // tocar arriba = abandonar sin premio
   if (defOpen) defensePress(x, y);
   else if (spdOpen) speedPress(x, y);
 }
+
+// ko9.1: abandonar sin premio (mantener el dedo 2 s, ver handleTouch)
+void trainingQuit() { defOpen = spdOpen = false; }
 
 bool trainingSwipe() {
   if (trainMenuOpen) { trainMenuOpen = false; return true; }

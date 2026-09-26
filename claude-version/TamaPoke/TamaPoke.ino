@@ -163,6 +163,7 @@ static const uint8_t CRACK2[][2] = { {11,13},{12,14},{11,15},{20,12},{19,13},{20
 static const uint16_t STARS[][2] = { {120,140},{330,120},{370,210},{95,230},{280,90},{160,95} };
 
 bool wasPressed = false;
+#define TRAIN_QUIT_MS 2000UL  // ko9.1: mantener 2 s = abandonar un juego de entrenamiento
 // eleccion de inicial (primera partida): Bulbasaur / Charmander / Squirtle, 3 filas
 static const int16_t STARTER_DEX[3] = { 1, 4, 7 };
 #define STARTER_ROW_Y 110
@@ -590,12 +591,30 @@ void handleTouch() {
   int16_t x, y;
   bool pressed = touch.getPoint(&x, &y, 1) > 0;
 
+  // ko9.1: en los juegos de entrenamiento se abandona MANTENIENDO el dedo 2 s
+  // quieto (antes: tocar la franja de arriba, y<72). La pokeball de las 12 del
+  // juego de velocidad, las que caen en el de defensa y el saco llegan a esa
+  // franja, asi que un toque normal a veces cerraba el juego sin guardar nada.
+  static uint32_t fastT0 = 0;
+  static int16_t fastX0 = 0, fastY0 = 0;
+  bool fastGame = sackOpen || trainingFast();
+  if (fastGame && pressed && !wasPressed) { fastT0 = millis(); fastX0 = x; fastY0 = y; }
+  if (fastGame && pressed && fastT0 && millis() - fastT0 > TRAIN_QUIT_MS &&
+      abs(x - fastX0) < 40 && abs(y - fastY0) < 40) {
+    fastT0 = 0;
+    sackOpen = false;
+    trainingQuit();
+    sfxPlay(SFX_DENY);
+    wasPressed = pressed;
+    return;
+  }
+  if (!pressed) fastT0 = 0;
+
   // saco de entrenamiento: cada toque cuenta al instante (aporrear rapido)
   if (sackOpen) {
     if (pressed && !wasPressed) {
       lastInteract = millis();
-      if (y < 72) sackOpen = false;  // tocar arriba = abandonar
-      else sackTap();
+      sackTap();
     }
     wasPressed = pressed;
     return;
@@ -621,6 +640,13 @@ void handleTouch() {
   } else if (pressed) {  // sigue apoyado
     tXl = x;
     tYl = y;
+    // ko9.1: juego de pelota: mantener 2 s = abandonar (antes tocar arriba)
+    if (gameOpen && !holdFired && !gameOverUntil && millis() - tStart > TRAIN_QUIT_MS &&
+        abs(tXl - tX0) < 40 && abs(tYl - tY0) < 40) {
+      holdFired = true;
+      gameOpen = false;
+      sfxPlay(SFX_DENY);
+    }
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
     if (!holdFired && !swallowGesture && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && !extraOpen() &&
         !trainingOpen() &&
@@ -1463,10 +1489,6 @@ void respawnBall() {
 
 void gameTap(int16_t x, int16_t y) {
   if (gameOverUntil) return;
-  if (y < 72) {  // tocar la cabecera = abandonar sin premio
-    gameOpen = false;
-    return;
-  }
   float dx = ballX - x, dy = ballY - y;
   if (dx * dx + dy * dy < 74 * 74) {  // toque a la bola!
     gameScore++;

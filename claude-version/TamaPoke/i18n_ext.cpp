@@ -45,7 +45,7 @@ static const char *const XS[2][X_COUNT] = {
     "WiFi, sound and language stay", "HOLD 3s", "Keep the button pressed for 3 s", "Starting over...",
     "Scan with phone camera", "WiFi", "PASSWORD", "ADDRESS",
     "SPACE", "DEL", "KOREAN",
-    "CANDY", "or ~%luh %lum of raising", "or ~%lu min of raising",
+    "CANDY", "or ~%luh %lum of raising", "or ~%lu min of raising", "Hold 2 s in a game to quit",
     "Looking for WiFi...", "AUTO ON", "AUTO OFF", "OPEN WiFi ON", "OPEN WiFi OFF", " +%u",
   },
   // ---------------- KO ----------------
@@ -88,7 +88,7 @@ static const char *const XS[2][X_COUNT] = {
     "WiFi, 소리, 언어 설정은 남아요", "3초 누르기", "버튼을 3초 동안 누르고 있으세요", "처음부터 시작해요!",
     "카메라로 QR 찍기", "WiFi", "비밀번호", "주소",
     "띄움", "지움", "한글",
-    "사탕", "또는 육성 약 %lu시간 %lu분", "또는 육성 약 %lu분",
+    "사탕", "또는 육성 약 %lu시간 %lu분", "또는 육성 약 %lu분", "게임 중 2초 누르면 그만",
     "WiFi 찾는 중...", "자동 켬", "자동 끔", "개방 WiFi 켬", "개방 WiFi 끔", " 외 %u개",
   },
 };
