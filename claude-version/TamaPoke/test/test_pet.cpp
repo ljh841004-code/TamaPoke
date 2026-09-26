@@ -264,6 +264,24 @@ TEST(tick, descuido_cuenta_una_vez_por_hora) {
   CHECK_EQ(p.careMistakes, (uint8_t)2);
 }
 
+// ko10.9: se apunta la causa del descuido (la barra que cayo) y cuando
+TEST(tick, descuido_apunta_la_causa) {
+  Pet p;
+  makePet(p, 4);
+  p.lastSeenEpoch = 1790343900;
+  setStats(p, 90, 90, 90, 0);
+  p.poops = 0;
+  advance(p, 1);
+  CHECK_EQ(p.careMistakes, (uint8_t)1);
+  CHECK_EQ(p.mistWhy, (uint8_t)MW_HYGIENE);
+  CHECK_EQ(p.mistEpoch, (uint32_t)1790343900);
+  p.saveNow();
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.mistWhy, (uint8_t)MW_HYGIENE);
+  CHECK_EQ(q.mistEpoch, (uint32_t)1790343900);
+}
+
 // regresion v1.4: el descuido restaba 3 de vinculo cada 30 min y era imposible
 // recuperarlo; ahora resta 1 y nunca lo deja en 0
 TEST(tick, descuido_enfria_el_vinculo_sin_arrasarlo) {

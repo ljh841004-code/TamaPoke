@@ -70,6 +70,9 @@ static void scenes(bool ko, const char *sfx) {
   cardPage = 3;
   render(); shot("03b_card_progress");
   pet.careMistakes = 2; render(); shot("03g_card_mistakes");  // ko10.6: cuanto falta para perdonar uno
+  pet.mistWhy = MW_FOOD; pet.mistEpoch = 1790343900 - 3600; mistWhyUntil = gMockMillis + 5000;
+  render(); shot("03h_card_mistake_why");  // ko10.9: causa al tocar
+  mistWhyUntil = 0;
   pet.careMistakes = 0;
   pet.berryKnown = true; pet.ageMinutes = 2 * 1440 + 300; pet.bond = 46; pet.streak = 3; pet.bestStreak = 5;
   cardPage = 0; render(); shot("03c_card_profile");

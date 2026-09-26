@@ -222,6 +222,7 @@ uint32_t holdStart = 0;     // pulsacion larga sobre el bicho
 uint32_t confirmUntil = 0;  // dialogo "soltar?" activo hasta este millis
 uint8_t choiceKind = 0;     // dialogo de decision: 0 ninguno, 1 evolucion, 2 despedida
 uint32_t choiceUntil = 0;   // se cierra solo a este millis
+uint32_t mistWhyUntil = 0;  // ko10.9: mostrar la causa del ultimo descuido (ficha)
 int16_t tX0, tY0, tXl, tYl; // gesto en curso (inicio y ultima posicion)
 uint32_t tStart = 0;
 bool holdFired = false;
@@ -875,6 +876,10 @@ void onTap(int16_t x, int16_t y) {
     if (navHit(NAV_DOWN, x, y)) { cardOpen = false; sfxPlay(SFX_TAP); return; }
     if (cardPage == 4) cardCandyTap(x, y);        // ko10.4: caramelos
     else if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
+    else if (cardPage == 3 && pet.careMistakes > 0 && y >= 296 && y < 362) {  // ko10.9: causa
+      mistWhyUntil = millis() + 5000;
+      sfxPlay(SFX_TAP);
+    }
     else if (cardPage == 1 && y >= CARD_ROW1_Y && y < CARD_ROW2_Y + CARD_BTN_H &&
              x >= CARD_COL1_X && x < CARD_COL2_X + CARD_COL_W) {
       bool right = x >= CARD_COL2_X - 3;
@@ -2720,14 +2725,33 @@ void renderCardProgress() {
   printT(evo);
 
   // descuidos (retrasan la evolucion)
-  char ms[24];
+  char ms[48];
   snprintf(ms, sizeof(ms), T(S_MISTAKES_FMT), pet.careMistakes);
+  if (pet.careMistakes > 0) {  // ko10.9: se puede tocar para ver la causa
+    size_t l = strlen(ms);
+    snprintf(ms + l, sizeof(ms) - l, " %s", XT(X_MIST_TAP));
+  }
   gfx->setTextColor(pet.careMistakes > 0 ? UI_BAR_BAD : UI_INK);
   setCur(centerX(ms, 2), pet.careMistakes > 0 ? 308 : 318);
   printT(ms);
   // ko10.6: 12 h seguidas con todo >= 40 perdonan un descuido; cuanto falta
   if (pet.careMistakes > 0) {
-    char hl[48];
+    char hl[96];
+    if (timeLeft(mistWhyUntil)) {
+      // ko10.9: causa y hora del ultimo descuido (se ve 5 s al tocar "Fallos")
+      static const XId WHY[5] = { X_MW_NONE, X_MW_FOOD, X_MW_JOY, X_MW_ENERGY, X_MW_HYGIENE };
+      char when[16];
+      when[0] = 0;
+      if (pet.mistWhy && pet.mistEpoch) {
+        uint8_t mo, dd;
+        wxDate(pet.mistEpoch, nullptr, &mo, &dd, nullptr);
+        uint32_t sod = pet.mistEpoch % 86400u;
+        snprintf(when, sizeof(when), "(%u/%u %02u:%02u)", mo, dd, (unsigned)(sod / 3600), (unsigned)(sod / 60 % 60));
+      }
+      snprintf(hl, sizeof(hl), XT(X_MW_LAST_FMT), XT(WHY[pet.mistWhy < 5 ? pet.mistWhy : 0]), when);
+      drawFit(hl, 336, 360, UI_BAR_BAD, 2);
+      return;
+    }
     if (pet.lowestStat() >= 40) {
       unsigned long m = GOOD_CARE_TICKS - pet.goodCareTicks();
       if (m >= 60) snprintf(hl, sizeof(hl), XT(X_MIST_HEAL_HM), m / 60, m % 60);

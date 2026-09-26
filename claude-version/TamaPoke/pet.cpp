@@ -43,6 +43,8 @@ void Pet::newEgg() {
   exp = 0;
   careMistakes = 0;
   mistakeCooldown = 0;
+  mistWhy = MW_NONE;
+  mistEpoch = 0;
   sleeping = false;
   save();
 }
@@ -189,6 +191,10 @@ void Pet::tick() {
   if (lowestStat() <= 10 && mistakeCooldown == 0) {
     careMistakes++;
     mistakeCooldown = 60;
+    // ko10.9: apunta la causa (la barra mas baja; empate: comida, animo, energia, higiene)
+    uint8_t lo = lowestStat();
+    mistWhy = fullness == lo ? MW_FOOD : joy == lo ? MW_JOY : energy == lo ? MW_ENERGY : MW_HYGIENE;
+    mistEpoch = lastSeenEpoch;
     if (bond > 1) bond--;  // el descuido enfria el vinculo, pero sin arrasarlo:
                            // a -3 cada 30 min se perdia mucho mas de lo que se
                            // podia ganar en todo un dia y el vinculo se atascaba
@@ -231,6 +237,8 @@ void Pet::flushSave() {
   prefs.putUInt("age", ageMinutes);
   prefs.putUInt("exp", exp);
   prefs.putUChar("mist", careMistakes);
+  prefs.putUChar("mwhy", mistWhy);
+  prefs.putUInt("mwhen", mistEpoch);
   prefs.putUShort("good", goodTicks);  // ko10.6: la racha sobrevive a un reinicio
   prefs.putBool("sleep", sleeping);
   prefs.putUChar("bond", bond);
@@ -853,6 +861,8 @@ void Pet::save() {
   prefs.putShort("eggT2", eggTarget);
   prefs.putUChar("crack", eggTaps);
   prefs.putUChar("mist", careMistakes);
+  prefs.putUChar("mwhy", mistWhy);
+  prefs.putUInt("mwhen", mistEpoch);
   prefs.putUShort("good", goodTicks);  // ko10.6: la racha sobrevive a un reinicio
   prefs.putBool("sleep", sleeping);
   prefs.putUChar("lend", lastEnd);
@@ -924,6 +934,8 @@ void Pet::load() {
   }
   eggTaps = prefs.getUChar("crack", 0);
   careMistakes = prefs.getUChar("mist", 0);
+  mistWhy = prefs.getUChar("mwhy", MW_NONE);
+  mistEpoch = prefs.getUInt("mwhen", 0);
   goodTicks = prefs.getUShort("good", 0);
   if (goodTicks >= GOOD_CARE_TICKS) goodTicks = 0;
   sleeping = prefs.getBool("sleep", false);
@@ -1065,6 +1077,7 @@ void Pet::adoptMon(int16_t dex, uint16_t lvl, bool isShiny, uint8_t gA, uint8_t 
   fullness = 80; joy = 80; energy = 80; hygiene = 100;
   poops = 0; weight = 0;
   careMistakes = 0; mistakeCooldown = 0;
+  mistWhy = MW_NONE; mistEpoch = 0;
   sleeping = false;
   berryKnown = false;
   bond = 0; bondToday = 0;
@@ -1143,6 +1156,8 @@ bool Pet::importTrade(const TradePet &t, uint16_t lvl) {
   newMedal = 0;
   careMistakes = 0;
   mistakeCooldown = 0;
+  mistWhy = MW_NONE;
+  mistEpoch = 0;
   neglectTicks = 0;
   goodTicks = 0;
   evoDeclinedLv = 0;

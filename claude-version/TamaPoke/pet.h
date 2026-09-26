@@ -35,6 +35,8 @@ static inline uint32_t timeLeft(uint32_t deadline) {
 
 // ceremonias de fin de ciclo
 enum : uint8_t { CER_NONE = 0, CER_FAREWELL, CER_RUNAWAY, CER_RELEASE };
+// ko10.9: causa del ultimo descuido
+enum : uint8_t { MW_NONE = 0, MW_FOOD, MW_JOY, MW_ENERGY, MW_HYGIENE };
 
 enum PetMood : uint8_t { MOOD_HAPPY, MOOD_SAD, MOOD_EATING, MOOD_SLEEPING };
 
@@ -91,6 +93,9 @@ public:
   int16_t speciesId = -1;      // numero de Pokedex (1-251), -1 = huevo
   int16_t prevSpeciesId = -1;  // para la animacion de evolucion
   uint8_t careMistakes = 0;   // descuidos: cada uno retrasa la evolucion 1 nivel
+  // ko10.9: por que fue el ultimo descuido (la ficha lo cuenta al tocar "Fallos")
+  uint8_t mistWhy = 0;        // MW_*: que barra cayo a 10 o menos
+  uint32_t mistEpoch = 0;     // cuando (hora local; 0 = sin reloj)
   bool sleeping = false;
   uint32_t lastSeenEpoch = 0;   // ultima hora RTC vista (para progresion offline)
   uint8_t ceremony = CER_NONE;  // despedida/escapada/liberacion en curso
