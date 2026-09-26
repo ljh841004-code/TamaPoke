@@ -236,6 +236,7 @@ static void scenes(bool ko, const char *sfx) {
   box.add(16, 14, false, false, gMockEpoch - 86400);
   box.add(129, 9, true, true, gMockEpoch - 3600);
   box.add(143, 22, false, true, gMockEpoch);
+  box.add(16, 18, false, true, gMockEpoch);   // ko10.4: repetidos (x2 Pidgey)
   openBox(); render(); shot("10_box");
   boxSel = 1; render(); shot("11_box_detail");
   // pokedex

@@ -95,9 +95,22 @@ void renderBox() {
     if (i >= box.count()) break;
     const BoxMon &m = box.at(i);
     int y = BOX_ROW_Y + r * (BOX_ROW_H + BOX_ROW_GAP);
-    gfx->fillRoundRect(73, y, 320, BOX_ROW_H, 10, UI_WHITE);
+    // ko10.4: repetidos: fondo de color por especie y "xN" (cuantos hay en la caja)
+    uint8_t same = 0;
+    for (uint8_t j = 0; j < box.count(); j++) if (box.at(j).dex == m.dex) same++;
+    static const uint16_t DUP_BG[6] = {
+      C565(0xff, 0xe4, 0xec), C565(0xe0, 0xf0, 0xff), C565(0xe6, 0xf8, 0xdc),
+      C565(0xff, 0xf2, 0xd0), C565(0xee, 0xe4, 0xff), C565(0xdc, 0xf6, 0xf2),
+    };
+    uint16_t rowBg = same > 1 ? DUP_BG[m.dex % 6] : UI_WHITE;
+    gfx->fillRoundRect(73, y, 320, BOX_ROW_H, 10, rowBg);
     gfx->drawRoundRect(73, y, 320, BOX_ROW_H, 10, UI_INK);
     drawThumbAt(m.dex, 104, y + BOX_ROW_H / 2, 1, false);
+    if (same > 1) {
+      char xn[8];
+      snprintf(xn, sizeof(xn), XT(X_DUP_COUNT_FMT), same);
+      drawBtn(300, y + 6, 44, 22, C565(0xf0, 0x7a, 0xa8), UI_WHITE, xn);
+    }
     char l[48];
     snprintf(l, sizeof(l), "%s%s", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex));
     gfx->setTextColor(UI_INK);
@@ -218,7 +231,14 @@ void renderSound() {
     int fw = (VOL_BAR_W - 4) * v / 100;
     if (fw > 0) gfx->fillRoundRect(VOL_BAR_X + 2, y + 36, fw, 12, 5, on ? UI_BAR_OK : 0x8410);
   }
-  drawBtn(143, 360, 180, 44, UI_BAR_OK, UI_WHITE, XT(X_VOL_DONE));
+  // ko10.4: duracion del fondo cargado (si sale 0:30 y la cancion era mas larga,
+  // el bgm.wav de la SD esta recortado: tools/prep_music.py)
+  uint32_t bs = audioBgmSeconds();
+  char bl[40];
+  if (bs) snprintf(bl, sizeof(bl), XT(X_BGM_LEN_FMT), (unsigned)(bs / 60), (unsigned)(bs % 60));
+  else snprintf(bl, sizeof(bl), "%s", XT(X_BGM_NONE));
+  drawFit(bl, 340, 300, 0x8410, 1);
+  drawBtn(143, 364, 180, 44, UI_BAR_OK, UI_WHITE, XT(X_VOL_DONE));
   gfx->flush();
 }
 

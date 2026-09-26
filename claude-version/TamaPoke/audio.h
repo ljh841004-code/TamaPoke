@@ -22,6 +22,7 @@ void audioBegin();          // init ES8311 + I2S + amplificador + tarea de audio
 void sfxPlay(uint8_t id);   // encola un efecto (no bloquea el loop)
 void audioSetEnabled(bool on);
 bool audioEnabled();
+uint32_t audioBgmSeconds();  // ko10.4: duracion de /mons/bgm.wav (0 = no hay o no valido)
 void audioSetSleeping(bool sleeping);  // dormida: amplificador apagado
 
 // Independent 0..100 levels, saved to NVS. 0=BGM, 1=cry, 2=system.

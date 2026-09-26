@@ -33,6 +33,7 @@ static std::atomic<uint32_t> musicRequest{0}; // bit 0: wild; upper bits: sessio
 static std::atomic<uint32_t> musicReload{0}, uploadRequest{0}, uploadAck{0};
 static std::atomic<bool> musicEnabled{false};
 static std::atomic<bool> musicPaused{false};  // fork KO (ko5): pantalla apagada
+static std::atomic<uint32_t> bgmSeconds{0};    // ko10.4: duracion de bgm.wav (0 = no cargado)
 static const char *const volumeKeys[] = {"volBgm", "volCry", "volSfx"};
 
 // El NS4150B tarda bastante mas de 8 ms en estabilizarse tras cada apagado, asi
@@ -163,6 +164,11 @@ static void audioTask(void *) {
               const char *path = request & 1u ? "/mons/battle_wild.wav" : "/mons/bgm.wav";
               if (!music.open(SD_MMC.open(path, FILE_READ), resume))
                 Serial.printf("AUDIO invalid/missing WAV: %s\n", path);
+              else {  // ko10.4: la duracion real del fichero (para ver si esta recortado)
+                uint32_t sec = music.lengthBytes() / (SAMPLE_RATE * 2);
+                Serial.printf("AUDIO %s: %u:%02u\n", path, sec / 60, sec % 60);
+                if (!(request & 1u)) bgmSeconds.store(sec);
+              }
             }
           }
           if (audible && !musicPaused.load()) musicSamples = music.read(musicBlock, 256);
@@ -229,6 +235,7 @@ static void queueWav(const char *path, uint8_t kind) {
   if (!xQueueSend(gQ, &c, 0)) free(pcm);
 }
 void audioLoadMusic() { musicEnabled = true; musicReload.fetch_add(1); }
+uint32_t audioBgmSeconds() { return bgmSeconds.load(); }
 void audioSetMusicPaused(bool paused) { musicPaused = paused; }
 void audioSetBattleMusic(bool active, bool newSession) {
   uint32_t value = musicRequest.load();

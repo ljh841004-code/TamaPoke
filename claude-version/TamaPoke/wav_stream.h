@@ -19,6 +19,7 @@ public:
   void close() { file.close(); dataStart = dataBytes = played = 0; at = count = 0; }
   bool valid() const { return dataBytes != 0; }
   uint32_t position() const { return played; }
+  uint32_t lengthBytes() const { return dataBytes; }  // ko10.4: duracion = bytes / 32000 s
   bool open(Reader input, uint32_t resume = 0) {
     close(); file = input;
     uint8_t h[16];

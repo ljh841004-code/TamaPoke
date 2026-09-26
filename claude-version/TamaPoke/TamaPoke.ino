@@ -3065,16 +3065,32 @@ void drawBattery() {
   }
 }
 
+// ko10.4: texto con contorno de 1-2 px (se lee sobre cielo nublado, nieve o nubes)
+void printOutlined(int x, int y, const char *s, uint8_t size, uint16_t fg, uint16_t edge, int w) {
+  setSize(size);
+  gfx->setTextColor(edge);
+  for (int dy = -w; dy <= w; dy++)
+    for (int dx = -w; dx <= w; dx++) {
+      if (!dx && !dy) continue;
+      if (dx * dx + dy * dy > w * w + 1) continue;  // redondeado
+      setCur(x + dx, y + dy);
+      printT(s);
+    }
+  gfx->setTextColor(fg);
+  setCur(x, y);
+  printT(s);
+}
+
 void drawHeader(const char *name, uint16_t nameColor, const char *msg) {
   drawBattery();
-  gfx->setTextColor(nameColor);
-  setSize(3);
-  setCur(centerX(name, 3), 52);
-  printT(name);
-  gfx->setTextColor(inkColor());
-  setSize(2);
-  setCur(centerX(msg, 2), 90);
-  printT(msg);
+  // ko10.4: contorno que contrasta con el color del texto (letra clara -> borde
+  // oscuro; letra oscura -> borde blanco): se lee con nubes, nieve o de noche
+  auto edgeFor = [](uint16_t c) -> uint16_t {
+    int lum = ((c >> 11) & 31) * 2 + ((c >> 5) & 63) * 2 + (c & 31);  // aprox. 0..250
+    return lum > 140 ? C565(0x1c, 0x22, 0x30) : UI_WHITE;
+  };
+  printOutlined(centerX(name, 3), 52, name, 3, nameColor, edgeFor(nameColor), 2);
+  printOutlined(centerX(msg, 2), 90, msg, 2, inkColor(), edgeFor(inkColor()), 1);
 }
 
 // animacion de la ceremonia (10s): despedida = reverencia con corazones y se
