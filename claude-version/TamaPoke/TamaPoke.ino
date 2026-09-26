@@ -2176,15 +2176,18 @@ void drawClockBtn(int x, int y, const char *l) {
 }
 
 // pildoras de idioma centradas en y; rellena la activa
-#define LANG_PILL_Y 296
+#define LANG_PILL_Y 272   // ko10.3: todo 20-30 px mas arriba (la version se cortaba abajo)
 #define LANG_PILL_H 30
 #define LANG_PILL_X 336          // pildora de idioma (cicla LANG_COUNT al tocar)
 #define LANG_PILL_W 96
 #define WIFI_PILL_X 178   // fork KO
 #define WIFI_PILL_W 110
 #define RST_PILL_X 163    // fork KO (ko8): [nuevo comienzo]
-#define RST_PILL_Y 398
+#define RST_PILL_Y 374
 #define RST_PILL_H 30
+#define CLK_BTN_Y 168   // botones +/- (antes 190)
+#define CLK_OK_Y 316    // [OK] (antes 340)
+#define CLK_VER_Y 414   // version (antes 436: con "ko10.2" ya rozaba el borde)
 #define RST_PILL_W 140
 static const char *const LANG_CODES[LANG_COUNT] = { "ES", "EN", "FR", "DE", "IT", "PT", "JA", "KO" };
 
@@ -2199,18 +2202,18 @@ void renderClock() {
   char t[8];
   snprintf(t, sizeof(t), "%02d:%02d", clockH, clockM);
   setSize(7);
-  setCur(centerX(t, 7), 108);  // ko8: centrado de verdad con cualquier fuente
+  setCur(centerX(t, 7), 96);  // ko8: centrado de verdad con cualquier fuente
   printT(t);
 
-  drawClockBtn(104, 190, "-");  // hora -
-  drawClockBtn(170, 190, "+");  // hora +
-  drawClockBtn(252, 190, "-");  // min -
-  drawClockBtn(318, 190, "+");  // min +
+  drawClockBtn(104, CLK_BTN_Y, "-");  // hora -
+  drawClockBtn(170, CLK_BTN_Y, "+");  // hora +
+  drawClockBtn(252, CLK_BTN_Y, "-");  // min -
+  drawClockBtn(318, CLK_BTN_Y, "+");  // min +
   setSize(2);
   gfx->setTextColor(UI_INK);
-  setCur(120, 256);
+  setCur(120, CLK_BTN_Y + 64);
   printT(T(S_HOUR));
-  setCur(276, 256);
+  setCur(276, CLK_BTN_Y + 64);
   printT(T(S_MIN));
 
   // interruptor de sonido (izquierda de la fila de idioma)
@@ -2242,10 +2245,10 @@ void renderClock() {
   setCur(WIFI_PILL_X + (WIFI_PILL_W - textW("WiFi", 2)) / 2, LANG_PILL_Y + 8);
   printT("WiFi");
 
-  gfx->fillRoundRect(133, 340, 200, 48, 14, UI_BAR_OK);
+  gfx->fillRoundRect(133, CLK_OK_Y, 200, 48, 14, UI_BAR_OK);
   gfx->setTextColor(UI_BG_DAY);
   setSize(3);
-  setCur(CX - 18, 352);
+  setCur(CX - 18, CLK_OK_Y + 12);
   printT("OK");
 
   // fork KO (ko8): [nuevo comienzo] (abre su propia pantalla de confirmacion)
@@ -2258,13 +2261,13 @@ void renderClock() {
   snprintf(ver, sizeof(ver), "TamaPoke v%s", FW_VERSION);
   gfx->setTextColor(UI_INK);
   setSize(1);
-  setCur(centerX(ver, 1), 436);
+  setCur(centerX(ver, 1), CLK_VER_Y);
   printT(ver);
   gfx->flush();
 }
 
 void clockTap(int16_t x, int16_t y) {
-  if (y >= 190 && y <= 248) {  // fila de botones +/-
+  if (y >= CLK_BTN_Y && y <= CLK_BTN_Y + 58) {  // fila de botones +/-
     if (x >= 104 && x < 162) clockH = (clockH + 23) % 24;
     else if (x >= 170 && x < 228) clockH = (clockH + 1) % 24;
     else if (x >= 252 && x < 310) clockM = (clockM + 59) % 60;
@@ -2290,7 +2293,7 @@ void clockTap(int16_t x, int16_t y) {
       return;
     }
   }
-  if (y >= 340 && y <= 388 && x >= 133 && x <= 333) { applyClock(); return; }
+  if (y >= CLK_OK_Y && y <= CLK_OK_Y + 48 && x >= 133 && x <= 333) { applyClock(); return; }
   if (y >= RST_PILL_Y && y < RST_PILL_Y + RST_PILL_H && x >= RST_PILL_X && x < RST_PILL_X + RST_PILL_W) {
     openReset();
     return;
