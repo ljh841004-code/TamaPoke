@@ -27,7 +27,9 @@ struct __attribute__((packed)) LinkPet {
   uint16_t lvl, atk, def, spe;      // stats de batalla tal como las calcula su dueno
 };
 
-#define LINK_PROTO_VER 1
+// 2 (ko8): el apodo del intercambio pasa de 12 a 20 bytes (hangul). Con otro
+// tamano de mensaje la version 1 ni se oye (se descarta por longitud).
+#define LINK_PROTO_VER 2
 
 void linkStart(LinkMode mode, const LinkPet &mine);
 void linkStop();

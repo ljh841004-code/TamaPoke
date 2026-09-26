@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 
 extern uint32_t gMockMillis, gMockEpoch;
+extern bool gMockPortal;
 extern const char *gSdRoot;
 
 static void shot(const char *name) {
@@ -47,6 +48,20 @@ static void scenes(bool ko, const char *sfx) {
   pet.exp = expForLevel(17) + 400;  // fork KO (ko7): barra de EXP
   cardPage = 3;
   render(); shot("03b_card_progress");
+  cardPage = 0; render(); shot("03c_card_profile");
+  cardPage = 2; render(); shot("03d_card_medals");
+  closeAll(); feedMenuUntil = gMockMillis + 5000; render(); shot("01b_feed_menu");
+  closeAll(); confirmUntil = gMockMillis + 5000; render(); shot("01c_confirm_release"); confirmUntil = 0;
+  closeAll(); openLinkMenu(); render(); shot("24_link_menu");
+  closeAll(); cardOpen = true; cardPage = 0; openKeyboard(); nameBuf[0] = 0; nameLen = 0;
+  for (uint8_t k : { CJI_K_B, CJI_K_B, CJI_K_I, CJI_K_DOT, CJI_K_O, CJI_K_I, CJI_K_N, CJI_K_N })
+    cjiPress(kbCji, k);
+  render(); shot("27_keyboard_ko");
+  kbCommit(); kbKo = false; render(); shot("28_keyboard_abc");
+  kbOpen = false;
+  closeAll(); startSack(); tick(300); render(); shot("25_sack");
+  closeAll(); startGame(); tick(300); render(); shot("26_ball_game");
+  closeAll();
   // entrenamiento
   closeAll(); openTrainMenu();
   render(); shot("04_train_menu");
@@ -105,6 +120,8 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); openClock(); render(); shot("15_clock_settings");
   closeAll(); openSound(); render(); shot("16_sound");
   closeAll(); openNet(); render(); shot("18_net");
+  { gMockPortal = true; render(); shot("18b_portal_qr"); gMockPortal = false; }
+  closeAll(); openReset(); render(); shot("23_reset");
   closeAll(); openUpdate(); render(); shot("19_update");
   updState = UPD_NONE; xScreen = XS_UPD; render(); shot("22_update_nofile");
   closeAll(); galleryOpen = true; galleryDetail = 0; galleryDirty = true; render(); shot("20_dex_grid_hint");

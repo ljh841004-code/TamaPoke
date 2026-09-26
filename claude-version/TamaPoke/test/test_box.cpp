@@ -395,3 +395,192 @@ TEST(box, niveles_viejos_vuelven_a_5) {
   d.begin();
   CHECK_EQ(d.at(0).lvl, (uint16_t)5);
 }
+
+// ---------------------------------------------------------------- ko8: WiFi
+#include "../net_pick.h"
+
+TEST(net, guardadas_visibles_primero_por_senal_luego_abiertas) {
+  char saved[NET_MAX_SAVED][33] = { "HOME", "OFFICE", "PHONE" };
+  NetSeen seen[] = {
+    { "CAFE_FREE", -40, true }, { "OFFICE", -70, false }, { "PHONE", -50, false },
+    { "SUBWAY", -60, true }, { "CAFE_FREE", -45, true }, { "LOCKED", -30, false },
+    { "", -20, true },
+  };
+  NetCand c[NET_MAX_CAND];
+  int n = netPickCandidates(saved, 3, seen, 7, true, c, NET_MAX_CAND);
+  CHECK_EQ(n, 5);
+  CHECK_EQ(c[0].saved, (int8_t)2);   // PHONE -50
+  CHECK_EQ(c[1].saved, (int8_t)1);   // OFFICE -70
+  CHECK_EQ(c[2].saved, (int8_t)0);   // HOME no se ve: se intenta igual
+  CHECK_EQ(c[2].seen, (int8_t)-1);
+  CHECK_EQ(c[3].saved, (int8_t)-1);  // abierta mas fuerte, sin repetir
+  CHECK_EQ(std::string(seen[c[3].seen].ssid), std::string("CAFE_FREE"));
+  CHECK_EQ(std::string(seen[c[4].seen].ssid), std::string("SUBWAY"));
+  // sin permiso para abiertas
+  CHECK_EQ(netPickCandidates(saved, 3, seen, 7, false, c, NET_MAX_CAND), 3);
+  // nada guardado: solo abiertas (maximo 3)
+  NetSeen many[] = { { "A", -40, true }, { "B", -50, true }, { "C", -60, true }, { "D", -30, true } };
+  n = netPickCandidates(saved, 0, many, 4, true, c, NET_MAX_CAND);
+  CHECK_EQ(n, NET_MAX_OPEN);
+  CHECK_EQ(std::string(many[c[0].seen].ssid), std::string("D"));
+  CHECK_EQ(netPickCandidates(saved, 0, many, 0, true, c, NET_MAX_CAND), 0);
+}
+
+TEST(net, recordar_sube_arriba_y_topa_en_5) {
+  char s[NET_MAX_SAVED][33] = {};
+  char p[NET_MAX_SAVED][65] = {};
+  uint8_t n = 0;
+  netRememberFront(s, p, n, "A", "1");
+  netRememberFront(s, p, n, "B", "2");
+  netRememberFront(s, p, n, "A", "9");  // ya estaba: sube y cambia la clave
+  CHECK_EQ(n, (uint8_t)2);
+  CHECK_EQ(std::string(s[0]), std::string("A"));
+  CHECK_EQ(std::string(p[0]), std::string("9"));
+  CHECK_EQ(std::string(s[1]), std::string("B"));
+  for (const char *x : { "C", "D", "E", "F" }) netRememberFront(s, p, n, x, "");
+  CHECK_EQ(n, (uint8_t)5);
+  CHECK_EQ(std::string(s[0]), std::string("F"));
+  CHECK_EQ(std::string(s[4]), std::string("A"));  // B era la menos reciente: se perdio
+  netForget(s, p, n, 0);
+  CHECK_EQ(n, (uint8_t)4);
+  CHECK_EQ(std::string(s[0]), std::string("E"));
+  netForget(s, p, n, 9);  // fuera de rango: nada
+  CHECK_EQ(n, (uint8_t)4);
+}
+
+// ---------------------------------------------------------------- ko8: reset
+TEST(reset, borra_partida_y_conserva_ajustes) {
+  mockNvsReset();
+  Preferences raw;
+  raw.begin("tamapoke", false);
+  raw.putUChar("lang", 7);
+  raw.putBool("snd", false);
+  raw.putUChar("volBgm", 30);
+  Pet p;
+  p.begin();
+  if (p.awaitingStarter()) p.chooseStarter(4);
+  p.eggTap(); p.eggTap(); p.eggTap();
+  p.wildWins = 9;
+  p.saveNow();
+  Box b; b.begin(); b.add(25, 10, false, true, 0);
+  DexLog d; d.begin(); d.seen(16, 100);
+  p.wipeGameKeepSettings();
+  b.wipe();
+  d.wipe();
+  CHECK_EQ(raw.getUChar("lang", 0), (uint8_t)7);
+  CHECK_EQ(raw.getBool("snd", true), false);
+  CHECK_EQ(raw.getUChar("volBgm", 0), (uint8_t)30);
+  CHECK(!raw.isKey("volCry"));   // lo que no existia no aparece
+  CHECK(!raw.isKey("dexn"));
+  CHECK(!raw.isKey("init"));
+  Pet q;
+  q.begin();
+  CHECK(q.awaitingStarter());    // vuelve a elegir inicial
+  CHECK_EQ(q.registeredCount(), (uint16_t)0);
+  CHECK_EQ(q.wildWins, (uint16_t)0);
+  Box b2; b2.begin();
+  CHECK_EQ(b2.count(), (uint8_t)0);
+  DexLog d2; d2.begin();
+  CHECK(!d2.wasSeen(16));
+}
+
+// ---------------------------------------------------------------- ko8: cheonjiin
+#include "../cji.h"
+
+static std::string cjiType(const std::vector<uint8_t> &keys, bool final = false) {
+  Cji c;
+  for (uint8_t k : keys) cjiPress(c, k);
+  char buf[64];
+  cjiCompose(c, buf, sizeof(buf), final);
+  return buf;
+}
+
+TEST(cji, silabas_basicas) {
+  using namespace std;
+  enum { I = CJI_K_I, D = CJI_K_DOT, E = CJI_K_EU, G = CJI_K_G, N = CJI_K_N, T = CJI_K_D,
+         B = CJI_K_B, S = CJI_K_S, J = CJI_K_J, SP = CJI_K_SPACE, O = CJI_K_O, DEL = CJI_K_DEL };
+  CHECK_EQ(cjiType({ G, I, D }), string("가"));
+  CHECK_EQ(cjiType({ G, I, D, D }), string("갸"));
+  CHECK_EQ(cjiType({ G }), string("ㄱ"));
+  CHECK_EQ(cjiType({ G, G }), string("ㅋ"));
+  CHECK_EQ(cjiType({ G, G, G }), string("ㄲ"));
+  CHECK_EQ(cjiType({ G, G, G, G }), string("ㄱ"));
+  CHECK_EQ(cjiType({ O, O }), string("ㅁ"));
+  CHECK_EQ(cjiType({ O, O, O }), string("ㅇ"));
+  // 한글
+  CHECK_EQ(cjiType({ S, S, I, D, N, G, E, N, N }), string("한글"));
+  // 파이리 / 꼬부기
+  CHECK_EQ(cjiType({ B, B, I, D, O, I, N, N, I }), string("파이리"));
+  CHECK_EQ(cjiType({ G, G, G, D, E, B, E, D, G, I }), string("꼬부기"));
+  // 각각: 띄움 separa la misma tecla
+  CHECK_EQ(cjiType({ G, I, D, G, SP, G, I, D, G }), string("각각"));
+  // sin 띄움, la segunda pulsacion cambia la consonante: 갘
+  CHECK_EQ(cjiType({ G, I, D, G, G }), string("갘"));
+  // final doble y paso de la final a la silaba siguiente
+  CHECK_EQ(cjiType({ T, I, D, N, N, G }), string("닭"));
+  CHECK_EQ(cjiType({ T, I, D, N, N, G, I, D }), string("달가"));
+  // vocales compuestas
+  CHECK_EQ(cjiType({ O, D, E, I, D }), string("와"));
+  CHECK_EQ(cjiType({ O, E, D, D, I }), string("워"));
+  CHECK_EQ(cjiType({ O, E, I }), string("의"));
+  CHECK_EQ(cjiType({ O, I, D, I }), string("애"));
+  CHECK_EQ(cjiType({ O, D, I, I }), string("에"));
+  // ㄸ no puede ser final: empieza silaba nueva
+  CHECK_EQ(cjiType({ G, I, D, T, T, T }), string("가ㄸ"));
+  // espacio
+  CHECK_EQ(cjiType({ G, I, D, SP, SP, N, I, D }), string("가 나"));
+}
+
+TEST(cji, trazos_a_medias_y_borrar) {
+  using namespace std;
+  enum { I = CJI_K_I, D = CJI_K_DOT, E = CJI_K_EU, G = CJI_K_G, DEL = CJI_K_DEL };
+  CHECK_EQ(cjiType({ G, D }), string("ㄱㆍ"));
+  CHECK_EQ(cjiType({ G, D }, true), string("ㄱ"));     // al guardar no queda el punto
+  CHECK_EQ(cjiType({ G, D, D }), string("ㄱㆍㆍ"));
+  CHECK_EQ(cjiType({ G, I, D, D, DEL }), string("가"));  // borra un trazo
+  CHECK_EQ(cjiType({ G, I, D, DEL }), string("기"));
+  CHECK_EQ(cjiType({ G, I, DEL }), string("ㄱ"));
+  CHECK_EQ(cjiType({ G, I, DEL, DEL }), string(""));
+  CHECK_EQ(cjiType({ DEL, DEL }), string(""));
+}
+
+TEST(cji, tope_de_6_silabas) {
+  enum { I = CJI_K_I, D = CJI_K_DOT, G = CJI_K_G };
+  Cji c;
+  for (int k = 0; k < 6; k++) {
+    CHECK(cjiPress(c, G));
+    CHECK(cjiPress(c, I));
+    CHECK(cjiPress(c, D));
+  }
+  char buf[64];
+  CHECK_EQ(cjiCompose(c, buf, sizeof(buf), true), 18);
+  CHECK(cjiPress(c, G));   // cabe como final de la sexta: ...각
+  CHECK(!cjiPress(c, I));  // pero una septima silaba (..가기) no
+  CHECK_EQ(cjiCompose(c, buf, sizeof(buf), true), 18);
+  CHECK_EQ(std::string(buf), std::string("가가가가가각"));
+}
+
+TEST(trade, apodo_en_hangul_viaja_y_se_filtra) {
+  Pet a;
+  mockNvsReset();
+  a.begin();
+  if (a.awaitingStarter()) a.chooseStarter(4);
+  a.eggTap(); a.eggTap(); a.eggTap();
+  TradePet t;
+  a.exportTrade(t);
+  t.dex = 25;
+  strcpy(t.nick, "피카 츄");
+  CHECK(a.importTrade(t, 10));
+  CHECK_EQ(std::string(a.nick), std::string("피카 츄"));
+  // UTF-8 roto o fuera del hangul: se descarta
+  Pet b;
+  mockNvsReset();
+  b.begin();
+  if (b.awaitingStarter()) b.chooseStarter(4);
+  b.eggTap(); b.eggTap(); b.eggTap();
+  memset(t.nick, 0, sizeof(t.nick));
+  const char bad[] = "\xE3\x81\x82" "AB" "\xEA\xB0" "\xEA\xB0\x80";  // あ AB (roto) 가
+  memcpy(t.nick, bad, sizeof(bad) - 1);
+  CHECK(b.importTrade(t, 10));
+  CHECK_EQ(std::string(b.nick), std::string("AB가"));
+}

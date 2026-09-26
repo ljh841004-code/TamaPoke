@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko7)
+# TamaPoke KO (v1.17-ko8)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -46,8 +46,11 @@
 ### WiFi 시간 맞추기
 1. 메인 화면에서 **아래로 스와이프** → 시간 설정 화면 → 가운데 **WiFi** 버튼
 2. **WiFi 설정하기** → 화면에 나온 `TamaPoke-XXXX` WiFi에 휴대폰으로 연결 (비밀번호 `tamapoke`)
+   (ko8: 화면의 큰 **QR코드**를 휴대폰 카메라로 찍으면 바로 연결돼요)
 3. 설정 페이지가 자동으로 열려요 (안 열리면 브라우저에서 `192.168.4.1`) → **WiFi 목록에서 고르기**
    (ko7, 안 보이면 [다시 검색] 또는 이름 직접 입력) → 비밀번호·시간대 입력 → 저장
+   (ko8: WiFi는 **5개까지** 저장되고, 켤 때 신호가 가장 센 것으로 맞춰요. 저장된 게 안 되면
+   비밀번호 없는 WiFi로 시간만 받아요. 네트워크 화면 [개방 WiFi 켬/끔])
 4. 바로 시간을 맞추고, 이후엔 켤 때마다 + 하루 한 번 자동으로 맞춰요
 
 ※ **2.4GHz WiFi만** 됩니다 (ESP32 제한). 시리얼로도 설정 가능: `WIFI 이름|비밀번호`
@@ -140,6 +143,8 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ PC 테스트 130개 통과 (AddressSanitizer 포함): 배틀 계산, 타입 상성, 교환 데이터 검증,
   한국어 조사(은/는, 이/가…), **두 기기 통신 프로토콜을 패킷 60% 손실 상황까지 시뮬레이션**
 - ✅ 실제 Arduino_GFX 그리기 코드를 PC에서 돌려 화면 캡처로 레이아웃 확인 (한국어/영어)
+- ✅ ko8: 컴파일 2.68MB / 3MB (글꼴 약 1MB), PC 테스트 174개 (+7: WiFi 선택 순서, WiFi 5개 기억,
+  새로 시작, 천지인 조합 3종, 한글 이름 교환) + 파이썬 23개. WiFi QR은 PC에서 그린 화면을 OpenCV로 읽어 확인
 - ✅ ko7: 컴파일 1.83MB / 3MB, PC 테스트 167개 (+9: 경험치 곡선, Lv.100 상한, 배틀/시간 EXP,
   진화 레벨 규칙, 옛 저장 Lv.1, 보관함 Lv.5). 이펙트 14종은 PC 렌더러로 그림 확인
 - ✅ ko6: USB 드라이브 제거, 기본 USB 방식으로 컴파일 1.82MB / 3MB, PC 테스트 158개
@@ -163,7 +168,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - `audio.h/.cpp`, `wav_stream.h`, `music_route.h`, `sd_lock.h` – SD카드 소리 (v1.23에서 이식, ko2) / `sdmon.cpp` – SD 접근 잠금
 - `sdupdate.h/.cpp` – SD카드 업데이트 (ko5) / `tools/get_cries.py` – 최신 울음소리 받기 (ko5)
 - `box.h/.cpp` – 보관함과 도감 기록 (ko4) / `train.ino` – 훈련 메뉴와 방어·속도 게임 (ko4) /
-  `ui_more.ino` – 보관함·소리 설정 화면 (ko4) / `hangul_ks.h` – 한글 Noto 글꼴 (`tools/gen_hangul_ks.py`로 생성)
+  `ui_more.ino` – 보관함·소리 설정 화면 (ko4) / `font_ko.h` – Noto Sans KR 부드러운 글꼴 (ko8, `tools/gen_font_ko.py`로 생성) / `cji.h` – 천지인 키보드 (ko8) / `net_pick.h` – WiFi 선택 순서 (ko8)
 - `test/render/` – 화면을 PC에서 그려 PNG로 저장 (`run.sh <SD 폴더>`)
 - `pet.h/.cpp` – 배틀 보상, 교환, 전적 저장 / `dex.h` – 타입 정보 추가 (`tools/gen_dex.py`로 생성)
 - `test/test_battle.cpp`, `test/test_link.cpp`, `test/test_i18n_ext.cpp` – 새 테스트

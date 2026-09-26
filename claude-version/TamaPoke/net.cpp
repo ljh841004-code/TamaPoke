@@ -1,6 +1,7 @@
 // WiFi + NTP + portal de configuracion. Ver net.h.
 #include "net.h"
 #include "link.h"
+#include "net_pick.h"
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
@@ -9,15 +10,26 @@
 #include <esp_mac.h>
 #include <time.h>
 
-#define NET_CONNECT_MS 20000UL
-#define NET_NTP_MS 15000UL
+#define NET_CONNECT_MS 12000UL   // ko8: por red (hay varias que probar)
+#define NET_NTP_MS 12000UL
+#define NET_SCAN_MS 9000UL
 #define NET_AUTO_EVERY_MS (24UL * 3600UL * 1000UL)
 #define NET_BOOT_DELAY_MS 6000UL
 #define NET_PORTAL_MS (10UL * 60UL * 1000UL)  // el portal se cierra solo a los 10 min
 #define NET_AP_PASS "tamapoke"
 
+// fork KO (ko8): hasta 5 WiFi guardadas (la 0 es la mas reciente) y, si se
+// permite, las abiertas de alrededor. gSsid = la que se esta probando / la
+// ultima que funciono (para la pantalla).
+static char gSaved[NET_MAX_SAVED][33];
+static char gSavedPass[NET_MAX_SAVED][65];
+static uint8_t gNSaved = 0;
+static bool gOpenOk = true;
 static char gSsid[33] = "";
-static char gPass[65] = "";
+static NetCand gCand[NET_MAX_CAND];
+static char gCandSsid[NET_MAX_CAND][33];
+static int gNCand = 0, gCandI = 0;
+static bool gAnyConnected = false;
 static int16_t gTz = 540;
 static bool gAuto = true;
 static uint32_t gLastSync = 0;
@@ -38,8 +50,25 @@ static DNSServer *gDns = nullptr;
 static void loadCfg() {
   Preferences p;
   p.begin("tpnet", true);
-  p.getString("ssid", gSsid, sizeof(gSsid));
-  p.getString("pass", gPass, sizeof(gPass));
+  memset(gSaved, 0, sizeof(gSaved));
+  memset(gSavedPass, 0, sizeof(gSavedPass));
+  gNSaved = 0;
+  if (p.isKey("n")) {
+    uint8_t n = p.getUChar("n", 0);
+    for (uint8_t i = 0; i < n && i < NET_MAX_SAVED; i++) {
+      char k[4] = { 's', (char)('0' + i), 0 };
+      p.getString(k, gSaved[gNSaved], 33);
+      k[0] = 'p';
+      p.getString(k, gSavedPass[gNSaved], 65);
+      if (gSaved[gNSaved][0]) gNSaved++;
+    }
+  } else if (p.isKey("ssid")) {  // ko7 y antes: una sola red
+    p.getString("ssid", gSaved[0], 33);
+    p.getString("pass", gSavedPass[0], 65);
+    if (gSaved[0][0]) gNSaved = 1;
+  }
+  gOpenOk = p.getBool("open", true);
+  strcpy(gSsid, gSaved[0]);
   gTz = p.getShort("tz", 540);
   gAuto = p.getBool("auto", true);
   gLastSync = p.getUInt("lsync", 0);
@@ -50,8 +79,22 @@ static void loadCfg() {
 static void saveCfg() {
   Preferences p;
   p.begin("tpnet", false);
-  p.putString("ssid", gSsid);
-  p.putString("pass", gPass);
+  p.putUChar("n", gNSaved);
+  for (uint8_t i = 0; i < NET_MAX_SAVED; i++) {
+    char k[4] = { 's', (char)('0' + i), 0 };
+    if (i < gNSaved) {
+      p.putString(k, gSaved[i]);
+      k[0] = 'p';
+      p.putString(k, gSavedPass[i]);
+    } else {
+      p.remove(k);
+      k[0] = 'p';
+      p.remove(k);
+    }
+  }
+  p.remove("ssid");  // formato de ko7: ya migrado
+  p.remove("pass");
+  p.putBool("open", gOpenOk);
   p.putShort("tz", gTz);
   p.putBool("auto", gAuto);
   p.putUInt("lsync", gLastSync);
@@ -65,8 +108,13 @@ void netBegin() {
   snprintf(gApName, sizeof(gApName), "TamaPoke-%02X%02X", mac[4], mac[5]);
 }
 
-bool netConfigured() { return gSsid[0] != 0; }
-const char *netSsid() { return gSsid; }
+bool netConfigured() { return gNSaved > 0; }
+const char *netSsid() { return gSsid[0] ? gSsid : gSaved[0]; }
+uint8_t netSavedCount() { return gNSaved; }
+const char *netSavedSsid(uint8_t i) { return i < gNSaved ? gSaved[i] : ""; }
+bool netOpenAllowed() { return gOpenOk; }
+void netSetOpenAllowed(bool on) { gOpenOk = on; saveCfg(); }
+static bool netCanSync() { return gNSaved > 0 || gOpenOk; }
 int16_t netTzMin() { return gTz; }
 void netSetTzMin(int16_t m) {
   if (m < -720) m = -720;
@@ -80,7 +128,7 @@ uint32_t netLastSync() { return gLastSync; }
 bool netPortalOn() { return gPortal; }
 const char *netApName() { return gApName; }
 NetState netState() { return gState; }
-bool netBusy() { return gPortal || gState == NET_CONNECTING || gState == NET_NTP; }
+bool netBusy() { return gPortal || gState == NET_SCAN || gState == NET_CONNECTING || gState == NET_NTP; }
 
 static void radioOff() {
   WiFi.disconnect(true, false);
@@ -89,30 +137,88 @@ static void radioOff() {
 
 static void onSntp(struct timeval *) { gSntpDone = true; }
 
+// ko8: primero se escanea y luego se prueban las candidatas en orden (net_pick.h)
 void netSyncNow() {
-  if (!netConfigured() || gPortal || linkActive()) return;
-  if (gState == NET_CONNECTING || gState == NET_NTP) return;
+  if (!netCanSync() || gPortal || linkActive()) return;
+  if (netBusy()) return;
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(true);
-  WiFi.begin(gSsid, gPass);
-  gState = NET_CONNECTING;
+  WiFi.scanDelete();
+  WiFi.scanNetworks(true);
+  gState = NET_SCAN;
   gT0 = millis();
-  Serial.printf("NET conectando a '%s'\n", gSsid);
+  gAnyConnected = false;
+  Serial.println("NET buscando WiFi...");
+}
+
+static void tryCand(int i, uint32_t now) {
+  gCandI = i;
+  const NetCand &c = gCand[i];
+  strcpy(gSsid, gCandSsid[i]);
+  WiFi.disconnect(false, false);
+  if (c.saved >= 0 && gSavedPass[c.saved][0]) WiFi.begin(gSsid, gSavedPass[c.saved]);
+  else WiFi.begin(gSsid);
+  gState = NET_CONNECTING;
+  gT0 = now;
+  Serial.printf("NET conectando a '%s'%s\n", gSsid, c.saved < 0 ? " (abierta)" : "");
+}
+
+// la candidata actual fallo: la siguiente, o se acabo
+static void nextCand(uint32_t now) {
+  if (gCandI + 1 < gNCand) { tryCand(gCandI + 1, now); return; }
+  radioOff();
+  gState = gAnyConnected ? NET_FAIL_NTP : NET_FAIL_WIFI;
+  strcpy(gSsid, gSaved[0]);
+  Serial.println(gAnyConnected ? "NET fallo: NTP" : "NET fallo: WiFi");
+}
+
+static void scanDone(uint32_t now) {
+  int n = WiFi.scanComplete();
+  if (n < 0) n = 0;
+  if (n > 40) n = 40;
+  static String names[40];
+  NetSeen seen[40];
+  for (int i = 0; i < n; i++) {
+    names[i] = WiFi.SSID(i);
+    seen[i].ssid = names[i].c_str();
+    seen[i].rssi = (int16_t)WiFi.RSSI(i);
+    seen[i].open = WiFi.encryptionType(i) == WIFI_AUTH_OPEN;
+  }
+  gNCand = netPickCandidates(gSaved, gNSaved, seen, n, gOpenOk, gCand, NET_MAX_CAND);
+  for (int i = 0; i < gNCand; i++) {
+    const char *src = gCand[i].seen >= 0 ? seen[gCand[i].seen].ssid : gSaved[gCand[i].saved];
+    strncpy(gCandSsid[i], src, 32);
+    gCandSsid[i][32] = 0;
+  }
+  for (int i = 0; i < n; i++) names[i] = String();
+  WiFi.scanDelete();
+  Serial.printf("NET %d redes vistas, %d candidatas\n", n, gNCand);
+  if (!gNCand) {
+    radioOff();
+    gState = NET_FAIL_WIFI;
+    return;
+  }
+  tryCand(0, now);
 }
 
 bool netSetCreds(const char *ssid, const char *pass) {
-  if (!ssid || !ssid[0] || strlen(ssid) >= sizeof(gSsid)) return false;
-  if (pass && strlen(pass) >= sizeof(gPass)) return false;
-  strncpy(gSsid, ssid, sizeof(gSsid) - 1);
-  gSsid[sizeof(gSsid) - 1] = 0;
-  strncpy(gPass, pass ? pass : "", sizeof(gPass) - 1);
-  gPass[sizeof(gPass) - 1] = 0;
+  if (!ssid || !ssid[0] || strlen(ssid) > 32) return false;
+  if (pass && strlen(pass) > 64) return false;
+  netRememberFront(gSaved, gSavedPass, gNSaved, ssid, pass);
+  strcpy(gSsid, gSaved[0]);
   saveCfg();
   return true;
 }
 
+void netForgetSaved(uint8_t i) {
+  netForget(gSaved, gSavedPass, gNSaved, i);
+  strcpy(gSsid, gSaved[0]);
+  saveCfg();
+}
+
 void netClearCreds() {
-  gSsid[0] = gPass[0] = 0;
+  while (gNSaved) netForget(gSaved, gSavedPass, gNSaved, 0);
+  gSsid[0] = 0;
   saveCfg();
 }
 
@@ -147,7 +253,7 @@ static void pageRoot() {
     int r = WiFi.RSSI(i);
     const char *bars = r > -60 ? "\u2582\u2584\u2586" : r > -75 ? "\u2582\u2584" : "\u2582";
     String e = htmlEsc(s);
-    opts += "<option value=\"" + e + "\"" + (s == gSsid ? " selected" : "") + ">" + e + "  " + bars +
+    opts += "<option value=\"" + e + "\"" + ">" + e + "  " + bars +
             (WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "" : " \U0001F512") + "</option>";
     shown++;
   }
@@ -171,6 +277,9 @@ static void pageRoot() {
          "border:2px solid #ccc;border-radius:10px;margin-top:6px}"
          "button{margin-top:20px;width:100%;font-size:18px;padding:12px;border:0;"
          "border-radius:12px;background:#e7352c;color:#fff}small{color:#777}"
+         "h2{font-size:17px;margin:22px 0 6px}.ck{font-weight:normal}.ck input{width:auto;margin-right:8px}"
+         ".sv{display:flex;justify-content:space-between;padding:10px;border:1px solid #ddd;"
+         "border-radius:10px;margin-top:6px;font-size:16px}.sv a{color:#e7352c}"
          "</style></head><body><div class=c><h1>TamaPoke WiFi</h1>"
          "<p>시계를 인터넷 시간(NTP)에 맞추기 위한 WiFi를 설정해요.<br>"
          "<small>Set the WiFi used to sync the clock (NTP).</small></p>"
@@ -183,13 +292,25 @@ static void pageRoot() {
   h += opts;
   h += F("</select><small><a href=/rescan>다시 검색 (Rescan)</a></small>"
          "<label>WiFi 이름 (SSID) <small>직접 입력도 돼요</small></label>"
-         "<input id=s name=s required maxlength=32 value=\"");
-  h += htmlEsc(gSsid);
-  h += F("\"><label>비밀번호 (Password)</label>"
+         "<input id=s name=s maxlength=32 placeholder='(새 WiFi 추가)'>"
+         "<label>비밀번호 (Password)</label>"
          "<input name=p type=password maxlength=64 placeholder='(없으면 비워두기)'>"
          "<label>시간대 (Time zone)</label><select name=z>");
   h += tz;
-  h += F("</select><button>저장하고 시간 맞추기 / Save</button></form>"
+  // ko8: WiFi abiertas como ultimo recurso
+  h += F("</select><label class=ck><input type=checkbox name=o value=1");
+  if (gOpenOk) h += F(" checked");
+  h += F("> 비밀번호 없는 WiFi도 자동 연결 (시간만 받고 바로 끊어요)</label>"
+         "<button>저장하고 시간 맞추기 / Save</button></form>");
+  // ko8: WiFi guardadas (hasta 5): se prueba la de mejor senal
+  h += F("<h2>저장된 WiFi (최대 5개)</h2>");
+  if (!gNSaved) h += F("<p><small>아직 없어요</small></p>");
+  for (uint8_t i = 0; i < gNSaved; i++) {
+    h += "<div class=sv><span>" + htmlEsc(gSaved[i]) + "</span><a href=/del?i=" + String(i) +
+         " onclick=\"return confirm('삭제할까요?')\">삭제</a></div>";
+  }
+  h += F("<p><small>켤 때와 하루 한 번, 주변에서 신호가 가장 센 저장된 WiFi로 시간을 맞춰요."
+         " 저장된 WiFi가 없으면 비밀번호 없는 WiFi를 써요.</small></p>"
          "<p><small>2.4GHz WiFi만 됩니다. 5GHz는 안 돼요.</small></p></div>");
   // la busqueda aun no acabo: recargar sola en 3 s para que aparezca la lista
   if (scanning) h += F("<script>setTimeout(function(){location.reload()},3000)</script>");
@@ -200,8 +321,12 @@ static void pageRoot() {
 static void pageSave() {
   String s = gWeb->arg("s"), p = gWeb->arg("p"), z = gWeb->arg("z");
   s.trim();
-  bool ok = netSetCreds(s.c_str(), p.c_str());
+  // ko8: sin nombre solo se guardan los ajustes (zona horaria, WiFi abiertas)
+  bool ok = s.length() ? netSetCreds(s.c_str(), p.c_str()) : true;
+  gOpenOk = gWeb->hasArg("o");
   if (z.length()) netSetTzMin((int16_t)z.toInt());
+  else saveCfg();
+  ok = ok && (gNSaved > 0 || gOpenOk);
   String h = F("<!doctype html><html><head><meta charset=utf-8>"
                "<meta name=viewport content='width=device-width,initial-scale=1'></head>"
                "<body style='font-family:sans-serif;text-align:center;padding:40px'>");
@@ -214,6 +339,14 @@ static void pageSave() {
     gSyncAfterPortal = true;
     gPortalT0 = millis() - NET_PORTAL_MS + 2500;  // cerrar en 2,5 s (que llegue la respuesta)
   }
+}
+
+static void pageDel() {
+  int i = gWeb->arg("i").toInt();
+  if (gWeb->hasArg("i") && i >= 0 && i < gNSaved) netForgetSaved((uint8_t)i);
+  gPortalT0 = millis();
+  gWeb->sendHeader("Location", "/", true);
+  gWeb->send(302, "text/plain", "");
 }
 
 static void pageRescan() {
@@ -242,6 +375,7 @@ void netStartPortal() {
   gWeb->on("/", HTTP_GET, pageRoot);
   gWeb->on("/save", HTTP_POST, pageSave);
   gWeb->on("/rescan", HTTP_GET, pageRescan);
+  gWeb->on("/del", HTTP_GET, pageDel);
   gWeb->onNotFound(pageRedirect);
   gWeb->begin();
   gPortal = true;
@@ -283,7 +417,7 @@ uint32_t netPoll(uint32_t now) {
   }
 
   // sincronizacion automatica: poco despues de arrancar y luego cada 24 h
-  if (gAuto && netConfigured() && !linkActive() &&
+  if (gAuto && netCanSync() && !linkActive() &&
       (gState == NET_IDLE || gState == NET_OK || gState == NET_FAIL_WIFI || gState == NET_FAIL_NTP)) {
     bool due = !gBootTried ? (now > NET_BOOT_DELAY_MS)
                            : (since(now, gLastAutoTry) > (int32_t)NET_AUTO_EVERY_MS);
@@ -294,17 +428,19 @@ uint32_t netPoll(uint32_t now) {
     }
   }
 
-  if (gState == NET_CONNECTING) {
+  if (gState == NET_SCAN) {
+    if (WiFi.scanComplete() >= 0 || since(now, gT0) > (int32_t)NET_SCAN_MS) scanDone(now);
+  } else if (gState == NET_CONNECTING) {
     if (WiFi.status() == WL_CONNECTED) {
+      gAnyConnected = true;
       gSntpDone = false;
       sntp_set_time_sync_notification_cb(onSntp);
       configTime(0, 0, "pool.ntp.org", "time.google.com", "kr.pool.ntp.org");
       gState = NET_NTP;
       gT0 = now;
     } else if (since(now, gT0) > (int32_t)NET_CONNECT_MS) {
-      Serial.println("NET fallo: WiFi");
-      radioOff();
-      gState = NET_FAIL_WIFI;
+      Serial.printf("NET '%s' no conecta\n", gSsid);
+      nextCand(now);
     }
   } else if (gState == NET_NTP) {
     time_t utc = time(nullptr);
@@ -313,16 +449,24 @@ uint32_t netPoll(uint32_t now) {
       esp_sntp_stop();
       radioOff();
       gLastSync = local;
+      // una guardada que funciona pasa a ser la mas reciente (se prueba primero)
+      const NetCand &c = gCand[gCandI];
+      if (c.saved > 0) {  // copia: netRememberFront desplaza la propia lista
+        char ss[33], pp[65];
+        memcpy(ss, gSaved[c.saved], sizeof(ss));
+        memcpy(pp, gSavedPass[c.saved], sizeof(pp));
+        netRememberFront(gSaved, gSavedPass, gNSaved, ss, pp);
+      }
       saveCfg();
       gState = NET_OK;
       Serial.printf("NET hora ok: utc=%lu local=%lu\n", (unsigned long)utc, (unsigned long)local);
       return local;
     }
     if (since(now, gT0) > (int32_t)NET_NTP_MS) {
-      Serial.println("NET fallo: NTP");
+      // p. ej. WiFi abierta con pagina de registro: no deja salir a internet
+      Serial.printf("NET '%s' sin hora (NTP)\n", gSsid);
       esp_sntp_stop();
-      radioOff();
-      gState = NET_FAIL_NTP;
+      nextCand(now);
     }
   }
   return 0;
@@ -359,8 +503,9 @@ bool netSerialCommand(const String &line) {
     return true;
   }
   if (line == "NET") {
-    Serial.printf("ssid=%s tz=%d auto=%d state=%u last=%lu portal=%d\n", gSsid, gTz, gAuto,
-                  gState, (unsigned long)gLastSync, gPortal);
+    Serial.printf("ssid=%s tz=%d auto=%d open=%d state=%u last=%lu portal=%d\n", gSsid, gTz, gAuto,
+                  gOpenOk, gState, (unsigned long)gLastSync, gPortal);
+    for (uint8_t i = 0; i < gNSaved; i++) Serial.printf("  guardada %u: %s\n", i, gSaved[i]);
     Serial.println("DONE");
     return true;
   }

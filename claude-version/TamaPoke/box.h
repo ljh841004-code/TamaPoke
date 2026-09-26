@@ -32,6 +32,7 @@ public:
   bool take(uint8_t i, BoxMon &out);  // saca el i-esimo (para criarlo)
   bool release(uint8_t i);            // lo suelta
   int pickRandom() const;             // indice al azar, -1 si vacia
+  void wipe();                        // fork KO (ko8): [nuevo comienzo]
 private:
   Preferences prefs;
   BoxMon mons[BOX_MAX];
@@ -48,6 +49,7 @@ public:
   uint16_t seenCount(int16_t dex) const { return ok(dex) ? seenN[dex - 1] : 0; }
   uint16_t caughtCount(int16_t dex) const { return ok(dex) ? caughtN[dex - 1] : 0; }
   bool wasSeen(int16_t dex) const { return seenCount(dex) > 0 || caughtCount(dex) > 0; }
+  void wipe();   // fork KO (ko8): [nuevo comienzo]
 private:
   Preferences prefs;
   uint32_t first[151];

@@ -13,6 +13,7 @@
 
 enum NetState : uint8_t {
   NET_IDLE = 0, NET_CONNECTING, NET_NTP, NET_OK, NET_FAIL_WIFI, NET_FAIL_NTP, NET_PORTAL,
+  NET_SCAN,  // ko8: buscando WiFi (guardadas + abiertas)
 };
 
 void netBegin();
@@ -23,8 +24,14 @@ void netSetTzMin(int16_t m);
 bool netAuto();                  // sincronizar solo (al arrancar + cada 24 h)
 void netSetAuto(bool on);
 uint32_t netLastSync();          // hora local de la ultima sincronizacion (0 = nunca)
-bool netSetCreds(const char *ssid, const char *pass);  // guarda y sincroniza
-void netClearCreds();
+bool netSetCreds(const char *ssid, const char *pass);  // guarda (al principio de la lista)
+void netClearCreds();            // olvida todas
+// ko8: hasta 5 WiFi guardadas + WiFi abiertas como ultimo recurso
+uint8_t netSavedCount();
+const char *netSavedSsid(uint8_t i);
+void netForgetSaved(uint8_t i);
+bool netOpenAllowed();
+void netSetOpenAllowed(bool on);
 
 void netSyncNow();               // arranca una sincronizacion (no bloquea)
 bool netBusy();                  // la radio esta en uso por la red

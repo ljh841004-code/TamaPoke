@@ -335,3 +335,80 @@ void updateTap(int16_t x, int16_t y) {
   }
   if (y >= 320 || y < 72) xScreen = XS_NET;
 }
+
+// ======================================================================
+// ko8: [nuevo comienzo]. Borra la partida entera (mascota, pokedex, caja,
+// medallas, records) y conserva WiFi, sonido e idioma. Para que no se haga
+// sin querer: pantalla propia y un boton que hay que mantener 3 s.
+// ======================================================================
+#define RST_BTN_Y 286
+#define RST_BTN_R 66
+#define RST_HOLD_MS 3000UL
+bool rstHint = false;
+bool rstDone = false;
+
+void openReset() {
+  clockOpen = false;
+  rstHint = false;
+  rstDone = false;
+  xScreen = XS_RESET;
+  sfxPlay(SFX_TAP);
+}
+
+static bool rstInButton(int x, int y) {
+  int dx = x - CX, dy = y - RST_BTN_Y;
+  return dx * dx + dy * dy <= (RST_BTN_R + 10) * (RST_BTN_R + 10);
+}
+
+void doResetGame() {
+  rstDone = true;
+  renderReset();  // "empezando de nuevo..." antes de reiniciar
+  pet.wipeGameKeepSettings();
+  box.wipe();
+  dexLog.wipe();
+  sfxPlay(SFX_BYE);
+  delay(1200);
+  ESP.restart();
+}
+
+void renderReset() {
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  drawFit(XT(X_RESET_TITLE), 40, 300, UI_INK, 3);
+  if (rstDone) {
+    drawFit(XT(X_RESET_DONE), 220, 320, UI_INK, 3);
+    gfx->flush();
+    return;
+  }
+  drawFit(XT(X_RESET_L1), 96, 340, UI_INK, 2);
+  drawFit(XT(X_RESET_L2), 124, 340, UI_BAR_BAD, 2);
+  drawFit(XT(X_RESET_L3), 160, 340, UI_INK, 2);
+  // progreso de la pulsacion (dedo apoyado dentro del boton)
+  float p = 0;
+  if (wasPressed && rstInButton(tX0, tY0) && rstInButton(tXl, tYl)) {
+    p = (float)(millis() - tStart) / RST_HOLD_MS;
+    if (p >= 1.0f) { doResetGame(); return; }
+  }
+  gfx->fillCircle(CX, RST_BTN_Y, RST_BTN_R + 12, UI_TRACK);
+  // anillo que se llena en el sentido de las agujas del reloj
+  int segs = (int)(p * 60);
+  for (int i = 0; i < segs; i++) {
+    float a = -1.5708f + i * 6.2832f / 60;
+    gfx->fillCircle(CX + (int)(cosf(a) * (RST_BTN_R + 6)), RST_BTN_Y + (int)(sinf(a) * (RST_BTN_R + 6)), 6,
+                    UI_BAR_BAD);
+  }
+  gfx->fillCircle(CX, RST_BTN_Y, RST_BTN_R, p > 0 ? C565(0xb8, 0x28, 0x20) : UI_BAR_BAD);
+  drawFit(XT(X_RESET_HOLD), RST_BTN_Y - 12, 2 * RST_BTN_R - 10, UI_WHITE, 2);
+  if (rstHint) drawFit(XT(X_RESET_HINT), 196, 340, UI_INK, 2);
+  drawBtn(163, 372, 140, 40, UI_WHITE, UI_INK, XT(X_UPD_CANCEL));
+  gfx->flush();
+}
+
+void resetTap(int16_t x, int16_t y) {
+  if (rstInButton(x, y)) { rstHint = true; sfxPlay(SFX_DENY); return; }  // toque corto: no basta
+  if (y >= 364 || y < 72) {  // cancelar -> vuelve a la hora
+    xScreen = XS_NONE;
+    clockOpen = true;
+    sfxPlay(SFX_TAP);
+  }
+}

@@ -327,13 +327,38 @@ class TestCadenasDelFork(unittest.TestCase):
                 self.assertEqual(fuera_de_ks(t), [], t)
 
     def test_todo_el_coreano_del_firmware_tiene_glifo_noto(self):
-        # ko4: hangul_ks.h solo trae KS X 1001. Una silaba de fuera no se pinta.
+        # font_ko.h (ko8; antes hangul_ks.h) solo trae KS X 1001. Una silaba de fuera no se pinta.
         for nombre in ('i18n.cpp', 'i18n_ext.cpp', 'dex.h', 'TamaPoke.ino', 'ui_extra.ino', 'train.ino'):
             ruta = os.path.join(ROOT, nombre)
             if not os.path.exists(ruta):
                 continue
             with open(ruta, encoding='utf-8') as fh:
                 self.assertEqual(fuera_de_ks(fh.read()), [], nombre)
+
+    def test_font_ko_trae_lo_que_pinta_el_firmware(self):
+        # ko8: font_ko.h (tools/gen_font_ko.py). Las silabas de los textos del
+        # firmware tienen que estar en el tamano grande (36 px): si se anade un
+        # texto con silabas nuevas, hay que regenerar la fuente.
+        with open(os.path.join(ROOT, 'font_ko.h'), encoding='utf-8') as fh:
+            src = fh.read()
+        def tabla(nombre):
+            cuerpo = re.search(nombre + r'\[[^]]*\] = \{([^}]*)\}', src).group(1)
+            return {int(x, 16) for x in re.findall(r'0x([0-9A-F]+)', cuerpo)}
+        ks = tabla('FKO_KS_CP')
+        sub = tabla('FKO_SUB_CP')
+        self.assertEqual(len(ks), 2350 + 52)
+        usadas = set()
+        for nombre in ('i18n.cpp', 'i18n_ext.cpp', 'dex.h', 'TamaPoke.ino', 'ui_extra.ino',
+                       'ui_more.ino', 'train.ino', 'net.cpp', 'pet.cpp', 'box.cpp', 'battle.cpp'):
+            ruta = os.path.join(ROOT, nombre)
+            if not os.path.exists(ruta):
+                continue
+            with open(ruta, encoding='utf-8') as fh:
+                for lit in re.findall(r'"((?:[^"\\\n]|\\.)*)"', fh.read()):
+                    usadas |= {ord(c) for c in lit if 0xAC00 <= ord(c) <= 0xD7A3}
+        self.assertEqual(sorted(usadas - ks), [])
+        falta = ''.join(chr(c) for c in sorted(usadas - sub))
+        self.assertEqual(falta, '', 'regenerar font_ko.h (tools/gen_font_ko.py)')
 
     def test_update_bin_publicado_es_de_esta_version(self):
         # ko6.2: el update.bin de claude-version/ debe llevar la marca TPVER de

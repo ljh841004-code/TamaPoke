@@ -342,8 +342,14 @@ void Pet::checkMedals() {
 }
 
 void Pet::rename(const char *name) {
-  strncpy(nick, name, sizeof(nick) - 1);
-  nick[sizeof(nick) - 1] = 0;
+  // ko8: hasta 18 bytes (6 silabas hangul) sin partir un caracter UTF-8
+  size_t n = strlen(name);
+  if (n > 18) {
+    n = 18;
+    while (n && ((uint8_t)name[n] & 0xC0) == 0x80) n--;
+  }
+  memcpy(nick, name, n);
+  nick[n] = 0;
   save();
 }
 
@@ -760,6 +766,23 @@ void Pet::load() {
   if (speciesId >= 1) registerSpecies(speciesId);
 }
 
+void Pet::wipeGameKeepSettings() {
+  static const char *const KEEP_U8[] = { "volBgm", "volCry", "volSfx", "lang" };
+  uint8_t u8[4];
+  bool has[4];
+  for (int i = 0; i < 4; i++) {
+    has[i] = prefs.isKey(KEEP_U8[i]);
+    u8[i] = prefs.getUChar(KEEP_U8[i], 0);
+  }
+  bool hasSnd = prefs.isKey("snd"), snd = prefs.getBool("snd", true);
+  uint32_t seen = prefs.getUInt("seen", 0);
+  prefs.clear();
+  for (int i = 0; i < 4; i++)
+    if (has[i]) prefs.putUChar(KEEP_U8[i], u8[i]);
+  if (hasSnd) prefs.putBool("snd", snd);
+  if (seen) prefs.putUInt("seen", seen);
+}
+
 // ---------------------------------------------------------------- batallas
 
 uint16_t Pet::hpStat() const {
@@ -891,12 +914,28 @@ bool Pet::importTrade(const TradePet &t, uint16_t lvl) {
   trDef = t.trDef > 100 ? 100 : t.trDef;
   trSpe = t.trSpe > 100 ? 100 : t.trSpe;
   weight = t.weight > 100 ? 100 : t.weight;
-  // apodo: solo el alfabeto del teclado del juego (A-Z . -), igual que rename()
+  // apodo: solo lo que escriben los teclados del juego (A-Z . - espacio y, desde
+  // ko8, silabas hangul completas en UTF-8). Lo demas se descarta.
   char nk[sizeof(nick)] = "";
   uint8_t j = 0;
-  for (uint8_t i = 0; i < sizeof(t.nick) && t.nick[i] && j < sizeof(nick) - 1; i++) {
-    char c = t.nick[i];
-    if ((c >= 'A' && c <= 'Z') || c == '.' || c == '-') nk[j++] = c;
+  for (uint8_t i = 0; i < sizeof(t.nick) && t.nick[i] && j < sizeof(nick) - 1;) {
+    uint8_t c = (uint8_t)t.nick[i];
+    if ((c >= 'A' && c <= 'Z') || c == '.' || c == '-' || c == ' ') {
+      nk[j++] = (char)c;
+      i++;
+      continue;
+    }
+    if ((c & 0xF0) == 0xE0 && i + 2 < sizeof(t.nick) && ((uint8_t)t.nick[i + 1] & 0xC0) == 0x80 &&
+        ((uint8_t)t.nick[i + 2] & 0xC0) == 0x80) {
+      uint32_t cp = ((uint32_t)(c & 15) << 12) | ((uint32_t)(t.nick[i + 1] & 63) << 6) | (t.nick[i + 2] & 63);
+      if (cp >= 0xAC00 && cp <= 0xD7A3 && j + 3 < sizeof(nick)) {
+        memcpy(nk + j, t.nick + i, 3);
+        j += 3;
+      }
+      i += 3;
+      continue;
+    }
+    i++;
   }
   nk[j] = 0;
   memcpy(nick, nk, sizeof(nick));

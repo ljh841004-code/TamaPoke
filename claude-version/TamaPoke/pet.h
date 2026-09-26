@@ -51,7 +51,7 @@ struct __attribute__((packed)) TradePet {
   uint8_t geneAtk, geneDef, geneSpe;
   uint8_t trAtk, trDef, trSpe;
   uint8_t weight;
-  char nick[12];
+  char nick[20];  // ko8: apodo en hangul (UTF-8, hasta 6 silabas); antes 12
 };
 
 // batallas: de donde viene el resultado
@@ -87,7 +87,7 @@ public:
   uint32_t lastCareDay = 0;
   // vinculo (del bicho: sube lento con cuidado, se resetea al nacer otro)
   uint8_t bond = 0;
-  char nick[12] = "";    // apodo (vacio = nombre de especie)
+  char nick[20] = "";    // apodo (vacio = nombre de especie). ko8: admite hangul
   // medallas: del individuo + contador acumulado entre todas las crianzas
   uint16_t medals = 0, totalMedals = 0;
   uint16_t newMedal = 0;   // recien conseguida(s), para celebrar
@@ -185,6 +185,10 @@ public:
   bool awaitingStarter() const { return starterPick; }
   void chooseStarter(int16_t dex) { eggTarget = dex; starterPick = false; save(); }
   void factoryReset() { prefs.clear(); }  // borra la NVS (test: comando serie WIPE)
+  // fork KO (ko8): [nuevo comienzo]. Borra la partida entera pero conserva los
+  // ajustes que comparten este espacio de la NVS (sonido, volumenes, idioma) y
+  // la ultima hora vista (resiembra del RTC). Al reiniciar, eleccion de inicial.
+  void wipeGameKeepSettings();
   void dbgRunawayReady() { fullness = joy = energy = hygiene = 0; neglectTicks = RUNAWAY_TICKS; }  // test
   uint16_t level() const { return levelForExp(exp); }
   // nivel necesario para evolucionar (con el retraso de los descuidos; 0 = final)

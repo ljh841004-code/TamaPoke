@@ -34,6 +34,7 @@ struct { int16_t x, y; uint32_t t; bool good; } defFx[DEF_BALLS];
 
 // ---------- velocidad: reflejos izquierda/derecha ----------
 #define SPD_ROUNDS 15
+#define SPD_POS 8       // ko8: posiciones posibles de la pokeball
 enum : uint8_t { SP_WAIT = 0, SP_SHOW, SP_FEED };
 bool spdOpen = false;
 uint8_t spdRound = 0, spdPhase = SP_WAIT, spdSide = 0, spdGain = 0;
@@ -235,7 +236,10 @@ static uint32_t spdWindow() {  // cuanto dura visible la pokeball en esta ronda
 static void spdNextRound() {
   spdPhase = SP_WAIT;
   spdUntil = millis() + 500 + random(800);
-  spdSide = random(2);
+  // ko8: 8 posiciones como las horas de un reloj (12, 1:30, 3...), al azar y
+  // sin repetir la anterior: antes solo izquierda/derecha y se adivinaba
+  uint8_t prev = spdSide;
+  do spdSide = random(SPD_POS); while (spdSide == prev);
 }
 
 void startSpeed() {
@@ -248,8 +252,15 @@ void startSpeed() {
   spdUntil += 700;  // un respiro para leer la ayuda
 }
 
-static int spdBallX() { return spdSide ? 336 : 130; }
-#define SPD_BALL_Y 212
+// ko8: anillo de 8 posiciones alrededor del bicho (0 = arriba, sentido horario)
+#define SPD_RING_X 233
+#define SPD_RING_Y 240
+#define SPD_RING_R 160
+#define SPD_PET_G 300   // el bicho, en el centro del anillo
+static const int8_t SPD_DIR[SPD_POS][2] = { { 0, -10 }, { 7, -7 }, { 10, 0 }, { 7, 7 },
+                                            { 0, 10 }, { -7, 7 }, { -10, 0 }, { -7, -7 } };
+static int spdBallX() { return SPD_RING_X + SPD_DIR[spdSide % SPD_POS][0] * SPD_RING_R / 10; }
+static int spdBallY() { return SPD_RING_Y + SPD_DIR[spdSide % SPD_POS][1] * SPD_RING_R / 10; }
 
 static void spdResolve(bool good) {
   spdGood = good;
@@ -262,7 +273,7 @@ static void spdResolve(bool good) {
 void speedPress(int16_t x, int16_t y) {
   if (spdOverUntil || spdPhase == SP_FEED) return;
   if (spdPhase == SP_WAIT) { spdResolve(false); return; }  // se adelanto
-  int dx = x - spdBallX(), dy = y - SPD_BALL_Y;
+  int dx = x - spdBallX(), dy = y - spdBallY();
   spdResolve(dx * dx + dy * dy <= 80 * 80);
 }
 
@@ -298,26 +309,49 @@ void renderSpeed() {
   bool night = sceneHour() < 6 || sceneHour() >= 20;
   uint16_t ink = night ? UI_INK_NIGHT : UI_INK;
   char b[16];
+  // ko8: marcador en el centro del anillo (arriba sale una pokeball)
   snprintf(b, sizeof(b), "%u/%u", spdRound + 1, SPD_ROUNDS);
-  drawFit(b, 30, 200, ink, 3);
+  drawFit(b, 128, 200, ink, 3);
   snprintf(b, sizeof(b), "%u", spdScore);
-  drawFit(b, 70, 200, UI_BAR_OK, 2);
+  drawFit(b, 160, 200, UI_BAR_OK, 2);
   // el bicho mira hacia donde salio la pokeball
-  uint8_t act = spdPhase == SP_SHOW ? (spdSide ? PMD_WALKR : PMD_WALKL) : PMD_IDLE;
-  drawTrainPet(CX, act);
+  int bx = spdBallX(), by = spdBallY();
+  uint8_t act = PMD_IDLE;
+  if (spdPhase == SP_SHOW && bx != SPD_RING_X) act = bx > SPD_RING_X ? PMD_WALKR : PMD_WALKL;
+  // plataforma flotante (como en las batallas) para el bicho del centro
+  uint8_t bio = DEX_TBL[pet.speciesId].biome;
+  uint16_t soil = BIOME_SOIL[bio < 6 ? bio : 0];
+  gfx->fillEllipse(CX, SPD_PET_G + 4, 70, 14, lerp565(soil, C565(0x10, 0x18, 0x20), 4, 16));
+  gfx->fillEllipse(CX, SPD_PET_G, 70, 12, soil);
+  if (pmd.loaded) {
+    if (!pmd.has(act)) act = PMD_IDLE;
+    drawPmdAct(act, CX, SPD_PET_G, millis(), true, false, 3);
+  }
+  // huecos del anillo: se ve donde PUEDE salir
+  for (int i = 0; i < SPD_POS; i++)
+    gfx->drawCircle(SPD_RING_X + SPD_DIR[i][0] * SPD_RING_R / 10, SPD_RING_Y + SPD_DIR[i][1] * SPD_RING_R / 10,
+                    10, lerp565(ink, UI_BG_DAY, 10, 16));
   if (spdPhase == SP_SHOW) {
-    int bx = spdBallX();
-    gfx->fillCircle(bx, SPD_BALL_Y, 44, lerp565(UI_WHITE, UI_BAR_WARN, 5, 16));  // halo
-    drawMap(SPR_ICON_PLAY, 16, bx - 32, SPD_BALL_Y - 32, 4, false);
-    // la ventana que queda, como un arco que se vacia
+    gfx->fillCircle(bx, by, 44, lerp565(UI_WHITE, UI_BAR_WARN, 5, 16));  // halo
+    drawMap(SPR_ICON_PLAY, 16, bx - 32, by - 32, 4, false);
+    // la ventana que queda, como una barra que se vacia
     uint32_t left = timeLeft(spdUntil), win = spdWindow();
     int w = (int)(80 * left / win);
-    gfx->fillRoundRect(bx - 40, SPD_BALL_Y + 50, 80, 6, 3, UI_TRACK);
-    if (w > 1) gfx->fillRoundRect(bx - 40, SPD_BALL_Y + 50, w, 6, 3, UI_BAR_WARN);
+    int ty = spdSide == 4 ? by - 56 : by + 48;  // abajo del todo: la barra va encima
+    gfx->fillRoundRect(bx - 40, ty, 80, 6, 3, UI_TRACK);
+    if (w > 1) gfx->fillRoundRect(bx - 40, ty, w, 6, 3, UI_BAR_WARN);
   } else if (spdPhase == SP_FEED) {
-    drawFit(XT(spdGood ? X_NICE : X_MISS), 200, 300, spdGood ? UI_BAR_OK : UI_BAR_BAD, 3);
+    // el resultado sale donde estaba la pokeball
+    const char *fb = XT(spdGood ? X_NICE : X_MISS);
+    gfx->setTextColor(spdGood ? UI_BAR_OK : UI_BAR_BAD);
+    setSize(2);
+    int fx = bx - textW(fb, 2) / 2;
+    if (fx < 40) fx = 40;
+    if (fx + textW(fb, 2) > 426) fx = 426 - textW(fb, 2);
+    setCur(fx, by - 8);
+    printT(fb);
   } else if (spdRound == 0) {
-    drawFit(XT(X_TR_SPE_HINT), 200, 320, ink, 2);
+    drawFit(XT(X_TR_SPE_HINT), 186, 220, ink, 2);
   }
   gfx->flush();
 }

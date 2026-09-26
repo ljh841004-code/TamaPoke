@@ -26,13 +26,15 @@
 #include "i18n_ext.h"  // fork KO: textos nuevos (KO/EN)
 #include "net.h"       // fork KO: WiFi + NTP
 #include "link.h"      // fork KO: tongsin ESP-NOW
-#include "hangul_ks.h"  // fork KO (ko4): hangul Noto Sans KR, 16 y 20 px
+#include "cji.h"        // fork KO (ko8): teclado coreano cheonjiin
+#include "font_ko.h"    // fork KO (ko8): Noto Sans KR suavizada (hangul + ASCII), 16-60 px
 #include "box.h"        // fork KO (ko4): bogwanham y registro de la pokedex
 #include "sdupdate.h"   // fork KO (ko5): actualizar desde /update.bin de la SD
+#include <qrcode.h>     // fork KO (ko8): QR del portal WiFi (componente espressif/qrcode del core)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko7"
+#define FW_VERSION "1.17-ko8"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -88,8 +90,10 @@ int16_t galleryDetail = 0;  // dex en vista detalle, 0 = rejilla
 bool screenOff = false;       // pulsacion corta del boton PWR
 bool cardOpen = false;        // ficha del bicho (deslizar vertical)
 bool kbOpen = false;          // teclado para renombrar al bicho
-char nameBuf[12] = "";
+char nameBuf[20] = "";   // ko8: lo ya escrito (apodo en hangul: hasta 18 bytes)
 uint8_t nameLen = 0;
+Cji kbCji;               // ko8: silabas en construccion (teclado cheonjiin)
+bool kbKo = true;        // ko8: teclado coreano (true) o alfabeto (false)
 uint8_t cardPage = 0;         // 0 perfil, 1 stats+medallas
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 int clockH = 12, clockM = 0;  // hora en edicion
@@ -932,7 +936,7 @@ static void drawSeg7(int x, int y, int w, int h, int t, uint8_t d, uint16_t col)
   if (m & 0x40) gfx->fillRoundRect(x + r, y + hh - r, w - t, t, r, col);         // centro
 }
 
-#define BIGCLK_Y 112   // entre el mensaje de estado (y 90) y el horizonte
+#define BIGCLK_Y 116   // entre el mensaje de estado (y 90) y el horizonte (ko8: +4, letra de 20 px)
 #define BIGCLK_W 44
 #define BIGCLK_H 76
 
@@ -1046,7 +1050,11 @@ void setSize(uint8_t n) {
   gfx->setTextSize(gTextSize);
 }
 
+static bool koNoto();
+static const FkoTier &fkoTier();
+
 void setCur(int x, int y) {
+  if (koNoto()) { gfx->setCursor(x, y + fkoTier().base); return; }  // ko8: y = borde superior
   gfx->setCursor(x, y + gFontAscent * gTextSize);
 }
 
@@ -1085,24 +1093,86 @@ void applyLangFont() {
 //
 // Para la fuente clasica devuelve EXACTAMENTE la misma cuenta que habia antes,
 // asi que este cambio no mueve un pixel en los seis idiomas actuales.
-// ---------- hangul Noto (fork KO, ko4) ----------
-// La unifont pintaba el coreano tosco (y con pseudo-negrita, borroso). En
-// coreano las silabas salen de hangul_ks.h: Noto Sans KR de 16 px (tamanos 1-2,
-// mismo ancho que la unifont: no se mueve nada), 20 px en el tamano 3 (titulos)
-// y 16 px escalado en los grandes. El resto (ASCII, signos) sigue en unifont.
+// ---------- fuente coreana (fork KO, ko8) ----------
+// En coreano TODO el texto (hangul y ASCII) sale de font_ko.h: Noto Sans KR
+// Medium con antialias de 2 bits, que se mezcla con lo que ya hay en el lienzo.
+// Tamano pedido -> px: 1:16  2:20  3:26  4-5:36  6:48  7:60. Antes (ko4-ko7)
+// el hangul era de 16/20 px a 1 bit y el ASCII la unifont pixelada.
+// El resto de idiomas CJK (japones) sigue con la unifont.
 static bool koNoto() { return gCjkFont && gLang == LANG_KO; }
 
-static int hangulIdx(uint32_t cp) {
-  int lo = 0, hi = HANGUL_KS_COUNT - 1;
+static const FkoTier &fkoTier() {
+  uint8_t n = gReqSize;
+  int t = n <= 1 ? 0 : n == 2 ? 1 : n == 3 ? 2 : n <= 5 ? 3 : n == 6 ? 4 : 5;
+  return FKO_TIERS[t];
+}
+
+static int fkoFind(const uint16_t *tab, int count, uint32_t cp) {
+  int lo = 0, hi = count - 1;
   while (lo <= hi) {
     int mid = (lo + hi) / 2;
-    if (HANGUL_KS_CP[mid] == cp) return mid;
-    if (HANGUL_KS_CP[mid] < cp) lo = mid + 1; else hi = mid - 1;
+    if (tab[mid] == cp) return mid;
+    if (tab[mid] < cp) lo = mid + 1; else hi = mid - 1;
   }
   return -1;
 }
 
-static int hangulPx() { return gReqSize == 3 ? 20 : 16 * gTextSize; }
+// glifo hangul del tamano actual; si ese tamano no lo trae (36 px solo tiene las
+// silabas de los textos del firmware, 48/60 ninguna) baja al siguiente que si
+static const FkoTier *fkoHangul(uint32_t cp, int *idx) {
+  int t = (int)(&fkoTier() - FKO_TIERS);
+  for (; t >= 0; t--) {
+    const FkoTier &T = FKO_TIERS[t];
+    int i = T.hangul == 1 ? fkoFind(FKO_KS_CP, FKO_KS_COUNT, cp)
+          : T.hangul == 2 ? fkoFind(FKO_SUB_CP, FKO_SUB_COUNT, cp) : -1;
+    if (i >= 0) { *idx = i; return &T; }
+  }
+  return nullptr;
+}
+
+// mezcla 0..3 de col sobre el pixel del lienzo
+static inline void fkoPut(uint16_t *fb, int x, int y, uint8_t a, uint16_t col) {
+  if ((unsigned)x >= LCD_WIDTH || (unsigned)y >= LCD_HEIGHT) return;
+  uint16_t &d = fb[y * LCD_WIDTH + x];
+  if (a >= 3) { d = col; return; }
+  uint16_t b = d;
+  uint8_t na = 3 - a;
+  uint16_t r = (((col >> 11) & 31) * a + ((b >> 11) & 31) * na) / 3;
+  uint16_t g = (((col >> 5) & 63) * a + ((b >> 5) & 63) * na) / 3;
+  uint16_t bl = ((col & 31) * a + (b & 31) * na) / 3;
+  d = (r << 11) | (g << 5) | bl;
+}
+
+static void fkoBlit(const uint8_t *bits, int w, int h, int x0, int y0, uint16_t col) {
+  uint16_t *fb = gfx->getFramebuffer();
+  if (!fb) return;
+  int rb = (w + 3) / 4;
+  for (int y = 0; y < h; y++) {
+    const uint8_t *row = bits + y * rb;
+    for (int x = 0; x < w; x++) {
+      uint8_t a = (row[x >> 2] >> (6 - 2 * (x & 3))) & 3;
+      if (a) fkoPut(fb, x0 + x, y0 + y, a, col);
+    }
+  }
+}
+
+// avance de un caracter (y lo pinta si draw); base = linea base
+static int fkoChar(uint32_t cp, int x, int base, bool draw, uint16_t col) {
+  const FkoTier &T = fkoTier();
+  if ((cp >= 0xAC00 && cp <= 0xD7A3) || (cp >= 0x3131 && cp <= 0x318E)) {  // silaba o jamo
+    int idx;
+    const FkoTier *H = fkoHangul(cp, &idx);
+    if (!H) return T.px;  // fuera de KS X 1001: hueco del ancho de una silaba
+    if (draw) fkoBlit(H->hg + (size_t)idx * ((H->px + 3) / 4) * H->px, H->px, H->px, x, base - H->base, col);
+    return H->px;
+  }
+  if (cp >= 32 && cp <= 126) {
+    const FkoGlyph &g = T.ascii[cp - 32];
+    if (draw && g.w) fkoBlit(T.abits + g.off, g.w, g.h, x + g.xo, base + g.yo, col);
+    return g.adv;
+  }
+  return T.px / 2;
+}
 
 // siguiente caracter UTF-8: devuelve cuantos bytes ocupa y su codepoint
 static int utf8Next(const char *s, uint32_t *cp) {
@@ -1135,38 +1205,29 @@ uint16_t textW(const char *s, uint8_t size) {
     gfx->getTextBounds(s, 0, 0, &x1, &y1, &w, &h);
     return w;
   }
+  uint8_t keep = gReqSize;  // el tamano que se mide, sin cambiar el activo
+  gReqSize = size;
   uint16_t w = 0;
   while (*s) {
     uint32_t cp;
-    int n = utf8Next(s, &cp);
-    if (cp >= 0xAC00 && cp <= 0xD7A3) {
-      w += hangulPx();
-    } else {
-      char g[5] = {};
-      memcpy(g, s, n);
-      w += cjkGlyphW(g);
-    }
-    s += n;
+    s += utf8Next(s, &cp);
+    w += fkoChar(cp, 0, 0, false, 0);
   }
+  gReqSize = keep;
   return w;
 }
 
-// pinta una silaba con la esquina superior en (x, y); devuelve el avance
-static int drawHangul(int idx, int x, int y, uint16_t col) {
-  if (gReqSize == 3) {
-    gfx->drawBitmap(x, y, HANGUL_KS20[idx], 20, 20, col);
-    return 20;
+// alto de una linea de texto del tamano dado (para centrar en botones)
+int textH(uint8_t size) {
+  if (koNoto()) {
+    uint8_t keep = gReqSize;
+    gReqSize = size;
+    int h = fkoTier().px;
+    gReqSize = keep;
+    return h;
   }
-  int hs = gTextSize;
-  for (int r = 0; r < 16; r++) {
-    uint16_t bits = HANGUL_KS16[idx][r];
-    for (int c = 0; bits && c < 16; c++, bits <<= 1)
-      if (bits & 0x8000) {
-        if (hs == 1) gfx->writePixel(x + c, y + r, col);
-        else gfx->fillRect(x + c * hs, y + r * hs, hs, hs, col);
-      }
-  }
-  return 16 * hs;
+  if (gCjkFont) return 16 * (size >= CJK_SIZE_DIV ? size / CJK_SIZE_DIV : 1);
+  return 8 * size;
 }
 
 // x del cursor para dejar el texto centrado en CX
@@ -1177,35 +1238,21 @@ int centerX(const char *s, uint8_t size) { return CX - textW(s, size) / 2; }
 // fuente de verdad negrita a este tamano junta los trazos y estropea los kana.
 // Repintar engorda el trazo sin deformar el glifo. Probado en placa por
 // usakomint, que comparo las dos opciones en japones.
-// El teclado de apodos es solo alfabeto (se deja asi a proposito), de modo que
-// aqui nunca hay CJK y no hace falta engordar nada.
-void printT(char c) { gfx->print(c); }
+void printT(char c) {
+  if (koNoto()) { char b[2] = { c, 0 }; printT(b); return; }  // ko8: misma fuente
+  gfx->print(c);
+}
 
 void printT(const char *s) {
-  if (koNoto()) {  // fork KO (ko4): hangul Noto nitido, sin pseudo-negrita
+  if (koNoto()) {  // fork KO (ko8): Noto suavizada, hangul y ASCII
     uint16_t col = gfx->ink();
+    int x = gfx->getCursorX(), base = gfx->getCursorY();
     while (*s) {
       uint32_t cp;
-      int n = utf8Next(s, &cp);
-      int idx = (cp >= 0xAC00 && cp <= 0xD7A3) ? hangulIdx(cp) : -1;
-      if (idx >= 0) {
-        int x = gfx->getCursorX(), base = gfx->getCursorY();
-        x += drawHangul(idx, x, base - gFontAscent * gTextSize, col);
-        gfx->setCursor(x, base);
-      } else {
-        // la unifont ancla el ASCII 3,5 px mas arriba que el centro del hangul
-        // Noto (medido: ascenso 10 frente a tinta en las filas 2-15): se baja 3
-        // para que "Lv.18", "4/60" o "!" no queden como superindices
-        char g[5] = {};
-        memcpy(g, s, n);
-        int base = gfx->getCursorY();
-        // con el hangul de 20 px (tamano 3) el centro queda mas abajo: +6
-        gfx->setCursor(gfx->getCursorX(), base + (gReqSize == 3 ? 6 : 3 * gTextSize));
-        gfx->print(g);
-        gfx->setCursor(gfx->getCursorX(), base);
-      }
-      s += n;
+      s += utf8Next(s, &cp);
+      x += fkoChar(cp, x, base, true, col);
     }
+    gfx->setCursor(x, base);
     return;
   }
   if (gCjkFont) {
@@ -1289,7 +1336,7 @@ void render() {
     printT(reg);
   } else {
     const DexEntry &d = DEX_TBL[pet.speciesId];
-    char name[28];
+    char name[44];  // ko8: apodo en hangul (hasta 18 bytes)
     const char *base = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
     snprintf(name, sizeof(name), T(S_NAME_FMT), pet.shiny ? "*" : "", base, pet.level());
     drawHeader(name, gNight ? UI_INK_NIGHT : d.accent, statusMsg());
@@ -1744,6 +1791,10 @@ void drawClockBtn(int x, int y, const char *l) {
 #define LANG_PILL_W 96
 #define WIFI_PILL_X 178   // fork KO
 #define WIFI_PILL_W 110
+#define RST_PILL_X 163    // fork KO (ko8): [nuevo comienzo]
+#define RST_PILL_Y 398
+#define RST_PILL_H 30
+#define RST_PILL_W 140
 static const char *const LANG_CODES[LANG_COUNT] = { "ES", "EN", "FR", "DE", "IT", "PT", "JA", "KO" };
 
 void renderClock() {
@@ -1757,7 +1808,7 @@ void renderClock() {
   char t[8];
   snprintf(t, sizeof(t), "%02d:%02d", clockH, clockM);
   setSize(7);
-  setCur(CX - 105, 108);
+  setCur(centerX(t, 7), 108);  // ko8: centrado de verdad con cualquier fuente
   printT(t);
 
   drawClockBtn(104, 190, "-");  // hora -
@@ -1806,16 +1857,15 @@ void renderClock() {
   setCur(CX - 18, 352);
   printT("OK");
 
-  gfx->setTextColor(UI_INK);
-  setSize(2);
-  setCur(centerX(T(S_CLOCK_CANCEL), 2), 410);
-  printT(T(S_CLOCK_CANCEL));
+  // fork KO (ko8): [nuevo comienzo] (abre su propia pantalla de confirmacion)
+  drawBtn(RST_PILL_X, RST_PILL_Y, RST_PILL_W, RST_PILL_H, UI_WHITE, UI_BAR_BAD, XT(X_RESET_BTN));
 
   // version del firmware (discreta, abajo del todo)
   // ko6.2: 20 no bastaba para "TamaPoke v1.17-ko6.1" (se veia "ko6."): que no vuelva a pasar
   char ver[40];
   static_assert(sizeof("TamaPoke v" FW_VERSION) <= sizeof(ver), "la version no cabe en pantalla");
   snprintf(ver, sizeof(ver), "TamaPoke v%s", FW_VERSION);
+  gfx->setTextColor(UI_INK);
   setSize(1);
   setCur(centerX(ver, 1), 436);
   printT(ver);
@@ -1850,6 +1900,10 @@ void clockTap(int16_t x, int16_t y) {
     }
   }
   if (y >= 340 && y <= 388 && x >= 133 && x <= 333) { applyClock(); return; }
+  if (y >= RST_PILL_Y && y < RST_PILL_Y + RST_PILL_H && x >= RST_PILL_X && x < RST_PILL_X + RST_PILL_W) {
+    openReset();
+    return;
+  }
 }
 
 // llama + numero de racha arriba a la izquierda
@@ -1908,7 +1962,7 @@ void drawMedalBadge(int x, int y, int i) {
 void renderCardProfile() {
   const DexEntry &d = DEX_TBL[pet.speciesId];
   const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
-  char head[32];
+  char head[44];
   snprintf(head, sizeof(head), T(S_NAME_FMT), pet.shiny ? "*" : "", nm, pet.level());
   gfx->setTextColor(d.accent);
   // auto-encoge: a tamano 3 los nombres largos no caben en la franja estrecha de
@@ -2107,71 +2161,174 @@ void renderCard() {
 }
 
 // ---------- teclado para renombrar ----------
+// ko8: dos teclados. Coreano cheonjiin (12 teclas, cji.h) y alfabeto A-Z.
+// nameBuf = lo ya confirmado; kbCji = lo que se esta escribiendo en coreano
+// (se recompone entero a cada tecla, ver cji.h). Tope: 18 bytes (6 silabas).
 
-static const char KB_KEYS[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ.-";  // 28 + DEL + OK = 30
-#define KB_COLS 6
-#define KB_X 40
-#define KB_Y 150
-#define KB_W 64
+// alfabeto: 7x4 (A-Z . -)
+static const char KB_KEYS[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ.-";
+#define KB_COLS 7
+#define KB_X 51
+#define KB_Y 126
+#define KB_W 52
 #define KB_H 52
+// cheonjiin: 3x4
+#define CJ_X 83
+#define CJ_Y 124
+#define CJ_W 100
+#define CJ_H 56
+static const char *const CJ_LABEL[CJI_K_COUNT] = {
+  "\xE3\x85\xA3", "\xE3\x86\x8D", "\xE3\x85\xA1",                   // ㅣ ㆍ ㅡ
+  "\xE3\x84\xB1\xE3\x85\x8B", "\xE3\x84\xB4\xE3\x84\xB9", "\xE3\x84\xB7\xE3\x85\x8C",  // ㄱㅋ ㄴㄹ ㄷㅌ
+  "\xE3\x85\x82\xE3\x85\x8D", "\xE3\x85\x85\xE3\x85\x8E", "\xE3\x85\x88\xE3\x85\x8A",  // ㅂㅍ ㅅㅎ ㅈㅊ
+  "", "\xE3\x85\x87\xE3\x85\x81", "",                               // (띄움) ㅇㅁ (지움)
+};
+// fila de abajo: [cambiar teclado] [borrar, solo alfabeto] [OK]
+#define KBB_Y 358
+#define KBB_H 44
 
 void openKeyboard() {
   kbOpen = true;
   strncpy(nameBuf, pet.nick, sizeof(nameBuf) - 1);
   nameBuf[sizeof(nameBuf) - 1] = 0;
   nameLen = strlen(nameBuf);
+  kbCji.clear();
+  kbKo = gLang == LANG_KO;
+}
+
+// texto completo (confirmado + lo que se esta escribiendo)
+static int kbText(char *out, int max, bool final) {
+  int n = snprintf(out, max, "%s", nameBuf);
+  if (n >= max) n = max - 1;
+  return n + cjiCompose(kbCji, out + n, max - n, final);
+}
+
+// pasa lo escrito en coreano a nameBuf
+static void kbCommit() {
+  char t[64];
+  kbText(t, sizeof(t), true);
+  strncpy(nameBuf, t, sizeof(nameBuf) - 1);
+  nameBuf[sizeof(nameBuf) - 1] = 0;
+  nameLen = strlen(nameBuf);
+  kbCji.clear();
+}
+
+// quita las silabas que no tiene la fuente (fuera de KS X 1001) y los jamo sueltos
+static void kbCleanName(char *s) {
+  char out[sizeof(nameBuf)];
+  int j = 0;
+  for (const char *p = s; *p;) {
+    uint32_t cp;
+    int n = utf8Next(p, &cp);
+    bool ok = (cp >= 32 && cp < 127) ||
+              (cp >= 0xAC00 && cp <= 0xD7A3 && fkoFind(FKO_KS_CP, FKO_KS_COUNT, cp) >= 0);
+    if (ok && !(j == 0 && cp == ' ') && j + n < (int)sizeof(out)) { memcpy(out + j, p, n); j += n; }
+    p += n;
+  }
+  while (j > 0 && out[j - 1] == ' ') j--;  // sin espacios al final
+  out[j] = 0;
+  strcpy(s, out);
 }
 
 void renderKeyboard() {
   gfx->fillScreen(RGB565_BLACK);
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  drawFit(T(S_NAME), 36, 200, UI_INK, 2);
+  // lo escrito
+  char t[64];
+  kbText(t, sizeof(t), false);
+  gfx->fillRoundRect(83, 68, 300, 46, 10, UI_WHITE);
+  gfx->drawRoundRect(83, 68, 300, 46, 10, UI_INK);
   gfx->setTextColor(UI_INK);
-  setSize(2);
-  setCur(centerX(T(S_NAME), 2), 56);
-  printT(T(S_NAME));
-  // buffer actual
-  gfx->fillRoundRect(83, 84, 300, 40, 8, UI_WHITE);
-  gfx->drawRoundRect(83, 84, 300, 40, 8, UI_INK);
   setSize(3);
-  setCur(95, 94);
-  printT(nameLen ? nameBuf : "_");
+  int tw = textW(t, 3);
+  setCur(tw > 280 ? 373 - tw : 95, 78);  // si no cabe, se ve el final
+  printT(t);
+  if ((millis() / 500) & 1) gfx->fillRect(gfx->getCursorX() + 2, 76, 2, 30, UI_INK);  // cursor
 
-  for (int i = 0; i < 30; i++) {
-    int x = KB_X + (i % KB_COLS) * KB_W, y = KB_Y + (i / KB_COLS) * KB_H;
-    bool special = (i >= 28);
-    gfx->fillRoundRect(x, y, KB_W - 6, KB_H - 6, 6, special ? UI_BAR_WARN : UI_WHITE);
-    gfx->drawRoundRect(x, y, KB_W - 6, KB_H - 6, 6, UI_INK);
-    gfx->setTextColor(UI_INK);
-    setSize(2);
-    if (i < 28) {
-      setCur(x + KB_W / 2 - 9, y + KB_H / 2 - 10);
-      printT(KB_KEYS[i]);
-    } else {
-      const char *lab = (i == 28) ? "<-" : "OK";
-      setCur(x + KB_W / 2 - 15, y + KB_H / 2 - 10);
-      printT(lab);
+  if (kbKo) {
+    for (int i = 0; i < CJI_K_COUNT; i++) {
+      int x = CJ_X + (i % 3) * CJ_W, y = CJ_Y + (i / 3) * CJ_H;
+      bool special = i == CJI_K_SPACE || i == CJI_K_DEL;
+      if (special) {
+        drawBtn(x, y, CJ_W - 6, CJ_H - 6, UI_TRACK, UI_INK, XT(i == CJI_K_SPACE ? X_KB_SPACE : X_KB_DEL));
+        continue;
+      }
+      drawBtn(x, y, CJ_W - 6, CJ_H - 6, UI_WHITE, UI_INK, "");
+      int kx = x + (CJ_W - 6) / 2, ky = y + (CJ_H - 6) / 2;
+      if (i == CJI_K_DOT) {  // el punto (아래아), bien visible
+        gfx->fillCircle(kx, ky, 5, UI_INK);
+        continue;
+      }
+      gfx->setTextColor(UI_INK);
+      setSize(3);  // jamo grandes: se leen de un vistazo
+      setCur(kx - textW(CJ_LABEL[i], 3) / 2, ky - textH(3) / 2);
+      printT(CJ_LABEL[i]);
     }
+    drawBtn(108, KBB_Y, 120, KBB_H, 0x4C98, UI_WHITE, "ABC");
+    drawBtn(238, KBB_Y, 120, KBB_H, UI_BAR_OK, UI_WHITE, "OK");
+  } else {
+    for (int i = 0; i < 28; i++) {
+      int x = KB_X + (i % KB_COLS) * KB_W, y = KB_Y + (i / KB_COLS) * KB_H;
+      char k[2] = { KB_KEYS[i], 0 };
+      drawBtn(x, y, KB_W - 5, KB_H - 5, UI_WHITE, UI_INK, k);
+    }
+    drawBtn(78, KBB_Y - 16, 100, KBB_H, 0x4C98, UI_WHITE, XT(X_KB_HANGUL));
+    drawBtn(184, KBB_Y - 16, 98, KBB_H, UI_TRACK, UI_INK, XT(X_KB_DEL));
+    drawBtn(288, KBB_Y - 16, 100, KBB_H, UI_BAR_OK, UI_WHITE, "OK");
   }
   gfx->flush();
 }
 
+// borra el ultimo caracter confirmado (UTF-8: hasta 3 bytes)
+static void kbBackspace() {
+  while (nameLen && ((uint8_t)nameBuf[nameLen - 1] & 0xC0) == 0x80) nameBuf[--nameLen] = 0;
+  if (nameLen) nameBuf[--nameLen] = 0;
+}
+
 void keyboardTap(int16_t x, int16_t y) {
-  // filtra ANTES de dividir: con x/y menores que KB_X/KB_Y la resta da negativo
-  // y la division entera trunca hacia cero (no hacia -inf), asi que col/row
-  // saldria 0 en vez de negativo y el filtro de abajo no lo detectaria
+  int by = kbKo ? KBB_Y : KBB_Y - 16;
+  if (y >= by && y < by + KBB_H) {  // fila de abajo
+    bool ok = kbKo ? x >= 238 : x >= 288;
+    bool mode = kbKo ? (x >= 108 && x < 228) : (x >= 78 && x < 178);
+    if (ok) {
+      kbCommit();
+      kbCleanName(nameBuf);
+      pet.rename(nameBuf);
+      kbOpen = false;
+    } else if (mode) {
+      kbCommit();
+      kbKo = !kbKo;
+    } else if (!kbKo && x >= 184 && x < 282) {
+      kbBackspace();
+    }
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  if (kbKo) {
+    if (x < CJ_X || y < CJ_Y) return;
+    int col = (x - CJ_X) / CJ_W, row = (y - CJ_Y) / CJ_H;
+    if (col >= 3 || row >= 4) return;
+    uint8_t key = (uint8_t)(row * 3 + col);
+    if (key == CJI_K_DEL && !kbCji.n) { kbBackspace(); sfxPlay(SFX_TAP); return; }
+    Cji before = kbCji;
+    if (!cjiPress(kbCji, key)) { sfxPlay(SFX_DENY); return; }
+    char t[64];
+    if (kbText(t, sizeof(t), false) > CJI_MAX_BYTES) { kbCji = before; sfxPlay(SFX_DENY); return; }
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  // alfabeto
   if (x < KB_X || y < KB_Y) return;
   int col = (x - KB_X) / KB_W, row = (y - KB_Y) / KB_H;
-  if (col >= KB_COLS || row >= 5) return;
+  if (col >= KB_COLS || row >= 4) return;
   int i = row * KB_COLS + col;
-  if (i >= 30) return;
-  if (i == 28) {  // borrar
-    if (nameLen) nameBuf[--nameLen] = 0;
-  } else if (i == 29) {  // OK
-    pet.rename(nameBuf);
-    kbOpen = false;
-  } else if (nameLen < sizeof(nameBuf) - 1) {
+  if (nameLen < CJI_MAX_BYTES && nameLen < sizeof(nameBuf) - 1) {
     nameBuf[nameLen++] = KB_KEYS[i];
     nameBuf[nameLen] = 0;
+    sfxPlay(SFX_TAP);
+  } else {
+    sfxPlay(SFX_DENY);
   }
 }
 
@@ -2493,7 +2650,7 @@ void drawFarewellButton() {
   int x = FAR_BTN_X - p, y = FAR_BTN_Y - p, w = FAR_BTN_W + 2 * p, h = FAR_BTN_H + 2 * p;
   gfx->fillRoundRect(x, y, w, h, 16, UI_BAR_WARN);
   gfx->drawRoundRect(x, y, w, h, 16, UI_INK);
-  char buf[52];
+  char buf[64];
   const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
   snprintf(buf, sizeof(buf), T(S_FAREWELL_BTN), nm);
   gfx->setTextColor(UI_INK);
@@ -2510,7 +2667,7 @@ void drawRunawayButton() {
   int x = FAR_BTN_X - p, y = FAR_BTN_Y - p, w = FAR_BTN_W + 2 * p, h = FAR_BTN_H + 2 * p;
   gfx->fillRoundRect(x, y, w, h, 16, C565(0x3a, 0x44, 0x5a));
   gfx->drawRoundRect(x, y, w, h, 16, C565(0x70, 0x80, 0x98));
-  char buf[52];
+  char buf[64];
   const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
   snprintf(buf, sizeof(buf), T(S_RUNAWAY_BTN), nm);
   gfx->setTextColor(C565(0xc8, 0xd2, 0xe0));

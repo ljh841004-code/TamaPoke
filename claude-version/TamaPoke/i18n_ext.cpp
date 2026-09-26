@@ -41,6 +41,11 @@ static const char *const XS[2][X_COUNT] = {
     "DOUBLE TAP: EXIT",
     "NOW v%s", "FILE v%s", "Same version already",
     "%lu EXP to next level", "EXP +%lu", "Grew to Lv.%u!", "MAX LEVEL",
+    "NEW GAME", "START OVER", "Pokemon, dex, box and records", "will all be erased.",
+    "WiFi, sound and language stay", "HOLD 3s", "Keep the button pressed for 3 s", "Starting over...",
+    "Scan with phone camera", "WiFi", "PASSWORD", "ADDRESS",
+    "SPACE", "DEL", "KOREAN",
+    "Looking for WiFi...", "AUTO ON", "AUTO OFF", "OPEN WiFi ON", "OPEN WiFi OFF", " +%u",
   },
   // ---------------- KO ----------------
   {
@@ -78,6 +83,11 @@ static const char *const XS[2][X_COUNT] = {
     "두 번 탭: 나가기",
     "현재 v%s", "파일 v%s", "이미 같은 버전이에요",
     "다음 레벨까지 %lu EXP", "경험치 +%lu", "레벨 %u 달성!", "최고 레벨!",
+    "새로 시작", "처음부터 새로 시작", "포켓몬, 도감, 보관함, 기록이", "모두 지워져요",
+    "WiFi, 소리, 언어 설정은 남아요", "3초 누르기", "버튼을 3초 동안 누르고 있으세요", "처음부터 시작해요!",
+    "카메라로 QR 찍기", "WiFi", "비밀번호", "주소",
+    "띄움", "지움", "한글",
+    "WiFi 찾는 중...", "자동 켬", "자동 끔", "개방 WiFi 켬", "개방 WiFi 끔", " 외 %u개",
   },
 };
 

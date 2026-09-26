@@ -58,6 +58,12 @@ bool Box::release(uint8_t i) {
 
 int Box::pickRandom() const { return n ? (int)random(n) : -1; }
 
+void Box::wipe() {
+  prefs.clear();
+  memset(mons, 0, sizeof(mons));
+  n = 0;
+}
+
 // ---------------------------------------------------------------- pokedex
 
 void DexLog::begin() {
@@ -68,6 +74,13 @@ void DexLog::begin() {
   if (prefs.getBytes("first", first, sizeof(first)) != sizeof(first)) memset(first, 0, sizeof(first));
   if (prefs.getBytes("seen", seenN, sizeof(seenN)) != sizeof(seenN)) memset(seenN, 0, sizeof(seenN));
   if (prefs.getBytes("caught", caughtN, sizeof(caughtN)) != sizeof(caughtN)) memset(caughtN, 0, sizeof(caughtN));
+}
+
+void DexLog::wipe() {
+  prefs.clear();
+  memset(first, 0, sizeof(first));
+  memset(seenN, 0, sizeof(seenN));
+  memset(caughtN, 0, sizeof(caughtN));
 }
 
 void DexLog::save() {

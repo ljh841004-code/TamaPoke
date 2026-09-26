@@ -8,7 +8,7 @@
 // Se engancha al sketch principal solo por funciones (extraRender, extraTap,
 // extraSwipe, extraLoop...), para tocar lo minimo el fichero original.
 
-enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_VOL, XS_UPD };
+enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_VOL, XS_UPD, XS_RESET };
 uint8_t xScreen = XS_NONE;
 
 // aviso breve en la pantalla principal
@@ -42,7 +42,7 @@ void drawBtn(int x, int y, int w, int h, uint16_t bg, uint16_t fg, const char *s
   if (textW(s, sz) > w - 10) { sz = 1; setSize(1); }
   gfx->setTextColor(fg);
   int tw = textW(s, sz);
-  int th = gCjkFont ? 16 : 8 * sz;
+  int th = textH(sz);
   setCur(x + (w - tw) / 2, y + (h - th) / 2);
   printT(s);
 }
@@ -92,31 +92,92 @@ void applyNetTime(uint32_t e) {
   }
 }
 
+// ---------------------------------------------------------------- ko8: QR
+// QR del WiFi del portal ("WIFI:T:WPA;S:<red>;P:<clave>;;"): los moviles lo
+// reconocen con la camara y se conectan solos. Se codifica una vez (la red no
+// cambia) con el codificador que trae el core (esp_qrcode / qrcodegen).
+#define NET_AP_PASS_UI "tamapoke"   // igual que NET_AP_PASS en net.cpp
+#define QR_MAX 41                   // hasta la version 6 (sobra: el texto es de ~40 bytes)
+static uint8_t gQrSize = 0;
+static uint8_t gQrBits[QR_MAX][(QR_MAX + 7) / 8];
+
+static void qrKeep(esp_qrcode_handle_t q) {
+  int n = esp_qrcode_get_size(q);
+  if (n <= 0 || n > QR_MAX) return;
+  gQrSize = (uint8_t)n;
+  memset(gQrBits, 0, sizeof(gQrBits));
+  for (int y = 0; y < n; y++)
+    for (int x = 0; x < n; x++)
+      if (esp_qrcode_get_module(q, x, y)) gQrBits[y][x >> 3] |= 1 << (x & 7);
+}
+
+static void makeWifiQr() {
+  if (gQrSize) return;
+  char txt[80];
+  snprintf(txt, sizeof(txt), "WIFI:T:WPA;S:%s;P:%s;;", netApName(), NET_AP_PASS_UI);
+  esp_qrcode_config_t cfg = { qrKeep, 6, ESP_QRCODE_ECC_MED };
+  esp_qrcode_generate(&cfg, txt);
+}
+
+// cuadro blanco de lado ~box centrado en (cx, cy), con margen de 3 modulos
+void drawWifiQr(int cx, int cy, int box) {
+  makeWifiQr();
+  if (!gQrSize) return;
+  int cells = gQrSize + 6;
+  int m = box / cells;             // pixeles por modulo (entero: bordes nitidos)
+  int side = m * cells;
+  int x0 = cx - side / 2, y0 = cy - side / 2;
+  gfx->fillRoundRect(x0 - 4, y0 - 4, side + 8, side + 8, 10, UI_WHITE);
+  gfx->drawRoundRect(x0 - 4, y0 - 4, side + 8, side + 8, 10, UI_INK);
+  int ox = x0 + 3 * m, oy = y0 + 3 * m;
+  for (int y = 0; y < gQrSize; y++)
+    for (int x = 0; x < gQrSize; x++)
+      if (gQrBits[y][x >> 3] & (1 << (x & 7))) gfx->fillRect(ox + x * m, oy + y * m, m, m, RGB565_BLACK);
+}
+
+// fila "etiqueta   VALOR" en una caja blanca (valor grande)
+void portalRow(int y, const char *label, const char *value, uint16_t col) {
+  gfx->fillRoundRect(78, y, 310, 34, 10, UI_WHITE);
+  gfx->drawRoundRect(78, y, 310, 34, 10, UI_TRACK);
+  gfx->setTextColor(UI_INK);
+  setSize(2);
+  setCur(92, y + 9);
+  printT(label);
+  uint8_t sz = 3;
+  int lw = textW(label, 2) + 24;
+  if (textW(value, sz) > 296 - lw) sz = 2;
+  setSize(sz);
+  gfx->setTextColor(col);
+  int vh = textH(sz);
+  setCur(376 - textW(value, sz), y + (34 - vh) / 2);
+  printT(value);
+}
+
 void renderNet() {
   screenBase();
   gfx->setTextColor(UI_INK);
   if (netPortalOn()) {
-    drawFit(XT(X_SETUP_WIFI), 48, 300, UI_INK, 3);
-    drawFit(XT(X_PORTAL_1), 104, 360, UI_INK, 2);
-    gfx->fillRoundRect(73, 132, 320, 48, 12, UI_WHITE);
-    gfx->drawRoundRect(73, 132, 320, 48, 12, UI_BAR_BAD);
-    drawFit(netApName(), 146, 300, UI_BAR_BAD, 3);
-    drawFit(XT(X_PORTAL_3), 196, 360, UI_INK, 2);
-    drawFit(XT(X_PORTAL_2), 232, 360, UI_INK, 2);
-    // icono de wifi animado
-    int ph = (millis() / 300) % 4;
-    for (int i = 0; i < 3; i++)
-      if (i < ph) gfx->drawCircle(CX, 318, 12 + i * 12, UI_BAR_OK);
-    gfx->fillCircle(CX, 318, 5, UI_BAR_OK);
-    drawBtn(133, 356, 200, 44, UI_TRACK, UI_INK, T(S_BACK));
+    // ko8: QR grande (la camara del movil se une al WiFi sin teclear) y los
+    // datos en letra grande por si el movil no lee QR
+    drawFit(XT(X_QR_HINT), 28, 230, UI_INK, 2);
+    drawWifiQr(CX, 164, 212);
+    portalRow(284, XT(X_QR_WIFI), netApName(), UI_BAR_BAD);
+    portalRow(324, XT(X_QR_PASS), NET_AP_PASS_UI, UI_INK);
+    portalRow(364, XT(X_QR_ADDR), "192.168.4.1", UI_INK);
+    drawBtn(158, 408, 150, 34, UI_TRACK, UI_INK, T(S_BACK));
     gfx->flush();
     return;
   }
 
   drawFit(XT(X_NET_TITLE), 36, 300, UI_INK, 3);
   char l[64];
-  if (netConfigured()) snprintf(l, sizeof(l), "WiFi: %s", netSsid());
-  else strncpy(l, XT(X_NOT_SET), sizeof(l));
+  if (netConfigured()) {
+    int k = snprintf(l, sizeof(l), "WiFi: %s", netSsid());
+    if (netSavedCount() > 1 && k > 0 && k < (int)sizeof(l))  // ko8: varias guardadas
+      snprintf(l + k, sizeof(l) - k, XT(X_SAVED_MORE_FMT), (unsigned)(netSavedCount() - 1));
+  } else {
+    strncpy(l, XT(netOpenAllowed() ? X_OPEN_ON : X_NOT_SET), sizeof(l));
+  }
   l[sizeof(l) - 1] = 0;
   drawFit(l, 80, 340, UI_INK, 2);
 
@@ -124,6 +185,7 @@ void renderNet() {
   const char *st = nullptr;
   uint16_t sc = UI_INK;
   switch (netState()) {
+    case NET_SCAN:       st = XT(X_ST_SCAN);       sc = UI_BAR_WARN; break;
     case NET_CONNECTING: st = XT(X_ST_CONNECTING); sc = UI_BAR_WARN; break;
     case NET_NTP:        st = XT(X_ST_NTP);        sc = UI_BAR_WARN; break;
     case NET_OK:         st = XT(X_ST_OK);         sc = UI_BAR_OK;   break;
@@ -161,11 +223,16 @@ void renderNet() {
   drawFit(tzs, NET_TZ_Y + 14, 190, UI_INK, 2);
 
   bool busy = netBusy() || linkActive();
-  drawBtn(NET_BTN_X, NET_SYNC_Y, NET_BTN_W, NET_BTN_H, (netConfigured() && !busy) ? UI_BAR_OK : UI_TRACK,
+  bool canSync = netConfigured() || netOpenAllowed();
+  drawBtn(NET_BTN_X, NET_SYNC_Y, NET_BTN_W, NET_BTN_H, (canSync && !busy) ? UI_BAR_OK : UI_TRACK,
           UI_WHITE, XT(X_SYNC_NOW));
   drawBtn(NET_BTN_X, NET_SETUP_Y, NET_BTN_W, NET_BTN_H, 0x4C98, UI_WHITE, XT(X_SETUP_WIFI));
-  drawBtn(NET_BTN_X, NET_AUTO_Y, NET_BTN_W, NET_BTN_H, netAuto() ? UI_WHITE : UI_TRACK, UI_INK,
-          netAuto() ? XT(X_AUTO_ON) : XT(X_AUTO_OFF));
+  // ko8: la fila se parte en dos: sincronizacion automatica | WiFi abiertas
+  int hw = (NET_BTN_W - 8) / 2;
+  drawBtn(NET_BTN_X, NET_AUTO_Y, hw, NET_BTN_H, netAuto() ? UI_WHITE : UI_TRACK, UI_INK,
+          XT(netAuto() ? X_AUTO_S_ON : X_AUTO_S_OFF));
+  drawBtn(NET_BTN_X + hw + 8, NET_AUTO_Y, hw, NET_BTN_H, netOpenAllowed() ? UI_WHITE : UI_TRACK, UI_INK,
+          XT(netOpenAllowed() ? X_OPEN_ON : X_OPEN_OFF));
   drawBtn(NET_UPD_X, NET_UPD_Y, NET_UPD_W, NET_UPD_H, 0xFB20, UI_WHITE, XT(X_UPD_BTN));
   drawFit(XT(X_TAP_CLOSE), 420, 220, UI_INK, 2);
   gfx->flush();
@@ -173,7 +240,7 @@ void renderNet() {
 
 void netTap(int16_t x, int16_t y) {
   if (netPortalOn()) {
-    if (y >= 350) netStopPortal();
+    if (y >= 400) netStopPortal();  // ko8: [volver] bajo el QR
     return;
   }
   if (y < 72) { closeNet(); return; }
@@ -186,14 +253,15 @@ void netTap(int16_t x, int16_t y) {
   }
   if (!inRect(x, y, NET_BTN_X, NET_SYNC_Y, NET_BTN_W, NET_AUTO_Y + NET_BTN_H - NET_SYNC_Y)) return;
   if (y < NET_SYNC_Y + NET_BTN_H) {
-    if (netConfigured() && !netBusy() && !linkActive()) { netSyncNow(); sfxPlay(SFX_TAP); }
+    if ((netConfigured() || netOpenAllowed()) && !netBusy() && !linkActive()) { netSyncNow(); sfxPlay(SFX_TAP); }
     else sfxPlay(SFX_DENY);
   } else if (y >= NET_SETUP_Y && y < NET_SETUP_Y + NET_BTN_H) {
     if (linkActive()) { sfxPlay(SFX_DENY); return; }
     netStartPortal();
     sfxPlay(SFX_TAP);
   } else if (y >= NET_AUTO_Y) {
-    netSetAuto(!netAuto());
+    if (x < NET_BTN_X + NET_BTN_W / 2) netSetAuto(!netAuto());
+    else netSetOpenAllowed(!netOpenAllowed());
     sfxPlay(SFX_TAP);
   }
 }
@@ -1267,7 +1335,7 @@ void extraLoop(uint32_t now) {
   if (xScreen == XS_WILD) updateWild();
   else if (xScreen == XS_LINK) updateLink();
   if (xScreen == XS_NET) lastInteract = now;
-  if (xScreen == XS_UPD) lastInteract = now;
+  if (xScreen == XS_UPD || xScreen == XS_RESET) lastInteract = now;
   rollWildEncounter(now);
 }
 
@@ -1280,6 +1348,7 @@ bool extraRender() {
     case XS_BOX: renderBox(); return true;    // ko4 (ui_more.ino)
     case XS_VOL: renderSound(); return true;  // ko4 (ui_more.ino)
     case XS_UPD: renderUpdate(); return true; // ko5 (ui_more.ino)
+    case XS_RESET: renderReset(); return true; // ko8 (ui_more.ino)
     default: return false;
   }
 }
@@ -1293,6 +1362,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_BOX: boxTap(x, y); return true;
     case XS_VOL: soundTap(x, y); return true;
     case XS_UPD: updateTap(x, y); return true;
+    case XS_RESET: resetTap(x, y); return true;
     default: return false;
   }
 }
@@ -1304,6 +1374,7 @@ bool extraSwipe() {
   if (xScreen == XS_BOX) { boxSwipe(); return true; }
   if (xScreen == XS_VOL) { xScreen = XS_NONE; clockOpen = true; return true; }
   if (xScreen == XS_UPD) { xScreen = XS_NET; return true; }
+  if (xScreen == XS_RESET) { xScreen = XS_NONE; clockOpen = true; return true; }
   return xScreen != XS_NONE;  // batalla / tongsin: se ignoran
 }
 

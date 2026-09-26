@@ -50,7 +50,41 @@ bool netBusy() { return false; }
 NetState netState() { return NET_IDLE; }
 void netStartPortal() {}
 void netStopPortal() {}
-bool netPortalOn() { return false; }
+bool gMockPortal = false;
+bool netPortalOn() { return gMockPortal; }
+uint8_t netSavedCount() { return 3; }
+const char *netSavedSsid(uint8_t) { return "MyHome_2.4G"; }
+void netForgetSaved(uint8_t) {}
+bool netOpenAllowed() { return true; }
+void netSetOpenAllowed(bool) {}
+
+// ---- QR: en el PC lo codifica segno (python) para comprobar el dibujo; en la
+// placa lo hace esp_qrcode. Mismo formato de "handle": [lado][modulos...]
+#include <qrcode.h>
+static uint8_t gQrBuf[1 + 177 * 177];
+esp_err_t esp_qrcode_generate(esp_qrcode_config_t *cfg, const char *text) {
+  char cmd[256];
+  snprintf(cmd, sizeof(cmd),
+           "python3 -c \"import segno,sys;q=segno.make(sys.argv[1],error='m',boost_error=False,micro=False);"
+           "print(chr(10).join(''.join('1' if c else '0' for c in r) for r in q.matrix))\" '%s'", text);
+  FILE *f = popen(cmd, "r");
+  if (!f) return ESP_FAIL;
+  char line[200];
+  int n = 0;
+  while (fgets(line, sizeof(line), f)) {
+    int w = (int)strcspn(line, "\r\n");
+    if (!w) continue;
+    gQrBuf[0] = (uint8_t)w;
+    for (int x = 0; x < w; x++) gQrBuf[1 + n * w + x] = line[x] == '1';
+    n++;
+  }
+  pclose(f);
+  if (!n) return ESP_FAIL;
+  cfg->display_func(gQrBuf);
+  return ESP_OK;
+}
+int esp_qrcode_get_size(esp_qrcode_handle_t q) { return q[0]; }
+bool esp_qrcode_get_module(esp_qrcode_handle_t q, int x, int y) { return q[1 + y * q[0] + x]; }
 const char *netApName() { return "TamaPoke-3F2A"; }
 uint32_t netPoll(uint32_t) { return 0; }
 bool netSerialCommand(const String &) { return false; }

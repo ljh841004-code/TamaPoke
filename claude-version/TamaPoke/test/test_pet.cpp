@@ -977,12 +977,20 @@ TEST(save, el_estado_sobrevive_a_un_reinicio) {
   CHECK(!b.awaitingStarter());
 }
 
-TEST(save, el_apodo_se_recorta_a_11_caracteres) {
+// ko8: 18 bytes (6 silabas hangul), sin partir un caracter
+TEST(save, el_apodo_se_recorta_a_18_bytes) {
   Pet p;
   makePet(p, 4);
   p.rename("NOMBRE-LARGUISIMO-QUE-NO-CABE");
-  CHECK_EQ((int)strlen(p.nick), 11);
-  CHECK_STREQ(p.nick, "NOMBRE-LARG");
+  CHECK_EQ((int)strlen(p.nick), 18);
+  CHECK_STREQ(p.nick, "NOMBRE-LARGUISIMO-");
+  p.rename("가나다라마바사");  // 7 silabas: la ultima no cabe
+  CHECK_STREQ(p.nick, "가나다라마바");
+  p.rename("AB가나다라마바");  // 20 bytes: se corta antes de "바", no en medio
+  CHECK_STREQ(p.nick, "AB가나다라마");
+  Pet q;
+  q.begin();  // y se guarda
+  CHECK_STREQ(q.nick, "AB가나다라마");
 }
 
 TEST(save, borrado_de_fabrica_deja_todo_como_nuevo) {
