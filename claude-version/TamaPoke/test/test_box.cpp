@@ -696,7 +696,7 @@ TEST(weather, mes_y_estacion_desde_la_fecha) {
 
 TEST(weather, nieve_solo_en_invierno_y_sol_solo_en_verano) {
   CHECK_EQ((int)weatherAt(0), (int)WX_CLEAR);  // sin reloj
-  int rain = 0, snow = 0, sunny = 0, blocks = 0;
+  int rain = 0, snow = 0, sunny = 0, blossom = 0, leaves = 0, blocks = 0;
   // un ano entero desde el 01-01-2026, bloque a bloque
   for (uint32_t e = 1767225600u; e < 1767225600u + 365u * 86400u; e += WX_BLOCK_S) {
     uint8_t w = weatherAt(e), s = wxSeason(wxMonth(e));
@@ -704,9 +704,23 @@ TEST(weather, nieve_solo_en_invierno_y_sol_solo_en_verano) {
     if (w == WX_SNOW) { snow++; CHECK_EQ((int)s, (int)SEASON_WINTER); }
     if (w == WX_SUNNY) { sunny++; CHECK_EQ((int)s, (int)SEASON_SUMMER); }
     if (w == WX_RAIN) { rain++; CHECK((int)s != (int)SEASON_WINTER); }
+    if (w == WX_BLOSSOM) { blossom++; CHECK_EQ((int)s, (int)SEASON_SPRING); }
+    if (w == WX_LEAVES) { leaves++; CHECK_EQ((int)s, (int)SEASON_AUTUMN); }
     CHECK_EQ((int)weatherAt(e + 3600), (int)w);  // estable dentro del bloque
   }
-  CHECK(snow > 0 && rain > 0 && sunny > 0);
+  CHECK(snow > 0 && rain > 0 && sunny > 0 && blossom > 0 && leaves > 0);
   // "de vez en cuando": entre el 8% y el 30% de los bloques
   CHECK_RANGE((rain + snow) * 100 / blocks, 8, 30);
+}
+
+TEST(weather, fecha_completa_y_dia_de_la_semana) {
+  int y; uint8_t m, d, wd;
+  wxDate(1790343900u, &y, &m, &d, &wd);  // viernes 25-09-2026
+  CHECK_EQ(y, 2026); CHECK_EQ((int)m, 9); CHECK_EQ((int)d, 25); CHECK_EQ((int)wd, 5);
+  wxDate(1709164800u, &y, &m, &d, &wd);  // jueves 29-02-2024
+  CHECK_EQ(y, 2024); CHECK_EQ((int)m, 2); CHECK_EQ((int)d, 29); CHECK_EQ((int)wd, 4);
+  wxDate(1767225599u, &y, &m, &d, &wd);  // miercoles 31-12-2025
+  CHECK_EQ(y, 2025); CHECK_EQ((int)m, 12); CHECK_EQ((int)d, 31); CHECK_EQ((int)wd, 3);
+  wxDate(0, &y, &m, &d, &wd);            // jueves 01-01-1970
+  CHECK_EQ(y, 1970); CHECK_EQ((int)m, 1); CHECK_EQ((int)d, 1); CHECK_EQ((int)wd, 4);
 }

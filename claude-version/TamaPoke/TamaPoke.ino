@@ -1254,6 +1254,28 @@ void drawWeather(uint8_t wx, int bottom, uint32_t now, bool night) {
       if (fy + sz > bottom) continue;
       gfx->fillRect(fx, fy, sz, sz, c);
     }
+  } else if (wx == WX_BLOSSOM || wx == WX_LEAVES) {
+    // ko10.1: petalos de cerezo (primavera) u hojas de otono, cayendo en diagonal
+    static const uint16_t PET[3] = { C565(0xff, 0xb4, 0xd0), C565(0xf4, 0x8c, 0xb4), C565(0xff, 0xd4, 0xe4) };
+    static const uint16_t LEAF[3] = { C565(0xe8, 0x6a, 0x2a), C565(0xc8, 0x3a, 0x2a), C565(0xf0, 0xb4, 0x30) };
+    bool leaves = wx == WX_LEAVES;
+    int n = leaves ? 16 : 24;
+    for (int f = 0; f < n; f++) {
+      uint32_t sp = leaves ? 26 + (f % 3) * 6 : 30 + (f % 4) * 5;  // ms por pixel
+      int fy = (int)((f * 71 + now / sp) % (uint32_t)(bottom + 20)) - 10;
+      int fx = (int)((f * 97 + now / (sp * 2) + (uint32_t)(14 * (1 + sinf(now / 600.0f + f)))) % 486) - 10;
+      if (fy < 6 || fy + 7 > bottom) continue;
+      uint16_t c = leaves ? LEAF[f % 3] : PET[f % 3];
+      if (night) c = lerp565(c, C565(0x16, 0x1c, 0x30), 8, 16);
+      bool flip = ((now / 350 + f) & 1) != 0;  // gira al caer
+      if (leaves) {
+        if (flip) { gfx->fillEllipse(fx, fy, 6, 3, c); gfx->drawFastHLine(fx - 6, fy, 12, lerp565(c, 0, 5, 16)); }
+        else      { gfx->fillEllipse(fx, fy, 3, 6, c); gfx->drawFastVLine(fx, fy - 6, 12, lerp565(c, 0, 5, 16)); }
+      } else {
+        if (flip) gfx->fillEllipse(fx, fy, 5, 3, c);
+        else      gfx->fillEllipse(fx, fy, 3, 5, c);
+      }
+    }
   }
 }
 
@@ -1280,7 +1302,8 @@ static void drawSeg7(int x, int y, int w, int h, int t, uint8_t d, uint16_t col)
   if (m & 0x40) gfx->fillRoundRect(x + r, y + hh - r, w - t, t, r, col);         // centro
 }
 
-#define BIGCLK_Y 116   // entre el mensaje de estado (y 90) y el horizonte (ko8: +4, letra de 20 px)
+#define BIGCLK_Y 134   // ko10.1: bajo la fecha (y 114), que va bajo el mensaje de estado (y 90)
+#define BIGDATE_Y 113
 #define BIGCLK_W 44
 #define BIGCLK_H 76
 
@@ -1310,6 +1333,22 @@ void drawBigClock(bool night) {
   x += colon + gap / 2;
   drawSeg7(x, y, BIGCLK_W, BIGCLK_H, t, mm / 10, col); x += BIGCLK_W + gap;
   drawSeg7(x, y, BIGCLK_W, BIGCLK_H, t, mm % 10, col);
+  // ko10.1: fecha encima, en letra pequena ("2026.09.25 (금)"); debajo la taparian
+  // los brillos de alegria del Pokemon
+  int yy; uint8_t mo, dd, wd;
+  wxDate(e, &yy, &mo, &dd, &wd);
+  char wday[4];
+  memcpy(wday, XT(X_WDAYS) + wd * 3, 3);
+  wday[3] = 0;
+  char buf[24];
+  snprintf(buf, sizeof(buf), XT(X_DATE_FMT), yy, (unsigned)mo, (unsigned)dd, wday);
+  uint16_t dsky = lerp565(gSkyTop, gSkyBot, BIGDATE_Y + 8, HORIZON);
+  setSize(1);
+  int dx = centerX(buf, 1), dy = BIGDATE_Y;
+  // tinta suave (mas discreta que el mensaje de estado, pero legible)
+  gfx->setTextColor(night ? lerp565(UI_INK_NIGHT, dsky, 4, 16) : lerp565(UI_INK, dsky, 5, 16));
+  setCur(dx, dy);
+  printT(buf);
 }
 
 // primera partida: elige inicial entre Bulbasaur / Charmander / Squirtle

@@ -117,7 +117,7 @@ static void scenes(bool ko, const char *sfx) {
     }
     struct { uint32_t e; const char *tag; } WX[] = {
       { 1772459100u, "rain" }, { 1767275100u, "snow" }, { 1780321500u, "sunny" },
-      { 1772459100u + 9 * 3600, "night_clear" },
+      { 1772459100u + 9 * 3600, "night_clear" }, { 1775137500u, "blossom" }, { 1791035100u, "leaves" },
     };
     for (auto &w : WX) {
       gMockEpoch = w.e; pet.lastSeenEpoch = w.e;

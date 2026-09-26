@@ -56,6 +56,7 @@ enum XId : uint8_t {
   X_GAME_REWARD, X_GAME_NO_REWARD,
   X_NEXT_Q, X_NEXT_GO, X_NEXT_EXIT,
   X_ST_SCAN, X_AUTO_S_ON, X_AUTO_S_OFF, X_OPEN_ON, X_OPEN_OFF, X_SAVED_MORE_FMT,
+  X_DATE_FMT, X_WDAYS,  // ko10.1: fecha bajo el reloj (dias de 3 bytes, domingo primero)
   X_COUNT
 };
 

@@ -49,6 +49,7 @@ static const char *const XS[2][X_COUNT] = {
     "JOY + ENERGY UP!", "Beat the record for a bonus",
     "Look for another Pokemon?", "KEEP GOING", "EXIT",
     "Looking for WiFi...", "AUTO ON", "AUTO OFF", "OPEN WiFi ON", "OPEN WiFi OFF", " +%u",
+    "%d.%02u.%02u %s", "SUNMONTUEWEDTHUFRISAT",
   },
   // ---------------- KO ----------------
   {
@@ -94,6 +95,7 @@ static const char *const XS[2][X_COUNT] = {
     "기분, 기력 상승!", "최고 기록을 넘으면 기분, 기력 상승",
     "다른 포켓몬을 계속 만날까요?", "계속 만나기", "나가기",
     "WiFi 찾는 중...", "자동 켬", "자동 끔", "개방 WiFi 켬", "개방 WiFi 끔", " 외 %u개",
+    "%d.%02u.%02u (%s)", "일월화수목금토",
   },
 };
 

@@ -6,26 +6,40 @@
 //   - nieve: SOLO en invierno (diciembre, enero, febrero); en invierno lo que
 //     seria lluvia cae como nieve
 //   - sol radiante: los dias despejados de verano (junio, julio, agosto)
+//   - (ko10.1) petalos de cerezo: a ratos en primavera (marzo-mayo)
+//   - (ko10.1) hojas de otono: a ratos en otono (septiembre-noviembre)
 // El tiempo sale de la fecha (hash del bloque de 3 horas): no cambia al
 // reiniciar ni parpadea, y dos TamaPoke a la misma hora ven lo mismo.
 // Sin reloj (epoch 0) siempre despejado.
 #include <stdint.h>
 
-enum : uint8_t { WX_CLEAR = 0, WX_RAIN, WX_SNOW, WX_SUNNY };
+enum : uint8_t { WX_CLEAR = 0, WX_RAIN, WX_SNOW, WX_SUNNY, WX_BLOSSOM, WX_LEAVES };
 enum : uint8_t { SEASON_SPRING = 0, SEASON_SUMMER, SEASON_AUTUMN, SEASON_WINTER };
 
 #define WX_BLOCK_S (3u * 3600u)
+#define WX_DRIFT_CHANCE 35  // % de bloques secos de primavera/otono con petalos/hojas
 
-// mes 1..12 de una fecha en segundos (hora local, como pet.lastSeenEpoch)
-static inline uint8_t wxMonth(uint32_t epoch) {
-  // "civil_from_days" de H. Hinnant, solo el mes
-  int32_t z = (int32_t)(epoch / 86400u) + 719468;
+// fecha (ano, mes 1..12, dia 1..31) y dia de la semana (0 = domingo)
+static inline void wxDate(uint32_t epoch, int *y, uint8_t *m, uint8_t *d, uint8_t *wday) {
+  int32_t days = (int32_t)(epoch / 86400u);
+  int32_t z = days + 719468;
   int32_t era = z / 146097;
   uint32_t doe = (uint32_t)(z - era * 146097);
   uint32_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
   uint32_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
   uint32_t mp = (5 * doy + 2) / 153;
-  return (uint8_t)(mp < 10 ? mp + 3 : mp - 9);
+  uint8_t mm = (uint8_t)(mp < 10 ? mp + 3 : mp - 9);
+  if (y) *y = (int)yoe + era * 400 + (mm <= 2 ? 1 : 0);
+  if (m) *m = mm;
+  if (d) *d = (uint8_t)(doy - (153 * mp + 2) / 5 + 1);
+  if (wday) *wday = (uint8_t)((days + 4) % 7);  // 1-1-1970 fue jueves
+}
+
+// mes 1..12 de una fecha en segundos (hora local, como pet.lastSeenEpoch)
+static inline uint8_t wxMonth(uint32_t epoch) {
+  uint8_t m;
+  wxDate(epoch, nullptr, &m, nullptr, nullptr);
+  return m;
 }
 
 static inline uint8_t wxSeason(uint8_t month) {
@@ -53,5 +67,10 @@ static inline uint8_t weatherAt(uint32_t epoch) {
   uint8_t season = wxSeason(wxMonth(epoch));
   bool wet = wxHash(epoch / WX_BLOCK_S) % 100 < wxWetChance(season);
   if (wet) return season == SEASON_WINTER ? WX_SNOW : WX_RAIN;
-  return season == SEASON_SUMMER ? WX_SUNNY : WX_CLEAR;
+  if (season == SEASON_SUMMER) return WX_SUNNY;
+  // ko10.1: petalos en primavera, hojas en otono (tirada aparte, solo en su estacion)
+  bool drift = wxHash(epoch / WX_BLOCK_S ^ 0x5eed1234u) % 100 < WX_DRIFT_CHANCE;
+  if (drift && season == SEASON_SPRING) return WX_BLOSSOM;
+  if (drift && season == SEASON_AUTUMN) return WX_LEAVES;
+  return WX_CLEAR;
 }
