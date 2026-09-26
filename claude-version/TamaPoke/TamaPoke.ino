@@ -158,11 +158,13 @@ struct Btn {
   int16_t cx, cy;
   const char *const *icon;
 };
-Btn buttons[4] = {  // ko10.8: un poco mas arriba (debajo va la flecha de la ficha)
-  { 140, 388, SPR_ICON_FOOD },   // comer
-  { 202, 398, SPR_ICON_PLAY },   // jugar
-  { 264, 398, SPR_ICON_LIGHT },  // luz
-  { 326, 388, SPR_ICON_CLEAN },  // bano
+// ko10.9: botones de 42x42 (antes 52): con la flecha de la ficha debajo, los de
+// 52 subian hasta pisar las barras. El icono sigue igual (32 px)
+Btn buttons[4] = {
+  { 140, 394, SPR_ICON_FOOD },   // comer
+  { 202, 402, SPR_ICON_PLAY },   // jugar
+  { 264, 402, SPR_ICON_LIGHT },  // luz
+  { 326, 394, SPR_ICON_CLEAN },  // bano
 };
 // ko10.8: flechas en los bordes para navegar tocando (deslizar sigue valiendo).
 // Deslizar fallaba a veces y el gesto acababa como toque (p. ej. cerrando la ficha)
@@ -172,7 +174,7 @@ enum : uint8_t { NAV_L = 0, NAV_R, NAV_UP, NAV_DOWN };
 #define NAV_Y 200
 #define NAV_BY 446
 #define NAV_R_ 15
-#define BTN_HALF 26  // boton de 52x52
+#define BTN_HALF 21  // boton de 42x42 (ko10.9; antes 52x52)
 // fork KO: botones de la pagina de combate de la ficha (ko4: rejilla 2x2)
 #define CARD_ROW1_Y 222
 #define CARD_ROW2_Y 270
@@ -3995,8 +3997,8 @@ void drawButtons() {
   for (int i = 0; i < 4; i++) {
     bool off = pet.sleeping && i != 2;  // durmiendo solo funciona LUZ
     int bx = buttons[i].cx - BTN_HALF, by = buttons[i].cy - BTN_HALF;
-    if (!pet.sleeping) gfx->fillRoundRect(bx, by, 2 * BTN_HALF, 2 * BTN_HALF, 14, UI_WHITE);
-    gfx->drawRoundRect(bx, by, 2 * BTN_HALF, 2 * BTN_HALF, 14, inkColor());
+    if (!pet.sleeping) gfx->fillRoundRect(bx, by, 2 * BTN_HALF, 2 * BTN_HALF, 12, UI_WHITE);
+    gfx->drawRoundRect(bx, by, 2 * BTN_HALF, 2 * BTN_HALF, 12, inkColor());
     if (!off) drawMap(buttons[i].icon, 16, buttons[i].cx - 16, buttons[i].cy - 16, 2, false);
   }
 }
