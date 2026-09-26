@@ -158,12 +158,20 @@ struct Btn {
   int16_t cx, cy;
   const char *const *icon;
 };
-Btn buttons[4] = {
-  { 140, 390, SPR_ICON_FOOD },   // comer
-  { 202, 404, SPR_ICON_PLAY },   // jugar
-  { 264, 404, SPR_ICON_LIGHT },  // luz
-  { 326, 390, SPR_ICON_CLEAN },  // bano
+Btn buttons[4] = {  // ko10.8: un poco mas arriba (debajo va la flecha de la ficha)
+  { 140, 388, SPR_ICON_FOOD },   // comer
+  { 202, 398, SPR_ICON_PLAY },   // jugar
+  { 264, 398, SPR_ICON_LIGHT },  // luz
+  { 326, 388, SPR_ICON_CLEAN },  // bano
 };
+// ko10.8: flechas en los bordes para navegar tocando (deslizar sigue valiendo).
+// Deslizar fallaba a veces y el gesto acababa como toque (p. ej. cerrando la ficha)
+enum : uint8_t { NAV_L = 0, NAV_R, NAV_UP, NAV_DOWN };
+#define NAV_LX 26
+#define NAV_RX 440
+#define NAV_Y 200
+#define NAV_BY 446
+#define NAV_R_ 15
 #define BTN_HALF 26  // boton de 52x52
 // fork KO: botones de la pagina de combate de la ficha (ko4: rejilla 2x2)
 #define CARD_ROW1_Y 222
@@ -861,6 +869,10 @@ void onTap(int16_t x, int16_t y) {
   }
   if (pet.ceremony) return;  // durante la despedida no hay botones
   if (cardOpen) {
+    // ko10.8: flechas (antes de todo lo demas: tocar fuera cierra la ficha)
+    if (navHit(NAV_L, x, y)) { if (cardPage > 0) { cardPage--; sfxPlay(SFX_TAP); } return; }
+    if (navHit(NAV_R, x, y)) { if (cardPage < CARD_PAGES - 1) { cardPage++; sfxPlay(SFX_TAP); } return; }
+    if (navHit(NAV_DOWN, x, y)) { cardOpen = false; sfxPlay(SFX_TAP); return; }
     if (cardPage == 4) cardCandyTap(x, y);        // ko10.4: caramelos
     else if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
     else if (cardPage == 1 && y >= CARD_ROW1_Y && y < CARD_ROW2_Y + CARD_BTN_H &&
@@ -925,6 +937,16 @@ void onTap(int16_t x, int16_t y) {
     if (pet.wantFarewellButton()) { choiceKind = 2; choiceUntil = millis() + 12000; return; }
   }
   if (wildAlertTap(x, y)) return;  // fork KO: aviso de salvaje -> batalla
+  // ko10.8: flechas de la pantalla principal
+  if (mainNavAllowed()) {
+    if (navHit(NAV_L, x, y)) {
+      galleryOpen = true; galleryPage = 0; galleryDetail = 0; galleryDirty = true;
+      sfxPlay(SFX_TAP);
+      return;
+    }
+    if (navHit(NAV_R, x, y)) { openClock(); sfxPlay(SFX_TAP); return; }
+    if (!pet.isEgg() && navHit(NAV_UP, x, y)) { cardOpen = true; cardPage = 0; sfxPlay(SFX_TAP); return; }
+  }
   for (int i = 0; i < 4; i++) {
     int dx = x - buttons[i].cx, dy = y - buttons[i].cy;
     if (dx * dx + dy * dy <= BTN_HIT * BTN_HIT) {
@@ -1823,6 +1845,11 @@ void render() {
     gfx->fillRect(0, 312, 466, 154, gNight ? UI_BG_NIGHT : UI_BG_DAY);
     drawBars();
     drawButtons();
+    if (mainNavAllowed()) {  // ko10.8
+      drawNav(NAV_L, inkColor());
+      drawNav(NAV_R, inkColor());
+      if (!pet.isEgg()) drawNav(NAV_UP, inkColor());
+    }
     drawCelebration();
     if (pet.wantEvolveButton()) drawEvolveButton();        // CTA rojo: evolucionar
     else if (pet.canRunawayNow()) drawRunawayButton();     // CTA sombrio: escapada (abandono)
@@ -2770,6 +2797,9 @@ void renderCard() {
   setSize(2);
   setCur(centerX(T(S_BACK), 2), 398);
   printT(T(S_BACK));
+  if (cardPage > 0) drawNav(NAV_L, UI_INK);  // ko10.8
+  if (cardPage < CARD_PAGES - 1) drawNav(NAV_R, UI_INK);
+  drawNav(NAV_DOWN, UI_INK);
   gfx->flush();
 }
 
@@ -3074,15 +3104,18 @@ void renderGallery() {
       }
     }
   }
-  drawFit(XT(X_DEX_EXIT), 410, 220, UI_INK, 1);  // ko5
+  // ko10.8: sin el aviso "doble toque: salir" (la flecha de abajo sale; el doble toque sigue)
   // puntos de pagina (ko10: 16 paginas; mas juntos para caber abajo del circulo;
   // los de gen 2 en color de acento)
   for (int i = 0; i < GAL_PAGES; i++) {
     int x = CX - (GAL_PAGES - 1) * 5 + i * 10;
     uint16_t col = i * 16 + 1 > 151 ? UI_BAR_WARN : UI_INK;
-    if (i == galleryPage) gfx->fillCircle(x, 436, 4, col);
-    else gfx->drawCircle(x, 436, 2, col);
+    if (i == galleryPage) gfx->fillCircle(x, 416, 4, col);
+    else gfx->drawCircle(x, 416, 2, col);
   }
+  drawNav(NAV_L, UI_INK);  // ko10.8: en la primera pagina, la izquierda sale
+  if (galleryPage < GAL_PAGES - 1) drawNav(NAV_R, UI_INK);
+  drawNav(NAV_DOWN, UI_INK);
   gfx->flush();
 }
 
@@ -3091,6 +3124,20 @@ void galleryTap(int16_t x, int16_t y) {
   // hasta la primera pagina y una vez mas)
   static uint32_t lastTap = 0;
   uint32_t now = millis();
+  // ko10.8: flechas de la rejilla (sin contar como doble toque)
+  if (!galleryDetail) {
+    int np = -1;
+    if (navHit(NAV_L, x, y)) np = galleryPage - 1;
+    else if (navHit(NAV_R, x, y)) np = galleryPage < GAL_PAGES - 1 ? galleryPage + 1 : galleryPage;
+    else if (navHit(NAV_DOWN, x, y)) np = -2;
+    if (np != -1) {
+      lastTap = 0;
+      sfxPlay(SFX_TAP);
+      if (np < 0) { galleryOpen = false; galleryPmd.unload(); return; }
+      if (np != galleryPage) { galleryPage = np; galleryDirty = true; }
+      return;
+    }
+  }
   if (lastTap && now - lastTap < 450) {
     lastTap = 0;
     galleryOpen = false;
@@ -3897,6 +3944,28 @@ void drawBar(int x, int y, const char *label, uint8_t val) {
   setCur(bx + (bw - textW(num, 1)) / 2, gCjkFont ? y : y + 4);
   printT(num);
 }
+
+void drawNav(uint8_t k, uint16_t ink) {
+  int x = k == NAV_L ? NAV_LX : k == NAV_R ? NAV_RX : CX;
+  int y = (k == NAV_L || k == NAV_R) ? NAV_Y : NAV_BY;
+  gfx->fillCircle(x, y, NAV_R_, UI_WHITE);
+  gfx->drawCircle(x, y, NAV_R_, ink);
+  const int a = 7;
+  if (k == NAV_L) gfx->fillTriangle(x - a + 1, y, x + a - 2, y - a, x + a - 2, y + a, ink);
+  else if (k == NAV_R) gfx->fillTriangle(x + a - 1, y, x - a + 2, y - a, x - a + 2, y + a, ink);
+  else if (k == NAV_UP) gfx->fillTriangle(x, y - a + 1, x - a, y + a - 2, x + a, y + a - 2, ink);
+  else gfx->fillTriangle(x, y + a - 1, x - a, y - a + 2, x + a, y - a + 2, ink);
+}
+
+// zona tactil generosa (el dedo tapa la flecha)
+bool navHit(uint8_t k, int16_t x, int16_t y) {
+  if (k == NAV_L) return x < 62 && y > NAV_Y - 55 && y < NAV_Y + 55;
+  if (k == NAV_R) return x > 404 && y > NAV_Y - 55 && y < NAV_Y + 55;
+  return y > 428 && x > CX - 55 && x < CX + 55;
+}
+
+// pantalla principal: izquierda = pokedex, derecha = hora/ajustes, abajo = ficha
+bool mainNavAllowed() { return !pet.ceremony && !confirmUntil && !feedMenuUntil && !choiceKind; }
 
 void drawButtons() {
   for (int i = 0; i < 4; i++) {

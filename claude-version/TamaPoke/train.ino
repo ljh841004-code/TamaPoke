@@ -124,6 +124,9 @@ void renderTrainMenu() {
   if (timeLeft(trainMsgUntil) && trainMsg) drawFit(trainMsg, 336, 320, UI_BAR_BAD, 2);
   drawTrainMenuDots();
   drawFit(T(S_BACK), 390, 220, UI_INK, 2);
+  if (trainMenuPage > 0) drawNav(NAV_L, UI_INK);  // ko10.8
+  else drawNav(NAV_R, UI_INK);
+  drawNav(NAV_DOWN, UI_INK);
   gfx->flush();
 }
 
@@ -161,6 +164,10 @@ static void battlePageTap(int16_t x, int16_t y) {
 }
 
 void trainMenuTap(int16_t x, int16_t y) {
+  // ko10.8: flechas
+  if (navHit(NAV_L, x, y) && trainMenuPage == 1) { trainMenuPage = 0; trainMsgUntil = 0; sfxPlay(SFX_TAP); return; }
+  if (navHit(NAV_R, x, y) && trainMenuPage == 0) { trainMenuPage = 1; trainMsgUntil = 0; sfxPlay(SFX_TAP); return; }
+  if (navHit(NAV_DOWN, x, y)) { trainMenuOpen = false; sfxPlay(SFX_TAP); return; }
   if (trainMenuPage == 1) { battlePageTap(x, y); return; }
   if (x < TRM_X || x >= TRM_X + TRM_W || y < TRM_Y) { trainMenuOpen = false; return; }
   int i = (y - TRM_Y) / (TRM_H + TRM_GAP);
