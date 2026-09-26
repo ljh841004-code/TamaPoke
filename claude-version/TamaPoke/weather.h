@@ -35,6 +35,22 @@ static inline void wxDate(uint32_t epoch, int *y, uint8_t *m, uint8_t *d, uint8_
   if (wday) *wday = (uint8_t)((days + 4) % 7);  // 1-1-1970 fue jueves
 }
 
+// ko10.4: al reves, dia 0 = 1-1-1970 (para poner la fecha a mano)
+static inline uint32_t wxDaysFromDate(int y, uint8_t m, uint8_t d) {
+  y -= m <= 2;
+  int32_t era = (y >= 0 ? y : y - 399) / 400;
+  uint32_t yoe = (uint32_t)(y - era * 400);
+  uint32_t doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+  uint32_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return (uint32_t)(era * 146097 + (int32_t)doe - 719468);
+}
+
+static inline uint8_t wxDaysInMonth(int y, uint8_t m) {
+  static const uint8_t D[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+  if (m == 2 && ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0)) return 29;
+  return D[(m - 1) % 12];
+}
+
 // mes 1..12 de una fecha en segundos (hora local, como pet.lastSeenEpoch)
 static inline uint8_t wxMonth(uint32_t epoch) {
   uint8_t m;

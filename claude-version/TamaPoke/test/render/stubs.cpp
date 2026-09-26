@@ -95,6 +95,8 @@ bool linkActive() { return false; }
 LinkState linkState() { return LS_OFF; }
 LinkMode linkMode() { return LINK_NONE; }
 const LinkPet &linkPartner() { return gLp; }
+void linkSetClock(uint32_t, bool) {}
+bool linkPartnerClock(uint32_t *) { return false; }
 const LinkPet &linkMine() { return gLp; }
 bool linkPartnerAccepted() { return false; }
 bool linkIAmA() { return true; }

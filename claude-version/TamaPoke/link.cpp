@@ -91,6 +91,8 @@ bool linkActive() { return gCore.mode() != LINK_NONE; }
 LinkState linkState() { return gError ? LS_ERROR : gCore.state(); }
 LinkMode linkMode() { return gCore.mode(); }
 const LinkPet &linkPartner() { return gCore.partner(); }
+void linkSetClock(uint32_t epoch, bool ok) { gCore.setClock(epoch, ok, millis()); }
+bool linkPartnerClock(uint32_t *epoch) { return gCore.partnerClock(millis(), epoch); }
 const LinkPet &linkMine() { return gCore.mine(); }
 bool linkPartnerAccepted() { return gCore.partnerAccepted(); }
 bool linkIAmA() { return gCore.iAmA(); }

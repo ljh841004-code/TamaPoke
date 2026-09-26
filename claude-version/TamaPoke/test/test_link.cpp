@@ -182,3 +182,27 @@ TEST(link, poll_con_now_anterior_al_inicio_no_pierde_la_busqueda) {
   run(a, 1000);
   CHECK_EQ(n.core.state(), LS_SEARCH);  // sigue buscando (nadie mas en el aire)
 }
+
+// ---------------------------------------------------------------- ko10.4: hora por tongsin
+TEST(link, la_hora_de_fiar_pasa_al_que_la_perdio) {
+  // dos nucleos conectados sin perdidas
+  struct Wire { LinkCore *to; uint8_t from[6]; uint32_t now; };
+  static LinkCore a, b;
+  static uint8_t macA[6] = { 1, 1, 1, 1, 1, 1 }, macB[6] = { 2, 2, 2, 2, 2, 2 };
+  static uint32_t tNow = 0;
+  auto toB = [](void *, const LinkMsg &m) { b.receive(macA, m, tNow); };
+  auto toA = [](void *, const LinkMsg &m) { a.receive(macB, m, tNow); };
+  LinkPet pa, pb;
+  memset(&pa, 0, sizeof(pa)); memset(&pb, 0, sizeof(pb));
+  pa.t.dex = 4; pb.t.dex = 7;
+  a.setClock(1790343900u, true, 0);   // A: hora buena
+  b.setClock(1767225600u, false, 0);  // B: sembrada tras perder la pila
+  a.start(LINK_BATTLE, pa, macA, 11, 0, toB, nullptr);
+  b.start(LINK_BATTLE, pb, macB, 22, 0, toA, nullptr);
+  for (tNow = 0; tNow < 5000; tNow += 100) { a.poll(tNow); b.poll(tNow); }
+  uint32_t e = 0;
+  CHECK(b.partnerClock(tNow, &e));
+  CHECK_RANGE((int)(e - 1790343900u), 4, 6);   // la de A, avanzada ~5 s
+  CHECK(!a.partnerClock(tNow, &e));             // la de B no es de fiar: A no la toma
+  a.stop(); b.stop();
+}

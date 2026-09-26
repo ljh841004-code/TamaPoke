@@ -786,3 +786,17 @@ TEST(candy, usos_gastan_y_aplican) {
   CHECK(!r.candyUse(CU_EXP));
   CHECK_EQ(r.candyOf(4), (uint16_t)2);
 }
+
+TEST(weather, fecha_a_mano_ida_y_vuelta) {
+  CHECK_EQ(wxDaysFromDate(1970, 1, 1), 0u);
+  CHECK_EQ(wxDaysFromDate(2026, 9, 25) * 86400u + 13 * 3600 + 45 * 60, 1790343900u);
+  CHECK_EQ(wxDaysFromDate(2024, 2, 29) * 86400u, 1709164800u);
+  for (uint32_t day = 19000; day < 22000; day += 7) {
+    int y; uint8_t m, d;
+    wxDate(day * 86400u, &y, &m, &d, nullptr);
+    CHECK_EQ(wxDaysFromDate(y, m, d), day);
+  }
+  CHECK_EQ((int)wxDaysInMonth(2024, 2), 29);
+  CHECK_EQ((int)wxDaysInMonth(2026, 2), 28);
+  CHECK_EQ((int)wxDaysInMonth(2026, 11), 30);
+}

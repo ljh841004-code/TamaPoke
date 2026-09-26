@@ -84,6 +84,7 @@ void closeNet() {
 // la hora local llega del NTP: al RTC y al juego
 void applyNetTime(uint32_t e) {
   rtcSetEpoch(e);
+  gClockTrusted = true;
   // si el RTC habia perdido la hora al arrancar, ahora SI se sabe cuanto tiempo
   // estuvo apagado: se aplica como progresion offline (igual que con pila)
   if (gRtcWasLost) {
@@ -1730,6 +1731,7 @@ void linkMenuTap(int16_t x, int16_t y) {
   sfxPlay(SFX_TAP);
   LinkPet lp;
   myLinkPet(lp);
+  linkSetClock(clockEpoch(), gClockTrusted);  // ko10.4: la hora viaja en cada mensaje
   linkStart(m, lp);
   linkEndAt = 0;
   linkEndMsg = nullptr;
@@ -1924,6 +1926,12 @@ void extraLoop(uint32_t now) {
   uint32_t e = netPoll(now);
   if (e) applyNetTime(e);
   linkPoll(now);
+  // ko10.4: si mi hora no es de fiar (pila agotada) y el amigo si la tiene, se toma
+  uint32_t le;
+  if (!gClockTrusted && linkActive() && linkPartnerClock(&le)) {
+    applyNetTime(le);
+    showToast(XT(X_TIME_FROM_LINK));
+  }
   if (xScreen == XS_WILD) updateWild();
   else if (xScreen == XS_LINK) updateLink();
   if (xScreen == XS_NET) lastInteract = now;

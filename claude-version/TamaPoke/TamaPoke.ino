@@ -102,6 +102,8 @@ const char *cardMsg = nullptr;  // ko10.4: aviso breve en la pagina de caramelos
 uint32_t cardMsgUntil = 0;
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 int clockH = 12, clockM = 0;  // hora en edicion
+int clockY = 2026, clockMo = 1, clockD = 1;  // ko10.4: fecha en edicion
+bool clockDateMode = false;  // los botones +/- cambian mes/dia en vez de hora/minuto
 
 // escena de bano: espuma sobre el bicho y limpieza al reventar
 uint32_t bathUntil = 0;
@@ -192,6 +194,9 @@ static const int16_t STARTER_DEX[3] = { 1, 4, 7 };
 // leer el bus I2C mientras el chip esta dormido (esa lectura se colgaba ~1s)
 volatile bool gTouchIrq = false;
 bool gRtcWasLost = false;  // el RTC arranco sin hora: el NTP aplicara el tiempo apagado
+// ko10.4: la hora es de fiar (RTC con hora al arrancar, NTP, puesta a mano o de un
+// amigo por tongsin). Solo una hora de fiar se pasa a otro TamaPoke
+bool gClockTrusted = false;
 void IRAM_ATTR touchIsr() { gTouchIrq = true; }
 uint32_t lastRender = 0;
 // proteccion del AMOLED: atenuado por inactividad
@@ -262,6 +267,7 @@ void setup() {
   batBegin();
   pwrSetup();
   uint32_t e = rtcEpoch();
+  gClockTrusted = e != 0;
   if (e == 0) {
     // Sin pila de respaldo, el PCF85063 pierde la hora al cortar la
     // alimentacion. Sembrar siempre la fecha fija haria RETROCEDER el tiempo de
@@ -2184,14 +2190,21 @@ void openClock() {
   uint32_t e = pet.lastSeenEpoch ? pet.lastSeenEpoch : rtcEpoch();
   clockH = (e / 3600) % 24;
   clockM = (e / 60) % 60;
+  uint8_t mo, d;
+  wxDate(e ? e : 1767225600u, &clockY, &mo, &d, nullptr);  // sin hora: 1-1-2026
+  clockMo = mo; clockD = d;
+  clockDateMode = false;
   clockOpen = true;
 }
 
 void applyClock() {
-  uint32_t base = pet.lastSeenEpoch ? pet.lastSeenEpoch : rtcEpoch();
-  uint32_t e = (base / 86400) * 86400 + (uint32_t)clockH * 3600 + (uint32_t)clockM * 60;
+  // ko10.4: fecha y hora puestas a mano (antes solo la hora, sobre el dia guardado)
+  uint32_t e = wxDaysFromDate(clockY, (uint8_t)clockMo, (uint8_t)clockD) * 86400u +
+               (uint32_t)clockH * 3600 + (uint32_t)clockM * 60;
   rtcSetEpoch(e);
   pet.setClock(e);
+  gRtcWasLost = false;
+  gClockTrusted = true;  // la hora ya es de fiar (tambien para pasarla por tongsin)
   clockOpen = false;
 }
 
@@ -2214,7 +2227,11 @@ void drawClockBtn(int x, int y, const char *l) {
 #define RST_PILL_X 163    // fork KO (ko8): [nuevo comienzo]
 #define RST_PILL_Y 374
 #define RST_PILL_H 30
-#define CLK_BTN_Y 168   // botones +/- (antes 190)
+#define CLK_BTN_Y 170   // botones +/- (antes 190)
+#define CLK_PILL_X 143  // ko10.4: pildora hora/fecha bajo el titulo
+#define CLK_PILL_Y 66
+#define CLK_PILL_W 180
+#define CLK_PILL_H 30
 #define CLK_OK_Y 316    // [OK] (antes 340)
 #define CLK_VER_Y 414   // version (antes 436: con "ko10.2" ya rozaba el borde)
 #define RST_PILL_W 140
@@ -2225,13 +2242,20 @@ void renderClock() {
   gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
   gfx->setTextColor(UI_INK);
   setSize(3);
-  setCur(centerX(T(S_SET_TIME), 3), 44);
+  setCur(centerX(T(S_SET_TIME), 3), 30);  // ko10.4: sitio para la pildora de fecha
   printT(T(S_SET_TIME));
 
+  // ko10.4: pildora que cambia entre hora y fecha (muestra la otra)
+  char pill[32];
+  if (clockDateMode) snprintf(pill, sizeof(pill), "%d  %02d:%02d", clockY, clockH, clockM);
+  else snprintf(pill, sizeof(pill), "%d.%02d.%02d", clockY, clockMo, clockD);
+  drawBtn(CLK_PILL_X, CLK_PILL_Y, CLK_PILL_W, CLK_PILL_H, clockDateMode ? UI_BAR_WARN : UI_WHITE, UI_INK, pill);
   char t[8];
-  snprintf(t, sizeof(t), "%02d:%02d", clockH, clockM);
+  if (clockDateMode) snprintf(t, sizeof(t), "%02d/%02d", clockMo, clockD);
+  else snprintf(t, sizeof(t), "%02d:%02d", clockH, clockM);
+  gfx->setTextColor(UI_INK);
   setSize(7);
-  setCur(centerX(t, 7), 96);  // ko8: centrado de verdad con cualquier fuente
+  setCur(centerX(t, 7), 104);  // ko8: centrado de verdad con cualquier fuente
   printT(t);
 
   drawClockBtn(104, CLK_BTN_Y, "-");  // hora -
@@ -2241,9 +2265,9 @@ void renderClock() {
   setSize(2);
   gfx->setTextColor(UI_INK);
   setCur(120, CLK_BTN_Y + 64);
-  printT(T(S_HOUR));
+  printT(clockDateMode ? XT(X_MONTH) : T(S_HOUR));
   setCur(276, CLK_BTN_Y + 64);
-  printT(T(S_MIN));
+  printT(clockDateMode ? XT(X_DAY) : T(S_MIN));
 
   // interruptor de sonido (izquierda de la fila de idioma)
   bool snd = audioEnabled();
@@ -2296,7 +2320,23 @@ void renderClock() {
 }
 
 void clockTap(int16_t x, int16_t y) {
+  if (y >= CLK_PILL_Y - 4 && y < CLK_PILL_Y + CLK_PILL_H + 4 && x >= CLK_PILL_X && x < CLK_PILL_X + CLK_PILL_W) {
+    clockDateMode = !clockDateMode;  // ko10.4: hora <-> fecha
+    sfxPlay(SFX_TAP);
+    return;
+  }
   if (y >= CLK_BTN_Y && y <= CLK_BTN_Y + 58) {  // fila de botones +/-
+    if (clockDateMode) {  // ko10.4: mes (con el ano al dar la vuelta) y dia
+      if (x >= 104 && x < 162) { if (--clockMo < 1) { clockMo = 12; clockY--; } }
+      else if (x >= 170 && x < 228) { if (++clockMo > 12) { clockMo = 1; clockY++; } }
+      else if (x >= 252 && x < 310) { if (--clockD < 1) clockD = wxDaysInMonth(clockY, (uint8_t)clockMo); }
+      else if (x >= 318 && x < 376) { if (++clockD > wxDaysInMonth(clockY, (uint8_t)clockMo)) clockD = 1; }
+      if (clockY < 2025) clockY = 2025;
+      if (clockY > 2099) clockY = 2099;
+      uint8_t dim = wxDaysInMonth(clockY, (uint8_t)clockMo);
+      if (clockD > dim) clockD = dim;
+      return;
+    }
     if (x >= 104 && x < 162) clockH = (clockH + 23) % 24;
     else if (x >= 170 && x < 228) clockH = (clockH + 1) % 24;
     else if (x >= 252 && x < 310) clockM = (clockM + 59) % 60;

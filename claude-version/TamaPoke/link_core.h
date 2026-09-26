@@ -21,6 +21,9 @@ struct __attribute__((packed)) LinkMsg {
   uint8_t peerMac[6];  // con quien me he emparejado (ceros = con nadie aun)
   uint32_t nonce;
   LinkPet pet;
+  // ko10.4 (proto 4): la hora local del que envia, y si es de fiar
+  uint32_t clock;
+  uint8_t clockOk;
 };
 
 class LinkCore {
@@ -35,6 +38,9 @@ public:
   void accept();
   void decline();
   bool takeTrade(TradePet &out);
+  // ko10.4: mi hora (se manda en cada mensaje) y la del otro, si es de fiar
+  void setClock(uint32_t epoch, bool ok, uint32_t now) { myClock = epoch; myClockOk = ok; myClockAt = now; }
+  bool partnerClock(uint32_t now, uint32_t *epoch) const;
 
   LinkState state() const { return st; }
   LinkMode mode() const { return md; }
@@ -55,6 +61,8 @@ private:
   uint32_t lastTx = 0, lastRx = 0, t0 = 0, doneAt = 0;
   bool myAccept = false, theirAccept = false, commitPending = false;
   uint8_t declineLeft = 0;
+  uint32_t myClock = 0, myClockAt = 0, theirClock = 0, theirClockAt = 0;
+  bool myClockOk = false, theirClockOk = false;
   SendFn sendFn = nullptr;
   void *sendCtx = nullptr;
 };

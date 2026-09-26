@@ -30,7 +30,8 @@ struct __attribute__((packed)) LinkPet {
 // 2 (ko8): el apodo del intercambio pasa de 12 a 20 bytes (hangul). Con otro
 // tamano de mensaje la version 1 ni se oye (se descarta por longitud).
 // 3 (ko10): especies de gen 2 (152-251); un ko9 no sabria que hacer con ellas
-#define LINK_PROTO_VER 3
+// 4 (ko10.4): cada mensaje lleva la hora; el que la perdio la toma del otro
+#define LINK_PROTO_VER 4
 
 void linkStart(LinkMode mode, const LinkPet &mine);
 void linkStop();
@@ -38,6 +39,8 @@ bool linkActive();
 LinkState linkState();
 LinkMode linkMode();
 const LinkPet &linkPartner();
+void linkSetClock(uint32_t epoch, bool ok);      // ko10.4
+bool linkPartnerClock(uint32_t *epoch);          // ko10.4: true si el otro tiene hora de fiar
 const LinkPet &linkMine();  // lo que YO envie (la batalla se simula con esto)
 bool linkPartnerAccepted();
 bool linkIAmA();          // mi placa es el lado "a" de la simulacion

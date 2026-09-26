@@ -257,6 +257,7 @@ static void scenes(bool ko, const char *sfx) {
   galleryDetail = 0; galleryPage = 0;
   // sonido y hora
   closeAll(); openClock(); render(); shot("15_clock_settings");
+  clockDateMode = true; render(); shot("15b_clock_date"); clockDateMode = false;
   closeAll(); openSound(); render(); shot("16_sound");
   closeAll(); openNet(); render(); shot("18_net");
   { gMockPortal = true; render(); shot("18b_portal_qr"); gMockPortal = false; }

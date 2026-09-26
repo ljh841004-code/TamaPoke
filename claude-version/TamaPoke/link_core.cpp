@@ -26,6 +26,8 @@ void LinkCore::start(LinkMode mode, const LinkPet &mine, const uint8_t mac[6], u
   declineLeft = 0;
   myNonce = nonce;
   theirNonce = 0;
+  theirClock = theirClockAt = 0;
+  theirClockOk = false;
   sendFn = fn;
   sendCtx = ctx;
   st = LS_SEARCH;
@@ -37,6 +39,12 @@ void LinkCore::stop() {
   st = LS_OFF;
   md = LINK_NONE;
   havePeer = false;
+}
+
+bool LinkCore::partnerClock(uint32_t now, uint32_t *epoch) const {
+  if (!theirClockOk || !theirClock) return false;
+  if (epoch) *epoch = theirClock + (now - theirClockAt) / 1000;
+  return true;
 }
 
 uint32_t LinkCore::seed() const {
@@ -56,6 +64,8 @@ void LinkCore::send(uint8_t type, uint32_t now) {
   if (havePeer) memcpy(m.peerMac, peer, 6);
   m.nonce = myNonce;
   m.pet = me;
+  m.clock = myClock ? myClock + (now - myClockAt) / 1000 : 0;
+  m.clockOk = myClockOk && myClock ? 1 : 0;
   if (sendFn) sendFn(sendCtx, m);
   lastTx = now;
 }
@@ -96,6 +106,7 @@ void LinkCore::receive(const uint8_t src[6], const LinkMsg &m, uint32_t now) {
   }
   if (!sameMac(src, peer)) return;
   lastRx = now;
+  if (m.clockOk && m.clock) { theirClock = m.clock; theirClockAt = now; theirClockOk = true; }
   if (m.type == MSG_HELLO) {
     if (st == LS_SEARCH && sameMac(m.peerMac, myMac)) st = LS_READY;  // nos vemos los dos
   } else if (m.type == MSG_ACCEPT) {
