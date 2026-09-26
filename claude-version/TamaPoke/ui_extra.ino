@@ -9,7 +9,8 @@
 // extraSwipe, extraLoop...), para tocar lo minimo el fichero original.
 
 enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_VOL, XS_UPD, XS_RESET,
-                 XS_REGION };  // ko10.1: elegir region antes del salvaje
+                 XS_REGION,    // ko10.1: elegir region antes del salvaje
+                 XS_GYM, XS_DAILY };  // ko10.4: gimnasios y reto del dia
 uint8_t xScreen = XS_NONE;
 
 // aviso breve en la pantalla principal
@@ -324,6 +325,12 @@ bool bWon = false, bFled = false, bLink = false, bRewarded = false;
 // ko10.1: region del salvaje (= escenario 0..15). La de mi Pokemon por defecto
 uint8_t bRegion = 0;
 uint8_t bGroup = WG_COMMON;  // de que grupo salio el rival (WG_RARE: brillo al aparecer)
+// ko10.4: combates contra entrenador (gimnasio / reto del dia): varios rivales seguidos
+enum : uint8_t { BK_WILD = 0, BK_GYM, BK_DAILY };
+uint8_t bKind = BK_WILD;
+uint8_t bGym = 0;
+Battler bTeam[GYM_MAX_TEAM > DAILY_TEAM ? GYM_MAX_TEAM : DAILY_TEAM];
+uint8_t bTeamN = 0, bTeamI = 0;
 
 // salvaje
 Battler bMe, bFoe;
@@ -979,8 +986,11 @@ void renderBattleView() {
     }
     if (good && !bLink) {  // fork KO (ko4): objetos y caja
       if (ly < 374) { drawFit(bWon ? XT(X_REWARD_ITEMS) : XT(X_REWARD), ly, 320, UI_INK, 2); ly += 26; }
-      if (bBoxMsg >= 0 && ly <= 374)
+      if (bBoxMsg >= 0 && ly <= 374) {
         drawFit(XT((XId)bBoxMsg), ly, 320, bBoxMsg == X_BOX_FULL ? UI_BAR_BAD : UI_INK, 2);
+        ly += 26;
+      }
+      if (bNote[0] && ly <= 374) drawFit(bNote, ly, 330, C565(0xa0, 0x30, 0x60), 2);  // ko10.4: medalla / reto
     } else if (good && ly < 374) {
       drawFit(XT(X_REWARD), ly, 320, UI_INK, 2);
     }
@@ -1035,6 +1045,62 @@ bool battleAllowed(bool toast) {
 
 uint8_t petRegion() { return pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome; }
 
+// ko10.4: el tiempo de ahora cuenta en la batalla; se avisa en la 2a linea
+void battleWeatherIntro() {
+  uint8_t wx = sceneWeather();
+  battleSetWeather(wx);
+  const char *m = wx == WX_RAIN ? XT(X_WX_RAIN) : wx == WX_SUNNY && sceneHour() >= 6 && sceneHour() < 20 ? XT(X_WX_SUNNY)
+                : wx == WX_SNOW ? XT(X_WX_SNOW) : "";
+  if (wx == WX_SUNNY && !m[0]) battleSetWeather(WX_CLEAR);  // de noche no hay sol
+  strncpy(bvL2, m, sizeof(bvL2) - 1);
+  bvL2[sizeof(bvL2) - 1] = 0;
+}
+
+// ko10.4: combate contra entrenador: team[0..n-1] uno tras otro, sin huir ni pokeball
+static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint8_t n) {
+  if (!battleAllowed(true)) return;
+  wildAlertUntil = 0;
+  cardOpen = false;
+  bKind = kind;
+  bRegion = region < REGION_COUNT ? region : 0;
+  bTeamN = n;
+  bTeamI = 0;
+  for (uint8_t i = 0; i < n; i++) bTeam[i] = team[i];
+  bRng = BRng(esp_random());
+  bMe = makeBattler(pet.speciesId, pet.level(), pet.atkStat(), pet.defStat(), pet.speStat());
+  bFoe = bTeam[0];
+  bvSetup(bMe, bFoe, nullptr, false);
+  bGroup = WG_COMMON;
+  bqAisMe = true;
+  bLink = false;
+  if (kind == BK_GYM) txFmt(bvL1, sizeof(bvL1), X_GYM_INTRO, XT((XId)(X_LEADER_0 + bGym)));
+  else txFmt(bvL1, sizeof(bvL1), X_DAILY_INTRO, XT((XId)(X_REG_0 + bRegion)));
+  battleWeatherIntro();
+  bPhase = BP_INTRO;
+  bPhaseT = millis();
+  xScreen = XS_WILD;
+  sfxPlay(SFX_MEDAL);
+  audioSetBattleMusic(false, true);
+  audioCry(bFoe.dex);
+}
+
+// el rival cayo: si le quedan Pokemon, sale el siguiente (EXP del vencido ya)
+static bool nextTrainerMon() {
+  if (bKind == BK_WILD || bTeamI + 1 >= bTeamN) return false;
+  pet.addExp(battleExp(bFoe.dex, bFoe.lvl));
+  bvMeLvl = pet.level();
+  bTeamI++;
+  bFoe = bTeam[bTeamI];
+  bvSetup(bMe, bFoe, nullptr, false);
+  const char *who = bKind == BK_GYM ? XT((XId)(X_LEADER_0 + bGym)) : XT(X_DAILY_FOE);
+  txFmt(bvL1, sizeof(bvL1), X_TRAINER_NEXT, who, dexName(bFoe.dex));
+  bvL2[0] = 0;
+  bPhase = BP_INTRO;
+  bPhaseT = millis();
+  audioCry(bFoe.dex);
+  return true;
+}
+
 void startWildIn(uint8_t region) {
   if (!battleAllowed(true)) return;
   wildAlertUntil = 0;
@@ -1051,7 +1117,8 @@ void startWildIn(uint8_t region) {
   bLink = false;
   txFmt(bvL1, sizeof(bvL1), bGroup == WG_RARE ? X_WILD_RARE : X_WILD_AT,
         XT((XId)(X_REG_0 + bRegion)), dexName(bFoe.dex));
-  bvL2[0] = 0;
+  bKind = BK_WILD;
+  battleWeatherIntro();
   bPhase = BP_INTRO;
   bPhaseT = millis();
   xScreen = XS_WILD;
@@ -1076,6 +1143,9 @@ void startWild() { startWildIn(petRegion()); }
 #define RG_DOTS_Y 356
 #define RG_BACK_Y 372
 uint8_t regionPage = 0;
+uint32_t regionMsgUntil = 0;
+// ko10.4: abierta si hay medallas suficientes; la region de mi Pokemon, siempre
+bool regionOpen(uint8_t r) { return r == petRegion() || regionUnlocked(r, pet.badges); }
 
 void openRegionPick() {
   if (!battleAllowed(true)) return;
@@ -1101,7 +1171,13 @@ void renderRegionPick() {
     uint16_t bg = BIOME_SOIL[i];
     int lum = ((bg >> 11) & 31) * 2 + ((bg >> 5) & 63) * 2 + (bg & 31);  // aprox. 0..250
     uint16_t fg = lum > 150 ? UI_INK : UI_WHITE;
-    drawBtn(x, y, RG_W, RG_H, bg, fg, XT((XId)(X_REG_0 + i)));
+    if (!regionOpen((uint8_t)i)) {  // ko10.4: faltan medallas
+      char l[40];
+      snprintf(l, sizeof(l), XT(X_REGION_LOCK_FMT), XT((XId)(X_REG_0 + i)), regionBadgesNeeded((uint8_t)i));
+      drawBtn(x, y, RG_W, RG_H, UI_TRACK, 0x8410, l);
+    } else {
+      drawBtn(x, y, RG_W, RG_H, bg, fg, XT((XId)(X_REG_0 + i)));
+    }
     if (i == mine) {  // la region de mi Pokemon: marco naranja
       uint16_t o = C565(0xff, 0x8a, 0x1a);
       gfx->drawRoundRect(x - 2, y - 2, RG_W + 4, RG_H + 4, 13, o);
@@ -1111,10 +1187,14 @@ void renderRegionPick() {
   }
   if (regionPage > 0) drawRegionArrow(40, true);
   if (regionPage < 1) drawRegionArrow(426, false);
-  for (int p = 0; p < 2; p++) {
-    int x = CX - 13 + p * 26;
-    if (p == regionPage) gfx->fillCircle(x, RG_DOTS_Y, 5, UI_INK);
-    else gfx->drawCircle(x, RG_DOTS_Y, 4, UI_INK);
+  if (timeLeft(regionMsgUntil)) {  // ko10.4: "faltan medallas"
+    drawFit(XT(X_REGION_LOCKED), RG_DOTS_Y - 8, 300, UI_BAR_BAD, 1);
+  } else {
+    for (int p = 0; p < 2; p++) {
+      int x = CX - 13 + p * 26;
+      if (p == regionPage) gfx->fillCircle(x, RG_DOTS_Y, 5, UI_INK);
+      else gfx->drawCircle(x, RG_DOTS_Y, 4, UI_INK);
+    }
   }
   drawBtn(CX - 80, RG_BACK_Y, 160, 44, UI_TRACK, UI_INK, T(S_BACK));
   gfx->flush();
@@ -1143,8 +1223,181 @@ void regionTap(int16_t x, int16_t y) {
   int cx = (x - RG_X) / (RG_W + RG_GAPX), cy = (y - RG_Y) / (RG_H + RG_GAPY);
   if (cx > 1 || cy > 3) return;
   if ((x - RG_X) % (RG_W + RG_GAPX) >= RG_W || (y - RG_Y) % (RG_H + RG_GAPY) >= RG_H) return;  // hueco
+  uint8_t r = (uint8_t)(regionPage * RG_PER_PAGE + cy * 2 + cx);
+  if (!regionOpen(r)) { sfxPlay(SFX_DENY); regionMsgUntil = millis() + 1800; return; }
   xScreen = XS_NONE;
-  startWildIn((uint8_t)(regionPage * RG_PER_PAGE + cy * 2 + cx));
+  startWildIn(r);
+}
+
+// ======================================================================
+// ko10.4: gimnasios (8 medallas) y reto del dia
+// ======================================================================
+static const uint16_t BADGE_COL[GYM_COUNT] = {
+  C565(0x8a, 0x8a, 0x8a), C565(0x3a, 0x8c, 0xe0), C565(0xf0, 0x90, 0x30), C565(0x6c, 0xc0, 0x5c),
+  C565(0xf0, 0x7a, 0xa8), C565(0xe0, 0xb8, 0x30), C565(0xd8, 0x40, 0x40), C565(0x40, 0xa0, 0x60),
+};
+#define GY_PER_PAGE 4
+#define GY_X 58
+#define GY_Y 124
+#define GY_W 350
+#define GY_H 50
+#define GY_GAP 8
+#define GY_BACK_Y 378
+uint8_t gymPage = 0;
+uint32_t gymMsgUntil = 0;
+const char *gymMsg = nullptr;
+
+void openGyms() {
+  xScreen = XS_GYM;
+  gymPage = badgeCount(pet.badges) >= GY_PER_PAGE ? 1 : 0;  // la pagina del proximo
+  sfxPlay(SFX_TAP);
+}
+
+static void drawBadge(int x, int y, int r, uint8_t i, bool got) {
+  if (got) {
+    gfx->fillCircle(x, y, r, BADGE_COL[i]);
+    gfx->fillCircle(x - r / 3, y - r / 3, r / 3, UI_WHITE);  // brillo
+  } else {
+    gfx->drawCircle(x, y, r, UI_TRACK);
+  }
+}
+
+void renderGyms() {
+  screenBase();
+  char t[40];
+  snprintf(t, sizeof(t), XT(X_GYM_TITLE_FMT), badgeCount(pet.badges));
+  drawFit(t, 40, 320, UI_INK, 3);
+  for (int i = 0; i < GYM_COUNT; i++) drawBadge(CX - 7 * 17 + i * 34, 96, 11, (uint8_t)i, pet.badges & (1 << i));
+  uint8_t next = badgeCount(pet.badges);
+  for (int k = 0; k < GY_PER_PAGE; k++) {
+    uint8_t i = (uint8_t)(gymPage * GY_PER_PAGE + k);
+    int y = GY_Y + k * (GY_H + GY_GAP);
+    bool got = pet.badges & (1 << i), open = got || i <= next;
+    uint16_t bg = got ? UI_WHITE : open ? C565(0xff, 0xf0, 0xc8) : UI_TRACK;
+    gfx->fillRoundRect(GY_X, y, GY_W, GY_H, 12, bg);
+    gfx->drawRoundRect(GY_X, y, GY_W, GY_H, 12, UI_INK);
+    drawBadge(GY_X + 26, y + GY_H / 2, 13, i, got);
+    const GymDef &g = GYMS[i];
+    char l1[48];
+    snprintf(l1, sizeof(l1), "%s  %s  Lv%u", XT((XId)(X_LEADER_0 + i)), XT((XId)(X_REG_0 + g.region)), g.lv[g.n - 1]);
+    gfx->setTextColor(open ? UI_INK : 0x8410);
+    setSize(2);
+    setCur(GY_X + 50, y + 6);
+    printT(l1);
+    char l2[40];
+    if (got) snprintf(l2, sizeof(l2), "%s", XT(X_GYM_AGAIN));
+    else if (open) snprintf(l2, sizeof(l2), "%s", XT(X_GYM_GO));
+    else snprintf(l2, sizeof(l2), XT(X_GYM_LOCK_FMT), i);
+    gfx->setTextColor(got ? 0x8410 : open ? UI_BAR_BAD : 0x8410);
+    setSize(1);
+    setCur(GY_X + 50, y + 30);
+    printT(l2);
+  }
+  if (gymMsg && timeLeft(gymMsgUntil)) drawFit(gymMsg, 360, 300, UI_BAR_BAD, 1);
+  else
+    for (int p = 0; p < 2; p++) {
+      int x = CX - 13 + p * 26;
+      if (p == gymPage) gfx->fillCircle(x, 364, 5, UI_INK);
+      else gfx->drawCircle(x, 364, 4, UI_INK);
+    }
+  drawBtn(CX - 80, GY_BACK_Y, 160, 40, UI_TRACK, UI_INK, T(S_BACK));
+  gfx->flush();
+}
+
+bool gymSwipe(int dir) {
+  if (xScreen != XS_GYM) return false;
+  int p = (int)gymPage + (dir > 0 ? -1 : 1);
+  if (p >= 0 && p <= 1 && p != gymPage) { gymPage = (uint8_t)p; sfxPlay(SFX_TAP); }
+  return true;
+}
+
+void gymTap(int16_t x, int16_t y) {
+  if (inRect(x, y, CX - 80, GY_BACK_Y, 160, 40)) { sfxPlay(SFX_TAP); xScreen = XS_NONE; return; }
+  if (x < GY_X || x >= GY_X + GY_W || y < GY_Y) return;
+  int k = (y - GY_Y) / (GY_H + GY_GAP);
+  if (k >= GY_PER_PAGE || (y - GY_Y) % (GY_H + GY_GAP) >= GY_H) return;
+  uint8_t i = (uint8_t)(gymPage * GY_PER_PAGE + k);
+  bool got = pet.badges & (1 << i);
+  if (!got && i > badgeCount(pet.badges)) {
+    sfxPlay(SFX_DENY);
+    gymMsg = XT(X_REGION_LOCKED);
+    gymMsgUntil = millis() + 1800;
+    return;
+  }
+  if (!pet.canBattle() || pet.tooTiredToBattle()) {
+    sfxPlay(SFX_DENY);
+    gymMsg = !pet.canBattle() ? XT(X_CANT_NOW) : XT(X_TOO_TIRED);
+    gymMsgUntil = millis() + 1800;
+    return;
+  }
+  const GymDef &g = GYMS[i];
+  Battler team[GYM_MAX_TEAM];
+  for (uint8_t j = 0; j < g.n; j++) team[j] = makeTrainerMon(g.dex[j], g.lv[j]);
+  bGym = i;
+  xScreen = XS_NONE;
+  startTrainer(BK_GYM, g.region, team, g.n);
+}
+
+// ---- reto del dia
+void openDaily() {
+  xScreen = XS_DAILY;
+  sfxPlay(SFX_TAP);
+}
+
+static uint32_t todayNum() { return pet.lastSeenEpoch / 86400u; }
+
+void renderDaily() {
+  screenBase();
+  drawFit(XT(X_DAILY_BTN), 40, 320, UI_INK, 3);
+  uint32_t day = todayNum();
+  if (!day) {
+    drawFit(XT(X_DAILY_NOCLOCK), 200, 320, UI_BAR_BAD, 2);
+  } else {
+    uint8_t reg = dailyRegion(day);
+    char l[48];
+    txFmt(l, sizeof(l), X_DAILY_INFO, XT((XId)(X_REG_0 + reg)), nullptr);
+    drawFit(l, 90, 320, UI_INK, 2);
+    // los tres rivales de hoy (en miniatura)
+    Battler team[DAILY_TEAM];
+    dailyTeam(day, pet.level(), team);
+    gfx->fillRoundRect(73, 124, 320, 104, 14, BIOME_SOIL[reg]);
+    for (int i = 0; i < DAILY_TEAM; i++) {
+      int cx = 126 + i * 107;
+      const uint8_t *th = thumbs.get(team[i].dex);
+      if (th) drawThumb(th, cx - 40, 132, 2, false);  // 40 px x2
+      char lv[8];
+      snprintf(lv, sizeof(lv), "Lv%u", team[i].lvl);
+      gfx->setTextColor(UI_INK);
+      setSize(1);
+      setCur(cx - textW(lv, 1) / 2, 206);
+      printT(lv);
+    }
+    bool done = pet.dailyDoneDay == day;
+    drawFit(done ? XT(X_DAILY_DONE_TODAY) : XT(X_DAILY_REWARD), 242, 330, done ? UI_BAR_OK : UI_INK, 2);
+    char c[32];
+    snprintf(c, sizeof(c), XT(X_DAILY_COUNT_FMT), pet.dailyClears);
+    drawFit(c, 272, 300, 0x8410, 1);
+    drawBtn(CX - 90, 300, 180, 50, UI_BAR_BAD, UI_WHITE, XT(X_GYM_GO));
+  }
+  if (gymMsg && timeLeft(gymMsgUntil)) drawFit(gymMsg, 356, 300, UI_BAR_BAD, 1);
+  drawBtn(CX - 80, GY_BACK_Y, 160, 40, UI_TRACK, UI_INK, T(S_BACK));
+  gfx->flush();
+}
+
+void dailyTap(int16_t x, int16_t y) {
+  if (inRect(x, y, CX - 80, GY_BACK_Y, 160, 40)) { sfxPlay(SFX_TAP); xScreen = XS_NONE; return; }
+  uint32_t day = todayNum();
+  if (!day || !inRect(x, y, CX - 90, 300, 180, 50)) return;
+  if (!pet.canBattle() || pet.tooTiredToBattle()) {
+    sfxPlay(SFX_DENY);
+    gymMsg = !pet.canBattle() ? XT(X_CANT_NOW) : XT(X_TOO_TIRED);
+    gymMsgUntil = millis() + 1800;
+    return;
+  }
+  Battler team[DAILY_TEAM];
+  dailyTeam(day, pet.level(), team);
+  xScreen = XS_NONE;
+  startTrainer(BK_DAILY, dailyRegion(day), team, DAILY_TEAM);
 }
 
 void endBattleScreen() {
@@ -1162,6 +1415,9 @@ void wildTap(int16_t x, int16_t y) {
   int a = battleMenuHit(x, y);
   if (a < 0) return;
   // fork KO (ko4): los objetos se gastan al elegirlos; sin existencias no hay turno
+  if (bKind != BK_WILD && (a == BA_BALL || a == BA_RUN)) {  // ko10.4: entrenador
+    strncpy(bvL1, XT(X_TRAINER_NO), sizeof(bvL1) - 1); bvL2[0] = 0; sfxPlay(SFX_DENY); return;
+  }
   if (a == BA_POTION && !pet.usePotion()) {
     strncpy(bvL1, XT(X_NO_POTION), sizeof(bvL1) - 1); bvL2[0] = 0; sfxPlay(SFX_DENY); return;
   }
@@ -1186,6 +1442,7 @@ bool ownsSpecies(int16_t dex) {
 
 // tras el resultado: el repetido (si lo hay) y luego "seguir?"
 static void afterResult() {
+  if (bKind != BK_WILD) { endBattleScreen(); return; }  // ko10.4: entrenador: se vuelve
   bPhase = bDupPending ? BP_DUP : BP_NEXT;
   bPhaseT = millis();
 }
@@ -1236,8 +1493,28 @@ void finishBattle(bool won, bool fled, bool caught) {
     sfxPlay(pet.lastLvlUp ? SFX_LEVEL : won || caught ? SFX_MEDAL : SFX_BYE);  // ko7: subida de nivel
     // fork KO: el capturado va siempre a la caja; el vencido, solo a veces
     // (ko5: 1 de cada 5 "quiere unirse"; si no, la pokeball no servia de nada)
-    bool joins = won && (uint32_t)random(100) < BOX_JOIN_PCT;
+    bool joins = won && bKind == BK_WILD && (uint32_t)random(100) < BOX_JOIN_PCT;
     bNote[0] = 0;
+    if (won && bKind == BK_GYM && !(pet.badges & (1 << bGym))) {  // ko10.4: medalla nueva
+      pet.badges |= (uint8_t)(1 << bGym);
+      char nb[4];
+      snprintf(nb, sizeof(nb), "%u", badgeCount(pet.badges));
+      txFmt(bNote, sizeof(bNote), X_BADGE_GOT, XT((XId)(X_BADGE_0 + bGym)), nb);
+      pet.saveNow();
+      sfxPlay(SFX_EVOLVE);
+    } else if (won && bKind == BK_DAILY) {
+      uint32_t day = pet.lastSeenEpoch / 86400u;
+      if (day && pet.dailyDoneDay != day) {  // el premio, una vez al dia
+        pet.dailyDoneDay = day;
+        pet.dailyClears++;
+        pet.balls = pet.balls > 96 ? 99 : pet.balls + 3;
+        pet.potions = pet.potions > 96 ? 99 : pet.potions + 3;
+        pet.addCandy(pet.speciesId, 3);
+        strncpy(bNote, XT(X_DAILY_WIN), sizeof(bNote) - 1);
+        bNote[sizeof(bNote) - 1] = 0;
+        pet.saveNow();
+      }
+    }
     if (!bLink && (caught || joins)) {
       uint32_t e = clockEpoch();
       if (caught) dexLog.caught(bFoe.dex, e);
@@ -1281,7 +1558,7 @@ void updateWild() {
       if (caught) finishBattle(false, false, true);
       else if (fled) finishBattle(false, true, false);
       else if (bMe.hp == 0) finishBattle(false, false, false);
-      else if (bFoe.hp == 0) finishBattle(true, false, false);
+      else if (bFoe.hp == 0) { if (!nextTrainerMon()) finishBattle(true, false, false); }
       else {
         bPhase = BP_MENU;
         txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
@@ -1617,6 +1894,8 @@ bool extraRender() {
     case XS_UPD: renderUpdate(); return true; // ko5 (ui_more.ino)
     case XS_RESET: renderReset(); return true; // ko8 (ui_more.ino)
     case XS_REGION: renderRegionPick(); return true;  // ko10.1
+    case XS_GYM: renderGyms(); return true;           // ko10.4
+    case XS_DAILY: renderDaily(); return true;
     default: return false;
   }
 }
@@ -1632,6 +1911,8 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_UPD: updateTap(x, y); return true;
     case XS_RESET: resetTap(x, y); return true;
     case XS_REGION: regionTap(x, y); return true;
+    case XS_GYM: gymTap(x, y); return true;
+    case XS_DAILY: dailyTap(x, y); return true;
     default: return false;
   }
 }
@@ -1644,7 +1925,7 @@ bool extraSwipe() {
   if (xScreen == XS_VOL) { xScreen = XS_NONE; clockOpen = true; return true; }
   if (xScreen == XS_UPD) { xScreen = XS_NET; return true; }
   if (xScreen == XS_RESET) { xScreen = XS_NONE; clockOpen = true; return true; }
-  if (xScreen == XS_REGION) { xScreen = XS_NONE; return true; }
+  if (xScreen == XS_REGION || xScreen == XS_GYM || xScreen == XS_DAILY) { xScreen = XS_NONE; return true; }
   return xScreen != XS_NONE;  // batalla / tongsin: se ignoran
 }
 

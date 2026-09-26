@@ -715,6 +715,7 @@ void onSwipeV(int dir) {
 void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
   if (regionSwipe(dir)) return;       // ko10.1: paginas de regiones
+  if (gymSwipe(dir)) return;          // ko10.4: paginas de gimnasios
   if (extraSwipe()) return;           // fork KO: pantallas nuevas
   if (trainMenuSwipe(dir)) return;    // ko9.1: menu de entrenamiento <-> batallas
   if (trainingSwipe()) return;        // fork KO (ko4): entrenamiento

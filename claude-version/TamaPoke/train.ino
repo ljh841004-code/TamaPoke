@@ -57,9 +57,11 @@ void openTrainMenu() {
 // ---------- menu ----------
 // ko9.1: dos paginas (deslizar a los lados): 0 entrenamiento, 1 batallas
 // (yasaeng y tongsin, los mismos que en la ficha > Batalla, que siguen alli)
-#define TRB_Y1 118   // botones de la pagina de batallas
-#define TRB_Y2 196
+#define TRB_Y1 104   // botones de la pagina de batallas (ko10.4: rejilla 2x2)
+#define TRB_Y2 180
 #define TRB_H 64
+#define TRB_W 154
+#define TRB_X2 (TRM_X + TRB_W + 12)
 
 static void drawTrainMenuDots() {
   for (int i = 0; i < 2; i++) {
@@ -95,11 +97,18 @@ static void renderTrainPage() {
 
 static void renderBattlePage() {
   drawFit(T(S_BATTLE), 44, 300, UI_INK, 3);
-  drawBtn(TRM_X, TRB_Y1, TRM_W, TRB_H, UI_BAR_OK, UI_WHITE, XT(X_WILD_BTN));
-  drawBtn(TRM_X, TRB_Y2, TRM_W, TRB_H, 0x4C98, UI_WHITE, XT(X_LINK_BTN));
+  drawBtn(TRM_X, TRB_Y1, TRB_W, TRB_H, UI_BAR_OK, UI_WHITE, XT(X_WILD_BTN));
+  drawBtn(TRB_X2, TRB_Y1, TRB_W, TRB_H, 0x4C98, UI_WHITE, XT(X_LINK_BTN));
+  // ko10.4: gimnasios (con las medallas) y reto del dia
+  char gb[24];
+  snprintf(gb, sizeof(gb), "%s %u/8", XT(X_GYM_BTN), badgeCount(pet.badges));
+  drawBtn(TRM_X, TRB_Y2, TRB_W, TRB_H, C565(0xc0, 0x5a, 0x2a), UI_WHITE, gb);
+  bool done = pet.lastSeenEpoch && pet.dailyDoneDay == pet.lastSeenEpoch / 86400u;
+  drawBtn(TRB_X2, TRB_Y2, TRB_W, TRB_H, done ? UI_TRACK : C565(0x9a, 0x4c, 0xc0), done ? UI_INK : UI_WHITE,
+          XT(X_DAILY_BTN));
   char rec[48];
   snprintf(rec, sizeof(rec), XT(X_RECORD_FMT), pet.wildWins, pet.linkWins, pet.linkBattles, pet.trades);
-  drawFit(rec, 282, 320, UI_INK, 2);
+  drawFit(rec, 268, 320, UI_INK, 2);
 }
 
 void renderTrainMenu() {
@@ -124,22 +133,26 @@ bool trainMenuSwipe(int dir) {
 
 static void battlePageTap(int16_t x, int16_t y) {
   if (x < TRM_X || x >= TRM_X + TRM_W) { trainMenuOpen = false; return; }
-  bool wild = y >= TRB_Y1 && y < TRB_Y1 + TRB_H, link = y >= TRB_Y2 && y < TRB_Y2 + TRB_H;
-  if (!wild && !link) {
+  int row = (y >= TRB_Y1 && y < TRB_Y1 + TRB_H) ? 0 : (y >= TRB_Y2 && y < TRB_Y2 + TRB_H) ? 1 : -1;
+  if (row < 0) {
     if (y < TRB_Y1 || y > 380) trainMenuOpen = false;
     return;
   }
-  if (wild) {
-    // mismos motivos que battleAllowed(), pero el aviso sale aqui en el menu
-    if (!pet.canBattle()) { trainMsg = XT(X_CANT_NOW); trainMsgUntil = millis() + 2500; sfxPlay(SFX_DENY); return; }
-    if (pet.tooTiredToBattle()) { trainMsg = XT(X_TOO_TIRED); trainMsgUntil = millis() + 2500; sfxPlay(SFX_DENY); return; }
-    trainMenuOpen = false;
-    openRegionPick();  // ko10.1: primero se elige a donde ir
-  } else {
+  bool right = x >= TRB_X2;
+  if (!right && x >= TRM_X + TRB_W) return;  // hueco entre columnas
+  if (row == 0 && right) {                   // tongsin
     trainMenuOpen = false;
     openLinkMenu();
     sfxPlay(SFX_TAP);
+    return;
   }
+  // salvaje, gimnasio y reto: mismos motivos que battleAllowed(), avisados aqui
+  if (!pet.canBattle()) { trainMsg = XT(X_CANT_NOW); trainMsgUntil = millis() + 2500; sfxPlay(SFX_DENY); return; }
+  if (row == 0 && pet.tooTiredToBattle()) { trainMsg = XT(X_TOO_TIRED); trainMsgUntil = millis() + 2500; sfxPlay(SFX_DENY); return; }
+  trainMenuOpen = false;
+  if (row == 0) openRegionPick();  // ko10.1: primero se elige a donde ir
+  else if (!right) openGyms();     // ko10.4
+  else openDaily();
 }
 
 void trainMenuTap(int16_t x, int16_t y) {

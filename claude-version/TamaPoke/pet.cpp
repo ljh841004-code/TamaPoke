@@ -789,6 +789,9 @@ void Pet::save() {
   prefs.putBytes("dexsh", dexShinyReg, sizeof(dexShinyReg));
   prefs.putBytes("candy", candy, sizeof(candy));  // ko10.4
   prefs.putBool("scharm", shinyCharm);
+  prefs.putUChar("badge", badges);  // ko10.4
+  prefs.putUInt("dday", dailyDoneDay);
+  prefs.putUShort("dclr", dailyClears);
   prefs.putUInt("age", ageMinutes);
   prefs.putUInt("exp", exp);
   prefs.putShort("dexn", speciesId);
@@ -845,6 +848,9 @@ void Pet::load() {
   if (prefs.getBytes("candy", candy, sizeof(candy)) != sizeof(candy)) memset(candy, 0, sizeof(candy));
   for (auto &c : candy) if (c > CANDY_MAX) c = CANDY_MAX;
   shinyCharm = prefs.getBool("scharm", false);
+  badges = prefs.getUChar("badge", 0);
+  dailyDoneDay = prefs.getUInt("dday", 0);
+  dailyClears = prefs.getUShort("dclr", 0);
   ageMinutes = prefs.getUInt("age", 0);
   // fork KO (ko7): guardados de antes (nivel = horas, hasta Lv338+) empiezan
   // en Lv1 con la misma especie

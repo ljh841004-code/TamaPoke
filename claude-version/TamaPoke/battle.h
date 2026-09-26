@@ -83,6 +83,21 @@ uint8_t wildSlot(uint8_t hour);
 // wx = WX_* de weather.h, season = SEASON_*; group (opcional) dice de que grupo salio
 Battler makeWildIn(uint8_t region, uint16_t petLvl, uint8_t hour, uint8_t wx, uint8_t season,
                    BRng &rng, uint8_t *group);
+// ---- ko10.4: gimnasios (8 medallas de Kanto) y reto del dia
+#define GYM_COUNT 8
+#define GYM_MAX_TEAM 3
+struct GymDef { uint8_t region, n; int16_t dex[GYM_MAX_TEAM]; uint8_t lv[GYM_MAX_TEAM]; };
+extern const GymDef GYMS[GYM_COUNT];
+Battler makeTrainerMon(int16_t dex, uint16_t lvl);  // stats fijas (genes 105)
+uint8_t badgeCount(uint8_t badges);
+// medallas necesarias para ir a la region (0 = abierta desde el principio)
+uint8_t regionBadgesNeeded(uint8_t region);
+bool regionUnlocked(uint8_t region, uint8_t badges);
+// reto del dia: region y 3 rivales salen del dia (igual en todos los aparatos)
+#define DAILY_TEAM 3
+uint8_t dailyRegion(uint32_t day);
+void dailyTeam(uint32_t day, uint16_t petLvl, Battler out[DAILY_TEAM]);
+
 // probabilidad (por mil) de la especie "dex" en ese momento, antes de evolucionar
 // por nivel (para tests y para el comando serie WILD)
 uint16_t wildPermil(int16_t dex, uint8_t region, uint16_t petLvl, uint8_t hour, uint8_t wx,
@@ -91,6 +106,12 @@ uint16_t wildPermil(int16_t dex, uint8_t region, uint16_t petLvl, uint8_t hour, 
 // eleccion de la IA (rival salvaje y ambos lados en la batalla automatica).
 // whim = % de veces que elige al azar en vez del mejor golpe
 BAct battleAi(const Battler &self, const Battler &foe, BRng &rng, uint8_t whim = 20);
+
+// ko10.4: tiempo de la batalla (WX_* de weather.h). Lluvia: agua x1,5, fuego x0,5;
+// sol: fuego x1,5, agua x0,5; nieve: hielo x1,5. battleAuto (tongsin) usa siempre buen tiempo
+void battleSetWeather(uint8_t wx);
+uint8_t battleWeather();
+uint8_t weatherMul(uint8_t wx, uint8_t moveType);  // en medios (3 = x1,5)
 
 // resuelve un turno: a hace actA, b hace actB. Rellena ev[] y devuelve cuantos.
 // canRun: solo en batallas salvajes (en tongsin BA_RUN se trata como placaje)

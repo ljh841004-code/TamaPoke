@@ -304,6 +304,79 @@ uint16_t wildPermil(int16_t dex, uint8_t region, uint16_t petLvl, uint8_t hour, 
   return (uint16_t)(num / (100 * 1000));
 }
 
+// ---------------------------------------------------------------- ko10.4: gimnasios
+// region: 4 montana, 1 playa, 6 central, 2 bosque, 8 pantano, 10 ruinas, 3 volcan, 9 desierto
+const GymDef GYMS[GYM_COUNT] = {
+  { 4, 2, { 74, 95, 0 }, { 12, 14, 0 } },      // Brock: Geodude, Onix
+  { 1, 2, { 120, 121, 0 }, { 18, 21, 0 } },    // Misty: Staryu, Starmie
+  { 6, 2, { 100, 26, 0 }, { 21, 24, 0 } },     // Lt. Surge: Voltorb, Raichu
+  { 2, 2, { 114, 45, 0 }, { 29, 32, 0 } },     // Erika: Tangela, Vileplume
+  { 8, 3, { 109, 89, 110 }, { 37, 39, 43 } },  // Koga: Koffing, Muk, Weezing
+  { 10, 3, { 64, 122, 65 }, { 38, 37, 43 } },  // Sabrina: Kadabra, Mr. Mime, Alakazam
+  { 3, 3, { 77, 78, 59 }, { 40, 42, 47 } },    // Blaine: Ponyta, Rapidash, Arcanine
+  { 9, 3, { 111, 34, 112 }, { 45, 45, 50 } },  // Giovanni: Rhyhorn, Nidoking, Rhydon
+};
+
+Battler makeTrainerMon(int16_t dex, uint16_t lvl) {
+  if (dex < 1 || dex > DEX_COUNT) dex = 16;
+  const DexEntry &e = DEX_TBL[dex];
+  return makeBattler(dex, lvl, wildStat(e.bAtk, 105, lvl), wildStat(e.bDef, 105, lvl), wildStat(e.bSpe, 105, lvl));
+}
+
+uint8_t badgeCount(uint8_t badges) {
+  uint8_t n = 0;
+  for (; badges; badges >>= 1) n += badges & 1;
+  return n;
+}
+
+// abiertas al principio: pradera, playa, bosque, montana, central, pantano, jardin,
+// ciudad. Cada medalla abre una mas (las de los gimnasios 6-8 llegan a tiempo)
+static const uint8_t REGION_UNLOCK_ORDER[GYM_COUNT] = { 7, 12, 5, 15, 10, 3, 9, 13 };
+
+uint8_t regionBadgesNeeded(uint8_t region) {
+  for (uint8_t i = 0; i < GYM_COUNT; i++)
+    if (REGION_UNLOCK_ORDER[i] == region) return i + 1;
+  return 0;
+}
+
+bool regionUnlocked(uint8_t region, uint8_t badges) {
+  return badgeCount(badges) >= regionBadgesNeeded(region);
+}
+
+// ---------------------------------------------------------------- ko10.4: reto del dia
+static uint32_t dayHash(uint32_t x) {
+  x ^= x >> 16; x *= 0x7feb352dU; x ^= x >> 15; x *= 0x846ca68bU; x ^= x >> 16;
+  return x;
+}
+
+uint8_t dailyRegion(uint32_t day) { return (uint8_t)(dayHash(day * 2654435761u) % REGION_COUNT); }
+
+void dailyTeam(uint32_t day, uint16_t petLvl, Battler out[DAILY_TEAM]) {
+  BRng rng(dayHash(day ^ 0xDA11u) | 1);
+  uint8_t region = dailyRegion(day);
+  uint8_t season = wxSeason(wxMonth(day * 86400u));
+  for (int i = 0; i < DAILY_TEAM; i++) {
+    // un poco mas fuertes cada vez: nivel +1, +2, +3 (antes de la variacion)
+    uint16_t lv = petLvl + 1 + i;
+    if (lv > LEVEL_MAX) lv = LEVEL_MAX;
+    uint8_t hour = (uint8_t)(7 + i * 7);  // manana, tarde, noche: grupos de hora distintos
+    out[i] = makeWildIn(region, lv, hour, WX_CLEAR, season, rng, nullptr);
+  }
+}
+
+// ---- ko10.4: el tiempo afecta a las batallas (salvajes, gimnasios, reto del dia)
+static uint8_t sBattleWx = WX_CLEAR;
+void battleSetWeather(uint8_t wx) { sBattleWx = wx; }
+uint8_t battleWeather() { return sBattleWx; }
+
+// multiplicador del tiempo en medios: 3 = x1,5, 1 = x0,5, 2 = normal
+uint8_t weatherMul(uint8_t wx, uint8_t moveType) {
+  if (wx == WX_RAIN) return moveType == PT_WATER ? 3 : moveType == PT_FIRE ? 1 : 2;
+  if (wx == WX_SUNNY) return moveType == PT_FIRE ? 3 : moveType == PT_WATER ? 1 : 2;
+  if (wx == WX_SNOW) return moveType == PT_ICE ? 3 : 2;
+  return 2;
+}
+
 // dano base de un movimiento (sin aleatorio ni critico), para la IA y el calculo
 static uint32_t rawDamage(const Battler &at, const Battler &df, uint8_t move, uint8_t *effOut) {
   uint8_t mtype = (move == BA_TYPE) ? at.type : (uint8_t)PT_NORMAL;
@@ -311,6 +384,7 @@ static uint32_t rawDamage(const Battler &at, const Battler &df, uint8_t move, ui
   uint32_t L = lvlCap(at.lvl);
   uint32_t d = ((2 * L / 5 + 2) * pow * at.atk / (df.def ? df.def : 1)) / 50 + 2;
   if (mtype == at.type) d = d * 3 / 2;  // STAB
+  d = d * weatherMul(sBattleWx, mtype) / 2;  // ko10.4: lluvia / sol / nieve
   uint8_t eff = typeEff(mtype, df.type);
   if (effOut) *effOut = eff;
   return d * eff / 2;
@@ -442,6 +516,10 @@ int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
 }
 
 uint8_t battleAuto(Battler a, Battler b, uint32_t seed, BEvent *ev, int maxEv, int *nEv) {
+  // tongsin: los dos aparatos simulan la misma batalla; su reloj puede no
+  // coincidir, asi que aqui siempre hace buen tiempo (si no, se desincronizan)
+  uint8_t keepWx = sBattleWx;
+  sBattleWx = WX_CLEAR;
   BRng rng(seed);
   int n = 0;
   for (int t = 0; t < BATTLE_AUTO_TURNS && a.hp && b.hp; t++) {
@@ -455,6 +533,7 @@ uint8_t battleAuto(Battler a, Battler b, uint32_t seed, BEvent *ev, int maxEv, i
     }
   }
   if (nEv) *nEv = (n < maxEv) ? n : maxEv;
+  sBattleWx = keepWx;
   if (a.hp == 0) return 1;
   if (b.hp == 0) return 0;
   // tope de turnos: gana quien conserve mas vida (en proporcion)

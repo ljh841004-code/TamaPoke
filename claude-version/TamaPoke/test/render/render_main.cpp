@@ -148,6 +148,30 @@ static void scenes(bool ko, const char *sfx) {
     pet.speciesId = keep;
     gMockEpoch = 1790343900; pet.lastSeenEpoch = gMockEpoch;
   }
+  // ko10.4: gimnasios, reto del dia, tiempo en batalla
+  {
+    closeAll(); pet.energy = 80;
+    pet.badges = 0x07;  // 3 medallas
+    openGyms(); gymPage = 0; render(); shot("50_gyms_p1");
+    gymPage = 1; render(); shot("50b_gyms_p2");
+    closeAll(); openDaily(); render(); shot("51_daily");
+    closeAll(); trainMenuOpen = true; trainMenuPage = 1; render(); shot("52_battle_page"); trainMenuOpen = false;
+    closeAll(); openRegionPick(); regionPage = 1; render(); shot("53_region_locked");
+    // gimnasio de Lt. Surge con lluvia: presentacion y resultado con medalla
+    closeAll();
+    gMockEpoch = 1772459100u; pet.lastSeenEpoch = gMockEpoch;  // lluvia
+    pet.badges = 0x03;
+    gymPage = 0; gymTap(GY_X + 10, GY_Y + 2 * (GY_H + GY_GAP) + 10);  // 3er gimnasio
+    render(); shot("54_gym_intro");
+    bPhase = BP_MENU; bvL1[0] = 0;
+    bFoe.hp = 0; bvFoeTgt = 0;
+    nextTrainerMon(); render(); shot("55_gym_next");
+    bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
+    finishBattle(true, false, false); render(); shot("56_gym_badge");
+    closeAll();
+    pet.badges = 0;
+    gMockEpoch = 1790343900; pet.lastSeenEpoch = gMockEpoch;
+  }
   // ko10.1: elegir region y encuentros
   {
     closeAll(); pet.energy = 80;

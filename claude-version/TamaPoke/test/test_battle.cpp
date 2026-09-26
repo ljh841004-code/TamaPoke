@@ -378,3 +378,72 @@ TEST(region, todas_las_regiones_dan_especies_validas_y_suman_mil) {
     CHECK(b.lvl >= 2 && b.lvl <= LEVEL_MAX);
   }
 }
+
+// ---------------------------------------------------------------- ko10.4: tiempo, gimnasios, reto
+TEST(weather_battle, lluvia_y_sol_cambian_el_dano) {
+  Battler a = makeBattler(7, 30, 60, 60, 60);   // Squirtle (agua)
+  Battler b = makeBattler(19, 30, 60, 60, 60);  // Rattata
+  auto dmg = [&](uint8_t wx) {
+    battleSetWeather(wx);
+    Battler x = a, y = b;
+    BRng r(5);
+    BEvent ev[BATTLE_MAX_EVENTS];
+    int n = battleTurn(x, y, BA_TYPE, BA_GUARD, r, ev, BATTLE_MAX_EVENTS, true);
+    for (int i = 0; i < n; i++) if (ev[i].kind == EV_HIT && ev[i].side == 0) return (int)ev[i].dmg;
+    return -1;
+  };
+  int clear = dmg(WX_CLEAR), rain = dmg(WX_RAIN), sun = dmg(WX_SUNNY);
+  battleSetWeather(WX_CLEAR);
+  CHECK(clear > 0);
+  CHECK(rain > clear);   // agua x1,5 con lluvia
+  CHECK(sun < clear);    // agua x0,5 con sol
+  CHECK_EQ((int)weatherMul(WX_SNOW, PT_ICE), 3);
+  CHECK_EQ((int)weatherMul(WX_SNOW, PT_FIRE), 2);
+  // tongsin (battleAuto): siempre buen tiempo, y no cambia el de fuera
+  battleSetWeather(WX_RAIN);
+  int n1 = 0, n2 = 0;
+  uint8_t w1 = battleAuto(a, b, 77, nullptr, 0, &n1);
+  battleSetWeather(WX_CLEAR);
+  uint8_t w2 = battleAuto(a, b, 77, nullptr, 0, &n2);
+  CHECK_EQ((int)w1, (int)w2);
+  battleSetWeather(WX_RAIN);
+  battleAuto(a, b, 77, nullptr, 0, &n1);
+  CHECK_EQ((int)battleWeather(), (int)WX_RAIN);
+  battleSetWeather(WX_CLEAR);
+}
+
+TEST(gym, ocho_gimnasios_y_regiones_por_medalla) {
+  for (int i = 0; i < GYM_COUNT; i++) {
+    const GymDef &g = GYMS[i];
+    CHECK(g.n >= 1 && g.n <= GYM_MAX_TEAM);
+    for (int j = 0; j < g.n; j++) CHECK(g.dex[j] >= 1 && g.dex[j] <= DEX_COUNT);
+    // la region del gimnasio i ya esta abierta con i medallas (las necesarias para llegar)
+    CHECK_MSG(regionBadgesNeeded(g.region) <= i, "gimnasio en region aun cerrada");
+    if (i) CHECK(g.lv[g.n - 1] >= GYMS[i - 1].lv[GYMS[i - 1].n - 1]);  // cada vez mas fuerte
+  }
+  int open0 = 0;
+  for (uint8_t r = 0; r < REGION_COUNT; r++) if (regionUnlocked(r, 0)) open0++;
+  CHECK_EQ(open0, 8);
+  CHECK(regionUnlocked(13, 0xFF));
+  CHECK(!regionUnlocked(13, 0x7F));  // el valle del dragon, con la 8a
+  CHECK_EQ((int)badgeCount(0xA5), 4);
+  Battler t = makeTrainerMon(95, 14);
+  CHECK_EQ((int)t.dex, 95);
+  CHECK_EQ((int)t.lvl, 14);
+}
+
+TEST(daily, igual_todo_el_dia_y_cambia_otro_dia) {
+  uint32_t day = 1790343900u / 86400u;
+  Battler a[DAILY_TEAM], b[DAILY_TEAM], c[DAILY_TEAM];
+  dailyTeam(day, 20, a);
+  dailyTeam(day, 20, b);
+  for (int i = 0; i < DAILY_TEAM; i++) { CHECK_EQ((int)a[i].dex, (int)b[i].dex); CHECK_EQ((int)a[i].lvl, (int)b[i].lvl); }
+  int diff = 0;
+  for (uint32_t d = day + 1; d < day + 8; d++) {
+    dailyTeam(d, 20, c);
+    for (int i = 0; i < DAILY_TEAM; i++) if (c[i].dex != a[i].dex) diff++;
+    CHECK(dailyRegion(d) < REGION_COUNT);
+  }
+  CHECK(diff > 0);
+  for (int i = 0; i < DAILY_TEAM; i++) CHECK(a[i].lvl >= 17 && a[i].lvl <= 24);
+}
