@@ -8,7 +8,8 @@
 // Se engancha al sketch principal solo por funciones (extraRender, extraTap,
 // extraSwipe, extraLoop...), para tocar lo minimo el fichero original.
 
-enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_VOL, XS_UPD, XS_RESET };
+enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_VOL, XS_UPD, XS_RESET,
+                 XS_REGION };  // ko10.1: elegir region antes del salvaje
 uint8_t xScreen = XS_NONE;
 
 // aviso breve en la pantalla principal
@@ -312,6 +313,9 @@ uint8_t bPhase = BP_INTRO;
 int bvShakeX = 0, bvShakeY = 0;  // fork KO (ko7): temblor de la escena (critico)
 uint32_t bPhaseT = 0;
 bool bWon = false, bFled = false, bLink = false, bRewarded = false;
+// ko10.1: region del salvaje (= escenario 0..15). La de mi Pokemon por defecto
+uint8_t bRegion = 0;
+uint8_t bGroup = WG_COMMON;  // de que grupo salio el rival (WG_RARE: brillo al aparecer)
 
 // salvaje
 Battler bMe, bFoe;
@@ -381,14 +385,12 @@ void startEvent(int i) {
 }
 
 // cielo segun la hora y el tiempo + escenario + dos plataformas.
-// ko10.1: en salvaje, el escenario es el del rival (su tipo/habitat); en
-// tongsin, el de mi Pokemon
+// ko10.1: en salvaje, el escenario es la region elegida; en tongsin, el de mi Pokemon
 void drawBattleBg() {
   int hh = sceneHour();
   bool night = hh < 6 || hh >= 20;
   uint8_t wx = sceneWeather();
-  int16_t who = bLink ? (pet.isEgg() ? 0 : pet.speciesId) : bvFoeDex;
-  uint8_t bio = (who >= 1 && who <= DEX_COUNT) ? DEX_TBL[who].biome : 0;
+  uint8_t bio = bLink ? petRegion() : bRegion;
   uint32_t now = millis();
   int hor = 150;
   drawSky(hor, hh, night, wx, now, false);
@@ -819,6 +821,18 @@ void drawBattlers() {
   bool meGone = bvMeFainted, foeGone = bvFoeFainted || bvFoeCaught;
   if (bvFoeCaught) drawMap(SPR_ICON_PLAY, 16, foeX - 16, foeG - 36, 2, false);  // atrapado
 
+  // ko10.1: un raro aparece con destellos dorados
+  if (xScreen == XS_WILD && bGroup == WG_RARE && bPhase == BP_INTRO && !foeGone) {
+    uint16_t gold = C565(0xff, 0xd8, 0x40);
+    for (int k = 0; k < 8; k++) {
+      float a = now / 400.0f + k * 0.785f;
+      int r = 58 + (int)(8 * sinf(now / 150.0f + k));
+      int sx = foeX + (int)(r * cosf(a)), sy = foeG - 44 + (int)(r * 0.7f * sinf(a));
+      int l = 3 + ((now / 120 + k) % 3) * 2;
+      gfx->fillRect(sx - l, sy - 1, 2 * l + 1, 3, gold);
+      gfx->fillRect(sx - 1, sy - l, 3, 2 * l + 1, gold);
+    }
+  }
   if (!foeHide && !foeGone) {
     if (foePmd.loaded) {
       if (!foePmd.has(foeAct)) foeAct = PMD_IDLE;
@@ -986,24 +1000,80 @@ bool battleAllowed(bool toast) {
   return true;
 }
 
-void startWild() {
+uint8_t petRegion() { return pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome; }
+
+void startWildIn(uint8_t region) {
   if (!battleAllowed(true)) return;
   wildAlertUntil = 0;
   cardOpen = false;
+  bRegion = region < REGION_COUNT ? region : 0;
   bRng = BRng(esp_random());
   bMe = makeBattler(pet.speciesId, pet.level(), pet.atkStat(), pet.defStat(), pet.speStat());
-  bFoe = makeWild(pet.level(), bRng);
+  uint32_t ep = pet.lastSeenEpoch;
+  bFoe = makeWildIn(bRegion, pet.level(), (uint8_t)sceneHour(), sceneWeather(), wxSeason(wxMonth(ep)),
+                    bRng, &bGroup);
   bool shiny = bRng.below(64) == 0;
   bvSetup(bMe, bFoe, nullptr, shiny);
   bqAisMe = true;
   bLink = false;
-  txFmt(bvL1, sizeof(bvL1), X_WILD_APPEARS, dexName(bFoe.dex));
+  txFmt(bvL1, sizeof(bvL1), bGroup == WG_RARE ? X_WILD_RARE : X_WILD_AT,
+        XT((XId)(X_REG_0 + bRegion)), dexName(bFoe.dex));
+  bvL2[0] = 0;
   bPhase = BP_INTRO;
   bPhaseT = millis();
   xScreen = XS_WILD;
-  sfxPlay(SFX_MEDAL);
+  sfxPlay(bGroup == WG_RARE ? SFX_EVOLVE : SFX_MEDAL);
   audioSetBattleMusic(false, true);  // batalla nueva: la cancion empieza de cero
   audioCry(bFoe.dex);
+}
+
+// aviso de salvaje en la pantalla principal: en la region de mi Pokemon
+void startWild() { startWildIn(petRegion()); }
+
+// ---- ko10.1: pantalla "a donde vamos?" (4x4 regiones)
+#define RG_X 48
+#define RG_Y 118
+#define RG_W 88
+#define RG_H 50
+#define RG_GAP 6
+#define RG_BACK_Y 350
+
+void openRegionPick() {
+  if (!battleAllowed(true)) return;
+  xScreen = XS_REGION;
+  cardOpen = false;
+  sfxPlay(SFX_TAP);
+}
+
+void renderRegionPick() {
+  screenBase();
+  drawFit(XT(X_REGION_Q), 62, 300, UI_INK, 3);
+  uint8_t mine = petRegion();
+  for (int i = 0; i < REGION_COUNT; i++) {
+    int x = RG_X + (i % 4) * (RG_W + RG_GAP), y = RG_Y + (i / 4) * (RG_H + RG_GAP);
+    uint16_t bg = BIOME_SOIL[i];
+    int lum = ((bg >> 11) & 31) * 2 + ((bg >> 5) & 63) * 2 + (bg & 31);  // aprox. 0..250
+    uint16_t fg = lum > 150 ? UI_INK : UI_WHITE;
+    drawBtn(x, y, RG_W, RG_H, bg, fg, XT((XId)(X_REG_0 + i)));
+    if (i == mine) {  // la region de mi Pokemon: marco naranja
+      uint16_t o = C565(0xff, 0x8a, 0x1a);
+      gfx->drawRoundRect(x - 2, y - 2, RG_W + 4, RG_H + 4, 13, o);
+      gfx->drawRoundRect(x - 3, y - 3, RG_W + 6, RG_H + 6, 14, o);
+      gfx->fillCircle(x + RG_W - 7, y + 7, 5, o);
+    }
+  }
+  drawBtn(CX - 80, RG_BACK_Y, 160, 44, UI_TRACK, UI_INK, T(S_BACK));
+  gfx->flush();
+}
+
+void regionTap(int16_t x, int16_t y) {
+  if (inRect(x, y, CX - 80, RG_BACK_Y, 160, 44)) { sfxPlay(SFX_TAP); xScreen = XS_NONE; return; }
+  if (x < RG_X || y < RG_Y) return;
+  int cx = (x - RG_X) / (RG_W + RG_GAP), cy = (y - RG_Y) / (RG_H + RG_GAP);
+  if (cx > 3 || cy > 3) return;
+  if ((x - RG_X) % (RG_W + RG_GAP) >= RG_W || (y - RG_Y) % (RG_H + RG_GAP) >= RG_H) return;  // hueco
+  xScreen = XS_NONE;
+  startWildIn((uint8_t)(cy * 4 + cx));
 }
 
 void endBattleScreen() {
@@ -1109,7 +1179,7 @@ static void wildNextTap(int16_t x, int16_t y) {
       return;
     }
     foePmd.unload();
-    startWild();
+    startWildIn(bRegion);              // ko10.1: sigue en la misma region
   } else if (x >= 237 && x < 383) {    // salir
     sfxPlay(SFX_TAP);
     endBattleScreen();
@@ -1418,6 +1488,7 @@ bool extraRender() {
     case XS_VOL: renderSound(); return true;  // ko4 (ui_more.ino)
     case XS_UPD: renderUpdate(); return true; // ko5 (ui_more.ino)
     case XS_RESET: renderReset(); return true; // ko8 (ui_more.ino)
+    case XS_REGION: renderRegionPick(); return true;  // ko10.1
     default: return false;
   }
 }
@@ -1432,6 +1503,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_VOL: soundTap(x, y); return true;
     case XS_UPD: updateTap(x, y); return true;
     case XS_RESET: resetTap(x, y); return true;
+    case XS_REGION: regionTap(x, y); return true;
     default: return false;
   }
 }
@@ -1444,6 +1516,7 @@ bool extraSwipe() {
   if (xScreen == XS_VOL) { xScreen = XS_NONE; clockOpen = true; return true; }
   if (xScreen == XS_UPD) { xScreen = XS_NET; return true; }
   if (xScreen == XS_RESET) { xScreen = XS_NONE; clockOpen = true; return true; }
+  if (xScreen == XS_REGION) { xScreen = XS_NONE; return true; }
   return xScreen != XS_NONE;  // batalla / tongsin: se ignoran
 }
 

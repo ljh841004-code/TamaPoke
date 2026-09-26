@@ -461,6 +461,9 @@ void handleSerial() {
   if (line == "WILD") {         // fork KO: batalla salvaje ya
     startWild();
     Serial.println("DONE");
+  } else if (line.startsWith("WILD ")) {  // ko10.1: WILD n = salvaje en la region n (0-15)
+    startWildIn((uint8_t)line.substring(5).toInt());
+    Serial.println("DONE");
   } else if (line == "ALERT") {  // fork KO: aviso de salvaje en pantalla
     triggerWildAlert();
     Serial.println("DONE");
@@ -773,7 +776,7 @@ void onTap(int16_t x, int16_t y) {
              x >= CARD_COL1_X && x < CARD_COL2_X + CARD_COL_W) {
       bool right = x >= CARD_COL2_X - 3;
       bool row2 = y >= CARD_ROW2_Y - 4;
-      if (!row2 && !right) { cardOpen = false; startWild(); }  // batalla salvaje
+      if (!row2 && !right) { cardOpen = false; openRegionPick(); }  // salvaje (ko10.1: region)
       else if (!row2) openLinkMenu();                          // tongsin (cierra la ficha)
       else if (!right) openTrainMenu();                        // ko4: entrenamiento
       else openBox();                                          // ko4: caja

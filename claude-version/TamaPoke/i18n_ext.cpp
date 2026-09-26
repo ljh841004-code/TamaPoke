@@ -50,6 +50,9 @@ static const char *const XS[2][X_COUNT] = {
     "Look for another Pokemon?", "KEEP GOING", "EXIT",
     "Looking for WiFi...", "AUTO ON", "AUTO OFF", "OPEN WiFi ON", "OPEN WiFi OFF", " +%u",
     "%d.%02u.%02u %s", "SUNMONTUEWEDTHUFRISAT",
+    "WHERE TO?", "A wild {2} appeared! ({1})", "Wow! A rare {2} appeared! ({1})",
+    "MEADOW", "BEACH", "FOREST", "VOLCANO", "MOUNTAIN", "SNOWFIELD", "POWER PLANT", "DOJO",
+    "SWAMP", "DESERT", "RUINS", "GARDEN", "GRAVEYARD", "DRAGON VALE", "CITY", "MINE",
   },
   // ---------------- KO ----------------
   {
@@ -96,6 +99,9 @@ static const char *const XS[2][X_COUNT] = {
     "다른 포켓몬을 계속 만날까요?", "계속 만나기", "나가기",
     "WiFi 찾는 중...", "자동 켬", "자동 끔", "개방 WiFi 켬", "개방 WiFi 끔", " 외 %u개",
     "%d.%02u.%02u (%s)", "일월화수목금토",
+    "어디로 갈까?", "{1}에서 야생 {2}{이} 나타났다!", "앗! {1}에서 희귀한 {2}{이} 나타났다!",
+    "초원", "바닷가", "숲", "화산", "산", "설원", "발전소", "도장",
+    "늪", "사막", "유적", "꽃밭", "묘지", "용의 계곡", "도시", "광산",
   },
 };
 

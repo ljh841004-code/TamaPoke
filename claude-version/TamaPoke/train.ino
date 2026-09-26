@@ -134,7 +134,7 @@ static void battlePageTap(int16_t x, int16_t y) {
     if (!pet.canBattle()) { trainMsg = XT(X_CANT_NOW); trainMsgUntil = millis() + 2500; sfxPlay(SFX_DENY); return; }
     if (pet.tooTiredToBattle()) { trainMsg = XT(X_TOO_TIRED); trainMsgUntil = millis() + 2500; sfxPlay(SFX_DENY); return; }
     trainMenuOpen = false;
-    startWild();
+    openRegionPick();  // ko10.1: primero se elige a donde ir
   } else {
     trainMenuOpen = false;
     openLinkMenu();

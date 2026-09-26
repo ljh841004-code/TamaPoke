@@ -138,6 +138,34 @@ static void scenes(bool ko, const char *sfx) {
     pet.speciesId = keep;
     gMockEpoch = 1790343900; pet.lastSeenEpoch = gMockEpoch;
   }
+  // ko10.1: elegir region y encuentros
+  {
+    closeAll(); pet.energy = 80;
+    openRegionPick(); render(); shot("44_region_pick");
+    gMockEpoch = 1772459100u; pet.lastSeenEpoch = gMockEpoch;  // lluvia (marzo)
+    startWildIn(6);
+    foePmd.unload();
+    bFoe = makeBattler(25, 18, 30, 30, 30); bGroup = WG_REGION;
+    bvSetup(bMe, bFoe, nullptr, false);
+    txFmt(bvL1, sizeof(bvL1), X_WILD_AT, XT(X_REG_6), dexName(25));
+    bPhase = BP_INTRO; bPhaseT = gMockMillis;
+    render(); shot("45_wild_power_plant_pikachu");
+    foePmd.unload();
+    bFoe = makeBattler(243, 45, 90, 80, 110); bGroup = WG_RARE;
+    bvSetup(bMe, bFoe, nullptr, false);
+    txFmt(bvL1, sizeof(bvL1), X_WILD_RARE, XT(X_REG_6), dexName(243));
+    bPhase = BP_INTRO; bPhaseT = gMockMillis;
+    render(); shot("46_wild_rare_raikou");
+    gMockEpoch = 1790343900; pet.lastSeenEpoch = gMockEpoch;
+    startWildIn(13);
+    foePmd.unload();
+    bFoe = makeBattler(147, 20, 40, 40, 40); bGroup = WG_REGION;
+    bvSetup(bMe, bFoe, nullptr, false);
+    txFmt(bvL1, sizeof(bvL1), X_WILD_AT, XT(X_REG_13), dexName(147));
+    bPhase = BP_INTRO; bPhaseT = gMockMillis;
+    render(); shot("47_wild_dragon_vale");
+    closeAll();
+  }
   // caja
   closeAll();
   box.add(16, 14, false, false, gMockEpoch - 86400);

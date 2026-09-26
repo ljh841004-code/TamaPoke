@@ -1,6 +1,7 @@
 // Batallas por turnos: ver battle.h. Solo enteros (determinista entre placas).
 #include "battle.h"
 #include "dex.h"
+#include "weather.h"
 #include <string.h>
 
 // Tabla de tipos de gen 2 (atacante x defensor), en mitades: 0 inmune, 1 poco
@@ -96,19 +97,8 @@ static uint16_t wildStat(uint8_t base, uint8_t gene, uint16_t lvl) {
   return (uint16_t)((uint32_t)base * gene / 100 + lvl);
 }
 
-Battler makeWild(uint16_t petLvl, BRng &rng) {
-  int lv = (int)petLvl - 4 + (int)rng.below(6);  // -4 .. +1
-  if (lv < 2) lv = 2;
-  if (lv > LEVEL_MAX) lv = LEVEL_MAX;
-  // rareza del encuentro
-  uint32_t r = rng.below(100);
-  uint8_t want = (r < 70) ? (uint8_t)R_COMUN : (r < 98 || petLvl < 40) ? (uint8_t)R_RARO : (uint8_t)R_LEGENDARIO;
-  int16_t pool[DEX_COUNT];
-  int n = 0;
-  for (int16_t d = 1; d <= DEX_COUNT; d++)
-    if (DEX_TBL[d].rarity == want) pool[n++] = d;
-  int16_t dex = n ? pool[rng.below(n)] : 16;
-  // sube por su linea evolutiva segun el nivel
+// sube por su linea evolutiva segun el nivel y monta el combatiente
+static Battler wildBattler(int16_t dex, int lv, BRng &rng) {
   for (int guard = 0; guard < 3 && DEX_TBL[dex].evolvesTo; guard++) {
     if (lv < evoLevel(dex)) break;
     int16_t opts[8];
@@ -119,6 +109,199 @@ Battler makeWild(uint16_t petLvl, BRng &rng) {
   uint8_t gA = 90 + rng.below(21), gD = 90 + rng.below(21), gS = 90 + rng.below(21);
   return makeBattler(dex, (uint16_t)lv, wildStat(e.bAtk, gA, lv), wildStat(e.bDef, gD, lv),
                      wildStat(e.bSpe, gS, lv));
+}
+
+static int wildLevel(uint16_t petLvl, BRng &rng) {
+  int lv = (int)petLvl - 4 + (int)rng.below(6);  // -4 .. +1
+  if (lv < 2) lv = 2;
+  if (lv > LEVEL_MAX) lv = LEVEL_MAX;
+  return lv;
+}
+
+Battler makeWild(uint16_t petLvl, BRng &rng) {
+  int lv = wildLevel(petLvl, rng);
+  // rareza del encuentro
+  uint32_t r = rng.below(100);
+  uint8_t want = (r < 70) ? (uint8_t)R_COMUN : (r < 98 || petLvl < 40) ? (uint8_t)R_RARO : (uint8_t)R_LEGENDARIO;
+  int16_t pool[DEX_COUNT];
+  int n = 0;
+  for (int16_t d = 1; d <= DEX_COUNT; d++)
+    if (DEX_TBL[d].rarity == want) pool[n++] = d;
+  return wildBattler(n ? pool[rng.below(n)] : 16, lv, rng);
+}
+
+// ---------------------------------------------------------------- ko10.1: regiones
+// 0 pradera 1 playa 2 bosque 3 volcan 4 montana 5 nieve 6 central 7 dojo
+// 8 pantano 9 desierto 10 ruinas 11 jardin 12 cementerio 13 valle 14 ciudad 15 mina
+
+// 1. comunes de cualquier sitio
+static const int16_t WILD_COMMON[] = { 16, 19, 21, 161, 10, 13, 52, 84 };
+
+// regiones con pocos de su tipo: se completan con vecinos (peso x2)
+static const int16_t REGION_EXTRA[REGION_COUNT][4] = {
+  {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0},
+  { 92, 200, 0 },          // cementerio: mas fantasmas
+  { 116, 129, 118, 223 },  // valle del dragon: agua dulce (Horsea, Magikarp...)
+  { 0 },
+  { 74, 95, 81, 0 },       // mina: Geodude, Onix, Magnemite
+};
+
+// 3. por hora (dentro de la region)
+struct WildTime { uint8_t region, slots; int16_t dex; };
+static const WildTime WILD_TIME[] = {
+  { 0, WS_MORNING, 165 }, { 0, WS_NIGHT, 163 }, { 0, WS_NIGHT, 52 },               // pradera
+  { 1, WS_MORNING, 72 }, { 1, WS_NIGHT, 170 }, { 1, WS_NIGHT, 120 },                // playa
+  { 2, WS_MORNING, 191 }, { 2, WS_MORNING, 187 }, { 2, WS_NIGHT, 43 },              // bosque
+  { 2, WS_NIGHT, 167 }, { 2, WS_NIGHT, 48 },
+  { 3, WS_DAY, 218 }, { 3, WS_NIGHT, 228 },                                          // volcan
+  { 4, WS_DAY, 74 }, { 4, WS_NIGHT, 41 },                                            // montana
+  { 5, WS_DAY, 220 }, { 5, WS_NIGHT, 215 },                                          // nieve
+  { 6, WS_MORNING, 179 }, { 6, WS_NIGHT, 100 },                                      // central
+  { 7, WS_MORNING, 66 }, { 7, WS_MORNING, 236 }, { 7, WS_DAY, 56 },                  // dojo
+  { 8, WS_DAY, 23 }, { 8, WS_DAY, 88 }, { 8, WS_NIGHT, 41 }, { 8, WS_NIGHT, 109 },   // pantano
+  { 9, WS_DAY, 27 }, { 9, WS_DAY, 50 }, { 9, WS_NIGHT, 104 },                        // desierto
+  { 10, WS_MORNING, 177 }, { 10, WS_NIGHT, 96 }, { 10, WS_NIGHT, 63 },               // ruinas
+  { 11, WS_MORNING, 165 }, { 11, WS_MORNING, 10 }, { 11, WS_NIGHT, 167 }, { 11, WS_NIGHT, 48 },  // jardin
+  { 12, WS_NIGHT, 92 }, { 12, WS_NIGHT, 200 }, { 12, WS_NIGHT, 198 },                // cementerio
+  { 13, WS_MORNING, 147 }, { 13, WS_NIGHT, 116 },                                    // valle
+  { 14, WS_DAY, 19 }, { 14, WS_NIGHT, 198 }, { 14, WS_NIGHT, 228 }, { 14, WS_NIGHT, 52 },  // ciudad
+  { 15, WS_DAY, 81 }, { 15, WS_DAY, 95 }, { 15, WS_NIGHT, 41 },                      // mina
+};
+
+// 4. raros con condicion. region/wx/season 0xFF = cualquiera. permil = por mil
+#define W_ANY 0xFF
+struct WildRare { uint8_t region, slots, wx, season; int16_t dex; uint8_t permil; };
+static const WildRare WILD_RARE[] = {
+  // legendarios (0,5 %; y solo con tu Pokemon a nivel 40 o mas)
+  { 6, WS_ANY, WX_RAIN, W_ANY, 243, 5 },            // Raikou: central + lluvia
+  { 6, WS_DAY, W_ANY, W_ANY, 145, 5 },              // Zapdos: central de dia
+  { 3, WS_ANY, WX_SUNNY, W_ANY, 244, 5 },           // Entei: volcan + sol de verano
+  { 3, WS_ANY, W_ANY, SEASON_SUMMER, 146, 5 },      // Moltres: volcan en verano
+  { 1, WS_ANY, WX_RAIN, W_ANY, 245, 5 },            // Suicune: playa + lluvia
+  { 1, WS_NIGHT, W_ANY, W_ANY, 249, 5 },            // Lugia: playa de noche
+  { 5, WS_ANY, WX_SNOW, W_ANY, 144, 5 },            // Articuno: nieve + nevando
+  { W_ANY, WS_MORNING, WX_SUNNY, W_ANY, 250, 5 },   // Ho-Oh: mananas de sol de verano
+  { 2, WS_ANY, WX_BLOSSOM, W_ANY, 251, 5 },         // Celebi: bosque + cerezos
+  { 10, WS_NIGHT, W_ANY, W_ANY, 151, 5 },           // Mew: ruinas de noche
+  { 15, WS_NIGHT, W_ANY, W_ANY, 150, 5 },           // Mewtwo: mina de noche
+  // raros (1 %)
+  { 1, WS_ANY, W_ANY, W_ANY, 131, 10 },             // Lapras: playa
+  { 0, WS_DAY, W_ANY, W_ANY, 143, 10 },             // Snorlax: pradera de dia
+  { 0, WS_MORNING, W_ANY, W_ANY, 113, 10 },         // Chansey: pradera por la manana
+  { 0, WS_DAY, W_ANY, W_ANY, 241, 10 },             // Miltank: pradera de dia
+  { 11, WS_MORNING, W_ANY, W_ANY, 123, 10 },        // Scyther: jardin por la manana
+  { 11, WS_DAY, W_ANY, W_ANY, 127, 10 },            // Pinsir: jardin de dia
+  { 2, WS_MORNING, W_ANY, W_ANY, 214, 10 },         // Heracross: bosque por la manana
+  { 4, WS_ANY, W_ANY, W_ANY, 246, 10 },             // Larvitar: montana
+  { 4, WS_ANY, W_ANY, W_ANY, 142, 10 },             // Aerodactyl: montana
+  { 15, WS_ANY, W_ANY, W_ANY, 227, 10 },            // Skarmory: mina
+  { 14, WS_NIGHT, W_ANY, W_ANY, 137, 10 },          // Porygon: ciudad de noche
+  { 14, WS_ANY, W_ANY, W_ANY, 132, 10 },            // Ditto: ciudad
+  { 14, WS_DAY, W_ANY, W_ANY, 133, 10 },            // Eevee: ciudad de dia
+  { 13, WS_ANY, WX_RAIN, W_ANY, 147, 10 },          // Dratini: valle + lluvia (ademas de al alba)
+  { 7, WS_ANY, W_ANY, W_ANY, 106, 10 },             // Hitmonlee: dojo
+  { 7, WS_ANY, W_ANY, W_ANY, 107, 10 },             // Hitmonchan: dojo
+};
+
+uint8_t wildSlot(uint8_t hour) {
+  if (hour < 6 || hour >= 20) return WS_NIGHT;
+  if (hour < 10) return WS_MORNING;
+  return WS_DAY;
+}
+
+static bool rareOk(const WildRare &r, uint8_t region, uint16_t petLvl, uint8_t slot, uint8_t wx,
+                   uint8_t season) {
+  if (r.region != W_ANY && r.region != region) return false;
+  if (!(r.slots & slot)) return false;
+  if (r.wx != W_ANY && r.wx != wx) return false;
+  if (r.season != W_ANY && r.season != season) return false;
+  if (DEX_TBL[r.dex].rarity == R_LEGENDARIO && petLvl < WILD_LEGEND_MIN_LVL) return false;
+  return true;
+}
+
+// peso de "dex" dentro del grupo de su region (0 = no esta)
+static uint8_t regionWeight(int16_t d, uint8_t region) {
+  uint8_t w = 0;
+  const DexEntry &e = DEX_TBL[d];
+  if (e.biome == region) w = e.rarity == R_COMUN ? 3 : e.rarity == R_RARO ? 1 : 0;
+  for (int16_t x : REGION_EXTRA[region]) if (x == d && w < 2) w = 2;
+  return w;
+}
+
+static int timeCount(uint8_t region, uint8_t slot) {
+  int n = 0;
+  for (const WildTime &t : WILD_TIME) if (t.region == region && (t.slots & slot)) n++;
+  return n;
+}
+
+Battler makeWildIn(uint8_t region, uint16_t petLvl, uint8_t hour, uint8_t wx, uint8_t season,
+                   BRng &rng, uint8_t *group) {
+  if (region >= REGION_COUNT) region = 0;
+  uint8_t slot = wildSlot(hour);
+  int lv = wildLevel(petLvl, rng);
+  // 1. raros
+  uint32_t roll = rng.below(1000), acc = 0;
+  for (const WildRare &r : WILD_RARE) {
+    if (!rareOk(r, region, petLvl, slot, wx, season)) continue;
+    acc += r.permil;
+    if (roll < acc) { if (group) *group = WG_RARE; return wildBattler(r.dex, lv, rng); }
+  }
+  uint32_t p = rng.below(100);
+  // 2. por hora
+  int nt = timeCount(region, slot);
+  if (p < WILD_TIME_PCT && nt) {
+    int k = (int)rng.below(nt);
+    for (const WildTime &t : WILD_TIME)
+      if (t.region == region && (t.slots & slot) && k-- == 0) {
+        if (group) *group = WG_TIME;
+        return wildBattler(t.dex, lv, rng);
+      }
+  }
+  // 3. de la region
+  if (p < WILD_TIME_PCT + WILD_REGION_PCT) {
+    uint32_t tot = 0;
+    for (int16_t d = 1; d <= DEX_COUNT; d++) tot += regionWeight(d, region);
+    if (tot) {
+      uint32_t k = rng.below(tot);
+      for (int16_t d = 1; d <= DEX_COUNT; d++) {
+        uint8_t w = regionWeight(d, region);
+        if (k < w) { if (group) *group = WG_REGION; return wildBattler(d, lv, rng); }
+        k -= w;
+      }
+    }
+  }
+  // 4. comunes
+  if (group) *group = WG_COMMON;
+  const int nc = sizeof(WILD_COMMON) / sizeof(WILD_COMMON[0]);
+  return wildBattler(WILD_COMMON[rng.below(nc)], lv, rng);
+}
+
+uint16_t wildPermil(int16_t dex, uint8_t region, uint16_t petLvl, uint8_t hour, uint8_t wx,
+                    uint8_t season) {
+  if (region >= REGION_COUNT || dex < 1 || dex > DEX_COUNT) return 0;
+  uint8_t slot = wildSlot(hour);
+  // fraccion en millonesimas para no perder precision
+  uint32_t rareTot = 0, rareMe = 0;
+  for (const WildRare &r : WILD_RARE)
+    if (rareOk(r, region, petLvl, slot, wx, season)) { rareTot += r.permil; if (r.dex == dex) rareMe += r.permil; }
+  uint32_t rest = 1000 - rareTot;  // por mil que no es raro
+  uint64_t num = (uint64_t)rareMe * 100 * 1000;  // escala: por mil * 100 (pct) * 1000
+  int nt = timeCount(region, slot);
+  uint32_t timePct = nt ? WILD_TIME_PCT : 0;
+  if (nt) {
+    int mine = 0;
+    for (const WildTime &t : WILD_TIME) if (t.region == region && (t.slots & slot) && t.dex == dex) mine++;
+    num += (uint64_t)rest * timePct * 1000 * mine / nt;
+  }
+  uint32_t tot = 0;
+  for (int16_t d = 1; d <= DEX_COUNT; d++) tot += regionWeight(d, region);
+  uint32_t regPct = WILD_TIME_PCT + WILD_REGION_PCT - timePct;
+  if (tot) num += (uint64_t)rest * regPct * 1000 * regionWeight(dex, region) / tot;
+  else regPct = 0;
+  uint32_t comPct = 100 - timePct - regPct;
+  const int nc = sizeof(WILD_COMMON) / sizeof(WILD_COMMON[0]);
+  for (int i = 0; i < nc; i++) if (WILD_COMMON[i] == dex) num += (uint64_t)rest * comPct * 1000 / nc;
+  return (uint16_t)(num / (100 * 1000));
 }
 
 // dano base de un movimiento (sin aleatorio ni critico), para la IA y el calculo

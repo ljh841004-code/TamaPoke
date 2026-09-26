@@ -67,6 +67,27 @@ Battler makeBattler(int16_t dex, uint16_t lvl, uint16_t atk, uint16_t def, uint1
 // rival salvaje acorde al nivel (formas base y sus evoluciones; legendarios muy raros)
 Battler makeWild(uint16_t petLvl, BRng &rng);
 
+// ---- ko10.1: encuentros por region (una por tipo, = escenario 0..15) ----
+// En cada encuentro, por orden:
+//   1. RARO:     solo si se cumple su condicion (region + hora + tiempo + estacion), ~0,5-1 %
+//   2. HORA:     los de esa region a esa hora (manana 6-10, dia 10-20, noche 20-6), 20 %
+//   3. REGION:   los de su tipo (comunes x3, raros x1), 50 %
+//   4. COMUN:    los de cualquier sitio (Pidgey, Rattata...), el resto
+#define REGION_COUNT 16
+enum : uint8_t { WG_COMMON = 0, WG_REGION, WG_TIME, WG_RARE };
+enum : uint8_t { WS_MORNING = 1, WS_DAY = 2, WS_NIGHT = 4, WS_ANY = 7 };
+#define WILD_TIME_PCT 20
+#define WILD_REGION_PCT 50
+#define WILD_LEGEND_MIN_LVL 40
+uint8_t wildSlot(uint8_t hour);
+// wx = WX_* de weather.h, season = SEASON_*; group (opcional) dice de que grupo salio
+Battler makeWildIn(uint8_t region, uint16_t petLvl, uint8_t hour, uint8_t wx, uint8_t season,
+                   BRng &rng, uint8_t *group);
+// probabilidad (por mil) de la especie "dex" en ese momento, antes de evolucionar
+// por nivel (para tests y para el comando serie WILD)
+uint16_t wildPermil(int16_t dex, uint8_t region, uint16_t petLvl, uint8_t hour, uint8_t wx,
+                    uint8_t season);
+
 // eleccion de la IA (rival salvaje y ambos lados en la batalla automatica).
 // whim = % de veces que elige al azar en vez del mejor golpe
 BAct battleAi(const Battler &self, const Battler &foe, BRng &rng, uint8_t whim = 20);

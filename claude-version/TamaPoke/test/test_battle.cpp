@@ -2,6 +2,7 @@
 #include "framework.h"
 #include "shim/Arduino.h"
 #include "../battle.h"
+#include "../weather.h"
 #include "../pet.h"
 #include "../dex.h"
 #include <string.h>
@@ -293,4 +294,84 @@ TEST(battle, exp_de_batalla_crece_con_el_nivel_del_rival) {
   CHECK_EQ(careMinutesForLevel(100), (uint32_t)0);
   CHECK_EQ(careMinutesForLevel(1), (uint32_t)30);
   CHECK_EQ(careMinutesForLevel(2), (uint32_t)60);
+}
+
+// ---------------------------------------------------------------- ko10.1: regiones
+TEST(region, pikachu_mucho_mas_frecuente_en_la_central) {
+  // 13:00, despejado, otono, nivel 20 (sin legendarios)
+  uint16_t en6 = wildPermil(25, 6, 20, 13, WX_CLEAR, SEASON_AUTUMN);
+  uint16_t en0 = wildPermil(25, 0, 20, 13, WX_CLEAR, SEASON_AUTUMN);
+  CHECK_RANGE((int)en6, 60, 120);  // ~8-11 % (de dia la central no tiene grupo de hora)
+  CHECK_EQ((int)en0, 0);           // fuera de su region no sale
+  // la simulacion cuadra con la cuenta (nivel 5: nadie evoluciona, ni Pichu)
+  uint16_t lo = wildPermil(25, 6, 5, 13, WX_CLEAR, SEASON_AUTUMN);
+  BRng rng(1234);
+  int hits = 0, N = 20000;
+  for (int i = 0; i < N; i++) {
+    Battler b = makeWildIn(6, 5, 13, WX_CLEAR, SEASON_AUTUMN, rng, nullptr);
+    if (b.dex == 25) hits++;
+  }
+  CHECK_RANGE(hits * 1000 / N, (int)lo - 15, (int)lo + 15);
+}
+
+TEST(region, la_hora_decide_los_de_hora) {
+  // Murkrow (198) en el cementerio: solo de noche (no es de su region)
+  CHECK(wildPermil(198, 12, 20, 23, WX_CLEAR, SEASON_SPRING) > 0);
+  CHECK_EQ((int)wildPermil(198, 12, 20, 13, WX_CLEAR, SEASON_SPRING), 0);
+  // Gastly sale en el cementerio a cualquier hora (grupo de region)
+  CHECK(wildPermil(92, 12, 20, 13, WX_CLEAR, SEASON_SPRING) > 100);
+  // Hoothoot (163) solo de noche en la pradera (ademas de su grupo de region)
+  CHECK(wildPermil(163, 0, 20, 2, WX_CLEAR, SEASON_SPRING) > wildPermil(163, 0, 20, 12, WX_CLEAR, SEASON_SPRING));
+  CHECK_EQ((int)wildSlot(5), (int)WS_NIGHT);
+  CHECK_EQ((int)wildSlot(6), (int)WS_MORNING);
+  CHECK_EQ((int)wildSlot(10), (int)WS_DAY);
+  CHECK_EQ((int)wildSlot(20), (int)WS_NIGHT);
+}
+
+TEST(region, legendarios_solo_con_su_condicion_y_nivel) {
+  // Raikou: central + lluvia + nivel 40
+  CHECK_EQ((int)wildPermil(243, 6, 45, 13, WX_RAIN, SEASON_SPRING), 5);
+  CHECK_EQ((int)wildPermil(243, 6, 45, 13, WX_CLEAR, SEASON_SPRING), 0);
+  CHECK_EQ((int)wildPermil(243, 6, 30, 13, WX_RAIN, SEASON_SPRING), 0);   // nivel bajo
+  CHECK_EQ((int)wildPermil(243, 1, 45, 13, WX_RAIN, SEASON_SPRING), 0);   // otra region
+  // Articuno solo nevando, Celebi con cerezos, Ho-Oh mananas de sol
+  CHECK_EQ((int)wildPermil(144, 5, 45, 13, WX_SNOW, SEASON_WINTER), 5);
+  CHECK_EQ((int)wildPermil(144, 5, 45, 13, WX_CLEAR, SEASON_WINTER), 0);
+  CHECK_EQ((int)wildPermil(251, 2, 45, 13, WX_BLOSSOM, SEASON_SPRING), 5);
+  CHECK_EQ((int)wildPermil(250, 9, 45, 8, WX_SUNNY, SEASON_SUMMER), 5);
+  CHECK_EQ((int)wildPermil(250, 9, 45, 13, WX_SUNNY, SEASON_SUMMER), 0);
+  // en ningun caso sale un legendario sin su condicion
+  BRng rng(99);
+  for (int i = 0; i < 20000; i++) {
+    uint8_t reg = (uint8_t)(i % REGION_COUNT), g = 0;
+    Battler b = makeWildIn(reg, 60, 13, WX_CLEAR, SEASON_AUTUMN, rng, &g);
+    if (DEX_TBL[b.dex].rarity == R_LEGENDARIO) {
+      CHECK_EQ((int)g, (int)WG_RARE);
+      CHECK(b.dex == 145);  // de dia, despejado, otono: solo Zapdos en la central
+      CHECK_EQ((int)reg, 6);
+    }
+  }
+}
+
+TEST(region, todas_las_regiones_dan_especies_validas_y_suman_mil) {
+  static const uint8_t WXS[] = { WX_CLEAR, WX_RAIN, WX_SNOW, WX_SUNNY, WX_BLOSSOM, WX_LEAVES };
+  for (uint8_t reg = 0; reg < REGION_COUNT; reg++)
+    for (uint8_t h : { 7, 13, 23 })
+      for (uint8_t wx : WXS) {
+        uint32_t sum = 0;
+        for (int16_t d = 1; d <= DEX_COUNT; d++) sum += wildPermil(d, reg, 50, h, wx, SEASON_SPRING);
+        CHECK_RANGE((int)sum, 950, 1000);  // cada especie redondea por abajo
+        // el grupo de la region existe (al menos 2 especies distintas)
+        int n = 0;
+        for (int16_t d = 1; d <= DEX_COUNT; d++)
+          if (wildPermil(d, reg, 50, h, wx, SEASON_SPRING) >= 20) n++;
+        CHECK(n >= 3);
+      }
+  BRng rng(7);
+  for (int i = 0; i < 5000; i++) {
+    Battler b = makeWildIn((uint8_t)(i % 16), (uint16_t)(2 + i % 99), (uint8_t)(i % 24), WX_RAIN,
+                           SEASON_SUMMER, rng, nullptr);
+    CHECK(b.dex >= 1 && b.dex <= DEX_COUNT);
+    CHECK(b.lvl >= 2 && b.lvl <= LEVEL_MAX);
+  }
 }

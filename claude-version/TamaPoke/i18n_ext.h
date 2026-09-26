@@ -57,6 +57,10 @@ enum XId : uint8_t {
   X_NEXT_Q, X_NEXT_GO, X_NEXT_EXIT,
   X_ST_SCAN, X_AUTO_S_ON, X_AUTO_S_OFF, X_OPEN_ON, X_OPEN_OFF, X_SAVED_MORE_FMT,
   X_DATE_FMT, X_WDAYS,  // ko10.1: fecha bajo el reloj (dias de 3 bytes, domingo primero)
+  // ko10.1: regiones del salvaje ({1} = region, {2} = Pokemon)
+  X_REGION_Q, X_WILD_AT, X_WILD_RARE,
+  X_REG_0, X_REG_1, X_REG_2, X_REG_3, X_REG_4, X_REG_5, X_REG_6, X_REG_7,
+  X_REG_8, X_REG_9, X_REG_10, X_REG_11, X_REG_12, X_REG_13, X_REG_14, X_REG_15,
   X_COUNT
 };
 
