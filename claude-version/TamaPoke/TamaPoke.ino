@@ -619,7 +619,8 @@ static volatile int16_t gTouchLX = 0, gTouchLY = 0;
 
 static void touchTask(void *) {
   bool was = false;
-  int16_t lx = 0, ly = 0;
+  int16_t lx = 0, ly = 0;  // ultima posicion leida
+  int16_t qx = 0, qy = 0;  // ultima posicion ENVIADA (arrastre lento: ver abajo)
   for (;;) {
     vTaskDelay(pdMS_TO_TICKS(8));
     // solo tocamos el bus si el chip aviso por INT o si el dedo sigue abajo (hay
@@ -637,9 +638,15 @@ static void touchTask(void *) {
     if (p != was) {  // apoyar/levantar: nunca se pierde (la cola se vacia cada loop)
       e.x = p ? x : lx; e.y = p ? y : ly; e.pressed = p;
       xQueueSend(gTouchQ, &e, 0);
-    } else if (p && (abs(x - lx) > 3 || abs(y - ly) > 3) && uxQueueSpacesAvailable(gTouchQ) > 8) {
-      e.x = x; e.y = y; e.pressed = 1;  // arrastre (deslizar); se descarta si va justa
+      qx = e.x; qy = e.y;
+    } else if (p && (abs(x - qx) > 3 || abs(y - qy) > 3) && uxQueueSpacesAvailable(gTouchQ) > 8) {
+      // arrastre: se compara con lo ULTIMO ENVIADO, no con la lectura anterior.
+      // Antes (lectura anterior) un arrastre lento avanza <3 px cada 8 ms, no se
+      // enviaba nunca y el gesto acababa pareciendo un toque (deslizar arriba
+      // desde abajo para abrir la ficha "no iba")
+      e.x = x; e.y = y; e.pressed = 1;
       xQueueSend(gTouchQ, &e, 0);
+      qx = x; qy = y;
     }
     if (p) { lx = x; ly = y; }
     was = p;
@@ -745,12 +752,17 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
       holdFired = true;
     }
   } else if (wasPressed) {  // levanta el dedo: resolver gesto
+    tXl = x;  // ko10.8: el evento de levantar trae la ultima posicion leida
+    tYl = y;
     lastInteract = millis();
     int dx = tXl - tX0, dy = tYl - tY0;
     uint32_t dt = millis() - tStart;
     if (!holdFired && !swallowGesture) {
-      if (abs(dx) > 80 && abs(dy) < 70 && dt < 800) onSwipe(dx > 0 ? 1 : -1);
-      else if (abs(dy) > 80 && abs(dx) < 70 && dt < 800) onSwipeV(dy > 0 ? 1 : -1);
+      // ko10.8: arrastres lentos (hasta 1,5 s) y algo torcidos tambien valen: manda
+      // el eje dominante (antes < 0,8 s y la otra direccion < 70 px)
+      int adx = abs(dx), ady = abs(dy);
+      if (adx > 80 && ady * 5 < adx * 4 && dt < 1500) onSwipe(dx > 0 ? 1 : -1);
+      else if (ady > 80 && adx * 5 < ady * 4 && dt < 1500) onSwipeV(dy > 0 ? 1 : -1);
       else if (dt < 1500 && abs(dx) < 40 && abs(dy) < 40) onTap(tX0, tY0);
     }
   }
