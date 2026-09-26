@@ -289,6 +289,40 @@ TEST(tick, buen_cuidado_12h_forja_defensa) {
   CHECK_EQ(p.trDef, (uint8_t)1);
 }
 
+// ko10.6: 12 h seguidas bien cuidado perdonan un descuido (y la DEF sigue subiendo)
+TEST(tick, buen_cuidado_12h_perdona_un_descuido) {
+  Pet p;
+  makePet(p, 4);
+  p.careMistakes = 2;
+  for (int m = 0; m < GOOD_CARE_TICKS - 1; m++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
+  CHECK_EQ(p.careMistakes, (uint8_t)2);
+  CHECK_EQ(p.goodCareTicks(), (uint16_t)(GOOD_CARE_TICKS - 1));
+  setStats(p, 100, 100, 100, 100); advance(p, 1);
+  CHECK_EQ(p.careMistakes, (uint8_t)1);
+  CHECK_EQ(p.trDef, (uint8_t)1);
+  CHECK_EQ(p.goodCareTicks(), (uint16_t)0);
+  // bajar de 40 reinicia la cuenta
+  for (int m = 0; m < 600; m++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
+  setStats(p, 100, 100, 100, 35); p.poops = 0; advance(p, 1);  // < 40 pero sin descuido
+  CHECK_EQ(p.goodCareTicks(), (uint16_t)0);
+  CHECK_EQ(p.careMistakes, (uint8_t)1);
+  // sin descuidos no baja de 0
+  p.careMistakes = 0;
+  for (int m = 0; m < GOOD_CARE_TICKS; m++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
+  CHECK_EQ(p.careMistakes, (uint8_t)0);
+}
+
+// ko10.6: la racha se guarda (un reinicio no la borra)
+TEST(tick, racha_de_buen_cuidado_se_guarda) {
+  Pet p;
+  makePet(p, 4);
+  for (int m = 0; m < 300; m++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
+  p.saveNow();
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.goodCareTicks(), (uint16_t)300);
+}
+
 // ---------------------------------------------------------------- niveles
 // fork KO (ko7): el nivel sale de la EXP (curva n^3, tope 100), no de la edad
 TEST(level, sale_de_la_exp_con_curva_cubica) {

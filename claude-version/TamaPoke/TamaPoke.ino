@@ -2630,8 +2630,20 @@ void renderCardProgress() {
   char ms[24];
   snprintf(ms, sizeof(ms), T(S_MISTAKES_FMT), pet.careMistakes);
   gfx->setTextColor(pet.careMistakes > 0 ? UI_BAR_BAD : UI_INK);
-  setCur(centerX(ms, 2), 318);
+  setCur(centerX(ms, 2), pet.careMistakes > 0 ? 308 : 318);
   printT(ms);
+  // ko10.6: 12 h seguidas con todo >= 40 perdonan un descuido; cuanto falta
+  if (pet.careMistakes > 0) {
+    char hl[48];
+    if (pet.lowestStat() >= 40) {
+      unsigned long m = GOOD_CARE_TICKS - pet.goodCareTicks();
+      if (m >= 60) snprintf(hl, sizeof(hl), XT(X_MIST_HEAL_HM), m / 60, m % 60);
+      else snprintf(hl, sizeof(hl), XT(X_MIST_HEAL_M), m);
+    } else {
+      snprintf(hl, sizeof(hl), "%s", XT(X_MIST_HEAL_HINT));
+    }
+    drawFit(hl, 336, 340, C565(0x60, 0x68, 0x70), 2);
+  }
 }
 
 // ---- ko10.4: pagina de caramelos (de la familia del Pokemon que crias)

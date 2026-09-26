@@ -9,7 +9,7 @@
 #include <Arduino.h>
 #include "i18n.h"
 
-enum XId : uint8_t {
+enum XId : uint16_t {  // ko10.6: pasaron de 255
   // red / hora
   X_WIFI, X_NET_TITLE, X_NOT_SET, X_SYNC_NOW, X_SETUP_WIFI, X_AUTO_ON, X_AUTO_OFF,
   X_ST_CONNECTING, X_ST_NTP, X_ST_OK, X_ST_FAIL_WIFI, X_ST_FAIL_NTP, X_ST_BUSY,
@@ -75,6 +75,7 @@ enum XId : uint8_t {
   X_BGM_LEN_FMT, X_BGM_NONE, X_DUP_COUNT_FMT,
   X_RAISED_TAG, X_NEXT_TITLE, X_NEXT_EGG, X_NEXT_FROM, X_NEXT_RAISED, X_NEXT_HINT,  // ko10.5
   X_HALL_TAB_FMT, X_HALL_EMPTY, X_HALL_NOTE,
+  X_MIST_HEAL_HM, X_MIST_HEAL_M, X_MIST_HEAL_HINT,  // ko10.6
   X_REG_0, X_REG_1, X_REG_2, X_REG_3, X_REG_4, X_REG_5, X_REG_6, X_REG_7,
   X_REG_8, X_REG_9, X_REG_10, X_REG_11, X_REG_12, X_REG_13, X_REG_14, X_REG_15,
   X_COUNT

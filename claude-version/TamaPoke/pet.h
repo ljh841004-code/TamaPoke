@@ -14,6 +14,7 @@
 #define EVOLVE_ANIM_MS 5200UL              // animacion de evolucion (mas larga = mas epica)
 #define CEREMONY_MS 10000UL                // duracion de la despedida en pantalla
 #define FAREWELL_AGE_MIN (3UL * 24 * 60)   // se despide a los 3 dias de juego (en forma final)
+#define GOOD_CARE_TICKS 720              // ko10.6: 12 h seguidas bien cuidado = +1 DEF y -1 descuido
 #define RUNAWAY_TICKS 60                   // se escapa tras 1 h con TODO a cero
 
 // milisegundos que faltan hasta `deadline` (0 si ya paso, o si deadline==0:
@@ -255,6 +256,7 @@ public:
   bool lineHasUnregistered(int16_t base) const;
   uint8_t eggRarity() const;       // rareza del huevo actual (sin revelar especie)
   int16_t pickEggSpecies();        // publica para poder simular tiradas (EGGS)
+  uint16_t goodCareTicks() const { return goodTicks; }  // ko10.6: racha de buen cuidado (min)
   uint8_t lowestStat() const { return min(min(fullness, joy), min(energy, hygiene)); }
   PetMood mood() const;
   // progreso de la ceremonia de despedida/escapada, 0..1 (para animarla)

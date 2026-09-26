@@ -163,11 +163,16 @@ void Pet::tick() {
   if (weight > 50) energy = clamp100(energy - 1);
   if (weight > 0 && ageMinutes % 3 == 0) weight--;
 
-  // la disciplina forja la defensa: 12 h seguidas bien cuidado = +1 DEF
+  // la disciplina forja la defensa: 12 h seguidas bien cuidado = +1 DEF.
+  // ko10.6: y ademas perdona un descuido (el buen cuidado repara el malo)
   if (lowestStat() >= 40) {
-    if (++goodTicks >= 720) {
+    if (++goodTicks >= GOOD_CARE_TICKS) {
       goodTicks = 0;
       if (trDef < 100) trDef++;
+      if (careMistakes) {
+        careMistakes--;
+        heartUntil = millis() + HEART_MS;
+      }
     }
   } else {
     goodTicks = 0;
@@ -226,6 +231,7 @@ void Pet::flushSave() {
   prefs.putUInt("age", ageMinutes);
   prefs.putUInt("exp", exp);
   prefs.putUChar("mist", careMistakes);
+  prefs.putUShort("good", goodTicks);  // ko10.6: la racha sobrevive a un reinicio
   prefs.putBool("sleep", sleeping);
   prefs.putUChar("bond", bond);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
@@ -824,6 +830,7 @@ void Pet::save() {
   prefs.putShort("eggT2", eggTarget);
   prefs.putUChar("crack", eggTaps);
   prefs.putUChar("mist", careMistakes);
+  prefs.putUShort("good", goodTicks);  // ko10.6: la racha sobrevive a un reinicio
   prefs.putBool("sleep", sleeping);
   prefs.putUChar("lend", lastEnd);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
@@ -894,6 +901,8 @@ void Pet::load() {
   }
   eggTaps = prefs.getUChar("crack", 0);
   careMistakes = prefs.getUChar("mist", 0);
+  goodTicks = prefs.getUShort("good", 0);
+  if (goodTicks >= GOOD_CARE_TICKS) goodTicks = 0;
   sleeping = prefs.getBool("sleep", false);
   lastEnd = prefs.getUChar("lend", CER_NONE);
   prefs.getBytes("dexreg", dexReg, sizeof(dexReg));
