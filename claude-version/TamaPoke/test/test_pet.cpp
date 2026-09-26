@@ -131,7 +131,7 @@ TEST(feed, baya_normal_sube_25_y_topa_en_100) {
 
 TEST(feed, baya_favorita_sube_mas_y_da_corazon) {
   Pet p;
-  makePet(p, 4);  // 4 % 3 == 1 -> le gusta la azul
+  makePet(p, 1);  // ko9: base 1 % 4 == 1 -> le gusta la azul
   CHECK(p.lovesBerry(1));
   CHECK(!p.lovesBerry(0));
   CHECK(!p.lovesBerry(2));
@@ -143,6 +143,32 @@ TEST(feed, baya_favorita_sube_mas_y_da_corazon) {
   CHECK(p.berryKnown);
   CHECK(p.showHeart());
   CHECK(p.eating());
+}
+
+// ko9: favorita entre 4 (tambien la chuche) y la misma en toda la linea
+TEST(feed, favorita_fija_al_evolucionar_y_puede_ser_la_chuche) {
+  Pet p;
+  makePet(p, 4);                   // CHARMANDER: base 4 % 4 = 0 (roja)
+  CHECK_EQ(p.favFood(), (uint8_t)0);
+  p.speciesId = 6;                 // CHARIZARD: misma linea, misma favorita
+  CHECK_EQ(p.favFood(), (uint8_t)0);
+  p.speciesId = 135;               // JOLTEON: sale de EEVEE (133 % 4 = 1)
+  CHECK_EQ(p.favFood(), (uint8_t)1);
+  Pet q;
+  makePet(q, 7);                   // SQUIRTLE: 7 % 4 = 3 -> la chuche
+  CHECK(q.lovesBerry(3));
+  q.fullness = 10;
+  q.feedCandy();
+  CHECK_EQ(q.fullness, (uint8_t)45);  // como una baya favorita
+  CHECK(q.berryKnown);
+  CHECK(q.showHeart());
+  int n = 0;
+  for (int d = 1; d <= 151; d++) {
+    Pet r;
+    r.speciesId = (int16_t)d;
+    if (r.favFood() == 3) n++;
+  }
+  CHECK(n > 20);                   // una parte buena de especies prefiere la chuche
 }
 
 TEST(feed, chuche_engorda) {
@@ -305,20 +331,37 @@ TEST(level, addexp_cuenta_los_niveles_subidos) {
   CHECK_EQ(e.exp, (uint32_t)0);
 }
 
-TEST(level, cada_hora_bien_cuidado_da_exp) {
+// ko9: solo con el tiempo, Lv1 -> 2 en 30 min, Lv2 -> 3 en 1 h, Lv3 -> 4 en 1 h 30
+TEST(level, tiempo_de_crianza_30_min_por_nivel) {
   Pet p;
   makePet(p, 4);
-  p.exp = expForLevel(10);
-  uint32_t e0 = p.exp;
+  CHECK_EQ(p.careMinutesLeft(), (uint32_t)30);
+  for (int i = 0; i < 29; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
+  CHECK_EQ(p.level(), (uint16_t)1);
+  CHECK_EQ(p.careMinutesLeft(), (uint32_t)1);
+  setStats(p, 100, 100, 100, 100); advance(p, 1);
+  CHECK_EQ(p.level(), (uint16_t)2);
+  CHECK_EQ(p.careMinutesLeft(), (uint32_t)60);
   for (int i = 0; i < 60; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
-  CHECK(p.exp > e0);
-  CHECK_EQ(p.exp - e0, careExp(10));
-  // descuidado (una barra < 40) no gana
+  CHECK_EQ(p.level(), (uint16_t)3);
+  CHECK_EQ(p.careMinutesLeft(), (uint32_t)90);
+  // dormido tambien cuenta
+  p.toggleLight();
+  for (int i = 0; i < 90; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
+  CHECK_EQ(p.level(), (uint16_t)4);
+  // descuido total (una barra <= 10): ese tiempo no cuenta
   Pet q;
   makePet(q, 4);
-  q.exp = expForLevel(10);
-  for (int i = 0; i < 60; i++) { setStats(q, 30, 100, 100, 100); advance(q, 1); }
-  CHECK_EQ(q.exp, expForLevel(10));
+  for (int i = 0; i < 60; i++) { setStats(q, 5, 100, 100, 100); advance(q, 1); }
+  CHECK_EQ(q.exp, (uint32_t)0);
+  // la EXP de batalla adelanta: tras una victoria falta menos tiempo
+  Pet r;
+  makePet(r, 4);
+  r.exp = expForLevel(10);
+  uint32_t m0 = r.careMinutesLeft();
+  CHECK_EQ(m0, (uint32_t)300);
+  r.addExp((expForLevel(11) - expForLevel(10)) / 2);
+  CHECK(r.careMinutesLeft() >= 149 && r.careMinutesLeft() <= 151);  // la mitad del camino
 }
 
 TEST(level, ganar_una_batalla_da_exp_y_perder_no) {
@@ -775,7 +818,7 @@ TEST(medals, forma_final_al_nacer) {
 
 TEST(medals, la_baya_favorita_da_medalla) {
   Pet p;
-  makePet(p, 4);
+  makePet(p, 1);
   p.feedBerry(1);  // su favorita
   CHECK(p.berryKnown);
   advance(p, 1);

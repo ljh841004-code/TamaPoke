@@ -14,6 +14,7 @@ enum Sfx : uint8_t {
   SFX_DENY,     // accion no permitida
   SFX_BYE,      // despedida
   SFX_LEVEL,    // sube de nivel
+  SFX_ALERT,    // ko9: aviso (caca nueva o una barra en 30 o menos)
   SFX_COUNT
 };
 

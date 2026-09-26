@@ -48,9 +48,11 @@ static void scenes(bool ko, const char *sfx) {
   pet.exp = expForLevel(17) + 400;  // fork KO (ko7): barra de EXP
   cardPage = 3;
   render(); shot("03b_card_progress");
+  pet.berryKnown = true; pet.ageMinutes = 2 * 1440 + 300; pet.bond = 46; pet.streak = 3; pet.bestStreak = 5;
   cardPage = 0; render(); shot("03c_card_profile");
+  strcpy(pet.nick, "불꽃이"); render(); shot("03e_card_profile_nick"); pet.nick[0] = 0;
   cardPage = 2; render(); shot("03d_card_medals");
-  closeAll(); feedMenuUntil = gMockMillis + 5000; render(); shot("01b_feed_menu");
+  closeAll(); pet.berryKnown = true; feedMenuUntil = gMockMillis + 5000; render(); shot("01b_feed_menu");
   closeAll(); confirmUntil = gMockMillis + 5000; render(); shot("01c_confirm_release"); confirmUntil = 0;
   closeAll(); openLinkMenu(); render(); shot("24_link_menu");
   closeAll(); cardOpen = true; cardPage = 0; openKeyboard(); nameBuf[0] = 0; nameLen = 0;

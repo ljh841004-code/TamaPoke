@@ -300,6 +300,27 @@ void ensureMon() {
   }
 }
 
+// ko9: aviso sonoro UNA vez cuando hace caca o cuando una barra (comida,
+// animo, energia, limpieza) baja a 30 o menos. Solo con el sonido activado,
+// despierto y con la pantalla encendida: dormido o con la pantalla apagada
+// (boton PWR) no suena, y ese aviso no se repite luego. Una barra vuelve a
+// poder avisar cuando sube de 30.
+#define ALERT_LOW 30
+void careAlert() {
+  static bool init = false;
+  static uint8_t lastPoops = 0, lowMask = 0;
+  uint8_t v[4] = { pet.fullness, pet.joy, pet.energy, pet.hygiene };
+  uint8_t mask = 0;
+  for (int i = 0; i < 4; i++)
+    if (v[i] <= ALERT_LOW) mask |= 1 << i;
+  bool quiet = pet.isEgg() || pet.ceremony != CER_NONE || pet.sleeping || screenOff;
+  bool fire = init && !quiet && (pet.poops > lastPoops || (mask & ~lowMask));
+  init = true;
+  lastPoops = pet.poops;
+  lowMask = mask;
+  if (fire && audioEnabled()) sfxPlay(SFX_ALERT);
+}
+
 void loop() {
   uint32_t now = millis();
   pet.update(now);
@@ -320,6 +341,7 @@ void loop() {
   bool runReady = pet.canRunawayNow();
   if (runReady && !wasRunReady) sfxPlay(SFX_DENY);
   wasRunReady = runReady;
+  careAlert();  // ko9: caca nueva o barra baja: un aviso
 
   handleTouch();
   handleSerial();
@@ -1373,6 +1395,8 @@ void render() {
       drawMap(SPR_ICON_BERRY_B, 16, 176, 296, 3, false);
       drawMap(SPR_ICON_BERRY_G, 16, 242, 296, 3, false);
       drawMap(SPR_ICON_CANDY, 16, 308, 296, 3, false);
+      // ko9: ya sabe cual le gusta: corazon sobre su favorita
+      if (pet.berryKnown) drawMap(SPR_HEART, 32, 110 + pet.favFood() * 66 + 8, 258, 1, false);
     }
   }
 
@@ -1986,37 +2010,50 @@ void renderCardProfile() {
     printT(par);
   }
 
-  // retrato grande animado
-  if (pmd.loaded) drawPmdAct(PMD_IDLE, CX, 206, millis(), true, false, 4);
+  // ko9: retrato mas grande (x6) y letra de 26 px en todo el perfil
+  if (pmd.loaded) drawPmdActFit(PMD_IDLE, CX, 214, millis(), 6, 230);
 
   // racha con llama
-  int sx = 138, sy = 224;
-  gfx->fillTriangle(sx + 8, sy, sx + 1, sy + 18, sx + 15, sy + 18, UI_BAR_BAD);
-  gfx->fillTriangle(sx + 8, sy + 7, sx + 4, sy + 18, sx + 12, sy + 18, UI_BAR_WARN);
   char rl[40];  // en japones pierde cifras con 30 a partir de 100 dias
   snprintf(rl, sizeof(rl), T(S_STREAK_FMT), pet.streak, pet.bestStreak);
+  int rw = 24 + textW(rl, 3);
+  int sx = CX - rw / 2, sy = 222;
+  gfx->fillTriangle(sx + 9, sy + 1, sx + 1, sy + 23, sx + 17, sy + 23, UI_BAR_BAD);
+  gfx->fillTriangle(sx + 9, sy + 10, sx + 5, sy + 23, sx + 13, sy + 23, UI_BAR_WARN);
   gfx->setTextColor(UI_INK);
-  setSize(2);
-  setCur(sx + 24, sy + 2);
+  setSize(3);
+  setCur(sx + 24, sy);
   printT(rl);
 
-  drawCardStat(258, T(S_VIN), pet.bond, 100, C565(0xd4, 0x52, 0x7e));
+  // vinculo: etiqueta, barra y numero en grande
+  {
+    int y = 260;
+    gfx->setTextColor(UI_INK);
+    setSize(3);
+    setCur(70, y);
+    printT(T(S_VIN));
+    int bx = 70 + textW(T(S_VIN), 3) + 12, bw = 350 - bx;
+    char num[8];
+    snprintf(num, sizeof(num), "%u", pet.bond);
+    setCur(362, y);
+    printT(num);
+    gfx->fillRoundRect(bx, y + 8, bw, 14, 5, UI_TRACK);
+    int fw = (int)pet.bond * bw / 100;
+    if (fw > 2) gfx->fillRoundRect(bx, y + 8, fw, 14, 5, C565(0xd4, 0x52, 0x7e));
+  }
 
+  uint8_t fav = pet.favFood();
   const char *berry = !pet.berryKnown ? T(S_BERRY_UNK)
-                      : pet.lovesBerry(0) ? T(S_BERRY_RED)
-                      : pet.lovesBerry(1) ? T(S_BERRY_BLUE)
-                                          : T(S_BERRY_GREEN);
+                      : fav == 0 ? T(S_BERRY_RED)
+                      : fav == 1 ? T(S_BERRY_BLUE)
+                      : fav == 2 ? T(S_BERRY_GREEN) : XT(X_FOOD_CANDY);
   char info[48];
+  // ko9: dia de crianza (1, 2, 3...) en vez de la edad en dias
   snprintf(info, sizeof(info), T(S_INFO_FMT), berry,
-           (unsigned long)(pet.ageMinutes / 1440));
-  gfx->setTextColor(UI_INK);
-  setSize(2);
-  setCur(centerX(info, 2), 296);
-  printT(info);
+           (unsigned long)(pet.ageMinutes / 1440 + 1));
+  drawFit(info, 298, 380, UI_INK, 3);
 
-  gfx->setTextColor(UI_INK);
-  setCur(centerX(T(S_RENAME_HINT), 2), 332);
-  printT(T(S_RENAME_HINT));
+  drawFit(T(S_RENAME_HINT), 338, 300, UI_INK, 2);
 }
 
 // pagina 1: combate (4 barras + botones: salvaje, tongsin, entrenar)
@@ -2106,12 +2143,21 @@ void renderCardProgress() {
   else snprintf(nx, sizeof(nx), XT(X_EXP_NEXT_FMT), (unsigned long)(span - into));
   gfx->setTextColor(UI_INK);
   setSize(2);
-  setCur(centerX(nx, 2), by + 32);
+  setCur(centerX(nx, 2), by + 30);
   printT(nx);
+  // ko9: o solo con el tiempo de crianza (30 min x nivel)
+  if (L < LEVEL_MAX) {
+    uint32_t m = pet.careMinutesLeft();
+    char tl[48];
+    if (m >= 60) snprintf(tl, sizeof(tl), XT(X_CARE_LEFT_HM), (unsigned long)(m / 60), (unsigned long)(m % 60));
+    else snprintf(tl, sizeof(tl), XT(X_CARE_LEFT_M), (unsigned long)m);
+    drawFit(tl, by + 56, 340, C565(0x60, 0x68, 0x70), 2);
+  }
 
   // estado de evolucion
   gfx->setTextColor(UI_INK);
-  setCur(centerX(T(S_EVO_LABEL), 2), 230);
+  setSize(2);
+  setCur(centerX(T(S_EVO_LABEL), 2), 250);
   printT(T(S_EVO_LABEL));
   char evoBuf[32];
   const char *evo;
@@ -2129,14 +2175,14 @@ void renderCardProgress() {
     }
   }
   gfx->setTextColor(evoCol);
-  setCur(centerX(evo, 2), 256);
+  setCur(centerX(evo, 2), 276);
   printT(evo);
 
   // descuidos (retrasan la evolucion)
   char ms[24];
   snprintf(ms, sizeof(ms), T(S_MISTAKES_FMT), pet.careMistakes);
   gfx->setTextColor(pet.careMistakes > 0 ? UI_BAR_BAD : UI_INK);
-  setCur(centerX(ms, 2), 312);
+  setCur(centerX(ms, 2), 318);
   printT(ms);
 }
 
@@ -2378,7 +2424,7 @@ void renderDexDetail() {
   drawFit(head, 36, 300, disc ? d.accent : UI_INK, 3);
   if (galleryPmd.loaded) {
     // animado y a color si se conoce; silueta estatica si no (estilo "?")
-    drawPmdActM(galleryPmd, PMD_IDLE, CX, 196, disc ? millis() : 0, true, !disc, 4);
+    drawPmdActM(galleryPmd, PMD_IDLE, CX, 196, disc ? millis() : 0, true, !disc, 4, 170);
   } else {
     const uint8_t *t = thumbs.get(dx);
     if (t) drawThumb(t, CX - GAL_CELL / 2, 96, 2, !disc);
@@ -2699,7 +2745,7 @@ void drawEvolveFX(uint32_t now) {
   // final (t>0.9) se queda fija en la nueva para el fogonazo de revelado
   int period = 60 + (int)(220 * (1.0f - t));
   bool showOld = t < 0.9f && evoPmd.loaded && ((now / period) % 2) == 0;
-  if (showOld) drawPmdActM(evoPmd, PMD_IDLE, cx, PET_GROUND, 0, true, true, 5);
+  if (showOld) drawPmdActM(evoPmd, PMD_IDLE, cx, PET_GROUND, 0, true, true, 5, 170);
   else drawPmdAct(PMD_IDLE, cx, PET_GROUND, 0, true, true, 5);
   // chispas que salen disparadas
   for (int i = 0; i < 10; i++) {
@@ -2850,14 +2896,17 @@ uint8_t pmdFrameAt(const PmdAct &a, uint32_t t, bool loop) {
 
 // dibuja una accion anclada por la base (centro-x, suelo) y devuelve su escala
 // dibuja una accion de un PmdMon concreto (m); drawPmdAct usa el global pmd
-void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS) {
+// fitH: alto objetivo del lienzo IDLE en px (170 = el de siempre; ko9: el perfil
+// usa mas para que el retrato se vea grande)
+void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS,
+                 uint16_t fitH) {
   const PmdAct &a = m.acts[actId];
   if (!a.frames) return;
-  uint8_t sBase = m.acts[PMD_IDLE].h ? 170 / m.acts[PMD_IDLE].h : 5;
+  uint8_t sBase = m.acts[PMD_IDLE].h ? fitH / m.acts[PMD_IDLE].h : 5;
   if (sBase < 2) sBase = 2;
   if (sBase > maxS) sBase = maxS;
   uint8_t s = sBase;
-  while (s > 2 && a.h * s > 250) s--;  // acciones con frame grande (ataque)
+  while (s > 2 && a.h * s > (fitH > 170 ? fitH + 80 : 250)) s--;  // acciones con frame grande (ataque)
   uint8_t fi = pmdFrameAt(a, t, loop);
   const uint8_t *fr = a.data + (uint32_t)fi * a.w * a.h;
   // anclar por los pies (a.base), no por el alto del lienzo: asi las acciones
@@ -2873,7 +2922,11 @@ void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
   }
 }
 void drawPmdAct(uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS) {
-  drawPmdActM(pmd, actId, cx, groundY, t, loop, sil, maxS);
+  drawPmdActM(pmd, actId, cx, groundY, t, loop, sil, maxS, 170);
+}
+// ko9: con alto objetivo propio (retrato grande del perfil)
+void drawPmdActFit(uint8_t actId, int cx, int groundY, uint32_t t, uint8_t maxS, uint16_t fitH) {
+  drawPmdActM(pmd, actId, cx, groundY, t, true, false, maxS, fitH);
 }
 
 // elige el siguiente capricho del bicho cuando esta contento

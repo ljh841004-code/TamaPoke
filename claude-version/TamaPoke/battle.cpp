@@ -72,10 +72,9 @@ uint32_t battleExp(int16_t foeDex, uint16_t foeLvl) {
   return x ? x : 1;
 }
 
-uint32_t careExp(uint16_t lvl) {
-  if (lvl >= LEVEL_MAX) return 0;
-  uint32_t x = (expForLevel(lvl + 1) - expForLevel(lvl)) / 4;
-  return x ? x : 1;
+uint32_t careMinutesForLevel(uint16_t lvl) {
+  if (lvl < 1) lvl = 1;
+  return lvl >= LEVEL_MAX ? 0 : 30UL * lvl;
 }
 
 static bool hasPreEvo(int16_t dex) {

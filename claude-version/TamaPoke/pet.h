@@ -112,9 +112,11 @@ public:
   void feed();              // baya roja (compatibilidad)
   void feedBerry(uint8_t color);  // 0 roja, 1 azul, 2 verde
   void feedCandy();
-  bool lovesBerry(uint8_t color) const {
-    return !isEgg() && (speciesId % 3) == color;  // gusto oculto por especie
-  }
+  // fork KO (ko9): comida favorita entre las 4 del menu (0 roja, 1 azul,
+  // 2 verde, 3 chuche). Sale de la forma base de la linea, asi no cambia al
+  // evolucionar (antes era dex % 3: al evolucionar pasaba a otra baya).
+  uint8_t favFood() const;
+  bool lovesBerry(uint8_t item) const { return !isEgg() && favFood() == item; }
   void playResult(uint8_t score);  // recompensa del juego de pelota (solo animo desde ko4)
   uint8_t trainStrength(uint16_t hits);  // saco de entrenamiento (entrena FUE)
   uint8_t trainDefense(uint16_t blocked);  // fork KO: pokeballs que caen (entrena DEF)
@@ -142,6 +144,10 @@ public:
   // lo que dio la ultima batalla (pantalla de resultado)
   uint32_t lastExpGain = 0;
   uint16_t lastLvlUp = 0;
+  // ko9: EXP por tiempo de crianza, repartida minuto a minuto. careAcc cuenta
+  // en unidades de 1/(30*nivel) de EXP (sin decimales)
+  uint32_t careAcc = 0;
+  uint32_t careMinutesLeft() const;  // minutos de crianza que faltan para subir
   bool useBall();    // gasta una pokeball (false si no quedan)
   bool usePotion();  // gasta una pocion
   // fork KO (ko4): el siguiente a criar sale de la caja (tras la despedida)
@@ -254,6 +260,7 @@ private:
   void addBond(uint8_t amt);
   void checkMedals();
   void tick();
+  void careTick();  // ko9
   void hatch();
   void registerSpecies(int16_t dex);
   void save();

@@ -289,5 +289,7 @@ TEST(battle, exp_de_batalla_crece_con_el_nivel_del_rival) {
   CHECK_EQ(battleExp(0, 10), (uint32_t)0);
   CHECK(battleExp(129, 1) >= 1);
   CHECK_EQ(levelForExp(expForLevel(37)), (uint16_t)37);
-  CHECK_EQ(careExp(100), (uint32_t)0);
+  CHECK_EQ(careMinutesForLevel(100), (uint32_t)0);
+  CHECK_EQ(careMinutesForLevel(1), (uint32_t)30);
+  CHECK_EQ(careMinutesForLevel(2), (uint32_t)60);
 }

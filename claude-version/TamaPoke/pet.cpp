@@ -138,13 +138,13 @@ void Pet::tick() {
       joy = dropTo(joy, 1, 35);
     }
     if (ageMinutes % 3 == 0) hygiene = dropTo(hygiene, 1, 45);
+    careTick();  // ko9: dormir tambien es tiempo de crianza
     checkMedals();
     pendingSave = true;  // fork KO (ko4): se guarda cada minuto
     return;
   }
 
-  // fork KO (ko7): cada hora despierto y bien cuidado da EXP (1/4 de nivel)
-  if (ageMinutes % 60 == 0 && lowestStat() >= 40) addExp(careExp(level()));
+  careTick();  // ko9: EXP por tiempo de crianza
 
   fullness = clamp100(fullness - 2);
   energy = clamp100(energy - 1);
@@ -454,6 +454,32 @@ bool Pet::canEvolveNow() const {
   return need && level() >= need && lowestStat() >= 40;
 }
 
+// ko9: cada minuto de crianza (despierto o dormido) da la parte de EXP que
+// toca para que subir de L a L+1 cueste 30*L minutos. Con alguna barra en el
+// suelo (<= 10, descuido) ese minuto no cuenta.
+void Pet::careTick() {
+  uint16_t L = level();
+  uint32_t per = careMinutesForLevel(L);
+  if (!per || isEgg() || lowestStat() <= 10) return;
+  careAcc += expForLevel(L + 1) - expForLevel(L);
+  if (careAcc >= per) {
+    uint32_t q = careAcc / per;
+    careAcc %= per;
+    addExp(q);
+  }
+}
+
+uint32_t Pet::careMinutesLeft() const {
+  uint16_t L = level();
+  uint32_t per = careMinutesForLevel(L);
+  if (!per) return 0;
+  uint32_t span = expForLevel(L + 1) - expForLevel(L);
+  uint32_t into = exp - expForLevel(L);
+  uint64_t need = (uint64_t)(span - into) * per;  // en unidades de careAcc
+  need = need > careAcc ? need - careAcc : 0;
+  return (uint32_t)((need + span - 1) / span);
+}
+
 uint16_t Pet::addExp(uint32_t x) {
   if (isEgg() || !x) return 0;
   uint16_t before = level();
@@ -509,9 +535,38 @@ void Pet::feedBerry(uint8_t color) {
   save();
 }
 
+// forma base de la linea evolutiva (Eevee para 134-136)
+static int16_t lineBase(int16_t dex) {
+  for (int guard = 0; guard < 4; guard++) {
+    int16_t prev = 0;
+    for (int16_t d = 1; d <= 151 && !prev; d++)
+      if (DEX_TBL[d].evolvesTo == dex || (d == DEX_EEVEE && dex >= 134 && dex <= 136)) prev = d;
+    if (!prev) break;
+    dex = prev;
+  }
+  return dex;
+}
+
+uint8_t Pet::favFood() const {
+  if (speciesId < 1 || speciesId > 151) return 0;
+  return (uint8_t)(lineBase(speciesId) % 4);
+}
+
 void Pet::feedCandy() {
   if (ceremony != CER_NONE) return;
   if (isEgg() || sleeping) return;
+  if (lovesBerry(3)) {  // ko9: la chuche es su favorita: llena como la baya favorita
+    fullness = clamp100(fullness + 35);
+    joy = clamp100(joy + 12);
+    weight = clamp100(weight + 6);
+    heartUntil = millis() + HEART_MS;
+    berryKnown = true;
+    addBond(2);
+    eatUntil = millis() + EAT_ANIM_MS;
+    registerCare();
+    save();
+    return;
+  }
   fullness = clamp100(fullness + 10);
   joy = clamp100(joy + 12);
   weight = clamp100(weight + 12);  // las chuches pasan factura

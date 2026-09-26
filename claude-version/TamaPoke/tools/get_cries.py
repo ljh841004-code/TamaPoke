@@ -9,6 +9,7 @@ Solo para uso personal; no los subas a ningun repositorio publico.
 
 Necesita ffmpeg (en el PATH, o `pip install imageio-ffmpeg`).
 Uso:  python3 tools/get_cries.py [carpeta_salida]   (por defecto ./sd_cries)
+      (ko9: si ya tenias cry025.wav / cry133.wav de antes, borralos para bajar la voz)
       -> copia la carpeta mons/ resultante a la raiz de la SD
 """
 import os
@@ -18,6 +19,11 @@ import sys
 import urllib.request
 
 URL = 'https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/{}.ogg'
+
+# ko9: Pikachu y Eevee dicen su nombre desde Let's Go ("Pi-ka-chu!", "Vui!").
+# El grito "latest" normal (#25, #133) es el sintetizado de los juegos; el de
+# sus formas companero (Let's Go, PokeAPI 10158 / 10159) es la voz.
+VOICED = {25: 10158, 133: 10159}
 
 
 def find_ffmpeg():
@@ -40,7 +46,7 @@ def main():
         dst = os.path.join(out, f'cry{n:03d}.wav')
         if os.path.exists(dst):
             continue
-        with urllib.request.urlopen(URL.format(n), timeout=30) as r, open(tmp, 'wb') as f:
+        with urllib.request.urlopen(URL.format(VOICED.get(n, n)), timeout=30) as r, open(tmp, 'wb') as f:
             f.write(r.read())
         # -map_metadata -1 + bitexact: sin chunk LIST, cabecera de 44 bytes exacta
         subprocess.run([ff, '-v', 'error', '-y', '-i', tmp, '-ac', '1', '-ar', '16000',

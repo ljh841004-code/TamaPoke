@@ -783,7 +783,7 @@ void drawBattlers() {
   if (!foeHide && !foeGone) {
     if (foePmd.loaded) {
       if (!foePmd.has(foeAct)) foeAct = PMD_IDLE;
-      drawPmdActM(foePmd, foeAct, foeX, foeG, now, true, foeSil, 3);
+      drawPmdActM(foePmd, foeAct, foeX, foeG, now, true, foeSil, 3, 170);
     } else {
       const uint8_t *th = thumbs.get(bvFoeDex);
       if (th) drawThumb(th, foeX - GAL_CELL / 2, foeG - GAL_CELL, 2, foeSil);
@@ -867,7 +867,7 @@ void renderBattleView() {
   updateShake(now);
   drawBattleBg();
   drawBattlers();
-  drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, false);
+  drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true);  // ko9: rival con numeros
   drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true);
 
   if (bPhase == BP_RESULT) {
@@ -1235,7 +1235,7 @@ void renderLinkTrade() {
   drawFit(l, 76, 340, DEX_TBL[th.t.dex >= 1 && th.t.dex <= DEX_COUNT ? th.t.dex : 0].accent, 2);
   // sprite del Pokemon que llegaria
   loadFoe(th.t.dex, th.t.shiny);
-  if (foePmd.loaded) drawPmdActM(foePmd, PMD_IDLE, CX, 236, millis(), true, false, 4);
+  if (foePmd.loaded) drawPmdActM(foePmd, PMD_IDLE, CX, 236, millis(), true, false, 4, 170);
   if (st == LS_READY) {
     drawFit(XT(X_TRADE_Q), 250, 340, UI_INK, 2);
     drawFit(XT(X_TRADE_WARN), 276, 340, UI_BAR_BAD, 2);
