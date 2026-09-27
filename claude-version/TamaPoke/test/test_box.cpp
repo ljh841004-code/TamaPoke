@@ -887,3 +887,26 @@ TEST(box, salon_de_la_fama_aparte_y_con_sitio_para_251) {
   b2.begin();
   CHECK_EQ((int)b2.count(), BOX_MAX);
 }
+
+// ko11.5: una partida con valores imposibles (NVS danada) no debe tumbar el
+// arranque: se corrigen al cargar en vez de perder la partida entera
+TEST(save, valores_danados_se_corrigen_al_cargar) {
+  Pet p;
+  freshPet(p, 4);
+  Preferences raw;
+  raw.begin("tamapoke", false);
+  raw.putShort("dexn", 900);
+  raw.putShort("eggT2", -7);
+  raw.putUChar("mwhy", 200);
+  raw.putUChar("lend", 99);
+  raw.putUChar("full", 250);
+  raw.putUChar("tatk", 180);
+  raw.end();
+  Pet q;
+  q.begin();
+  CHECK(q.speciesId >= -1 && q.speciesId <= DEX_COUNT);
+  CHECK(q.mistWhy <= MW_HYGIENE);
+  CHECK(q.lastEnd <= CER_RELEASE);
+  CHECK(q.fullness <= 100);
+  CHECK(q.trAtk <= 100);
+}

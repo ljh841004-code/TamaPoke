@@ -1001,6 +1001,21 @@ void Pet::load() {
   potions = prefs.getUChar("potn", 2);
   defHi = prefs.getUShort("dhi", 0);
   speHi = prefs.getUShort("vhp", 0);
+  // ko11.5: nada fuera de rango entra en juego aunque la NVS venga danada
+  // (una placa se quedo reiniciando en bucle al arrancar y solo volvio
+  // borrando la partida entera: mejor corregir el valor que perderlo todo)
+  if (speciesId < -1 || speciesId > DEX_COUNT || speciesId == 0) speciesId = -1;
+  if (eggTarget < 1 || eggTarget > DEX_COUNT) eggTarget = 4;
+  if (mistWhy > MW_HYGIENE) mistWhy = MW_NONE;
+  if (lastEnd > CER_RELEASE) lastEnd = CER_NONE;
+  if (fullness > 100) fullness = 100;
+  if (joy > 100) joy = 100;
+  if (energy > 100) energy = 100;
+  if (hygiene > 100) hygiene = 100;
+  if (trAtk > 100) trAtk = 100;
+  if (trDef > 100) trDef = 100;
+  if (trSpe > 100) trSpe = 100;
+  nick[sizeof(nick) - 1] = 0;
   // siembra: la mascota actual cuenta como criada (guardados antiguos)
   if (speciesId >= 1) registerSpecies(speciesId);
 }
