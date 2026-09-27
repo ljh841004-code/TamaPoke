@@ -4,6 +4,7 @@
 #include <Wire.h>
 #include <ESP_I2S.h>
 #include <Preferences.h>
+#include "bgm_pick.h"
 #include <SD_MMC.h>
 #include <atomic>
 #include "wav_stream.h"
@@ -36,6 +37,11 @@ static std::atomic<bool> musicPaused{false};  // fork KO (ko5): pantalla apagada
 static std::atomic<uint8_t> musicTrack{MT_NORMAL};  // ko11: gimnasio / liga / salon
 static std::atomic<uint32_t> bgmSeconds{0};    // ko10.4: duracion de bgm.wav (0 = no cargado)
 static const char *const volumeKeys[] = {"volBgm", "volCry", "volSfx"};
+// ko11.8: fondos normales elegibles (bgm.wav, bgm2.wav ... bgm8.wav)
+static std::atomic<uint8_t> bgmAvail{1}, bgmMaskA{0xFF};
+static std::atomic<int8_t> bgmForce{-1}, bgmNowA{-1};
+static uint16_t bgmSecs[BGM_MAX];
+static char bgmTitles[BGM_MAX][28];
 
 // El NS4150B tarda bastante mas de 8 ms en estabilizarse tras cada apagado, asi
 // que encenderlo justo antes de cada efecto se comia los cortos: el jingle de
@@ -134,10 +140,10 @@ static void audioTask(void *) {
   uint32_t cryLen = 0, cryAt = 0;
   MusicRoute route;
   bool suspended = false;
-  // ko11: musica normal = bgm.wav y bgm2.wav (si esta) al azar (y el salon de la
-  // fama igual: fame.wav / fame2.wav): al acabar una
-  // cancion se sortea la siguiente. Sin bgm2.wav, bgm.wav en bucle como siempre
-  uint8_t bgmPick = 0;
+  // ko11: el salon de la fama suena fame.wav / fame2.wav al azar.
+  // ko11.8: la musica normal, una al azar de las activadas en la pantalla de
+  // sonido (bgm.wav, bgm2.wav ... bgm8.wav); al acabar una se sortea otra
+  uint8_t bgmIdx = 0, famePick = 0, seenMask = bgmMaskA.load();
   bool bgmSwap = false;
   int sfx = -1, note = 0;
   uint32_t noteAt = 0, phase = 0;
@@ -164,8 +170,21 @@ static void audioTask(void *) {
           uploadAck.store(upload); // writer may now safely replace a WAV
         } else {
           uploadAck.store(upload);
+          // ko11.8: escuchar una desde el menu / se desactivo la que sonaba
+          if (!(request & 1u) && (uint8_t)(request >> 24) == MT_NORMAL) {
+            int8_t f = bgmForce.exchange(-1);
+            uint8_t m = bgmMaskA.load();
+            if (f >= 0 && f < BGM_MAX) { bgmIdx = (uint8_t)f; bgmSwap = true; }
+            else if (m != seenMask && !(m & (1u << bgmIdx)) && (bgmAvail.load() & m)) {
+              bgmIdx = bgmChoose(bgmAvail.load(), m, bgmIdx, esp_random()); bgmSwap = true;
+            }
+            seenMask = m;
+          }
           if (suspended || bgmSwap || route.changed(request, reload)) {
-            if (!bgmSwap && route.changed(request, reload) && !(request & 1u)) bgmPick = (uint8_t)(esp_random() & 1u);
+            if (!bgmSwap && route.changed(request, reload) && !(request & 1u)) {
+              bgmIdx = bgmChoose(bgmAvail.load(), bgmMaskA.load(), BGM_MAX, esp_random());
+              famePick = (uint8_t)(esp_random() & 1u);
+            }
             bgmSwap = false;
             uint32_t resume = route.switchTo(request, reload, music.position(), music.valid());
             music.close();
@@ -174,20 +193,24 @@ static void audioTask(void *) {
               uint8_t tr = (uint8_t)(request >> 24);
               const char *base = request & 1u ? "/mons/battle_wild.wav" : "/mons/bgm.wav";
               const char *path = base;
+              static char bgmPathBuf[24];
               if (request & 1u) {
                 if (tr == MT_GYM) path = "/mons/battle_gym.wav";
                 else if (tr == MT_CHAMP) path = "/mons/battle_champ.wav";
               } else if (tr == MT_FAME) {
-                path = bgmPick ? "/mons/fame2.wav" : "/mons/fame.wav";  // ko11: 2 al azar
-                if (bgmPick && !SD_MMC.exists(path)) path = "/mons/fame.wav";
-              } else if (bgmPick) {
-                path = "/mons/bgm2.wav";  // ko11: la segunda cancion normal (Pallet Town...)
+                path = famePick ? "/mons/fame2.wav" : "/mons/fame.wav";  // ko11: 2 al azar
+                if (famePick && !SD_MMC.exists(path)) path = "/mons/fame.wav";
+              } else if (bgmIdx) {
+                audioBgmPath(bgmIdx, bgmPathBuf, sizeof(bgmPathBuf));  // ko11.8
+                path = bgmPathBuf;
               }
               bool opened = music.open(SD_MMC.open(path, FILE_READ), resume);
               if (!opened && path != base) {  // ko11: sin ese fichero, la de siempre
                 path = base;
+                if (!(request & 1u) && tr == MT_NORMAL) bgmIdx = 0;
                 opened = music.open(SD_MMC.open(path, FILE_READ), resume);
               }
+              bgmNowA.store(opened && !(request & 1u) && tr == MT_NORMAL ? (int8_t)bgmIdx : (int8_t)-1);
               if (!opened)
                 Serial.printf("AUDIO invalid/missing WAV: %s\n", path);
               else {  // ko10.4: la duracion real del fichero (para ver si esta recortado)
@@ -200,11 +223,16 @@ static void audioTask(void *) {
           if (audible && !musicPaused.load()) {
             uint32_t before = music.loops;
             musicSamples = music.read(musicBlock, 256);
-            // ko11: acabo una cancion normal: sortear la siguiente (bgm.wav / bgm2.wav)
+            // ko11: acabo una cancion normal: sortear la siguiente
             uint8_t trk = (uint8_t)(request >> 24);
-            if (music.loops != before && !(request & 1u) && (trk == MT_NORMAL || trk == MT_FAME)) {
-              uint8_t next = (uint8_t)(esp_random() & 1u);
-              if (next != bgmPick) { bgmPick = next; bgmSwap = true; }
+            if (music.loops != before && !(request & 1u)) {
+              if (trk == MT_NORMAL) {  // ko11.8: entre las activadas, sin repetir si hay otra
+                uint8_t next = bgmChoose(bgmAvail.load(), bgmMaskA.load(), bgmIdx, esp_random());
+                if (next != bgmIdx) { bgmIdx = next; bgmSwap = true; }
+              } else if (trk == MT_FAME) {
+                uint8_t next = (uint8_t)(esp_random() & 1u);
+                if (next != famePick) { famePick = next; bgmSwap = true; }
+              }
             }
           }
         }
@@ -269,7 +297,45 @@ static void queueWav(const char *path, uint8_t kind) {
   AudioCommand c{kind, 0, pcm, bytes / 2};
   if (!xQueueSend(gQ, &c, 0)) free(pcm);
 }
-void audioLoadMusic() { musicEnabled = true; musicReload.fetch_add(1); }
+void audioLoadMusic() { audioScanBgm(); musicEnabled = true; musicReload.fetch_add(1); }
+
+// ---- ko11.8: fondos normales elegibles ----
+void audioBgmPath(uint8_t i, char *out, size_t n) {
+  if (i == 0) snprintf(out, n, "/mons/bgm.wav");
+  else snprintf(out, n, "/mons/bgm%u.wav", (unsigned)(i + 1));
+}
+void audioScanBgm() {
+  uint8_t av = 0;
+  for (uint8_t i = 0; i < BGM_MAX; i++) {
+    char path[24];
+    audioBgmPath(i, path, sizeof(path));
+    bgmSecs[i] = 0; bgmTitles[i][0] = 0;
+    SdCardLock lock(pdMS_TO_TICKS(500));
+    if (!lock) continue;
+    if (!SD_MMC.exists(path)) continue;
+    File f = SD_MMC.open(path, FILE_READ);
+    if (!f) continue;
+    uint32_t bytes = 0;
+    if (wavInfo(f, &bytes, bgmTitles[i], sizeof(bgmTitles[i]))) {
+      av |= (uint8_t)(1u << i);
+      bgmSecs[i] = (uint16_t)(bytes / (SAMPLE_RATE * 2));
+    }
+    f.close();
+  }
+  bgmAvail = av ? av : 1;  // sin ninguna valida: se intenta bgm.wav como siempre
+  Serial.printf("BGM avail=0x%02x mask=0x%02x\n", av, bgmMaskA.load());
+}
+uint8_t audioBgmAvail() { return bgmAvail.load(); }
+uint8_t audioBgmMask() { return bgmMaskA.load(); }
+void audioSetBgmMask(uint8_t mask) {
+  if (!mask) return;
+  bgmMaskA = mask;
+  Preferences p; p.begin("tamapoke", false); p.putUChar("bgmMask", mask); p.end();
+}
+uint16_t audioBgmSecondsOf(uint8_t i) { return i < BGM_MAX ? bgmSecs[i] : 0; }
+const char *audioBgmTitle(uint8_t i) { return i < BGM_MAX ? bgmTitles[i] : ""; }
+int8_t audioBgmNow() { return bgmNowA.load(); }
+void audioBgmPlay(uint8_t i) { if (i < BGM_MAX) bgmForce = (int8_t)i; }
 uint32_t audioBgmSeconds() { return bgmSeconds.load(); }
 void audioSetMusicPaused(bool paused) { musicPaused = paused; }
 void audioSetMusicTrack(uint8_t track) { musicTrack = track; }
@@ -323,6 +389,7 @@ void audioBegin() {
   p.begin("tamapoke", true);
   gOn = p.getBool("snd", true);
   for (int i = 0; i < 3; ++i) { uint8_t v = p.getUChar(volumeKeys[i], levels[i].load()); levels[i] = v > 100 ? 100 : v; }
+  bgmMaskA = p.getUChar("bgmMask", 0xFF);  // ko11.8
   p.end();
 
   gQ = xQueueCreate(8, sizeof(AudioCommand));

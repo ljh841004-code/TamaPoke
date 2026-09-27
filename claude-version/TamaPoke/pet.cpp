@@ -159,7 +159,7 @@ void Pet::tick() {
 
   fullness = clamp100(fullness - 2);
   energy = clamp100(energy - 1);
-  if (fullness > 40 && poops < 3 && random(100) < 15) poops++;
+  if (fullness > 40 && poops < 3 && !holdPoop && random(100) < 15) poops++;  // ko11.8: no en combate
 
   hygiene = clamp100(hygiene - 1 - 4 * poops);
   // el sobrepeso da pereza: la energia cae el doble
@@ -1053,17 +1053,18 @@ void Pet::load() {
 }
 
 void Pet::wipeGameKeepSettings() {
-  static const char *const KEEP_U8[] = { "volBgm", "volCry", "volSfx", "lang" };
-  uint8_t u8[4];
-  bool has[4];
-  for (int i = 0; i < 4; i++) {
+  // ko11.8: "bgmMask" = fondos elegidos en la pantalla de sonido (tambien es ajuste)
+  static const char *const KEEP_U8[] = { "volBgm", "volCry", "volSfx", "lang", "bgmMask" };
+  uint8_t u8[5];
+  bool has[5];
+  for (int i = 0; i < 5; i++) {
     has[i] = prefs.isKey(KEEP_U8[i]);
     u8[i] = prefs.getUChar(KEEP_U8[i], 0);
   }
   bool hasSnd = prefs.isKey("snd"), snd = prefs.getBool("snd", true);
   uint32_t seen = prefs.getUInt("seen", 0);
   prefs.clear();
-  for (int i = 0; i < 4; i++)
+  for (int i = 0; i < 5; i++)
     if (has[i]) prefs.putUChar(KEEP_U8[i], u8[i]);
   if (hasSnd) prefs.putBool("snd", snd);
   if (seen) prefs.putUInt("seen", seen);

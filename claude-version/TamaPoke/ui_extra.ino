@@ -13,7 +13,8 @@ enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_
                  XS_GYM, XS_DAILY,  // ko10.4: gimnasios y reto del dia
                  XS_NEXTPICK,       // ko10.5: elegir el siguiente tras un ciclo
                  XS_CANDY,          // ko10.11: bolsa de caramelos
-                 XS_FAME, XS_BAK };  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
+                 XS_FAME, XS_BAK,
+                 XS_BGM };  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
 uint8_t xScreen = XS_NONE;
 
 // aviso breve en la pantalla principal
@@ -27,6 +28,7 @@ void showToast(const char *s) {
 }
 
 bool extraOpen() { return xScreen != XS_NONE; }
+bool inBattleScreen() { return xScreen == XS_WILD || xScreen == XS_LINK; }  // ko11.8
 
 // texto centrado que se encoge a tamano 1 si no cabe en maxW
 void drawFit(const char *s, int y, int maxW, uint16_t col, uint8_t size) {
@@ -319,12 +321,14 @@ void loadFoe(int16_t dex, bool shiny) {
 // fase de la batalla
 // BP_NEXT (ko9.2, solo salvajes): tras el resultado, "seguir buscando o salir"
 // BP_DUP (ko10.4): repetido capturado -> quedarselo (caja) o cambiarlo por caramelos
-enum : uint8_t { BP_INTRO = 0, BP_MENU, BP_PLAY, BP_RESULT, BP_NEXT, BP_DUP };
+enum : uint8_t { BP_INTRO = 0, BP_MENU, BP_PLAY, BP_RESULT, BP_NEXT, BP_DUP,
+                 BP_JOIN };  // ko11.8: el vencido quiere venir -> preguntar
 #define BD_MS 20000UL  // sin elegir en 20 s: se lo queda (no se pierde nada)
 #define BDUP_KEEP_X 70  // botones de BP_DUP
 #define BDUP_CANDY_X 240
 #define BDUP_W 156
 bool bDupPending = false, bDupCaught = false;
+bool bJoinPending = false;  // ko11.8
 uint32_t bDupEpoch = 0;
 char bNote[80] = "";  // ko10.11: 48 -> 80 (textos de revancha y liga)   // linea extra bajo "seguir?" (caramelos ganados)
 #define BN_Y 330      // botones de BP_NEXT
@@ -1012,7 +1016,18 @@ void renderBattleView() {
     printT(ob);
   }
 
-  if (bPhase == BP_DUP) {  // ko10.4: repetido
+  if (bPhase == BP_JOIN) {  // ko11.8: quiere venir
+    gfx->fillRoundRect(40, 266, 386, 56, 12, UI_WHITE);
+    gfx->drawRoundRect(40, 266, 386, 56, 12, UI_INK);
+    char q[64];
+    txFmt(q, sizeof(q), X_JOIN_Q, dexName(bFoe.dex));
+    drawFit(q, 272, 370, UI_INK, 2);
+    drawFit(XT(X_JOIN_SUB), 298, 370, C565(0xc8, 0x3c, 0x78), 1);
+    bool full = box.full() && !ownsSpecies(bFoe.dex);
+    drawBtn(BDUP_KEEP_X, BN_Y, BDUP_W, BN_H, full ? UI_TRACK : UI_BAR_OK, full ? 0x8410 : UI_WHITE, XT(X_JOIN_TAKE));
+    drawBtn(BDUP_CANDY_X, BN_Y, BDUP_W, BN_H, UI_TRACK, UI_INK, XT(X_JOIN_LEAVE));
+    if (full) drawFit(XT(X_BOX_FULL), BN_Y + BN_H + 8, 300, UI_BAR_BAD, 1);
+  } else if (bPhase == BP_DUP) {  // ko10.4: repetido
     gfx->fillRoundRect(40, 266, 386, 56, 12, UI_WHITE);
     gfx->drawRoundRect(40, 266, 386, 56, 12, UI_INK);
     char q[64];
@@ -1105,6 +1120,7 @@ void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool fo
   bWon = bFled = bRewarded = false;
   bItems = 0;
   bDupPending = false;  // ko10.4
+  bJoinPending = false;  // ko11.8
   bNote[0] = 0;
   bvMeFainted = bvFoeFainted = false;
   bvFoeCaught = bCaught = false;
@@ -1623,6 +1639,7 @@ void wildTap(int16_t x, int16_t y) {
   // ko9.2: tocar el resultado pasa ya a la pregunta
   if (bPhase == BP_RESULT && millis() - bPhaseT > 800) { afterResult(); return; }
   if (bPhase == BP_DUP) { wildDupTap(x, y); return; }
+  if (bPhase == BP_JOIN) { wildJoinTap(x, y); return; }  // ko11.8
   if (bPhase == BP_NEXT) { wildNextTap(x, y); return; }
   if (bPhase != BP_MENU) return;
   int a = battleMenuHit(x, y);
@@ -1666,7 +1683,7 @@ static void afterResult() {
   }
   if (bKind == BK_DAILY) { foePmd.unload(); openDaily(); return; }
   if (bKind == BK_CHAMP) { foePmd.unload(); openGyms(); gymPage = 2; return; }  // ko10.11
-  bPhase = bDupPending ? BP_DUP : BP_NEXT;
+  bPhase = bJoinPending ? BP_JOIN : bDupPending ? BP_DUP : BP_NEXT;  // ko11.8
   bPhaseT = millis();
 }
 
@@ -1701,6 +1718,43 @@ static void wildDupTap(int16_t x, int16_t y) {
   if (y < BN_Y || y >= BN_Y + BN_H) return;
   if (x >= BDUP_KEEP_X && x < BDUP_KEEP_X + BDUP_W) dupDecide(true);
   else if (x >= BDUP_CANDY_X && x < BDUP_CANDY_X + BDUP_W) dupDecide(false);
+}
+
+// ko11.8: el vencido quiere venir: [데려가기] / [보내주기]
+static void joinDecide(bool take) {
+  if (!bJoinPending) return;
+  bJoinPending = false;
+  if (!take) {
+    txFmt(bNote, sizeof(bNote), X_JOIN_BYE, dexName(bFoe.dex));
+    sfxPlay(SFX_TAP);
+    bPhase = BP_NEXT;
+    bPhaseT = millis();
+    return;
+  }
+  if (ownsSpecies(bFoe.dex)) {  // repetido: como siempre, caja o caramelos
+    bDupPending = true;
+    bDupCaught = false;
+    bPhase = BP_DUP;
+    bPhaseT = millis();
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  if (box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, false, bDupEpoch)) {
+    txFmt(bNote, sizeof(bNote), X_JOIN_OK, dexName(bFoe.dex));
+    sfxPlay(SFX_MEDAL);
+  } else {
+    strncpy(bNote, XT(X_BOX_FULL), sizeof(bNote) - 1);
+    bNote[sizeof(bNote) - 1] = 0;
+    sfxPlay(SFX_DENY);
+  }
+  bPhase = BP_NEXT;
+  bPhaseT = millis();
+}
+
+static void wildJoinTap(int16_t x, int16_t y) {
+  if (y < BN_Y || y >= BN_Y + BN_H) return;
+  if (x >= BDUP_KEEP_X && x < BDUP_KEEP_X + BDUP_W) joinDecide(true);
+  else if (x >= BDUP_CANDY_X && x < BDUP_CANDY_X + BDUP_W) joinDecide(false);
 }
 
 void finishBattle(bool won, bool fled, bool caught) {
@@ -1785,9 +1839,13 @@ void finishBattle(bool won, bool fled, bool caught) {
         pet.saveNow();
       }
     }
-    if (!bLink && (caught || joins)) {
+    if (!bLink && joins && !caught) {  // ko11.8: ya no entra solo: se pregunta tras el resultado
+      bJoinPending = true;
+      bDupEpoch = clockEpoch();
+    }
+    if (!bLink && caught) {
       uint32_t e = clockEpoch();
-      if (caught) dexLog.caught(bFoe.dex, e);
+      dexLog.caught(bFoe.dex, e);
       if (ownsSpecies(bFoe.dex)) {  // ko10.4: repetido -> se pregunta tras el resultado
         bDupPending = true;
         bDupCaught = caught;
@@ -1839,6 +1897,8 @@ void updateWild() {
     if (now - bPhaseT > 3800) afterResult();  // ko9.2: preguntar (ko10.4: antes el repetido)
   } else if (bPhase == BP_DUP) {
     if (now - bPhaseT > BD_MS) { if (!box.full()) dupDecide(true); else dupDecide(false); }
+  } else if (bPhase == BP_JOIN) {  // ko11.8: sin elegir en 20 s, viene (como antes)
+    if (now - bPhaseT > BD_MS) joinDecide(true);
   } else if (bPhase == BP_NEXT) {
     if (now - bPhaseT > BN_MS) endBattleScreen();
   }
@@ -2146,7 +2206,7 @@ uint8_t musicTrackNow() {
 
 bool battleMusicActive() {
   bool fighting = xScreen == XS_WILD || (xScreen == XS_LINK && linkBattleStarted);
-  return fighting && bPhase != BP_RESULT && bPhase != BP_NEXT && bPhase != BP_DUP;
+  return fighting && bPhase != BP_RESULT && bPhase != BP_NEXT && bPhase != BP_DUP && bPhase != BP_JOIN;
 }
 
 void extraLoop(uint32_t now) {
@@ -2185,6 +2245,7 @@ bool extraRender() {
     case XS_CANDY: renderCandyBag(); return true;     // ko10.11
     case XS_FAME: renderFame(); return true;          // ko11.1
     case XS_BAK: renderBackup(); return true;         // ko11.6
+    case XS_BGM: renderBgmPick(); return true;        // ko11.8
     default: return false;
   }
 }
@@ -2206,6 +2267,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_CANDY: candyBagTap(x, y); return true;
     case XS_FAME: fameTap(x, y); return true;
     case XS_BAK: backupTap(x, y); return true;
+    case XS_BGM: bgmPickTap(x, y); return true;
     default: return false;
   }
 }
@@ -2216,6 +2278,7 @@ bool extraSwipe() {
   if (xScreen == XS_LINKMENU) { xScreen = XS_NONE; return true; }
   if (xScreen == XS_BOX) { boxSwipe(); return true; }
   if (xScreen == XS_VOL) { xScreen = XS_NONE; clockOpen = true; return true; }
+  if (xScreen == XS_BGM) { xScreen = XS_VOL; return true; }  // ko11.8
   if (xScreen == XS_UPD) { xScreen = XS_NET; return true; }
   if (xScreen == XS_RESET) { xScreen = XS_NONE; clockOpen = true; return true; }
   if (xScreen == XS_CANDY) { xScreen = XS_NONE; return true; }  // ko10.11: vertical = cerrar

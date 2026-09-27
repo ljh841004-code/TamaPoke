@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
 
 // Efectos de sonido del juego (cola, no bloqueante). El orden coincide con la
 // tabla SFX de audio.cpp.
@@ -35,6 +36,18 @@ void audioSetBattleMusic(bool active, bool newSession = false);
 // fame2.wav al azar (si no estan, bgm.wav); normal: bgm.wav o bgm2.wav al azar
 enum : uint8_t { MT_NORMAL = 0, MT_GYM, MT_CHAMP, MT_FAME };
 void audioSetMusicTrack(uint8_t track);
+// ko11.8: fondos normales elegibles: /mons/bgm.wav, bgm2.wav ... bgm8.wav. Suenan al
+// azar solo los activados (mascara guardada en "bgmMask"; por defecto todos).
+#define BGM_MAX 8
+void audioBgmPath(uint8_t i, char *out, size_t n);  // i=0 -> /mons/bgm.wav, i -> /mons/bgm{i+1}.wav
+void audioScanBgm();                  // mira en la SD cuales hay (loop principal; bloquea la SD un momento)
+uint8_t audioBgmAvail();              // bits: ficheros validos encontrados
+uint8_t audioBgmMask();               // bits: activados por el usuario
+void audioSetBgmMask(uint8_t mask);   // guarda y, si la que suena se desactiva, cambia
+uint16_t audioBgmSecondsOf(uint8_t i);
+const char *audioBgmTitle(uint8_t i); // titulo (INAM del WAV) o "" si no lleva
+int8_t audioBgmNow();                 // la que suena ahora (-1 si ninguna normal)
+void audioBgmPlay(uint8_t i);         // escucharla ya (luego sigue el sorteo)
 bool audioPauseForUpload(); // closes streaming file before PUT; false on timeout
 void audioResumeAfterUpload();
 void audioCry(uint16_t dex); // main loop only

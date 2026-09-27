@@ -218,6 +218,21 @@ TEST(tick, despierto_baja_comida_2_y_energia_1_por_minuto) {
   CHECK_EQ(p.poops, (uint8_t)0);
 }
 
+TEST(tick, en_combate_no_hace_caca) {  // ko11.8
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 100, 100, 100, 100);
+  p.poops = 0;
+  p.holdPoop = true;
+  mockForceRandom(0);  // sin el bloqueo haria caca cada minuto
+  advance(p, 10);
+  CHECK_EQ(p.poops, (uint8_t)0);
+  p.holdPoop = false;
+  advance(p, 1);
+  mockClearForcedRandom();
+  CHECK_EQ(p.poops, (uint8_t)1);
+}
+
 TEST(tick, las_barras_nunca_bajan_de_cero) {
   Pet p;
   makePet(p, 4);

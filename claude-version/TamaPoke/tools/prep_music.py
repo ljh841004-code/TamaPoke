@@ -10,6 +10,11 @@ Uso:
     python tools/prep_music.py CANCION.wav            -> sd_music/mons/bgm.wav
     python tools/prep_music.py CANCION.wav battle     -> sd_music/mons/battle_wild.wav
     python tools/prep_music.py CANCION.mp3 fame2.wav  -> sd_music/mons/fame2.wav (ko11)
+    python tools/prep_music.py CANCION.mp3 bgm3.wav --title "Route 1"
+        ko11.8: fondos normales bgm.wav, bgm2.wav ... bgm8.wav (en la pantalla de
+        sonido se eligen los que suenan). --title guarda el nombre dentro del WAV
+        (LIST/INFO/INAM) y la pantalla lo ensena; mejor en letras latinas (la
+        fuente del firmware solo lleva las silabas coreanas que usa el juego)
 ko11: nombres de la SD: bgm.wav / bgm2.wav (normal, al azar), battle_wild.wav,
 battle_gym.wav, battle_champ.wav, fame.wav / fame2.wav (salon de la fama, al azar).
 MP3/FLAC/OGG: se leen con el modulo miniaudio (pip install miniaudio).
@@ -50,7 +55,31 @@ def read_any(path):
     return list(d.samples), d.sample_rate
 
 
+def add_title(path, title):
+    """ko11.8: anade LIST/INFO/INAM con el titulo al final del WAV"""
+    import struct
+    t = title.encode('utf-8')[:26] + b'\0'
+    if len(t) & 1:
+        t += b'\0'
+    inam = b'INAM' + struct.pack('<I', len(t)) + t
+    lst = b'LIST' + struct.pack('<I', 4 + len(inam)) + b'INFO' + inam
+    with open(path, 'r+b') as f:
+        data = f.read()
+        if len(data) & 1:
+            data += b'\0'
+        data += lst
+        data = data[:4] + struct.pack('<I', len(data) - 8) + data[8:]
+        f.seek(0)
+        f.write(data)
+        f.truncate()
+
+
 def main(argv):
+    title = None
+    if '--title' in argv:
+        i = argv.index('--title')
+        title = argv[i + 1] if i + 1 < len(argv) else None
+        argv = argv[:i] + argv[i + 2:]
     if len(argv) < 2:
         print(__doc__)
         return 1
@@ -82,8 +111,11 @@ def main(argv):
         prep_cries.write_wav(os.path.join(out_dir, name), pcm)
     finally:
         prep_cries.MAX_SECONDS = keep
+    if title:
+        add_title(os.path.join(out_dir, name), title)
     sec = len(pcm) // prep_cries.RATE
-    print(f'{os.path.join(out_dir, name)}: {sec // 60}:{sec % 60:02d} (16 kHz mono 16 bit)')
+    print(f'{os.path.join(out_dir, name)}: {sec // 60}:{sec % 60:02d} (16 kHz mono 16 bit)' +
+          (f'  "{title}"' if title else ''))
     return 0
 
 

@@ -132,6 +132,19 @@ bool audioPauseForUpload() { return true; }
 void audioResumeAfterUpload() {}
 void audioCry(uint16_t) {}
 void audioSetMusicPaused(bool) {}
+// ko11.8: dos fondos (bgm.wav sin titulo, bgm2.wav con titulo)
+static uint8_t gBgmMask = 0xFF;
+void audioBgmPath(uint8_t i, char *out, size_t n) {
+  if (i == 0) snprintf(out, n, "/mons/bgm.wav"); else snprintf(out, n, "/mons/bgm%u.wav", (unsigned)(i + 1));
+}
+void audioScanBgm() {}
+uint8_t audioBgmAvail() { return 0x03; }
+uint8_t audioBgmMask() { return gBgmMask; }
+void audioSetBgmMask(uint8_t m) { if (m) gBgmMask = m; }
+uint16_t audioBgmSecondsOf(uint8_t i) { return i == 0 ? 170 : i == 1 ? 188 : 0; }
+const char *audioBgmTitle(uint8_t i) { return i == 1 ? "Pallet Town" : ""; }
+int8_t audioBgmNow() { return 1; }
+void audioBgmPlay(uint8_t) {}
 #include "../../sdupdate.h"
 UpdCheck sdUpdateCheck(uint32_t *size) { if (size) *size = 1873367; return UPD_OK; }
 bool sdUpdateRun(void (*)(uint32_t, uint32_t)) { return false; }

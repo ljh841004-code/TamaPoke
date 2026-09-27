@@ -213,6 +213,10 @@ static void scenes(bool ko, const char *sfx) {
   bDupPending = true; bDupCaught = true; bPhase = BP_DUP; bPhaseT = gMockMillis;
   render(); shot("09c_battle_dup");
   dupDecide(false); render(); shot("09d_battle_dup_candy");
+  // ko11.8: el vencido quiere venir -> preguntar
+  bJoinPending = true; bPhase = BP_JOIN; bPhaseT = gMockMillis;
+  render(); shot("09e_battle_join");
+  joinDecide(false); render(); shot("09f_battle_join_bye");
   // ko10.1: escenario de la batalla salvaje = habitat del rival; tiempo por fecha
   {
     auto rep = [](int bio) -> int16_t {
@@ -376,6 +380,8 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); openClock(); render(); shot("15_clock_settings");
   clockDateMode = true; render(); shot("15b_clock_date"); clockDateMode = false;
   closeAll(); openSound(); render(); shot("16_sound");
+  closeAll(); openBgmPick(); render(); shot("16b_bgm_pick");  // ko11.8
+  audioSetBgmMask(0x02); render(); shot("16c_bgm_pick_one"); audioSetBgmMask(0xFF);
   closeAll(); openNet(); render(); shot("18_net");
   { gMockPortal = true; render(); shot("18b_portal_qr"); gMockPortal = false; }
   // ko11.6: copia de la partida en la SD

@@ -1,6 +1,7 @@
 #include "framework.h"
 #include "../wav_stream.h"
 #include "../music_route.h"
+#include "../bgm_pick.h"
 #include <memory>
 #include <algorithm>
 
@@ -123,4 +124,43 @@ TEST(Audio, ReadAheadTopsUpInChunks) {
   int n=0;while(s.read(b,256,false)==256u) n++;
   CHECK_EQ(n,16);  // 8 KiB enteros de colchon, no lo que sobraba del bloque anterior
   CHECK_EQ(b[0],(int16_t)(4*256+15*256));
+}
+
+// ko11.8: fondos elegibles
+TEST(Bgm, ChooseOnlyEnabledAndNeverRepeatsWhenThereIsAnother) {
+  // hay 0,1,2; activadas 0 y 2
+  for (uint32_t r = 0; r < 50; r++) {
+    uint8_t n = bgmChoose(0x07, 0x05, 0, r);
+    CHECK_EQ(n, (uint8_t)2);           // no repite la 0, y la 1 esta apagada
+    CHECK_EQ(bgmChoose(0x07, 0x05, 2, r), (uint8_t)0);
+  }
+  CHECK_EQ(bgmChoose(0x07, 0x02, 1, 7), (uint8_t)1);   // una sola activada: se repite
+  CHECK_EQ(bgmChoose(0x01, 0x02, 0, 3), (uint8_t)0);   // la activada no existe: la que hay
+  CHECK_EQ(bgmChoose(0x00, 0xFF, 0, 3), (uint8_t)0);   // nada en la SD: bgm.wav
+  bool seen[3] = {false, false, false};
+  for (uint32_t r = 0; r < 30; r++) seen[bgmChoose(0x07, 0xFF, 8, r)] = true;  // al empezar, cualquiera
+  CHECK(seen[0] && seen[1] && seen[2]);
+}
+TEST(Bgm, WavInfoReadsLengthAndTitle) {
+  std::vector<uint8_t> b = wav(16000 * 3);
+  // anadir LIST/INFO/INAM "Pallet Town" al final
+  const char *t = "Pallet Town";
+  std::vector<uint8_t> inam = {'I','N','A','M',12,0,0,0};
+  inam.insert(inam.end(), t, t + 11); inam.push_back(0);
+  std::vector<uint8_t> list = {'L','I','S','T',0,0,0,0,'I','N','F','O'};
+  list.insert(list.end(), inam.begin(), inam.end());
+  put32(list, 4, list.size() - 8);
+  b.insert(b.end(), list.begin(), list.end());
+  put32(b, 4, b.size() - 8);
+  MemoryFile f(b);
+  uint32_t bytes = 0; char title[28];
+  CHECK(wavInfo(f, &bytes, title, sizeof(title)));
+  CHECK_EQ(bytes, (uint32_t)(16000 * 3 * 2));
+  CHECK(strcmp(title, "Pallet Town") == 0);
+  MemoryFile g(wav(100));
+  CHECK(wavInfo(g, &bytes, title, sizeof(title)));
+  CHECK_EQ(title[0], 0);
+  std::vector<uint8_t> bad = wav(100); bad[0] = 'X';
+  MemoryFile h(bad);
+  CHECK(!wavInfo(h, &bytes, title, sizeof(title)));
 }

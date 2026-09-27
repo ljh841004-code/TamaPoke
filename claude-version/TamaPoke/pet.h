@@ -93,6 +93,7 @@ public:
   uint8_t energy = 80;    // energia
   uint8_t hygiene = 100;  // limpieza
   uint8_t poops = 0;      // cacas en pantalla (max 3)
+  bool holdPoop = false;  // ko11.8: en combate no hace caca (lo pone el loop, no se guarda)
   uint8_t weight = 0;     // 0-100: las chuches engordan, el minijuego quema
   // genes (90-110%, se tiran al eclosionar) y entrenamiento (0-100)
   uint8_t geneAtk = 100, geneDef = 100, geneSpe = 100;

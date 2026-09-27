@@ -115,6 +115,10 @@ extern bool bakAsk;           // ko11.6 (ui_more.ino): pregunta de la copia en l
 void renderBakAsk();
 void bakAskTap(int16_t x, int16_t y);
 void bakAutoLoop(uint32_t now);
+bool inBattleScreen();    // ko11.8 (ui_extra.ino)
+void openBgmPick();       // ko11.8: elegir los fondos normales
+void renderBgmPick();
+void bgmPickTap(int16_t x, int16_t y);
 void bakBootCheck();
 void bakRequest();
 void expLoop();  // ko11.7 (ui_more.ino)
@@ -597,6 +601,7 @@ void loop() {
   handleSerial();
   extraLoop(now);  // fork KO: red, tongsin, batallas (ui_extra.ino)
   bakAutoLoop(now);  // ko11.6: copia de la partida en la SD
+  pet.holdPoop = inBattleScreen();  // ko11.8: en combate (salvaje, gimnasio, liga, tongsin) no hace caca
   expLoop();         // ko11.7: aviso de vuelta de la expedicion
   dexRewardLoop(now);  // ko11.7: premios de la pokedex
   ensureMon();

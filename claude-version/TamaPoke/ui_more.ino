@@ -498,8 +498,10 @@ void nextPickPoll() {
 // Sonido: volumen de musica, voces y sistema (desde la pantalla de hora)
 // ======================================================================
 
-#define VOL_ROW_Y 138
-#define VOL_ROW_H 72
+#define VOL_ROW_Y 128  // ko11.8: un poco mas juntas (cabe [배경음 고르기])
+#define VOL_ROW_H 66
+#define VOL_BGM_Y 326
+#define VOL_DONE_Y 366
 #define VOL_BAR_X 138
 #define VOL_BAR_W 190
 
@@ -532,14 +534,9 @@ void renderSound() {
     int fw = (VOL_BAR_W - 4) * v / 100;
     if (fw > 0) gfx->fillRoundRect(VOL_BAR_X + 2, y + 36, fw, 12, 5, on ? UI_BAR_OK : 0x8410);
   }
-  // ko10.4: duracion del fondo cargado (si sale 0:30 y la cancion era mas larga,
-  // el bgm.wav de la SD esta recortado: tools/prep_music.py)
-  uint32_t bs = audioBgmSeconds();
-  char bl[40];
-  if (bs) snprintf(bl, sizeof(bl), XT(X_BGM_LEN_FMT), (unsigned)(bs / 60), (unsigned)(bs % 60));
-  else snprintf(bl, sizeof(bl), "%s", XT(X_BGM_NONE));
-  drawFit(bl, 340, 300, 0x8410, 1);
-  drawBtn(143, 364, 180, 44, UI_BAR_OK, UI_WHITE, XT(X_VOL_DONE));
+  // ko11.8: elegir que fondos suenan (la duracion de cada uno esta en esa pantalla)
+  drawBtn(113, VOL_BGM_Y, 240, 34, UI_WHITE, UI_INK, XT(X_BGM_PICK_BTN));
+  drawBtn(143, VOL_DONE_Y, 180, 40, UI_BAR_OK, UI_WHITE, XT(X_VOL_DONE));
   gfx->flush();
 }
 
@@ -554,7 +551,12 @@ void soundTap(int16_t x, int16_t y) {
     if (audioEnabled()) sfxPlay(SFX_TAP);
     return;
   }
-  if ((y >= 356 && x >= 133 && x < 333) || y < 72) {  // completar -> hora
+  if (y >= VOL_BGM_Y && y < VOL_BGM_Y + 36 && x >= 113 && x < 353) {  // ko11.8
+    openBgmPick();
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  if ((y >= VOL_DONE_Y - 4 && x >= 133 && x < 333) || y < 72) {  // completar -> hora
     xScreen = XS_NONE;
     clockOpen = true;
     return;
@@ -571,6 +573,121 @@ void soundTap(int16_t x, int16_t y) {
     soundPreview(i);
     return;
   }
+}
+
+// ======================================================================
+// ko11.8: elegir los fondos normales (bgm.wav, bgm2.wav ... bgm8.wav de la SD).
+// Suenan al azar solo los activados; tocar el nombre o [>] = escucharlo ya.
+// ======================================================================
+
+#define BGMP_ROWS 4
+#define BGMP_Y0 104
+#define BGMP_H 50
+static uint8_t bgmPage = 0;
+static uint32_t bgmWarnUntil = 0;
+
+static uint8_t bgmList(uint8_t *out) {  // indices de los ficheros que hay
+  uint8_t n = 0, av = audioBgmAvail();
+  for (uint8_t i = 0; i < BGM_MAX; i++)
+    if (av & (1u << i)) out[n++] = i;
+  return n;
+}
+
+void openBgmPick() {
+  audioScanBgm();  // por si se anadieron canciones con el instalador web
+  bgmPage = 0;
+  bgmWarnUntil = 0;
+  xScreen = XS_BGM;
+}
+
+void renderBgmPick() {
+  gfx->fillScreen(UI_BG_DAY);
+  drawFit(XT(X_BGM_PICK_TITLE), 38, 300, UI_INK, 3);
+  drawFit(XT(X_BGM_PICK_HINT), 76, 320, 0x8410, 1);
+  uint8_t list[BGM_MAX];
+  uint8_t n = bgmList(list), mask = audioBgmMask();
+  uint8_t pages = (n + BGMP_ROWS - 1) / BGMP_ROWS;
+  if (bgmPage >= pages) bgmPage = 0;
+  int8_t now = audioBgmNow();
+  for (uint8_t r = 0; r < BGMP_ROWS; r++) {
+    uint8_t k = bgmPage * BGMP_ROWS + r;
+    if (k >= n) break;
+    uint8_t i = list[k];
+    int y = BGMP_Y0 + r * BGMP_H;
+    bool on = mask & (1u << i);
+    if (now == (int8_t)i) gfx->fillRoundRect(58, y - 2, 350, BGMP_H - 4, 10, C565(0xd8, 0xf0, 0xd8));
+    drawBtn(64, y + 4, 62, 36, on ? UI_BAR_OK : UI_TRACK, on ? UI_WHITE : UI_INK, XT(on ? X_BGM_ON : X_BGM_OFF));
+    char name[40];
+    const char *t = audioBgmTitle(i);
+    if (t[0]) snprintf(name, sizeof(name), "%s", t);
+    else snprintf(name, sizeof(name), XT(X_BGM_ROW_FMT), (unsigned)(i + 1));
+    gfx->setTextColor(on ? UI_INK : 0x8410);
+    setSize(textW(name, 2) > 204 ? 1 : 2);
+    setCur(136, y + 4);
+    printT(name);
+    char sub[32], file[16];
+    audioBgmPath(i, file, sizeof(file));
+    uint16_t sec = audioBgmSecondsOf(i);
+    snprintf(sub, sizeof(sub), "%s  %u:%02u", file + 6, (unsigned)(sec / 60), (unsigned)(sec % 60));
+    gfx->setTextColor(0x8410);
+    setSize(1);
+    setCur(136, y + 30);
+    printT(sub);
+    // [>] escuchar
+    int px = 352, py = y + 4;
+    gfx->fillRoundRect(px, py, 44, 36, 10, now == (int8_t)i ? UI_BAR_OK : UI_WHITE);
+    gfx->drawRoundRect(px, py, 44, 36, 10, UI_INK);
+    uint16_t tc = now == (int8_t)i ? UI_WHITE : UI_INK;
+    gfx->fillTriangle(px + 16, py + 9, px + 16, py + 27, px + 31, py + 18, tc);
+  }
+  if (pages > 1) {
+    drawNav(NAV_L, UI_INK);
+    drawNav(NAV_R, UI_INK);
+    char pg[12];
+    snprintf(pg, sizeof(pg), "%u/%u", (unsigned)(bgmPage + 1), (unsigned)pages);
+    drawFit(pg, BGMP_Y0 + BGMP_ROWS * BGMP_H + 2, 100, UI_INK, 1);
+  }
+  int my = BGMP_Y0 + BGMP_ROWS * BGMP_H + 20;
+  if (timeLeft(bgmWarnUntil)) drawFit(XT(X_BGM_LAST), my, 320, UI_BAR_BAD, 1);
+  else if (n < BGM_MAX) {
+    uint8_t nx = 1;  // primer numero libre (bgm.wav = 1)
+    while (nx < BGM_MAX && (audioBgmAvail() & (1u << nx))) nx++;
+    char hint[64];
+    snprintf(hint, sizeof(hint), XT(X_BGM_ADD_HINT), (unsigned)(nx + 1));
+    drawFit(hint, my, 320, 0x8410, 1);
+  }
+  drawBtn(143, VOL_DONE_Y, 180, 40, UI_BAR_OK, UI_WHITE, XT(X_VOL_DONE));
+  gfx->flush();
+}
+
+void bgmPickTap(int16_t x, int16_t y) {
+  uint8_t list[BGM_MAX];
+  uint8_t n = bgmList(list);
+  uint8_t pages = (n + BGMP_ROWS - 1) / BGMP_ROWS;
+  if ((y >= VOL_DONE_Y - 4 && x >= 133 && x < 333) || y < 60) {  // hecho -> sonido
+    xScreen = XS_VOL;
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  if (pages > 1 && navHit(NAV_L, x, y)) { bgmPage = (bgmPage + pages - 1) % pages; sfxPlay(SFX_TAP); return; }
+  if (pages > 1 && navHit(NAV_R, x, y)) { bgmPage = (bgmPage + 1) % pages; sfxPlay(SFX_TAP); return; }
+  if (y < BGMP_Y0 - 4) return;
+  uint8_t r = (y - (BGMP_Y0 - 4)) / BGMP_H;
+  uint8_t k = bgmPage * BGMP_ROWS + r;
+  if (r >= BGMP_ROWS || k >= n) return;
+  uint8_t i = list[k];
+  if (x >= 58 && x < 130) {  // [켬]/[끔]
+    uint8_t m = audioBgmMask() ^ (uint8_t)(1u << i);
+    if (!(m & audioBgmAvail())) {  // no dejar todas apagadas
+      bgmWarnUntil = millis() + 2500;
+      sfxPlay(SFX_DENY);
+      return;
+    }
+    audioSetBgmMask(m);
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  if (x >= 130 && x < 410) audioBgmPlay(i);  // nombre o [>]: escucharla ya
 }
 
 // ======================================================================
