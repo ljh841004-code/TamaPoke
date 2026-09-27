@@ -29,6 +29,30 @@ static inline uint8_t bgmChoose(uint8_t avail, uint8_t mask, uint8_t cur, uint32
   return 0;
 }
 
+// ko11.8.1: que hueco (0 = bgm.wav, 1 = bgm2.wav ... 7 = bgm8.wav) es un fichero,
+// aunque el navegador o el PC le hayan cambiado un poco el nombre al guardarlo:
+// "bgm2 (1).wav", "BGM2.WAV", "bgm2-1.wav", "bgm2_copy.wav" -> 1; "bgm.wav",
+// "bgm1.wav", "bgm (2).wav" -> 0. -1 si no es un fondo (bgm10.wav, ._bgm2.wav...).
+// *exact = el nombre es justo el canonico (tiene prioridad si hay dos iguales).
+static inline int bgmSlotFromName(const char *name, bool *exact = nullptr) {
+  if (exact) *exact = false;
+  if (!name) return -1;
+  auto low = [](char c) { return (char)(c >= 'A' && c <= 'Z' ? c + 32 : c); };
+  if (low(name[0]) != 'b' || low(name[1]) != 'g' || low(name[2]) != 'm') return -1;
+  size_t n = strlen(name);
+  if (n < 7) return -1;
+  const char *ext = name + n - 4;
+  if (ext[0] != '.' || low(ext[1]) != 'w' || low(ext[2]) != 'a' || low(ext[3]) != 'v') return -1;
+  const char *p = name + 3;
+  int num = 0, digits = 0;
+  while (p < ext && *p >= '0' && *p <= '9') { num = num * 10 + (*p - '0'); p++; digits++; }
+  if (digits > 1) return -1;
+  int slot = digits ? num - 1 : 0;
+  if (slot < 0 || slot > 7) return -1;
+  if (exact) *exact = (p == ext) && (digits ? num >= 2 : true);
+  return slot;
+}
+
 // Cabecera de un WAV del juego (16 kHz mono 16 bit): bytes de audio y titulo.
 // Reader: size(), seek(pos), read(buf, n) (File de SD_MMC o el de los tests).
 template<class Reader>

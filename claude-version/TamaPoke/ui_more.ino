@@ -629,10 +629,12 @@ void renderBgmPick() {
     setSize(textW(name, 2) > 204 ? 1 : 2);
     setCur(136, y + 4);
     printT(name);
-    char sub[32], file[16];
+    char sub[48], file[48];
     audioBgmPath(i, file, sizeof(file));
+    const char *base = strrchr(file, '/');  // ko11.8.1: el nombre real (puede venir cambiado)
+    base = base ? base + 1 : file;
     uint16_t sec = audioBgmSecondsOf(i);
-    snprintf(sub, sizeof(sub), "%s  %u:%02u", file + 6, (unsigned)(sec / 60), (unsigned)(sec % 60));
+    snprintf(sub, sizeof(sub), "%.24s  %u:%02u", base, (unsigned)(sec / 60), (unsigned)(sec % 60));
     gfx->setTextColor(0x8410);
     setSize(1);
     setCur(136, y + 30);

@@ -164,3 +164,22 @@ TEST(Bgm, WavInfoReadsLengthAndTitle) {
   MemoryFile h(bad);
   CHECK(!wavInfo(h, &bytes, title, sizeof(title)));
 }
+TEST(Bgm, SlotFromRenamedFileNames) {  // ko11.8.1
+  bool ex;
+  CHECK_EQ(bgmSlotFromName("bgm.wav", &ex), 0); CHECK(ex);
+  CHECK_EQ(bgmSlotFromName("bgm2.wav", &ex), 1); CHECK(ex);
+  CHECK_EQ(bgmSlotFromName("bgm8.wav", &ex), 7); CHECK(ex);
+  CHECK_EQ(bgmSlotFromName("bgm2 (1).wav", &ex), 1); CHECK(!ex);
+  CHECK_EQ(bgmSlotFromName("BGM2.WAV", &ex), 1);
+  CHECK_EQ(bgmSlotFromName("bgm2-1.wav"), 1);
+  CHECK_EQ(bgmSlotFromName("bgm (2).wav", &ex), 0); CHECK(!ex);
+  CHECK_EQ(bgmSlotFromName("bgm1.wav", &ex), 0); CHECK(!ex);
+  CHECK_EQ(bgmSlotFromName("bgm10.wav"), -1);
+  CHECK_EQ(bgmSlotFromName("bgm9.wav"), -1);
+  CHECK_EQ(bgmSlotFromName("bgm0.wav"), -1);
+  CHECK_EQ(bgmSlotFromName("._bgm2.wav"), -1);
+  CHECK_EQ(bgmSlotFromName("bgm2.mp3"), -1);
+  CHECK_EQ(bgmSlotFromName("battle_wild.wav"), -1);
+  CHECK_EQ(bgmSlotFromName("b"), -1);
+  CHECK_EQ(bgmSlotFromName(""), -1);
+}

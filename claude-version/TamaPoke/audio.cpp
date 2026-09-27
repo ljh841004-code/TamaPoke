@@ -6,6 +6,7 @@
 #include <Preferences.h>
 #include "bgm_pick.h"
 #include <SD_MMC.h>
+#include <dirent.h>
 #include <atomic>
 #include "wav_stream.h"
 #include "sd_lock.h"
@@ -42,6 +43,7 @@ static std::atomic<uint8_t> bgmAvail{1}, bgmMaskA{0xFF};
 static std::atomic<int8_t> bgmForce{-1}, bgmNowA{-1};
 static uint16_t bgmSecs[BGM_MAX];
 static char bgmTitles[BGM_MAX][28];
+static char bgmPaths[BGM_MAX][48];  // ko11.8.1: ruta real (el nombre puede venir cambiado)
 
 // El NS4150B tarda bastante mas de 8 ms en estabilizarse tras cada apagado, asi
 // que encenderlo justo antes de cada efecto se comia los cortos: el jingle de
@@ -193,7 +195,7 @@ static void audioTask(void *) {
               uint8_t tr = (uint8_t)(request >> 24);
               const char *base = request & 1u ? "/mons/battle_wild.wav" : "/mons/bgm.wav";
               const char *path = base;
-              static char bgmPathBuf[24];
+              static char bgmPathBuf[48];
               if (request & 1u) {
                 if (tr == MT_GYM) path = "/mons/battle_gym.wav";
                 else if (tr == MT_CHAMP) path = "/mons/battle_champ.wav";
@@ -301,26 +303,63 @@ void audioLoadMusic() { audioScanBgm(); musicEnabled = true; musicReload.fetch_a
 
 // ---- ko11.8: fondos normales elegibles ----
 void audioBgmPath(uint8_t i, char *out, size_t n) {
-  if (i == 0) snprintf(out, n, "/mons/bgm.wav");
+  if (i < BGM_MAX && bgmPaths[i][0]) snprintf(out, n, "%s", bgmPaths[i]);
+  else if (i == 0) snprintf(out, n, "/mons/bgm.wav");
   else snprintf(out, n, "/mons/bgm%u.wav", (unsigned)(i + 1));
 }
+// ko11.8.1: se busca en /mons (y en la raiz, por si se copio ahi desde el PC)
+// cualquier bgm*.wav, aunque el nombre venga cambiado ("bgm2 (1).wav"). Antes solo
+// se miraba el nombre exacto y un fichero renombrado al descargarlo no aparecia.
 void audioScanBgm() {
+  static char found[BGM_MAX][48];
+  bool exactF[BGM_MAX] = {};
+  for (uint8_t i = 0; i < BGM_MAX; i++) found[i][0] = 0;
+  static const char *const DIRS[2] = { "/mons", "" };
+  {
+    SdCardLock lock(pdMS_TO_TICKS(2000));
+    if (lock) {
+      for (int d = 0; d < 2; d++) {
+        char vdir[24];
+        snprintf(vdir, sizeof(vdir), "/sdcard%s", DIRS[d]);
+        DIR *dir = opendir(vdir);  // POSIX: solo nombres, sin abrir cada fichero (hay ~750)
+        if (!dir) continue;
+        struct dirent *e;
+        while ((e = readdir(dir)) != nullptr) {
+          bool ex;
+          int k = bgmSlotFromName(e->d_name, &ex);
+          if (k < 0) continue;
+          if (found[k][0] && (exactF[k] || !ex)) continue;  // ya hay uno mejor (o igual de bueno)
+          snprintf(found[k], sizeof(found[k]), "%s/%s", DIRS[d], e->d_name);
+          exactF[k] = ex;
+        }
+        closedir(dir);
+      }
+    }
+  }
   uint8_t av = 0;
+  static uint16_t secs[BGM_MAX];
+  static char titles[BGM_MAX][28];
   for (uint8_t i = 0; i < BGM_MAX; i++) {
-    char path[24];
-    audioBgmPath(i, path, sizeof(path));
-    bgmSecs[i] = 0; bgmTitles[i][0] = 0;
+    secs[i] = 0; titles[i][0] = 0;
+    if (!found[i][0]) continue;
     SdCardLock lock(pdMS_TO_TICKS(500));
     if (!lock) continue;
-    if (!SD_MMC.exists(path)) continue;
-    File f = SD_MMC.open(path, FILE_READ);
-    if (!f) continue;
+    File f = SD_MMC.open(found[i], FILE_READ);
     uint32_t bytes = 0;
-    if (wavInfo(f, &bytes, bgmTitles[i], sizeof(bgmTitles[i]))) {
-      av |= (uint8_t)(1u << i);
-      bgmSecs[i] = (uint16_t)(bytes / (SAMPLE_RATE * 2));
+    bool ok = f && wavInfo(f, &bytes, titles[i], sizeof(titles[i]));
+    if (f) f.close();
+    if (ok) { av |= (uint8_t)(1u << i); secs[i] = (uint16_t)(bytes / (SAMPLE_RATE * 2)); }
+    else if (!f && !strcmp(found[i], bgmPaths[i]) && (bgmAvail.load() & (1u << i))) {
+      // no se pudo abrir (p. ej. sonando ahora): se queda lo que ya se sabia
+      av |= (uint8_t)(1u << i); secs[i] = bgmSecs[i]; memcpy(titles[i], bgmTitles[i], sizeof(titles[i]));
     }
-    f.close();
+    Serial.printf("BGM %u: %s %s %u s\n", (unsigned)(i + 1), found[i], (av & (1u << i)) ? "ok" : "NO VALE", secs[i]);
+  }
+  SdCardLock lock(pdMS_TO_TICKS(2000));  // la tarea de audio abre con el candado: copiar dentro
+  for (uint8_t i = 0; i < BGM_MAX; i++) {
+    memcpy(bgmPaths[i], found[i], sizeof(bgmPaths[i]));
+    bgmSecs[i] = secs[i];
+    memcpy(bgmTitles[i], titles[i], sizeof(bgmTitles[i]));
   }
   bgmAvail = av ? av : 1;  // sin ninguna valida: se intenta bgm.wav como siempre
   Serial.printf("BGM avail=0x%02x mask=0x%02x\n", av, bgmMaskA.load());
