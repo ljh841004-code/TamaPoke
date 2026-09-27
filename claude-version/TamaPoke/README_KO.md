@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko11.5)
+# TamaPoke KO (v1.17-ko11.6)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -151,6 +151,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.3: 훈련 중 렉 — I2C 100→400kHz(실패 시 100), 훈련 중 RTC 읽기 대신 millis, PWR 1초·배터리 10초, 결과 화면에 그리기/멈춤 최대 ms. PC 테스트 211개
 - ✅ ko11.4: 빠른 연타 렉 원인 — SensorLib이 Wire.readBytes()를 써서 NACK 시 Stream 타임아웃(1000ms) 바쁜 대기 → Wire.setTimeout(3). PC 테스트 211개
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
+- ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko10.10: 사탕 메뉴 이름 "실수 만회 1회", 샤이니 UP 보존(보관함 선택 시). PC 테스트 204개
 - ✅ ko10.9: 실수 원인 기록·표시, 육성 일차 날짜 기준, 수동 시간 설정 시 오프라인 반영, 아래 버튼 배치. PC 테스트 204개 (+2)
 - ✅ ko10.8.1: 가장자리 화살표 탭 이동 (기본·카드·도감·훈련 메뉴), 느린 드래그 인식. PC 테스트 202개
