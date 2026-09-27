@@ -240,7 +240,7 @@ void renderNet() {
   drawBtn(NET_BTN_X + hw + 8, NET_AUTO_Y, hw, NET_BTN_H, netOpenAllowed() ? UI_WHITE : UI_TRACK, UI_INK,
           XT(netOpenAllowed() ? X_OPEN_ON : X_OPEN_OFF));
   drawBtn(NET_UPD_X, NET_UPD_Y, NET_UPD_W, NET_UPD_H, 0xFB20, UI_WHITE, XT(X_UPD_BTN));
-  drawFit(XT(X_TAP_CLOSE), 420, 220, UI_INK, 2);
+  drawTopExitHint(424);  // ko11.6: doble toque arriba (antes "tocar arriba", con el aviso abajo junto a [SD])
   gfx->flush();
 }
 
@@ -249,7 +249,8 @@ void netTap(int16_t x, int16_t y) {
     if (y >= 400) netStopPortal();  // ko8: [volver] bajo el QR
     return;
   }
-  if (y < 72) { closeNet(); return; }
+  if (topDoubleTap(y)) { closeNet(); return; }  // ko11.6: doble toque arriba
+  if (y < TOP_EXIT_Y) return;
   if (inRect(x, y, NET_UPD_X, NET_UPD_Y, NET_UPD_W, NET_UPD_H)) { openUpdate(); return; }
   if (y >= NET_TZ_Y && y < NET_TZ_Y + 44) {
     if (x < 140) netSetTzMin(netTzMin() - 30);

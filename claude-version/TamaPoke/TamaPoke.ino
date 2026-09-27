@@ -2556,6 +2556,13 @@ void applyClock() {
   clockOpen = false;
 }
 
+// ko11.6: marca arriba (flecha pequena) + aviso abajo: "doble toque arriba = salir"
+void drawTopExitHint(int hintY) {
+  const int y = 14, a = 6;
+  gfx->fillTriangle(CX, y - a + 1, CX - a, y + a - 2, CX + a, y + a - 2, 0x8410);
+  drawFit(XT(X_TOP_DBL_EXIT), hintY, 200, 0x8410, 1);
+}
+
 void drawClockBtn(int x, int y, const char *l) {
   gfx->fillRoundRect(x, y, 58, 58, 12, UI_WHITE);
   gfx->drawRoundRect(x, y, 58, 58, 12, UI_INK);
@@ -2581,7 +2588,8 @@ void drawClockBtn(int x, int y, const char *l) {
 #define CLK_PILL_W 180
 #define CLK_PILL_H 30
 #define CLK_OK_Y 316    // [OK] (antes 340)
-#define CLK_VER_Y 414   // version (antes 436: con "ko10.2" ya rozaba el borde)
+#define CLK_VER_Y 410   // version (antes 436: con "ko10.2" ya rozaba el borde)
+#define TOP_EXIT_Y 62   // ko11.6: zona de arriba (doble toque = salir)
 #define RST_PILL_W 140
 static const char *const LANG_CODES[LANG_COUNT] = { "ES", "EN", "FR", "DE", "IT", "PT", "JA", "KO" };
 
@@ -2664,10 +2672,24 @@ void renderClock() {
   setSize(1);
   setCur(centerX(ver, 1), CLK_VER_Y);
   printT(ver);
+  drawTopExitHint(434);  // ko11.6
   gfx->flush();
 }
 
+// ko11.6: el borde de arriba (vacio) tocado dos veces seguidas = salir. Asi no
+// hace falta apuntar abajo del todo, junto a [SD] / [nuevo comienzo]
+bool topDoubleTap(int16_t y) {
+  static uint32_t lastT = 0;
+  if (y >= TOP_EXIT_Y) { lastT = 0; return false; }
+  uint32_t now = millis();
+  bool dbl = lastT && now - lastT < 500;
+  lastT = dbl ? 0 : now;
+  if (!dbl) sfxPlay(SFX_TAP);
+  return dbl;
+}
+
 void clockTap(int16_t x, int16_t y) {
+  if (topDoubleTap(y)) { clockOpen = false; sfxPlay(SFX_TAP); return; }  // ko11.6
   if (y >= CLK_PILL_Y - 4 && y < CLK_PILL_Y + CLK_PILL_H + 4 && x >= CLK_PILL_X && x < CLK_PILL_X + CLK_PILL_W) {
     clockDateMode = !clockDateMode;  // ko10.4: hora <-> fecha
     sfxPlay(SFX_TAP);
