@@ -596,3 +596,175 @@ uint16_t screenSig() {
          (trainMenuOpen ? 1u << 10 : 0) | (clockOpen ? 1u << 11 : 0) | (kbOpen ? 1u << 12 : 0) |
          (galleryDetail ? 1u << 13 : 0) | (gameOpen || sackOpen || trainingFast() ? 1u << 14 : 0);
 }
+
+// ======================================================================
+// ko10.11: bolsa de caramelos. Todas las familias con caramelos, el universal,
+// y al tocar: cambiar 3 de otra familia por 1 de la que crias, o usar
+// ======================================================================
+#define BAG_ROW_X 70
+#define BAG_ROW_W 326
+#define BAG_ROW_Y 132
+#define BAG_ROW_H 40
+#define BAG_GAP 6
+#define BAG_ROWS 5
+#define BAG_RARE_Y 80
+static uint8_t bagFam[PET_DEX_MAX];
+static uint8_t bagN = 0, bagPage = 0;
+static int16_t bagSel = -1;        // -1 nada, 0 = universal, si no familia (dex base)
+static const char *bagMsg = nullptr;
+static uint32_t bagMsgUntil = 0;
+
+static void bagBuild() {
+  bagN = 0;
+  uint8_t mine = pet.isEgg() ? 0 : DEX_FAM[pet.speciesId];
+  if (mine && pet.candy[mine]) bagFam[bagN++] = mine;  // la tuya, la primera
+  for (int16_t f = 1; f <= DEX_COUNT; f++)
+    if (f != mine && DEX_FAM[f] == f && pet.candy[f]) bagFam[bagN++] = (uint8_t)f;
+}
+static uint8_t bagPages() { return bagN ? (uint8_t)((bagN + BAG_ROWS - 1) / BAG_ROWS) : 1; }
+
+void openCandyBag() {
+  xScreen = XS_CANDY;
+  cardOpen = false;
+  bagBuild();
+  bagPage = 0;
+  bagSel = -1;
+  bagMsgUntil = 0;
+  sfxPlay(SFX_TAP);
+}
+
+bool candyBagSwipe(int dir) {
+  if (xScreen != XS_CANDY) return false;
+  if (bagSel >= 0) return true;
+  int p = (int)bagPage + (dir > 0 ? -1 : 1);
+  if (p >= 0 && p < bagPages()) { bagPage = (uint8_t)p; sfxPlay(SFX_TAP); }
+  return true;
+}
+
+static void bagPopupRect(int &x, int &y, int &w, int &h) { x = 58; y = 150; w = 350; h = 196; }
+
+void renderCandyBag() {
+  screenBase();
+  drawFit(XT(X_BAG_TITLE), 36, 300, UI_INK, 3);
+  char b[48];
+  snprintf(b, sizeof(b), XT(X_BAG_RARE_FMT), pet.rareCandy);
+  drawBtn(BAG_ROW_X, BAG_RARE_Y, BAG_ROW_W, BAG_ROW_H, pet.rareCandy ? C565(0xd8, 0xa8, 0x20) : UI_TRACK,
+          pet.rareCandy ? UI_WHITE : 0x8410, b);
+  uint8_t mine = pet.isEgg() ? 0 : DEX_FAM[pet.speciesId];
+  if (!bagN) drawFit(XT(X_BAG_EMPTY), BAG_ROW_Y + 60, 300, 0x8410, 2);
+  for (int r = 0; r < BAG_ROWS; r++) {
+    int k = bagPage * BAG_ROWS + r;
+    if (k >= bagN) break;
+    uint8_t f = bagFam[k];
+    int y = BAG_ROW_Y + r * (BAG_ROW_H + BAG_GAP);
+    bool isMine = f == mine;
+    gfx->fillRoundRect(BAG_ROW_X, y, BAG_ROW_W, BAG_ROW_H, 12, isMine ? C565(0xf0, 0x7a, 0xa8) : UI_WHITE);
+    gfx->drawRoundRect(BAG_ROW_X, y, BAG_ROW_W, BAG_ROW_H, 12, UI_INK);
+    const uint8_t *th = thumbs.get(f);
+    if (th) drawThumb(th, BAG_ROW_X + 8, y - 14, 1, false);
+    snprintf(b, sizeof(b), XT(X_BAG_ROW_FMT), dexName(f), pet.candy[f]);
+    gfx->setTextColor(isMine ? UI_WHITE : UI_INK);
+    setSize(2);
+    setCur(BAG_ROW_X + 54, y + 9);
+    printT(b);
+    if (isMine) {
+      setSize(1);
+      setCur(BAG_ROW_X + BAG_ROW_W - 44, y + 13);
+      printT(XT(X_BAG_MINE));
+    }
+  }
+  if (bagMsg && timeLeft(bagMsgUntil)) drawFit(bagMsg, 372, 300, UI_BAR_OK, 2);
+  else if (bagPages() > 1) {
+    snprintf(b, sizeof(b), XT(X_BAG_PAGE_FMT), bagPage + 1, bagPages());
+    drawFit(b, 372, 200, UI_INK, 1);
+  }
+  if (bagPage > 0) drawNav(NAV_L, UI_INK);
+  if (bagPage + 1 < bagPages()) drawNav(NAV_R, UI_INK);
+  drawNav(NAV_DOWN, UI_INK);
+  // ventana de la seleccion
+  if (bagSel >= 0) {
+    int x, y, w, h;
+    bagPopupRect(x, y, w, h);
+    gfx->fillRoundRect(x, y, w, h, 16, UI_WHITE);
+    gfx->drawRoundRect(x, y, w, h, 16, UI_INK);
+    gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, 15, UI_INK);
+    if (bagSel == 0) {
+      snprintf(b, sizeof(b), XT(X_BAG_RARE_FMT), pet.rareCandy);
+      drawFit(b, y + 14, w - 20, C565(0xb0, 0x80, 0x10), 2);
+      drawFit(XT(X_BAG_RARE_INFO), y + 50, w - 20, UI_INK, 2);
+      bool ok = pet.rareCandy && !pet.isEgg();
+      drawBtn(x + 20, y + 96, w - 40, 40, ok ? C565(0xd8, 0xa8, 0x20) : UI_TRACK, ok ? UI_WHITE : 0x8410, XT(X_BAG_USE));
+    } else {
+      uint8_t f = (uint8_t)bagSel;
+      snprintf(b, sizeof(b), XT(X_BAG_ROW_FMT), dexName(f), pet.candy[f]);
+      drawFit(b, y + 14, w - 20, UI_INK, 2);
+      if (f == mine) {
+        drawFit(XT(X_BAG_MINE_INFO), y + 50, w - 20, UI_INK, 2);
+        drawBtn(x + 20, y + 96, w - 40, 40, C565(0xf0, 0x7a, 0xa8), UI_WHITE, XT(X_BAG_USE_GO));
+      } else {
+        drawFit(pet.isEgg() ? XT(X_BAG_NOEGG) : XT(X_BAG_TRADE_INFO), y + 50, w - 20, UI_INK, 2);
+        uint16_t all = pet.candy[f] / CANDY_TRADE_RATE;
+        bool ok = all && !pet.isEgg();
+        char a[24];
+        snprintf(a, sizeof(a), XT(X_BAG_TRADEALL_FMT), all);
+        drawBtn(x + 20, y + 96, (w - 50) / 2, 40, ok ? C565(0xf0, 0x7a, 0xa8) : UI_TRACK, ok ? UI_WHITE : 0x8410,
+                XT(X_BAG_TRADE1));
+        drawBtn(x + 30 + (w - 50) / 2, y + 96, (w - 50) / 2, 40, ok ? C565(0xc8, 0x3c, 0x78) : UI_TRACK,
+                ok ? UI_WHITE : 0x8410, a);
+      }
+    }
+    drawBtn(x + 20, y + 144, w - 40, 36, UI_TRACK, UI_INK, XT(X_BAG_CLOSE));
+    if (bagMsg && timeLeft(bagMsgUntil)) drawFit(bagMsg, y - 30, 300, UI_BAR_OK, 2);
+  }
+  gfx->flush();
+}
+
+static void bagSay(const char *m, bool good) {
+  bagMsg = m;
+  bagMsgUntil = millis() + 1800;
+  sfxPlay(good ? SFX_HEART : SFX_DENY);
+}
+
+void candyBagTap(int16_t x, int16_t y) {
+  if (bagSel >= 0) {  // ventana abierta
+    int px, py, pw, ph;
+    bagPopupRect(px, py, pw, ph);
+    if (inRect(x, y, px + 20, py + 144, pw - 40, 36) || !inRect(x, y, px, py, pw, ph)) { bagSel = -1; sfxPlay(SFX_TAP); return; }
+    if (y < py + 96 || y >= py + 136) return;
+    uint8_t mine = pet.isEgg() ? 0 : DEX_FAM[pet.speciesId];
+    if (bagSel == 0) {
+      if (pet.useRareCandy()) { bagBuild(); bagSay(XT(X_BAG_DONE), true); }
+      else bagSay(pet.isEgg() ? XT(X_BAG_NOEGG) : XT(X_CANDY_NO), false);
+      return;
+    }
+    uint8_t f = (uint8_t)bagSel;
+    if (f == mine) {  // usar: a la pagina de caramelos de la ficha
+      xScreen = XS_NONE;
+      cardOpen = true;
+      cardPage = 4;
+      sfxPlay(SFX_TAP);
+      return;
+    }
+    bool left = x < px + pw / 2;
+    uint16_t times = left ? 1 : pet.candy[f] / CANDY_TRADE_RATE;
+    if (pet.candyTrade(f, times)) {
+      bagBuild();
+      if (!pet.candy[f]) bagSel = -1;
+      bagSay(XT(X_BAG_DONE), true);
+    } else {
+      bagSay(pet.isEgg() ? XT(X_BAG_NOEGG) : XT(X_CANDY_NO), false);
+    }
+    return;
+  }
+  if (navHit(NAV_DOWN, x, y)) { xScreen = XS_NONE; sfxPlay(SFX_TAP); return; }
+  if (navHit(NAV_L, x, y)) { candyBagSwipe(1); return; }
+  if (navHit(NAV_R, x, y)) { candyBagSwipe(-1); return; }
+  if (inRect(x, y, BAG_ROW_X, BAG_RARE_Y, BAG_ROW_W, BAG_ROW_H)) { bagSel = 0; sfxPlay(SFX_TAP); return; }
+  if (x < BAG_ROW_X || x >= BAG_ROW_X + BAG_ROW_W || y < BAG_ROW_Y) return;
+  int r = (y - BAG_ROW_Y) / (BAG_ROW_H + BAG_GAP);
+  if (r >= BAG_ROWS || (y - BAG_ROW_Y) % (BAG_ROW_H + BAG_GAP) >= BAG_ROW_H) return;
+  int k = bagPage * BAG_ROWS + r;
+  if (k >= bagN) return;
+  bagSel = bagFam[k];
+  sfxPlay(SFX_TAP);
+}

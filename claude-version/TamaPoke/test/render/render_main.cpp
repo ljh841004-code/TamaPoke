@@ -80,6 +80,12 @@ static void scenes(bool ko, const char *sfx) {
   cardPage = 2; render(); shot("03d_card_medals");
   pet.addCandy(pet.speciesId, 12); cardPage = 4; render(); shot("03f_card_candy");
   pet.careMistakes = 1; pet.addCandy(pet.speciesId, 10); render(); shot("03i_card_candy_mistake"); pet.careMistakes = 0;
+  // ko10.11: bolsa de caramelos
+  pet.addCandy(25, 7); pet.addCandy(133, 4); pet.addCandy(6, 2); pet.addCandy(92, 11); pet.rareCandy = 2;
+  closeAll(); openCandyBag(); render(); shot("03j_candy_bag");
+  candyBagTap(BAG_ROW_X + 100, BAG_ROW_Y + 1 * (BAG_ROW_H + BAG_GAP) + 10); render(); shot("03k_candy_bag_trade");
+  candyBagTap(0, 0); candyBagTap(BAG_ROW_X + 100, BAG_RARE_Y + 10); render(); shot("03l_candy_bag_rare");
+  closeAll(); pet.rareCandy = 0; cardOpen = true; cardPage = 4; render(); shot("03m_card_candy_bagbtn"); closeAll();
   closeAll(); pet.berryKnown = true; feedMenuUntil = gMockMillis + 5000; render(); shot("01b_feed_menu");
   closeAll(); confirmUntil = gMockMillis + 5000; render(); shot("01c_confirm_release"); confirmUntil = 0;
   closeAll(); openLinkMenu(); render(); shot("24_link_menu");

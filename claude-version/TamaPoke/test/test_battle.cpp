@@ -503,3 +503,28 @@ TEST(gym, liga_seis_fuertes_sin_repetir) {
     }
   }
 }
+
+// ko10.11: el salvaje sale con una fuerza parecida a la tuya
+TEST(wild, salvaje_de_tu_talla) {
+  Battler me = makeBattler(9, 50, 120, 130, 110);  // un Blastoise Lv50 entrenado
+  uint32_t mp = battlerPower(me);
+  int ok = 0, total = 0;
+  for (uint32_t s = 1; s < 200; s++) {
+    BRng r(s);
+    int16_t d = (int16_t)(1 + r.below(DEX_COUNT));
+    Battler f = makeBattler(d, 47, 60, 60, 60);
+    wildMatchPower(f, me, r);
+    CHECK(f.lvl >= 41 && f.lvl <= 57);
+    CHECK_EQ((int)f.dex, (int)d);           // la especie no cambia
+    uint32_t fp = battlerPower(f);
+    total++;
+    if (fp >= mp * 70 / 100 && fp <= mp * 125 / 100) ok++;
+  }
+  CHECK_MSG(ok * 100 / total >= 70, "la mayoria cerca de tu fuerza (las muy flojas/fuertes topan en el rango)");
+  // un Caterpie frente a un Lv50 sale con mas nivel que un Dragonite
+  BRng r1(3), r2(3);
+  Battler c = makeBattler(10, 47, 1, 1, 1), g = makeBattler(149, 47, 1, 1, 1);
+  wildMatchPower(c, me, r1);
+  wildMatchPower(g, me, r2);
+  CHECK(c.lvl > g.lvl);
+}

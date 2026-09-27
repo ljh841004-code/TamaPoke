@@ -839,6 +839,7 @@ void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
   if (regionSwipe(dir)) return;       // ko10.1: paginas de regiones
   if (gymSwipe(dir)) return;          // ko10.4: paginas de gimnasios
+  if (candyBagSwipe(dir)) return;     // ko10.11: paginas de la bolsa de caramelos
   if (extraSwipe()) return;           // fork KO: pantallas nuevas
   if (trainMenuSwipe(dir)) return;    // ko9.1: menu de entrenamiento <-> batallas
   if (trainingSwipe()) return;        // fork KO (ko4): entrenamiento
@@ -2809,10 +2810,8 @@ void renderCardProgress() {
 #define CANDY_ROW_GAP 6
 
 void renderCardCandy() {
-  gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(XT(X_CANDY_TITLE), 3), 36);
-  printT(XT(X_CANDY_TITLE));
+  // ko10.11: el titulo es el boton de la bolsa de caramelos (todas las familias)
+  drawBtn(CX - 100, 20, 200, 40, C565(0xc8, 0x3c, 0x78), UI_WHITE, XT(X_BAG_OPEN));
   char have[48], nb[8];
   snprintf(nb, sizeof(nb), "%u", pet.candyOf(pet.speciesId));
   txFmt(have, sizeof(have), X_CANDY_HAVE, dexName(DEX_FAM[pet.speciesId]), nb);
@@ -2831,6 +2830,7 @@ void renderCardCandy() {
 }
 
 static void cardCandyTap(int16_t x, int16_t y) {
+  if (y < 66 && x >= CX - 110 && x < CX + 110) { openCandyBag(); return; }  // ko10.11: bolsa
   if (x < CANDY_ROW_X || x >= CANDY_ROW_X + CANDY_ROW_W || y < CANDY_ROW_Y) { cardOpen = false; return; }
   int i = (y - CANDY_ROW_Y) / (CANDY_ROW_H + CANDY_ROW_GAP);
   if (i >= CU_COUNT) { cardOpen = false; return; }

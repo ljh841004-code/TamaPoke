@@ -11,7 +11,8 @@
 enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_VOL, XS_UPD, XS_RESET,
                  XS_REGION,    // ko10.1: elegir region antes del salvaje
                  XS_GYM, XS_DAILY,  // ko10.4: gimnasios y reto del dia
-                 XS_NEXTPICK };     // ko10.5: elegir el siguiente tras un ciclo
+                 XS_NEXTPICK,       // ko10.5: elegir el siguiente tras un ciclo
+                 XS_CANDY };        // ko10.11: bolsa de caramelos
 uint8_t xScreen = XS_NONE;
 
 // aviso breve en la pantalla principal
@@ -1173,8 +1174,15 @@ void startWildIn(uint8_t region) {
   bRng = BRng(esp_random());
   bMe = makeBattler(pet.speciesId, pet.level(), pet.atkStat(), pet.defStat(), pet.speStat());
   uint32_t ep = pet.lastSeenEpoch;
-  bFoe = makeWildIn(bRegion, pet.level(), (uint8_t)sceneHour(), sceneWeather(), wxSeason(wxMonth(ep)),
-                    bRng, &bGroup);
+  // ko10.11: hasta 3 tiradas; una especie ya vista/capturada se queda solo al 45 %
+  // (asi salen mas nuevas). Los raros se quedan siempre
+  for (int t = 0; t < 3; t++) {
+    bFoe = makeWildIn(bRegion, pet.level(), (uint8_t)sceneHour(), sceneWeather(), wxSeason(wxMonth(ep)),
+                      bRng, &bGroup);
+    bool fresh = !dexDiscovered(bFoe.dex) || (dexLog.caughtCount(bFoe.dex) == 0 && !ownsSpecies(bFoe.dex));
+    if (bGroup == WG_RARE || fresh || bRng.below(100) < 45) break;
+  }
+  wildMatchPower(bFoe, bMe, bRng);  // ko10.11: de tu talla (90-105 % de tu fuerza)
   bool shiny = bRng.below(64) == 0;
   bvSetup(bMe, bFoe, nullptr, shiny);
   // ko10.11: cuantos de esta especie hay ya en la caja (se ensena unos segundos)
@@ -1665,6 +1673,13 @@ void finishBattle(bool won, bool fled, bool caught) {
     // (ko5: 1 de cada 5 "quiere unirse"; si no, la pokeball no servia de nada)
     bool joins = won && bKind == BK_WILD && (uint32_t)random(100) < BOX_JOIN_PCT;
     bNote[0] = 0;
+    // ko10.11: a veces, un caramelo universal (salvaje ganado o capturado)
+    if (bKind == BK_WILD && !bLink && (won || caught) && (uint32_t)random(100) < RARE_CANDY_PCT) {
+      if (pet.rareCandy < 999) pet.rareCandy++;
+      strncpy(bNote, XT(X_RARE_CANDY_GOT), sizeof(bNote) - 1);
+      bNote[sizeof(bNote) - 1] = 0;
+      pet.saveNow();
+    }
     if (won && bKind == BK_GYM && !(pet.badges & (1 << bGym))) {  // ko10.4: medalla nueva
       pet.badges |= (uint8_t)(1 << bGym);
       char nb[4];
@@ -2099,6 +2114,7 @@ bool extraRender() {
     case XS_GYM: renderGyms(); return true;           // ko10.4
     case XS_DAILY: renderDaily(); return true;
     case XS_NEXTPICK: renderNextPick(); return true;  // ko10.5
+    case XS_CANDY: renderCandyBag(); return true;     // ko10.11
     default: return false;
   }
 }
@@ -2117,6 +2133,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_GYM: gymTap(x, y); return true;
     case XS_DAILY: dailyTap(x, y); return true;
     case XS_NEXTPICK: nextPickTap(x, y); return true;
+    case XS_CANDY: candyBagTap(x, y); return true;
     default: return false;
   }
 }
@@ -2129,6 +2146,7 @@ bool extraSwipe() {
   if (xScreen == XS_VOL) { xScreen = XS_NONE; clockOpen = true; return true; }
   if (xScreen == XS_UPD) { xScreen = XS_NET; return true; }
   if (xScreen == XS_RESET) { xScreen = XS_NONE; clockOpen = true; return true; }
+  if (xScreen == XS_CANDY) { xScreen = XS_NONE; return true; }  // ko10.11: vertical = cerrar
   if (xScreen == XS_REGION || xScreen == XS_GYM || xScreen == XS_DAILY || xScreen == XS_NEXTPICK) {
     xScreen = XS_NONE;  // ko10.5: en la eleccion, cerrar = quedarse el huevo
     return true;

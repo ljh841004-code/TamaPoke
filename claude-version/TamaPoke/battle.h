@@ -97,6 +97,11 @@ bool regionUnlocked(uint8_t region, uint8_t badges);
 #define DAILY_TEAM 3
 uint8_t dailyRegion(uint32_t day);
 void dailyTeam(uint32_t day, uint16_t petLvl, Battler out[DAILY_TEAM]);
+// ko10.11: ajusta el nivel del salvaje para que su fuerza (vida + ataque + defensa
+// + velocidad) quede cerca de la tuya (90-105 %): especies flojas salen con mas
+// nivel, y las fuertes con menos (entre -6 y +10 del nivel que traia)
+void wildMatchPower(Battler &foe, const Battler &me, BRng &rng);
+uint32_t battlerPower(const Battler &b);
 // ---- ko10.11: revancha de gimnasio (con la medalla) y liga (con las 8)
 extern const uint8_t GYM_TYPE[GYM_COUNT];   // tipo de cada gimnasio (roca, agua...)
 #define REMATCH_MAX 4

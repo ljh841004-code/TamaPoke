@@ -67,6 +67,9 @@ struct __attribute__((packed)) TradePet {
 // ko10.4: usos de los caramelos (de la familia del Pokemon que crias)
 enum : uint8_t { CU_EXP = 0, CU_GAUGE, CU_GENES, CU_SHINY, CU_EVO, CU_COUNT };
 static const uint8_t CANDY_COST[CU_COUNT] = { 3, 1, 5, 10, 5 };
+#define CANDY_TRADE_RATE 3   // ko10.11: 3 de otra familia = 1 de la que crias
+#define RARE_CANDY_VALUE 5   // ko10.11: 1 caramelo universal = 5 de la que crias
+#define RARE_CANDY_PCT 5     // ko10.11: % de que un salvaje ganado/capturado lo de
 #define CANDY_MAX 999
 #define CANDY_KEEP 1   // quedarse el repetido (a la caja) da 1 caramelo
 #define CANDY_GENE_MAX 115  // los genes nacen en 90-110; con caramelos hasta 115
@@ -116,6 +119,10 @@ public:
   uint16_t gymDay[8] = { 0 };  // dia (epoch/86400, 16 bits) del ultimo premio de revancha
   uint8_t gymWins[8] = { 0 };  // revanchas ganadas por gimnasio (las estrellas)
   uint16_t champWins = 0;      // veces campeon de la liga
+  // ko10.11: caramelo universal (sale a veces en los salvajes) y cambios
+  uint16_t rareCandy = 0;
+  bool candyTrade(int16_t famDex, uint16_t times);  // 3 de otra familia -> 1 de la actual (x times)
+  bool useRareCandy();                              // 1 universal -> RARE_CANDY_VALUE de la actual
   // racha de cuidado diario (del jugador: persiste entre crianzas)
   uint16_t streak = 0, bestStreak = 0;
   uint32_t lastCareDay = 0;

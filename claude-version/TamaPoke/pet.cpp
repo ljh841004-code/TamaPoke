@@ -647,6 +647,25 @@ void Pet::addCandy(int16_t dex, uint16_t n) {
 }
 
 // cambiar un repetido por caramelos: 3, +2 si es shiny, +1 si es de nivel 30 o mas
+// ko10.11: cambiar caramelos de otra familia por los de la que crias (3 -> 1)
+bool Pet::candyTrade(int16_t famDex, uint16_t times) {
+  if (isEgg() || famDex < 1 || famDex > DEX_COUNT || !times) return false;
+  uint8_t fam = DEX_FAM[famDex], mine = DEX_FAM[speciesId];
+  if (fam == mine || candy[fam] < (uint32_t)times * CANDY_TRADE_RATE) return false;
+  candy[fam] -= times * CANDY_TRADE_RATE;
+  addCandy(speciesId, times);
+  save();
+  return true;
+}
+
+bool Pet::useRareCandy() {
+  if (isEgg() || !rareCandy) return false;
+  rareCandy--;
+  addCandy(speciesId, RARE_CANDY_VALUE);
+  save();
+  return true;
+}
+
 uint16_t Pet::dupCandy(bool shinyMon, uint16_t lvl) {
   return 3 + (shinyMon ? 2 : 0) + (lvl >= 30 ? 1 : 0);
 }
@@ -861,6 +880,7 @@ void Pet::save() {
   prefs.putBytes("gymd", gymDay, sizeof(gymDay));  // ko10.11
   prefs.putBytes("gymw", gymWins, sizeof(gymWins));
   prefs.putUShort("chw", champWins);
+  prefs.putUShort("rcandy", rareCandy);
   prefs.putUInt("age", ageMinutes);
   prefs.putUInt("exp", exp);
   prefs.putShort("dexn", speciesId);
@@ -927,6 +947,7 @@ void Pet::load() {
   if (prefs.getBytes("gymd", gymDay, sizeof(gymDay)) != sizeof(gymDay)) memset(gymDay, 0, sizeof(gymDay));
   if (prefs.getBytes("gymw", gymWins, sizeof(gymWins)) != sizeof(gymWins)) memset(gymWins, 0, sizeof(gymWins));
   champWins = prefs.getUShort("chw", 0);
+  rareCandy = prefs.getUShort("rcandy", 0);
   ageMinutes = prefs.getUInt("age", 0);
   // fork KO (ko7): guardados de antes (nivel = horas, hasta Lv338+) empiezan
   // en Lv1 con la misma especie

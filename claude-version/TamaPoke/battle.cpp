@@ -623,3 +623,23 @@ void championTeam(uint16_t petLvl, uint32_t seed, Battler out[CHAMP_TEAM]) {
   for (uint8_t i = 0; i < CHAMP_TEAM; i++)
     out[i] = makeTrainerMon(pick[i < k ? i : 0], trainerLvl((int32_t)petLvl + 2 + (i * 4) / (CHAMP_TEAM - 1)));
 }
+
+// ---- ko10.11: salvajes de tu talla
+uint32_t battlerPower(const Battler &b) { return (uint32_t)b.maxHp + b.atk + b.def + b.spe; }
+
+void wildMatchPower(Battler &foe, const Battler &me, BRng &rng) {
+  const DexEntry &e = DEX_TBL[foe.dex];
+  uint32_t target = battlerPower(me) * (90 + rng.below(16)) / 100;  // 90-105 %
+  int best = foe.lvl;
+  uint32_t bestDiff = 0xFFFFFFFFu;
+  for (int lv = (int)foe.lvl - 6; lv <= (int)foe.lvl + 10; lv++) {
+    if (lv < 2 || lv > LEVEL_MAX) continue;
+    uint32_t p = (uint32_t)battleHp(e.bHp, (uint16_t)lv) + wildStat(e.bAtk, 100, (uint16_t)lv) +
+                 wildStat(e.bDef, 100, (uint16_t)lv) + wildStat(e.bSpe, 100, (uint16_t)lv);
+    uint32_t d = p > target ? p - target : target - p;
+    if (d < bestDiff) { bestDiff = d; best = lv; }
+  }
+  uint8_t gA = 90 + rng.below(21), gD = 90 + rng.below(21), gS = 90 + rng.below(21);
+  foe = makeBattler(foe.dex, (uint16_t)best, wildStat(e.bAtk, gA, (uint16_t)best),
+                    wildStat(e.bDef, gD, (uint16_t)best), wildStat(e.bSpe, gS, (uint16_t)best));
+}
