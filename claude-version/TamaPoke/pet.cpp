@@ -880,6 +880,9 @@ void Pet::save() {
   prefs.putBytes("gymd", gymDay, sizeof(gymDay));  // ko10.11
   prefs.putBytes("gymw", gymWins, sizeof(gymWins));
   prefs.putUShort("chw", champWins);
+  prefs.putUShort("chs", champStreak);  // ko11.6.1
+  prefs.putUShort("chb", champBest);
+  prefs.putBytes("fstk", fameStreak, sizeof(fameStreak));
   prefs.putUShort("rcandy", rareCandy);
   prefs.putUInt("age", ageMinutes);
   prefs.putUInt("exp", exp);
@@ -947,6 +950,10 @@ void Pet::load() {
   if (prefs.getBytes("gymd", gymDay, sizeof(gymDay)) != sizeof(gymDay)) memset(gymDay, 0, sizeof(gymDay));
   if (prefs.getBytes("gymw", gymWins, sizeof(gymWins)) != sizeof(gymWins)) memset(gymWins, 0, sizeof(gymWins));
   champWins = prefs.getUShort("chw", 0);
+  champStreak = prefs.getUShort("chs", 0);  // ko11.6.1
+  champBest = prefs.getUShort("chb", 0);
+  if (champBest < champStreak) champBest = champStreak;
+  if (prefs.getBytes("fstk", fameStreak, sizeof(fameStreak)) != sizeof(fameStreak)) memset(fameStreak, 0, sizeof(fameStreak));
   rareCandy = prefs.getUShort("rcandy", 0);
   ageMinutes = prefs.getUInt("age", 0);
   // fork KO (ko7): guardados de antes (nivel = horas, hasta Lv338+) empiezan

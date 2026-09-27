@@ -960,3 +960,17 @@ TEST(save, sin_nvs2_todo_sigue_igual) {
   CHECK_EQ(c.count(), (uint8_t)1);
   CHECK_EQ(mockNvsKeyCount("nvs2:tpbox"), (size_t)0);
 }
+
+// ko11.6.1: la racha de la liga se guarda y se relee
+TEST(save, racha_de_liga_persiste) {
+  Pet p;
+  freshPet(p, 4);
+  p.champStreak = 3; p.champBest = 5; p.fameStreak[0] = 2; p.fameStreak[59] = 7;
+  p.saveNow();
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.champStreak, (uint16_t)3);
+  CHECK_EQ(q.champBest, (uint16_t)5);
+  CHECK_EQ(q.fameStreak[0], (uint8_t)2);
+  CHECK_EQ(q.fameStreak[59], (uint8_t)7);
+}

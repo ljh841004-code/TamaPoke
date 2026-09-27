@@ -125,6 +125,9 @@ public:
   uint16_t gymDay[8] = { 0 };  // dia (epoch/86400, 16 bits) del ultimo premio de revancha
   uint8_t gymWins[8] = { 0 };  // revanchas ganadas por gimnasio (las estrellas)
   uint16_t champWins = 0;      // veces campeon de la liga
+  // ko11.6.1: racha de la liga (se corta al perder en ella; las medallas NO se pierden)
+  uint16_t champStreak = 0, champBest = 0;
+  uint8_t fameStreak[60] = {};  // racha de cada entrada del salon de la fama (mismo orden, 0 = sin dato)
   // ko10.11: caramelo universal (sale a veces en los salvajes) y cambios
   uint16_t rareCandy = 0;
   bool candyTrade(int16_t famDex, uint16_t times);  // 3 de otra familia -> 1 de la actual (x times)

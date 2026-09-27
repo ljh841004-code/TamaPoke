@@ -1485,7 +1485,13 @@ static void renderLeague() {
   else drawBtn(GY_X + 20, LG_BTN_Y, GY_W - 40, LG_BTN_H, UI_TRACK, 0x8410, XT(X_CHAMP_LOCK));
   char w[48];
   snprintf(w, sizeof(w), XT(X_CHAMP_WINS_FMT), pet.champWins);
-  drawFit(w, 178, 300, UI_INK, 2);
+  if (pet.champWins) {  // ko11.6.1: + racha
+    size_t k = strlen(w);
+    snprintf(w + k, sizeof(w) - k, "  ");
+    k = strlen(w);
+    snprintf(w + k, sizeof(w) - k, XT(X_STREAK_FMT), (unsigned)pet.champStreak, (unsigned)pet.champBest);
+  }
+  drawFit(w, 178, 330, UI_INK, 2);
   // ko11.1: el salon de la fama es una pantalla aparte (antes lista pequena que se pisaba)
   uint8_t n = fame.count();
   snprintf(w, sizeof(w), XT(X_FAME_BTN_FMT), n);
@@ -1730,16 +1736,30 @@ void finishBattle(bool won, bool fled, bool caught) {
       pet.saveNow();
     } else if (won && bKind == BK_CHAMP) {  // ko10.11: campeon: al salon de la fama de la liga
       if (pet.champWins < 65535) pet.champWins++;
+      if (pet.champStreak < 65535) pet.champStreak++;  // ko11.6.1: racha
+      if (pet.champStreak > pet.champBest) pet.champBest = pet.champStreak;
       pet.giveItems(3, 3);  // ko11.1: antes +5/+5
       pet.addCandy(pet.speciesId, 10);
-      if (fame.full()) fame.release(0);  // lleno: se va el mas antiguo
+      if (fame.full()) {  // lleno: se va el mas antiguo (y su racha con el)
+        fame.release(0);
+        memmove(pet.fameStreak, pet.fameStreak + 1, sizeof(pet.fameStreak) - 1);
+        pet.fameStreak[sizeof(pet.fameStreak) - 1] = 0;
+      }
       // ko11.1: con sus genes (la ficha del salon los ensena)
       fame.addRaised(pet.speciesId, pet.level(), pet.shiny, pet.geneAtk, pet.geneDef, pet.geneSpe, clockEpoch());
-      strncpy(bNote, XT(X_CHAMP_WIN), sizeof(bNote) - 1);
+      if (fame.count() >= 1 && fame.count() <= sizeof(pet.fameStreak))
+        pet.fameStreak[fame.count() - 1] = (uint8_t)(pet.champStreak > 255 ? 255 : pet.champStreak);
+      snprintf(bNote, sizeof(bNote), XT(X_CHAMP_WIN), (unsigned)pet.champStreak);
       bakRequest();  // ko11.6: copia en la SD
       bNote[sizeof(bNote) - 1] = 0;
       pet.saveNow();
       sfxPlay(SFX_EVOLVE);
+    } else if (!won && bKind == BK_CHAMP) {  // ko11.6.1: perder en la liga corta la racha (medallas intactas)
+      if (pet.champStreak) {
+        snprintf(bNote, sizeof(bNote), XT(X_STREAK_LOST_FMT), (unsigned)pet.champStreak);
+        pet.champStreak = 0;
+        pet.saveNow();
+      }
     } else if (won && bKind == BK_DAILY) {
       uint32_t day = pet.lastSeenEpoch / 86400u;
       if (day && pet.dailyDoneDay != day) {  // el premio, una vez al dia

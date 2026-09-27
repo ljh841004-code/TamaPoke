@@ -862,11 +862,18 @@ static void fameDetail() {
     snprintf(when, sizeof(when), XT(X_FAME_DATE_FMT), (unsigned)yy, mo, dd);
   }
   snprintf(b, sizeof(b), XT(X_FAME_NTH_FMT), (unsigned)(fameSel + 1));
-  if (when[0]) { size_t l = strlen(b); snprintf(b + l, sizeof(b) - l, "  %s", when); }
-  drawFit(b, 306, 340, C565(0xb0, 0x80, 0x10), 2);
+  uint8_t stk = fameSel < (int)sizeof(pet.fameStreak) ? pet.fameStreak[fameSel] : 0;
+  if (stk) {  // ko11.6.1: con cuantas seguidas llego aqui
+    size_t l = strlen(b);
+    snprintf(b + l, sizeof(b) - l, "  ");
+    l = strlen(b);
+    snprintf(b + l, sizeof(b) - l, XT(X_FAME_STREAK_FMT), (unsigned)stk);
+  }
+  drawFit(b, 302, 340, C565(0xb0, 0x80, 0x10), 2);
+  if (when[0]) drawFit(when, 330, 300, C565(0xb0, 0x80, 0x10), 2);
   if (m.geneAtk) {
     snprintf(b, sizeof(b), XT(X_FAME_GENES_FMT), m.geneAtk, m.geneDef, m.geneSpe);
-    drawFit(b, 336, 320, 0x8410, 2);
+    drawFit(b, 358, 320, 0x8410, 2);
   }
   drawFit(XT(X_FAME_TAP), 392, 240, UI_INK, 1);
   drawNav(NAV_DOWN, UI_INK);

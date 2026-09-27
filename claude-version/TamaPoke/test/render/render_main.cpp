@@ -267,7 +267,8 @@ static void scenes(bool ko, const char *sfx) {
     fame.add(6, 58, false, false, gMockEpoch - 86400 * 3);
     fame.add(134, 61, true, false, gMockEpoch - 86400);
     fame.add(pet.speciesId, pet.level(), pet.shiny, false, gMockEpoch);
-    pet.champWins = 3;
+    pet.champWins = 3; pet.champStreak = 2; pet.champBest = 2;
+    pet.fameStreak[1] = 1; pet.fameStreak[2] = 2;  // ko11.6.1: rachas
     render(); shot("59_league_fame");
     openFame(); render(); shot("59d_fame_grid");
     fameTap(FM_X + FM_CELL + 10, FM_Y + 10); render(); shot("59e_fame_detail");
