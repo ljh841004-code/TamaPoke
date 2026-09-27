@@ -24,6 +24,12 @@ struct __attribute__((packed)) BoxMon {
   uint32_t epoch;  // cuando llego a la caja (0 = sin reloj)
 };
 
+// ko11.6: particion NVS grande ("nvs2", 256 KB) para la caja, el salon, la
+// liga y la pokedex. nullptr = la NVS de siempre (tabla de particiones vieja).
+// La primera vez que se abre la grande se traen ahi los datos de la de siempre.
+void setBigPart(const char *label);
+const char *bigPart();
+
 class Box {
 public:
   // ko10.5: la misma clase sirve para la caja ("tpbox", 60) y el salon de la

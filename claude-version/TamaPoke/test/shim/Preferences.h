@@ -8,7 +8,7 @@
 
 class Preferences {
 public:
-  bool begin(const char *name, bool readOnly = false);
+  bool begin(const char *name, bool readOnly = false, const char *partition = nullptr);
   void end();
   bool clear();
   bool isKey(const char *key);

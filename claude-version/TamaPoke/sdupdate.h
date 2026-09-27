@@ -15,7 +15,9 @@ enum UpdCheck : uint8_t {
   UPD_BAD,       // no es una app de ESP32-S3 o el tamano no cuadra
 };
 
-#define UPD_MAX_SIZE (3UL * 1024 * 1024)  // particion de app de 3 MB
+// ko11.6: apps de 6 MB con la tabla nueva. Con la vieja (3 MB) Update.begin()
+// rechaza una imagen que no quepa en la particion, asi que no hay peligro
+#define UPD_MAX_SIZE (6UL * 1024 * 1024)
 #define UPD_HEAD_LEN 0x8002               // para ver si hay tabla de particiones en 0x8000
 
 // Clasifica un fichero por su cabecera (logica pura: test/test_box.cpp).

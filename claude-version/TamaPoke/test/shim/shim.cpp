@@ -71,8 +71,9 @@ size_t mockNvsKeyCount(const char *ns) {
   return it == gStore.end() ? 0 : it->second.size();
 }
 
-bool Preferences::begin(const char *name, bool readOnly) {
-  ns_ = name;
+bool Preferences::begin(const char *name, bool readOnly, const char *partition) {
+  // ko11.6: otra particion NVS = otro espacio ("nvs2:tphall")
+  ns_ = partition ? std::string(partition) + ":" + name : std::string(name);
   ro_ = readOnly;
   open_ = true;
   return true;

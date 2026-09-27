@@ -1,0 +1,10 @@
+# ko11.6: particiones propias (antes "app3M_fat9M_16MB"). El FAT de 9 MB no se
+# usaba (todo va en la SD): se reparte en apps de 6 MB y una NVS grande.
+# nvs y otadata NO se mueven: la partida guardada sigue en su sitio.
+# Name,   Type, SubType,  Offset,   Size,     Flags
+nvs,      data, nvs,      0x9000,   0x5000,
+otadata,  data, ota,      0xe000,   0x2000,
+app0,     app,  ota_0,    0x10000,  0x600000,
+app1,     app,  ota_1,    0x610000, 0x600000,
+nvs2,     data, nvs,      0xC10000, 0x40000,
+coredump, data, coredump, 0xFF0000, 0x10000,

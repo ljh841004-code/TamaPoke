@@ -3,10 +3,31 @@
 
 // ---------------------------------------------------------------- caja
 
+static const char *gBigPart = nullptr;
+void setBigPart(const char *label) { gBigPart = label; }
+const char *bigPart() { return gBigPart; }
+
 void Box::begin() {
   memset(mons, 0, sizeof(mons));
   n = 0;
-  prefs.begin(ns_, false);
+  const char *part = bigPart();
+  prefs.begin(ns_, false, part);
+  // ko11.6: primera vez en la particion grande: se trae lo guardado en la NVS de
+  // siempre y SOLO si se copio bien se borra alli ("n" va lo ultimo: es la marca)
+  if (part && !prefs.isKey("n")) {
+    Preferences old;
+    old.begin(ns_, false);
+    if (old.isKey("n")) {
+      uint8_t oc = old.getUChar("n", 0);
+      size_t len = sizeof(BoxMon) * (oc <= cap_ ? oc : 0);
+      bool ok = true;
+      if (len) ok = old.getBytes("mons", mons, len) == len && prefs.putBytes("mons", mons, len) == len;
+      if (ok) ok = prefs.putUChar("n", len ? oc : 0) == 1;
+      if (ok) old.clear();
+      memset(mons, 0, sizeof(mons));
+    }
+    old.end();
+  }
   uint8_t c = prefs.getUChar("n", 0);
   if (c > cap_) c = 0;
   if (c && prefs.getBytes("mons", mons, sizeof(BoxMon) * c) != sizeof(BoxMon) * c) c = 0;
@@ -83,7 +104,27 @@ void DexLog::begin() {
   memset(first, 0, sizeof(first));
   memset(seenN, 0, sizeof(seenN));
   memset(caughtN, 0, sizeof(caughtN));
-  prefs.begin("tpdex", false);
+  const char *part = bigPart();
+  prefs.begin("tpdex", false, part);
+  // ko11.6: primera vez en la particion grande: traer la pokedex de la NVS de siempre
+  if (part && !prefs.isKey("mig")) {
+    Preferences old;
+    old.begin("tpdex", false);
+    static const char *const K[3] = { "first", "seen", "caught" };
+    void *const B[3] = { first, seenN, caughtN };
+    const size_t S[3] = { sizeof(first), sizeof(seenN), sizeof(caughtN) };
+    bool ok = true;
+    for (int i = 0; i < 3 && ok; i++) {
+      if (!old.isKey(K[i])) continue;
+      size_t got = old.getBytes(K[i], B[i], S[i]);
+      ok = got > 0 && prefs.putBytes(K[i], B[i], got) == got;
+    }
+    if (ok && prefs.putUChar("mig", 1) == 1) old.clear();
+    old.end();
+    memset(first, 0, sizeof(first));
+    memset(seenN, 0, sizeof(seenN));
+    memset(caughtN, 0, sizeof(caughtN));
+  }
   // ko10: se aceptan los de 151 (ko4-ko9) y los de 251; lo demas, corrupto
   auto load = [&](const char *k, void *buf, size_t el, size_t cap) {
     size_t n = prefs.getBytes(k, buf, cap);

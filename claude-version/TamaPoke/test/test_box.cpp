@@ -408,7 +408,8 @@ TEST(sdupdate, clasifica_cabeceras) {
   c3[12] = 5;
   CHECK_EQ(updClassify(c3.data(), c3.size(), 1800000), UPD_BAD);
   CHECK_EQ(updClassify(app.data(), app.size(), 100), UPD_BAD);                // demasiado pequeno
-  CHECK_EQ(updClassify(app.data(), app.size(), 4 * 1024 * 1024), UPD_BAD);    // no cabe en 3 MB
+  CHECK_EQ(updClassify(app.data(), app.size(), 4 * 1024 * 1024), UPD_OK);     // ko11.6: apps de 6 MB
+  CHECK_EQ(updClassify(app.data(), app.size(), 7 * 1024 * 1024), UPD_BAD);    // no cabe en 6 MB
   CHECK_EQ(updClassify(app.data(), 8, 1800000), UPD_BAD);                     // cabecera cortada
 }
 
@@ -909,4 +910,53 @@ TEST(save, valores_danados_se_corrigen_al_cargar) {
   CHECK(q.lastEnd <= CER_RELEASE);
   CHECK(q.fullness <= 100);
   CHECK(q.trAtk <= 100);
+}
+
+// ko11.6: con la tabla nueva, la caja/salon y la pokedex pasan a "nvs2": lo
+// guardado en la NVS de siempre se copia una vez y solo entonces se borra alli
+TEST(save, migracion_a_nvs2_conserva_caja_y_pokedex) {
+  mockNvsReset();
+  setBigPart(nullptr);  // tabla vieja
+  Box b("tphall", HALL_MAX);
+  b.begin();
+  b.add(25, 30, true, true, 111);
+  b.add(152, 12, false, false, 222);
+  DexLog d;
+  d.begin();
+  d.caught(25, 1000);
+  d.seen(152, 2000);
+  CHECK(mockNvsKeyCount("tphall") > 0);
+
+  setBigPart("nvs2");  // tabla nueva
+  Box b2("tphall", HALL_MAX);
+  b2.begin();
+  CHECK_EQ(b2.count(), (uint8_t)2);
+  CHECK_EQ(b2.at(0).dex, (int16_t)25);
+  CHECK_EQ(b2.at(1).lvl, (uint16_t)12);
+  CHECK_EQ(mockNvsKeyCount("tphall"), (size_t)0);  // la vieja queda libre
+  DexLog d2;
+  d2.begin();
+  CHECK_EQ(d2.caughtCount(25), (uint16_t)1);
+  CHECK_EQ(d2.firstSeen(152), 2000u);
+  CHECK_EQ(mockNvsKeyCount("tpdex"), (size_t)0);
+
+  // lo nuevo se guarda en nvs2 y se relee (sin volver a migrar)
+  b2.add(4, 5, false, true, 333);
+  Box b3("tphall", HALL_MAX);
+  b3.begin();
+  CHECK_EQ(b3.count(), (uint8_t)3);
+  CHECK(mockNvsKeyCount("nvs2:tphall") > 0);
+  setBigPart(nullptr);
+}
+
+TEST(save, sin_nvs2_todo_sigue_igual) {
+  mockNvsReset();
+  setBigPart(nullptr);
+  Box b;
+  b.begin();
+  b.add(7, 9, false, true, 0);
+  Box c;
+  c.begin();
+  CHECK_EQ(c.count(), (uint8_t)1);
+  CHECK_EQ(mockNvsKeyCount("nvs2:tpbox"), (size_t)0);
 }

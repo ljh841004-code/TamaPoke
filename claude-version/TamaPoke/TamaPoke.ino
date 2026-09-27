@@ -31,6 +31,11 @@
 #include "weather.h"    // fork KO (ko10.1): estaciones y tiempo segun la fecha
 #include "box.h"        // fork KO (ko4): bogwanham y registro de la pokedex
 #include "sdupdate.h"   // fork KO (ko5): actualizar desde /update.bin de la SD
+#ifdef ESP_PLATFORM
+#include <nvs_flash.h>     // ko11.6: particion nvs2
+#include <esp_partition.h>
+#include <Preferences.h>
+#endif
 #include <qrcode.h>     // fork KO (ko8): QR del portal WiFi (componente espressif/qrcode del core)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
@@ -340,6 +345,37 @@ void bootDiagLoop() {
   if (phase == 2 && millis() > 20000) { rbStep = BS_OK; rbFails = 0; phase = 3; Serial.println("BOOT ok"); }
 }
 
+// ko11.6: la particion "nvs2" (256 KB) solo existe con la tabla nueva
+// (partitions.csv, se instala con los 3 ficheros). Con la vieja todo sigue en la
+// NVS de siempre. Esa zona antes era el FAT (sin usar): la primera vez se borra.
+static void bigStoreBegin() {
+#ifdef ESP_PLATFORM
+  if (!esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, "nvs2")) {
+    Serial.println("NVS2: tabla vieja (todo en nvs)");
+    return;
+  }
+  esp_err_t e = nvs_flash_init_partition("nvs2");
+  if (e != ESP_OK) {
+    nvs_flash_erase_partition("nvs2");
+    e = nvs_flash_init_partition("nvs2");
+  }
+  if (e != ESP_OK) { Serial.printf("NVS2: error %d\n", (int)e); return; }
+  Preferences m;
+  m.begin("tpsys", false, "nvs2");
+  if (!m.isKey("fmt")) {  // nunca la preparamos nosotros: lo que haya es basura del FAT
+    m.end();
+    nvs_flash_deinit_partition("nvs2");
+    nvs_flash_erase_partition("nvs2");
+    if (nvs_flash_init_partition("nvs2") != ESP_OK) return;
+    m.begin("tpsys", false, "nvs2");
+    m.putUChar("fmt", 1);
+  }
+  m.end();
+  setBigPart("nvs2");
+  Serial.println("NVS2: ok");
+#endif
+}
+
 void setup() {
   Serial.setRxBufferSize(8192);  // la transferencia a SD llega en bloques de 2 KB
   Serial.begin(115200);
@@ -406,6 +442,7 @@ void setup() {
 #endif
   }
 
+  bigStoreBegin();  // ko11.6: NVS grande (si la tabla de particiones nueva esta)
   bootStep(BS_PET);
   pet.begin();
   bootStep(BS_BOX);
