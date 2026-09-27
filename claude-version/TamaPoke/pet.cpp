@@ -858,6 +858,9 @@ void Pet::save() {
   prefs.putUChar("badge", badges);  // ko10.4
   prefs.putUInt("dday", dailyDoneDay);
   prefs.putUShort("dclr", dailyClears);
+  prefs.putBytes("gymd", gymDay, sizeof(gymDay));  // ko10.11
+  prefs.putBytes("gymw", gymWins, sizeof(gymWins));
+  prefs.putUShort("chw", champWins);
   prefs.putUInt("age", ageMinutes);
   prefs.putUInt("exp", exp);
   prefs.putShort("dexn", speciesId);
@@ -921,6 +924,9 @@ void Pet::load() {
   badges = prefs.getUChar("badge", 0);
   dailyDoneDay = prefs.getUInt("dday", 0);
   dailyClears = prefs.getUShort("dclr", 0);
+  if (prefs.getBytes("gymd", gymDay, sizeof(gymDay)) != sizeof(gymDay)) memset(gymDay, 0, sizeof(gymDay));
+  if (prefs.getBytes("gymw", gymWins, sizeof(gymWins)) != sizeof(gymWins)) memset(gymWins, 0, sizeof(gymWins));
+  champWins = prefs.getUShort("chw", 0);
   ageMinutes = prefs.getUInt("age", 0);
   // fork KO (ko7): guardados de antes (nivel = horas, hasta Lv338+) empiezan
   // en Lv1 con la misma especie

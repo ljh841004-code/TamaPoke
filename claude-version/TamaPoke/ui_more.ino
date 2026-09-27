@@ -541,6 +541,7 @@ void doResetGame() {
   pet.wipeGameKeepSettings();
   box.wipe();
   hall.wipe();  // ko10.5
+  fame.wipe();  // ko10.11
   dexLog.wipe();
   sfxPlay(SFX_BYE);
   delay(1200);

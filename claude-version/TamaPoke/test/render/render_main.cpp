@@ -124,6 +124,8 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); pet.energy = 80; startWild();
   bPhase = BP_MENU; txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
   render(); shot("08_battle_menu");
+  box.add(bFoe.dex, 5, false, true, 0); box.add(bFoe.dex, 7, false, true, 0); bvOwned = 2; bvOwnedT = gMockMillis;
+  render(); shot("08b_battle_owned"); bvOwned = 0;
   // fork KO (ko7): efectos de cada tipo (viaje y impacto) + critico/muy eficaz
   for (int ty = -1; ty < PT_COUNT; ty++) {
     bPhase = BP_PLAY; bqAisMe = true; bqN = 1; bqI = 0;
@@ -238,7 +240,27 @@ static void scenes(bool ko, const char *sfx) {
     nextTrainerMon(); render(); shot("55_gym_next");
     bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
     finishBattle(true, false, false); render(); shot("56_gym_badge");
+    // ko10.11: revanchas y liga
     closeAll();
+    gMockEpoch = 1790343900; pet.lastSeenEpoch = gMockEpoch;
+    pet.badges = 0xFF;
+    pet.gymWins[0] = 3; pet.gymWins[1] = 1; pet.gymDay[1] = (uint16_t)(gMockEpoch / 86400u);
+    openGyms(); gymPage = 0; render(); shot("57_gyms_rematch");
+    gymPage = 2; render(); shot("58_league_empty");
+    fame.add(6, 58, false, false, gMockEpoch - 86400 * 3);
+    fame.add(134, 61, true, false, gMockEpoch - 86400);
+    fame.add(pet.speciesId, pet.level(), pet.shiny, false, gMockEpoch);
+    pet.champWins = 3;
+    render(); shot("59_league_fame");
+    leagueTap(GY_X + 40, LG_BTN_Y + 10); render(); shot("59b_league_intro");
+    bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
+    finishBattle(true, false, false); render(); shot("59c_league_win");
+    closeAll();
+    gymPage = 0; gymTap(GY_X + 10, GY_Y + 1 * (GY_H + GY_GAP) + 10);  // revancha de Misty
+    render(); shot("57b_rematch_intro");
+    closeAll();
+    fame.wipe(); pet.champWins = 0;
+    memset(pet.gymWins, 0, sizeof(pet.gymWins)); memset(pet.gymDay, 0, sizeof(pet.gymDay));
     pet.badges = 0;
     gMockEpoch = 1790343900; pet.lastSeenEpoch = gMockEpoch;
   }

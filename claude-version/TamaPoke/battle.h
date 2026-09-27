@@ -97,6 +97,16 @@ bool regionUnlocked(uint8_t region, uint8_t badges);
 #define DAILY_TEAM 3
 uint8_t dailyRegion(uint32_t day);
 void dailyTeam(uint32_t day, uint16_t petLvl, Battler out[DAILY_TEAM]);
+// ---- ko10.11: revancha de gimnasio (con la medalla) y liga (con las 8)
+extern const uint8_t GYM_TYPE[GYM_COUNT];   // tipo de cada gimnasio (roca, agua...)
+#define REMATCH_MAX 4
+#define CHAMP_TEAM 6
+#define CHAMP_REGION 13                     // valle del dragon
+// revancha: 3-4 del tipo del gimnasio (sin legendarios), a tu nivel (-1..+2,
+// el ultimo el mas fuerte). Devuelve cuantos
+uint8_t gymRematchTeam(uint8_t gym, uint16_t petLvl, uint32_t seed, Battler out[REMATCH_MAX]);
+// liga: 6 formas finales fuertes (sin legendarios) de tipos distintos, nivel +2..+5
+void championTeam(uint16_t petLvl, uint32_t seed, Battler out[CHAMP_TEAM]);
 
 // probabilidad (por mil) de la especie "dex" en ese momento, antes de evolucionar
 // por nivel (para tests y para el comando serie WILD)

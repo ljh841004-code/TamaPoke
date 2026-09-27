@@ -559,3 +559,67 @@ uint8_t battleAuto(Battler a, Battler b, uint32_t seed, BEvent *ev, int maxEv, i
   if (pa != pb) return pa > pb ? 0 : 1;
   return (uint8_t)(seed & 1);
 }
+
+// ---- ko10.11: revanchas y liga
+const uint8_t GYM_TYPE[GYM_COUNT] = { PT_ROCK, PT_WATER, PT_ELECTRIC, PT_GRASS,
+                                      PT_POISON, PT_PSYCHIC, PT_FIRE, PT_GROUND };
+
+static uint16_t trainerLvl(int32_t lv) { return (uint16_t)(lv < 3 ? 3 : lv > LEVEL_MAX ? LEVEL_MAX : lv); }
+static uint16_t baseTotal(int16_t d) {
+  const DexEntry &e = DEX_TBL[d];
+  return (uint16_t)e.bHp + e.bAtk + e.bDef + e.bSpe;
+}
+
+uint8_t gymRematchTeam(uint8_t gym, uint16_t petLvl, uint32_t seed, Battler out[REMATCH_MAX]) {
+  if (gym >= GYM_COUNT) gym = 0;
+  uint8_t type = GYM_TYPE[gym];
+  int16_t pool[DEX_COUNT];
+  uint16_t n = 0;
+  for (int16_t d = 1; d <= DEX_COUNT; d++)
+    if (DEX_TBL[d].ptype == type && DEX_TBL[d].rarity != R_LEGENDARIO) pool[n++] = d;
+  BRng rng(seed | 1);
+  uint8_t k = (uint8_t)(3 + rng.below(2));  // 3 o 4
+  if (k > n) k = (uint8_t)n;
+  int16_t pick[REMATCH_MAX];
+  for (uint8_t i = 0; i < k; i++) {  // sin repetir (Fisher-Yates parcial)
+    uint16_t j = (uint16_t)(i + rng.below(n - i));
+    int16_t t = pool[i]; pool[i] = pool[j]; pool[j] = t;
+    pick[i] = pool[i];
+  }
+  // el mas fuerte, al final (el "as" del lider)
+  for (uint8_t i = 0; i < k; i++)
+    for (uint8_t j = i + 1; j < k; j++)
+      if (baseTotal(pick[j]) < baseTotal(pick[i])) { int16_t t = pick[i]; pick[i] = pick[j]; pick[j] = t; }
+  for (uint8_t i = 0; i < k; i++) {
+    int32_t lv = (int32_t)petLvl - 1 + i + (i + 1 == k ? 1 : 0);
+    out[i] = makeTrainerMon(pick[i], trainerLvl(lv));
+  }
+  return k;
+}
+
+void championTeam(uint16_t petLvl, uint32_t seed, Battler out[CHAMP_TEAM]) {
+  int16_t pool[DEX_COUNT];
+  uint16_t n = 0;
+  for (int16_t d = 1; d <= DEX_COUNT; d++) {
+    const DexEntry &e = DEX_TBL[d];
+    if (e.rarity != R_LEGENDARIO && e.evolvesTo == 0 && baseTotal(d) >= 330) pool[n++] = d;
+  }
+  BRng rng(seed | 1);
+  int16_t pick[CHAMP_TEAM];
+  uint8_t k = 0;
+  uint16_t typesUsed = 0;
+  for (int guard = 0; k < CHAMP_TEAM && guard < 400; guard++) {
+    int16_t d = pool[rng.below(n)];
+    bool dup = false;
+    for (uint8_t i = 0; i < k; i++) if (pick[i] == d) dup = true;
+    // tipos distintos mientras se pueda (las primeras 300 tiradas)
+    if (dup || (guard < 300 && (typesUsed & (1u << DEX_TBL[d].ptype)))) continue;
+    typesUsed |= (uint16_t)(1u << DEX_TBL[d].ptype);
+    pick[k++] = d;
+  }
+  for (uint8_t i = 0; i < k; i++)
+    for (uint8_t j = i + 1; j < k; j++)
+      if (baseTotal(pick[j]) < baseTotal(pick[i])) { int16_t t = pick[i]; pick[i] = pick[j]; pick[j] = t; }
+  for (uint8_t i = 0; i < CHAMP_TEAM; i++)
+    out[i] = makeTrainerMon(pick[i < k ? i : 0], trainerLvl((int32_t)petLvl + 2 + (i * 4) / (CHAMP_TEAM - 1)));
+}

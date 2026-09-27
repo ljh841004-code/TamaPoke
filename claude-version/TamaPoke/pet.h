@@ -112,6 +112,10 @@ public:
   uint8_t badges = 0;
   uint32_t dailyDoneDay = 0;   // dia (epoch/86400) del ultimo reto superado
   uint16_t dailyClears = 0;    // retos del dia superados en total
+  // ko10.11: revanchas de gimnasio (ya con la medalla) y liga
+  uint16_t gymDay[8] = { 0 };  // dia (epoch/86400, 16 bits) del ultimo premio de revancha
+  uint8_t gymWins[8] = { 0 };  // revanchas ganadas por gimnasio (las estrellas)
+  uint16_t champWins = 0;      // veces campeon de la liga
   // racha de cuidado diario (del jugador: persiste entre crianzas)
   uint16_t streak = 0, bestStreak = 0;
   uint32_t lastCareDay = 0;

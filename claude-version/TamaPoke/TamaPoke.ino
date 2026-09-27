@@ -63,6 +63,7 @@ bool gCjkFont = false;
 Pet pet;
 Box box;        // fork KO (ko4): Pokemon ganados/capturados
 Box hall("tphall", HALL_MAX);  // ko10.5: los criados hasta el final (corona)
+Box fame("tpfame", BOX_MAX);   // ko10.11: salon de la fama de la liga (campeones), aparte de la corona
 DexLog dexLog;  // fork KO (ko4): historial de la pokedex
 
 // sprite animado de la SD para la especie actual (si existe el archivo)
@@ -280,6 +281,7 @@ void setup() {
   pet.begin();
   box.begin();
   hall.begin();
+  fame.begin();  // ko10.11
   // ko10.5: los criados que ko10.5 aun guardaba en la caja pasan al salon
   for (int i = box.count() - 1; i >= 0; i--)
     if (box.at((uint8_t)i).flags & BOXF_RAISED) {

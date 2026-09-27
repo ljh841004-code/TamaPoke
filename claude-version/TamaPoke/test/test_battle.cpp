@@ -462,3 +462,44 @@ TEST(moves, fase_del_ataque_segun_evolucion) {
   CHECK_EQ((int)moveTier(134), 2);  // Vaporeon (rama de Eevee)
   for (int d = 1; d <= DEX_COUNT; d++) CHECK(moveTier(d) <= 2);
 }
+
+// ko10.11: revancha = 3-4 del tipo del gimnasio, sin legendarios, a tu nivel
+TEST(gym, revancha_del_tipo_del_gimnasio_a_tu_nivel) {
+  for (uint8_t g = 0; g < GYM_COUNT; g++) {
+    for (uint32_t seed = 1; seed < 40; seed++) {
+      Battler t[REMATCH_MAX];
+      uint8_t n = gymRematchTeam(g, 50, seed, t);
+      CHECK(n >= 3 && n <= REMATCH_MAX);
+      for (uint8_t i = 0; i < n; i++) {
+        CHECK_EQ((int)DEX_TBL[t[i].dex].ptype, (int)GYM_TYPE[g]);
+        CHECK(DEX_TBL[t[i].dex].rarity != R_LEGENDARIO);
+        CHECK(t[i].lvl >= 49 && t[i].lvl <= 53);
+        for (uint8_t j = 0; j < i; j++) CHECK(t[i].dex != t[j].dex);
+      }
+    }
+  }
+  // varia de una vez a otra (no siempre los mismos)
+  Battler a[REMATCH_MAX], b[REMATCH_MAX];
+  gymRematchTeam(1, 30, 11, a);
+  bool diff = false;
+  for (uint32_t s = 12; s < 30 && !diff; s++) { gymRematchTeam(1, 30, s, b); diff = b[0].dex != a[0].dex; }
+  CHECK(diff);
+  // niveles con tope
+  gymRematchTeam(0, 100, 7, a);
+  CHECK(a[0].lvl <= LEVEL_MAX);
+}
+
+// ko10.11: liga = 6 formas finales fuertes, sin legendarios ni repetidos, nivel +2..+6
+TEST(gym, liga_seis_fuertes_sin_repetir) {
+  for (uint32_t seed = 1; seed < 60; seed++) {
+    Battler t[CHAMP_TEAM];
+    championTeam(40, seed, t);
+    for (uint8_t i = 0; i < CHAMP_TEAM; i++) {
+      const DexEntry &e = DEX_TBL[t[i].dex];
+      CHECK(e.rarity != R_LEGENDARIO);
+      CHECK_EQ((int)e.evolvesTo, 0);
+      CHECK(t[i].lvl >= 42 && t[i].lvl <= 46);
+      for (uint8_t j = 0; j < i; j++) CHECK(t[i].dex != t[j].dex);
+    }
+  }
+}
