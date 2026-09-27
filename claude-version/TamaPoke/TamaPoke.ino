@@ -35,7 +35,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko11.3"
+#define FW_VERSION "1.17-ko11.4"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -255,6 +255,15 @@ void setup() {
   // tactil; el cuelgue del tactil dormido se resuelve gateando por INT, ver
   // handleTouch).
   Wire.setTimeOut(50);
+  // ko11.4: CAUSA de los tirones al aporrear. SensorLib lee con Wire.readBytes(),
+  // que es Stream::readBytes: si el CST9217 no contesta (NACK, pasa a veces al
+  // soltar/apoyar muy rapido) espera el timeout de Stream, 1000 ms por defecto,
+  // en un bucle activo. La tarea del tactil se quedaba ~1 s sin leer (toques
+  // perdidos = "lag") y ademas acaparaba el nucleo 0 (la musica daba tirones).
+  // Es el cuelgue de 1000 ms del issue #16. setTimeOut (O mayuscula) es el del
+  // bus I2C; este es el de Stream. Los datos buenos ya estan en el buffer al
+  // volver requestFrom(), asi que 3 ms sobran.
+  Wire.setTimeout(3);
 
   // CRITICO: encender la alimentacion del panel (BLDO1=OLED VDD 3.3V) ANTES de
   // inicializar el display. Si el PMU se reseteo (drenaje total), este rail
