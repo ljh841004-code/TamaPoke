@@ -102,3 +102,15 @@ TEST(Audio, WaveResultsResumeButNewRunRestarts) {
   CHECK_EQ(r.switchTo(5,1,88888,true),0u); // NEW run must reset
   CHECK(r.changed(5,2)); // explicit reload after replacement
 }
+
+// ko11: el contador de vueltas sube al terminar la cancion (para sortear la siguiente)
+TEST(Audio, WavStreamCountsLoops) {
+  WavStream<MemoryFile> ws;
+  CHECK(ws.open(MemoryFile(wav(3))));
+  CHECK_EQ(ws.loops, 0u);
+  int16_t buf[3];
+  CHECK_EQ(ws.read(buf, 3), (size_t)3);
+  CHECK_EQ(ws.loops, 0u);
+  CHECK_EQ(ws.read(buf, 1), (size_t)1);  // vuelve a empezar
+  CHECK_EQ(ws.loops, 1u);
+}

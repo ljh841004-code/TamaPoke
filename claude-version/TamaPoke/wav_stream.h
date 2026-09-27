@@ -10,6 +10,9 @@ template<class Reader> class WavStream {
   uint32_t dataStart = 0, dataBytes = 0, played = 0;
   uint8_t cache[8192];
   size_t at = 0, count = 0;
+public:
+  uint32_t loops = 0;  // ko11: vueltas completas desde open()
+private:
   static uint16_t u16(const uint8_t *p) { return p[0] | uint16_t(p[1]) << 8; }
   static uint32_t u32(const uint8_t *p) {
     return uint32_t(p[0]) | uint32_t(p[1]) << 8 |
@@ -21,7 +24,7 @@ public:
   uint32_t position() const { return played; }
   uint32_t lengthBytes() const { return dataBytes; }  // ko10.4: duracion = bytes / 32000 s
   bool open(Reader input, uint32_t resume = 0) {
-    close(); file = input;
+    close(); file = input; loops = 0;
     uint8_t h[16];
     if (!file || file.size() < 12 || file.read(h, 12) != 12 ||
         memcmp(h, "RIFF", 4) || memcmp(h + 8, "WAVE", 4)) { close(); return false; }
@@ -59,6 +62,7 @@ public:
         if (!allowIO) break; // consume read-ahead while another task owns SD
         if (played == dataBytes) {
           played = 0;
+          loops++;  // ko11: una vuelta completa (para cambiar de cancion al acabar)
           if (!file.seek(dataStart)) { close(); break; }
         }
         size_t want = dataBytes - played;
