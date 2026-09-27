@@ -369,6 +369,10 @@ void netStartPortal() {
   if (gState == NET_CONNECTING || gState == NET_NTP) radioOff();
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(gApName, NET_AP_PASS);
+  // ko11.6.1: el movil esta al lado: potencia baja. A tope (20 dBm) los picos de
+  // corriente de la radio (balizas cada 100 ms) hacian parpadear la pantalla
+  // alimentada solo por USB (sin bateria)
+  WiFi.setTxPower(WIFI_POWER_8_5dBm);
   delay(100);
   WiFi.scanNetworks(true);  // asincrono: la lista llega a la web cuando termine
   gDns = new DNSServer();
