@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko11.7)
+# TamaPoke KO (v1.17-ko11.8)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko11.8: 배경음 선택(bgm_pick.h, bgmMask, bgm.wav~bgm8.wav, WAV INAM 제목, prep_music --title), 따라오기 팝업(BP_JOIN), 방어 반격(EV_COUNTER·counterDamage, LINK_PROTO_VER 5), 전투 중 똥 없음(holdPoop), 보관함 ◀·탭 y44. PC 테스트 229개
 - ✅ ko11.7: 탐험(pet.exped, Box::put, expeditionReward), 친밀도 진화(FRIEND_EVO_BOND 70, 이브이 낮/밤), dayEvent(요일 타입·주말 샤이니·보름달 전설), 도감 보상(dxrw), 훈련 최소 +3. PC 테스트 224개
 - ✅ ko10.10: 사탕 메뉴 이름 "실수 만회 1회", 샤이니 UP 보존(보관함 선택 시). PC 테스트 204개
 - ✅ ko10.9: 실수 원인 기록·표시, 육성 일차 날짜 기준, 수동 시간 설정 시 오프라인 반영, 아래 버튼 배치. PC 테스트 204개 (+2)
