@@ -79,6 +79,7 @@ static void scenes(bool ko, const char *sfx) {
   strcpy(pet.nick, "불꽃이"); render(); shot("03e_card_profile_nick"); pet.nick[0] = 0;
   cardPage = 2; render(); shot("03d_card_medals");
   pet.addCandy(pet.speciesId, 12); cardPage = 4; render(); shot("03f_card_candy");
+  pet.careMistakes = 1; pet.addCandy(pet.speciesId, 10); render(); shot("03i_card_candy_mistake"); pet.careMistakes = 0;
   closeAll(); pet.berryKnown = true; feedMenuUntil = gMockMillis + 5000; render(); shot("01b_feed_menu");
   closeAll(); confirmUntil = gMockMillis + 5000; render(); shot("01c_confirm_release"); confirmUntil = 0;
   closeAll(); openLinkMenu(); render(); shot("24_link_menu");
