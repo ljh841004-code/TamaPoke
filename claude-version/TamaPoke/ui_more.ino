@@ -247,7 +247,9 @@ uint8_t nextPage = 0;
 #define NP_ROWS 4
 #define NP_NAV_Y 346
 
+void bakRequest();  // ko11.6
 void onPetEnd(Pet &p, uint8_t how) {
+  bakRequest();  // ko11.6: la despedida tambien va a la copia de la SD
   if (how == CER_RUNAWAY || p.isEgg()) return;  // escapada: huevo y ya
   hall.addRaised(p.speciesId, p.level(), p.shiny, p.geneAtk, p.geneDef, p.geneSpe, clockEpoch());  // salon
   gNextPickPending = true;
@@ -913,4 +915,192 @@ void fameTap(int16_t x, int16_t y) {
   const BoxMon &m = fame.at((uint8_t)fameSel);
   galleryPmd.load((uint8_t)m.dex, m.flags & BOXF_SHINY);
   audioCry(m.dex);
+}
+
+// ======================================================================
+// ko11.6: copia de la partida en la SD (savebak.h)
+// Automatica: una al dia y en los momentos importantes (evolucion / nuevo
+// companero, campeon, despedida). Manual: red > [copia]. Al arrancar con una
+// partida nueva y una copia en la SD, se pregunta si restaurarla.
+// ======================================================================
+
+BakSlot bakSlots[2];
+int8_t bakSel = -1;          // ranura elegida para restaurar (confirmacion)
+int8_t bakMsg = -1;          // XId del ultimo aviso (-1 nada)
+uint32_t bakMsgUntil = 0;
+bool bakAsk = false;         // pregunta al arrancar
+int8_t bakAskSlot = -1;
+static bool bakPending = false;
+static uint32_t bakLastT = 0;
+static int32_t bakKnownDay = -2;  // dia de la copia mas nueva (-1 ninguna, -2 sin mirar)
+
+void bakRequest() { bakPending = true; }
+
+static void bakSetMsg(XId m) { bakMsg = (int8_t)m; bakMsgUntil = millis() + 3000; }
+
+static bool bakDoBackup() {
+  if (!sdReady) { bakSetMsg(X_BAK_NOSD); return false; }
+  pet.saveNow();  // lo ultimo tambien
+  uint32_t e = clockEpoch();
+  bool ok = bakBackupNow(pet.speciesId, pet.level(), gClockTrusted ? e : 0);
+  bakLastT = millis() ? millis() : 1;
+  bakPending = false;
+  if (ok && gClockTrusted) bakKnownDay = (int32_t)(e / 86400);
+  return ok;
+}
+
+// en loop(): la copia automatica, solo con la placa tranquila
+void bakAutoLoop(uint32_t now) {
+  static int16_t lastSp = -32000;
+  if (lastSp == -32000) lastSp = pet.speciesId;
+  if (pet.speciesId != lastSp) {  // nacio / evoluciono / nuevo companero
+    if (pet.speciesId >= 1) bakPending = true;
+    lastSp = pet.speciesId;
+  }
+  static uint32_t lastCheck = 0;
+  if (now < 60000) return;  // el primer minuto, a lo suyo
+  if (!bakPending && lastCheck && now - lastCheck < 60000) return;
+  if (!sdReady || safeMode || bakAsk || pet.awaitingStarter() || fastGameNow() || screenOff) return;
+  if (xScreen == XS_WILD || xScreen == XS_LINK || xScreen == XS_UPD) return;  // en plena batalla / actualizacion
+  if (bakLastT && now - bakLastT < 60000) return;
+  lastCheck = now;
+  bool due = bakPending;
+  if (!due && gClockTrusted) {  // una al dia
+    if (bakKnownDay == -2) {
+      BakSlot s[2];
+      bakInfo(s);
+      int n = bakNewest(s);
+      bakKnownDay = n < 0 ? -1 : (int32_t)(s[n].h.epoch / 86400);
+    }
+    due = (int32_t)(clockEpoch() / 86400) != bakKnownDay;
+  }
+  if (due) bakDoBackup();
+}
+
+// al final de setup(): partida nueva + copia en la SD -> preguntar
+void bakBootCheck() {
+  if (!sdReady || safeMode || !pet.awaitingStarter()) return;
+  bakInfo(bakSlots);
+  int n = bakNewest(bakSlots);
+  if (n < 0 || bakSlots[n].h.dex < 1) return;
+  bakAsk = true;
+  bakAskSlot = (int8_t)n;
+}
+
+// "2026.09.27 12:30" + "PIKACHU Lv23"
+static void bakSlotLines(const BakHdr &h, char *l1, size_t n1, char *l2, size_t n2) {
+  if (h.epoch) {
+    int y;
+    uint8_t mo, d;
+    wxDate(h.epoch, &y, &mo, &d, nullptr);
+    snprintf(l1, n1, "%d.%02u.%02u %02u:%02u", y, mo, d, (unsigned)(h.epoch / 3600 % 24), (unsigned)(h.epoch / 60 % 60));
+  } else {
+    snprintf(l1, n1, "#%u", (unsigned)h.seq);
+  }
+  if (h.dex >= 1 && h.dex <= DEX_COUNT) snprintf(l2, n2, "%s  Lv%u", dexName(h.dex), h.lvl);
+  else snprintf(l2, n2, "%s", T(S_EGG_HDR));
+}
+
+#define BAK_NOW_Y 104
+#define BAK_ROW_Y 170
+#define BAK_ROW_H 70
+#define BAK_ROW_GAP 12
+
+void openBackup() {
+  if (netPortalOn()) netStopPortal();
+  bakInfo(bakSlots);
+  bakSel = -1;
+  bakMsg = -1;
+  xScreen = XS_BAK;
+  sfxPlay(SFX_TAP);
+}
+
+static void drawBakConfirm(const char *title, int8_t slot, XId yes, XId no, bool warn = true) {
+  gfx->fillRoundRect(48, 120, 370, 226, 22, UI_WHITE);
+  gfx->drawRoundRect(48, 120, 370, 226, 22, UI_INK);
+  drawFit(title, 150, 330, UI_INK, 2);
+  if (slot >= 0 && bakSlots[slot].ok) {
+    char l1[32], l2[48];
+    bakSlotLines(bakSlots[slot].h, l1, sizeof(l1), l2, sizeof(l2));
+    drawFit(l2, 192, 330, UI_INK, 3);
+    drawFit(l1, 234, 330, 0x8410, 2);
+  }
+  if (warn) drawFit(XT(X_BAK_WARN), 264, 330, UI_BAR_BAD, 1);  // al arrancar no hay nada que perder
+  drawBtn(78, 288, 150, 44, UI_BAR_OK, UI_WHITE, XT(yes));
+  drawBtn(238, 288, 150, 44, UI_TRACK, UI_INK, XT(no));
+}
+
+void renderBackup() {
+  screenBase();
+  drawFit(XT(X_BAK_TITLE), 50, 300, UI_INK, 3);
+  drawBtn(113, BAK_NOW_Y, 240, 44, UI_BAR_OK, UI_WHITE, XT(X_BAK_NOW));
+  int nw = bakNewest(bakSlots);
+  for (int i = 0; i < 2; i++) {
+    int y = BAK_ROW_Y + i * (BAK_ROW_H + BAK_ROW_GAP);
+    bool ok = bakSlots[i].ok;
+    gfx->fillRoundRect(73, y, 320, BAK_ROW_H, 14, ok ? UI_WHITE : UI_TRACK);
+    gfx->drawRoundRect(73, y, 320, BAK_ROW_H, 14, i == nw ? UI_BAR_OK : UI_INK);
+    if (!ok) {
+      drawFit(XT(X_BAK_EMPTY), y + 24, 280, 0x8410, 2);
+      continue;
+    }
+    char l1[48], l2[48];
+    bakSlotLines(bakSlots[i].h, l1, sizeof(l1), l2, sizeof(l2));
+    if (i == nw) {  // la mas nueva: borde verde y "(최신)"
+      size_t k = strlen(l1);
+      snprintf(l1 + k, sizeof(l1) - k, "  (%s)", XT(X_BAK_NEWEST));
+    }
+    drawFit(l2, y + 12, 290, UI_INK, 2);
+    drawFit(l1, y + 42, 290, i == nw ? UI_BAR_OK : 0x8410, 1);
+  }
+  drawFit(XT(X_BAK_TAP_SLOT), 338, 300, UI_INK, 1);
+  drawFit(XT(X_BAK_AUTO), 362, 320, 0x8410, 1);
+  if (bakMsg >= 0 && timeLeft(bakMsgUntil))
+    drawFit(XT((XId)bakMsg), 390, 300, bakMsg == X_BAK_DONE ? UI_BAR_OK : UI_BAR_BAD, 2);
+  drawTopExitHint(424);
+  if (bakSel >= 0) drawBakConfirm(XT(X_BAK_CONFIRM), bakSel, X_BAK_RESTORE, X_BAK_CANCEL);
+  gfx->flush();
+}
+
+static void bakRestoreAndRestart(int8_t slot) {
+  screenBase();
+  drawFit(XT(X_BAK_RESTORING), 220, 360, UI_INK, 2);
+  gfx->flush();
+  if (bakRestore((uint8_t)slot)) {
+    delay(800);
+    ESP.restart();
+  }
+  bakSetMsg(X_BAK_FAIL);
+}
+
+void backupTap(int16_t x, int16_t y) {
+  if (bakSel >= 0) {  // confirmacion
+    if (inRect(x, y, 78, 288, 150, 44)) { int8_t s = bakSel; bakSel = -1; bakRestoreAndRestart(s); }
+    else if (inRect(x, y, 238, 288, 150, 44)) { bakSel = -1; sfxPlay(SFX_TAP); }
+    return;
+  }
+  if (topDoubleTap(y)) { xScreen = XS_NET; return; }  // vuelve a la red
+  if (inRect(x, y, 113, BAK_NOW_Y, 240, 44)) {
+    bool ok = bakDoBackup();
+    if (sdReady) bakSetMsg(ok ? X_BAK_DONE : X_BAK_FAIL);
+    bakInfo(bakSlots);
+    sfxPlay(ok ? SFX_MEDAL : SFX_DENY);
+    return;
+  }
+  for (int i = 0; i < 2; i++) {
+    int ry = BAK_ROW_Y + i * (BAK_ROW_H + BAK_ROW_GAP);
+    if (inRect(x, y, 73, ry, 320, BAK_ROW_H) && bakSlots[i].ok) { bakSel = (int8_t)i; sfxPlay(SFX_TAP); return; }
+  }
+}
+
+// pregunta al arrancar (tiene prioridad sobre elegir inicial)
+void renderBakAsk() {
+  screenBase();
+  drawBakConfirm(XT(X_BAK_ASK_TITLE), bakAskSlot, X_BAK_RESTORE, X_RESET_BTN, false);
+  gfx->flush();
+}
+
+void bakAskTap(int16_t x, int16_t y) {
+  if (inRect(x, y, 78, 288, 150, 44)) { bakAsk = false; bakRestoreAndRestart(bakAskSlot); return; }
+  if (inRect(x, y, 238, 288, 150, 44)) { bakAsk = false; sfxPlay(SFX_TAP); }  // empezar de cero
 }

@@ -31,6 +31,7 @@
 #include "weather.h"    // fork KO (ko10.1): estaciones y tiempo segun la fecha
 #include "box.h"        // fork KO (ko4): bogwanham y registro de la pokedex
 #include "sdupdate.h"   // fork KO (ko5): actualizar desde /update.bin de la SD
+#include "savebak.h"    // ko11.6: copia de la partida en la SD
 #ifdef ESP_PLATFORM
 #include <nvs_flash.h>     // ko11.6: particion nvs2
 #include <esp_partition.h>
@@ -110,6 +111,12 @@ int16_t galDex(int p, int idx) {
 int16_t galleryDetail = 0;  // dex en vista detalle, 0 = rejilla
 
 bool screenOff = false;       // pulsacion corta del boton PWR
+extern bool bakAsk;           // ko11.6 (ui_more.ino): pregunta de la copia en la SD
+void renderBakAsk();
+void bakAskTap(int16_t x, int16_t y);
+void bakAutoLoop(uint32_t now);
+void bakBootCheck();
+void bakRequest();
 bool cardOpen = false;        // ficha del bicho (deslizar vertical)
 bool kbOpen = false;          // teclado para renombrar al bicho
 char nameBuf[20] = "";   // ko8: lo ya escrito (apodo en hangul: hasta 18 bytes)
@@ -507,6 +514,7 @@ void setup() {
   bootStep(BS_MUSIC);
   if (sdReady && !safeMode) audioLoadMusic();  // /mons/bgm.wav y /mons/battle_wild.wav si existen
 
+  bakBootCheck();  // ko11.6: partida nueva + copia en la SD -> preguntar
   lastInteract = millis();
 }
 
@@ -584,6 +592,7 @@ void loop() {
   handleTouch();
   handleSerial();
   extraLoop(now);  // fork KO: red, tongsin, batallas (ui_extra.ino)
+  bakAutoLoop(now);  // ko11.6: copia de la partida en la SD
   ensureMon();
   static int16_t crySpecies = -1;  // grito al nacer/evolucionar/cambiar (/mons/cryNNN.wav)
   if (!pet.isEgg() && pet.speciesId != crySpecies) {
@@ -1108,6 +1117,7 @@ void onSwipe(int dir) {
 
 void onTap(int16_t x, int16_t y) {
   // Serial.printf("TOUCH %d %d\n", x, y);  // diagnostico (silenciado: satura el log)
+  if (bakAsk) { bakAskTap(x, y); return; }  // ko11.6
   if (pet.awaitingStarter()) {  // primera partida: elegir inicial
     for (int i = 0; i < 3; i++) {
       int ry = STARTER_ROW_Y + i * (STARTER_ROW_H + STARTER_ROW_GAP);
@@ -2037,6 +2047,10 @@ void printT(const char *s) {
 }
 
 void render() {
+  if (bakAsk) {  // ko11.6: copia en la SD encontrada al arrancar
+    renderBakAsk();
+    return;
+  }
   if (pet.awaitingStarter()) {  // primera partida: elegir inicial (prioridad total)
     renderStarterSelect();
     return;

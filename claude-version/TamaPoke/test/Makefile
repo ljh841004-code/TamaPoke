@@ -9,7 +9,7 @@ SRC_DIR  := ..
 BUILD    := build
 BIN      := $(BUILD)/tamapoke_tests
 
-SOURCES := main.cpp shim/shim.cpp test_pet.cpp test_dex.cpp test_i18n.cpp test_battle.cpp test_i18n_ext.cpp test_link.cpp test_audio.cpp test_box.cpp \
+SOURCES := main.cpp shim/shim.cpp test_pet.cpp test_dex.cpp test_i18n.cpp test_battle.cpp test_i18n_ext.cpp test_link.cpp test_audio.cpp test_box.cpp test_savebak.cpp \
            $(SRC_DIR)/pet.cpp $(SRC_DIR)/i18n.cpp $(SRC_DIR)/battle.cpp $(SRC_DIR)/i18n_ext.cpp $(SRC_DIR)/link_core.cpp $(SRC_DIR)/box.cpp
 
 .PHONY: all run clean asan

@@ -13,7 +13,7 @@ enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_
                  XS_GYM, XS_DAILY,  // ko10.4: gimnasios y reto del dia
                  XS_NEXTPICK,       // ko10.5: elegir el siguiente tras un ciclo
                  XS_CANDY,          // ko10.11: bolsa de caramelos
-                 XS_FAME };         // ko11.1: salon de la fama (campeones de la liga)
+                 XS_FAME, XS_BAK };  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
 uint8_t xScreen = XS_NONE;
 
 // aviso breve en la pantalla principal
@@ -72,8 +72,10 @@ void screenBase() {
 #define NET_SETUP_Y 266
 #define NET_AUTO_Y 318
 #define NET_TZ_Y 150
-#define NET_UPD_X 113   // ko6: [SD update] (la unidad USB se quito)
-#define NET_UPD_W 240
+#define NET_UPD_X 105   // ko6: [SD update] (la unidad USB se quito)
+#define NET_UPD_W 124   // ko11.6: la fila se parte: [SD update] | [copia]
+#define NET_BAK_X 237
+#define NET_BAK_W 124
 #define NET_UPD_Y 370
 #define NET_UPD_H 40
 
@@ -240,6 +242,7 @@ void renderNet() {
   drawBtn(NET_BTN_X + hw + 8, NET_AUTO_Y, hw, NET_BTN_H, netOpenAllowed() ? UI_WHITE : UI_TRACK, UI_INK,
           XT(netOpenAllowed() ? X_OPEN_ON : X_OPEN_OFF));
   drawBtn(NET_UPD_X, NET_UPD_Y, NET_UPD_W, NET_UPD_H, 0xFB20, UI_WHITE, XT(X_UPD_BTN));
+  drawBtn(NET_BAK_X, NET_UPD_Y, NET_BAK_W, NET_UPD_H, 0x6B4D, UI_WHITE, XT(X_BAK_BTN));  // ko11.6
   drawTopExitHint(424);  // ko11.6: doble toque arriba (antes "tocar arriba", con el aviso abajo junto a [SD])
   gfx->flush();
 }
@@ -252,6 +255,7 @@ void netTap(int16_t x, int16_t y) {
   if (topDoubleTap(y)) { closeNet(); return; }  // ko11.6: doble toque arriba
   if (y < TOP_EXIT_Y) return;
   if (inRect(x, y, NET_UPD_X, NET_UPD_Y, NET_UPD_W, NET_UPD_H)) { openUpdate(); return; }
+  if (inRect(x, y, NET_BAK_X, NET_UPD_Y, NET_BAK_W, NET_UPD_H)) { openBackup(); return; }  // ko11.6
   if (y >= NET_TZ_Y && y < NET_TZ_Y + 44) {
     if (x < 140) netSetTzMin(netTzMin() - 30);
     else if (x > 326) netSetTzMin(netTzMin() + 30);
@@ -1733,6 +1737,7 @@ void finishBattle(bool won, bool fled, bool caught) {
       // ko11.1: con sus genes (la ficha del salon los ensena)
       fame.addRaised(pet.speciesId, pet.level(), pet.shiny, pet.geneAtk, pet.geneDef, pet.geneSpe, clockEpoch());
       strncpy(bNote, XT(X_CHAMP_WIN), sizeof(bNote) - 1);
+      bakRequest();  // ko11.6: copia en la SD
       bNote[sizeof(bNote) - 1] = 0;
       pet.saveNow();
       sfxPlay(SFX_EVOLVE);
@@ -2147,6 +2152,7 @@ bool extraRender() {
     case XS_NEXTPICK: renderNextPick(); return true;  // ko10.5
     case XS_CANDY: renderCandyBag(); return true;     // ko10.11
     case XS_FAME: renderFame(); return true;          // ko11.1
+    case XS_BAK: renderBackup(); return true;         // ko11.6
     default: return false;
   }
 }
@@ -2167,6 +2173,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_NEXTPICK: nextPickTap(x, y); return true;
     case XS_CANDY: candyBagTap(x, y); return true;
     case XS_FAME: fameTap(x, y); return true;
+    case XS_BAK: backupTap(x, y); return true;
     default: return false;
   }
 }

@@ -354,6 +354,10 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); openSound(); render(); shot("16_sound");
   closeAll(); openNet(); render(); shot("18_net");
   { gMockPortal = true; render(); shot("18b_portal_qr"); gMockPortal = false; }
+  // ko11.6: copia de la partida en la SD
+  openBackup(); render(); shot("18c_backup");
+  bakSel = 1; render(); shot("18d_backup_confirm"); bakSel = -1;
+  bakInfo(bakSlots); bakAsk = true; bakAskSlot = 1; render(); shot("18e_backup_boot_ask"); bakAsk = false;
   closeAll(); openReset(); render(); shot("23_reset");
   closeAll(); openUpdate(); render(); shot("19_update");
   updState = UPD_NONE; xScreen = XS_UPD; render(); shot("22_update_nofile");
