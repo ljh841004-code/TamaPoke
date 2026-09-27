@@ -119,6 +119,7 @@ void audioSetVolume(uint8_t c, uint8_t p) { if (c < 3) gVol[c] = p; }
 uint8_t audioVolume(uint8_t c) { return c < 3 ? gVol[c] : 0; }
 void audioLoadMusic() {}
 void audioSetBattleMusic(bool, bool) {}
+void audioSetMusicTrack(uint8_t) {}
 bool audioPauseForUpload() { return true; }
 void audioResumeAfterUpload() {}
 void audioCry(uint16_t) {}

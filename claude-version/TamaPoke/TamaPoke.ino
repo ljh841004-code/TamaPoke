@@ -428,6 +428,7 @@ void loop() {
 
   // musica de combate mientras dura una batalla (salvaje o tongsin); el
   // resultado, la huida y la pantalla apagada vuelven a la BGM normal
+  audioSetMusicTrack(musicTrackNow());  // ko11: gimnasio / liga / salon de la fama
   audioSetBattleMusic(battleMusicActive() && !screenOff);
   audioSetMusicPaused(screenOff);  // ko5: pantalla apagada = sin musica
   updateBrightness(now);

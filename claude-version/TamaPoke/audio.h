@@ -30,6 +30,11 @@ void audioSetVolume(uint8_t channel, uint8_t percent);
 uint8_t audioVolume(uint8_t channel);
 void audioLoadMusic(); // enable/reload streaming music after SD mount
 void audioSetBattleMusic(bool active, bool newSession = false);
+// ko11: que cancion toca. En combate: MT_GYM -> battle_gym.wav, MT_CHAMP ->
+// battle_champ.wav (si no estan, battle_wild.wav). Fuera: MT_FAME -> fame.wav
+// (si no esta, bgm.wav)
+enum : uint8_t { MT_NORMAL = 0, MT_GYM, MT_CHAMP, MT_FAME };
+void audioSetMusicTrack(uint8_t track);
 bool audioPauseForUpload(); // closes streaming file before PUT; false on timeout
 void audioResumeAfterUpload();
 void audioCry(uint16_t dex); // main loop only

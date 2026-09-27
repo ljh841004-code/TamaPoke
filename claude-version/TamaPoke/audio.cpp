@@ -33,6 +33,7 @@ static std::atomic<uint32_t> musicRequest{0}; // bit 0: wild; upper bits: sessio
 static std::atomic<uint32_t> musicReload{0}, uploadRequest{0}, uploadAck{0};
 static std::atomic<bool> musicEnabled{false};
 static std::atomic<bool> musicPaused{false};  // fork KO (ko5): pantalla apagada
+static std::atomic<uint8_t> musicTrack{MT_NORMAL};  // ko11: gimnasio / liga / salon
 static std::atomic<uint32_t> bgmSeconds{0};    // ko10.4: duracion de bgm.wav (0 = no cargado)
 static const char *const volumeKeys[] = {"volBgm", "volCry", "volSfx"};
 
@@ -145,7 +146,9 @@ static void audioTask(void *) {
     if (!audible) { sfx = -1; free(cry); cry = nullptr; cryLen = 0; }
     size_t musicSamples = 0;
     uint32_t upload = uploadRequest.load();
-    uint32_t request = musicRequest.load(), reload = musicReload.load();
+    // ko11: la pista va en los bits altos: cambiarla reabre (y no reanuda la de salvaje)
+    uint32_t request = (musicRequest.load() & 0x00FFFFFFu) | ((uint32_t)musicTrack.load() << 24);
+    uint32_t reload = musicReload.load();
     {
       // Sprite loads and USB writes share the card. Never block I2S on a lock:
       // use read-ahead while busy, then silence without losing the cursor.
@@ -161,13 +164,26 @@ static void audioTask(void *) {
             music.close();
             suspended = false;
             if (musicEnabled.load()) {
-              const char *path = request & 1u ? "/mons/battle_wild.wav" : "/mons/bgm.wav";
-              if (!music.open(SD_MMC.open(path, FILE_READ), resume))
+              uint8_t tr = (uint8_t)(request >> 24);
+              const char *base = request & 1u ? "/mons/battle_wild.wav" : "/mons/bgm.wav";
+              const char *path = base;
+              if (request & 1u) {
+                if (tr == MT_GYM) path = "/mons/battle_gym.wav";
+                else if (tr == MT_CHAMP) path = "/mons/battle_champ.wav";
+              } else if (tr == MT_FAME) {
+                path = "/mons/fame.wav";
+              }
+              bool opened = music.open(SD_MMC.open(path, FILE_READ), resume);
+              if (!opened && path != base) {  // ko11: sin ese fichero, la de siempre
+                path = base;
+                opened = music.open(SD_MMC.open(path, FILE_READ), resume);
+              }
+              if (!opened)
                 Serial.printf("AUDIO invalid/missing WAV: %s\n", path);
               else {  // ko10.4: la duracion real del fichero (para ver si esta recortado)
                 uint32_t sec = music.lengthBytes() / (SAMPLE_RATE * 2);
                 Serial.printf("AUDIO %s: %u:%02u\n", path, (unsigned)(sec / 60), (unsigned)(sec % 60));
-                if (!(request & 1u)) bgmSeconds.store(sec);
+                if (path == base && !(request & 1u)) bgmSeconds.store(sec);
               }
             }
           }
@@ -237,6 +253,7 @@ static void queueWav(const char *path, uint8_t kind) {
 void audioLoadMusic() { musicEnabled = true; musicReload.fetch_add(1); }
 uint32_t audioBgmSeconds() { return bgmSeconds.load(); }
 void audioSetMusicPaused(bool paused) { musicPaused = paused; }
+void audioSetMusicTrack(uint8_t track) { musicTrack = track; }
 void audioSetBattleMusic(bool active, bool newSession) {
   uint32_t value = musicRequest.load();
   if (newSession) value = (value & ~1u) + 2;

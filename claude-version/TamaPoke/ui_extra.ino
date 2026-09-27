@@ -2082,6 +2082,13 @@ void updateLink() {
 
 // /mons/battle_wild.wav suena durante el combate (salvaje y tongsin), no en el
 // resultado: al acabar vuelve /mons/bgm.wav
+// ko11: que pista toca ahora (ver audioSetMusicTrack)
+uint8_t musicTrackNow() {
+  if (battleMusicActive()) return bKind == BK_GYM ? MT_GYM : bKind == BK_CHAMP ? MT_CHAMP : MT_NORMAL;
+  if (xScreen == XS_GYM && gymPage == 2) return MT_FAME;  // la pagina de la liga y el salon
+  return MT_NORMAL;
+}
+
 bool battleMusicActive() {
   bool fighting = xScreen == XS_WILD || (xScreen == XS_LINK && linkBattleStarted);
   return fighting && bPhase != BP_RESULT && bPhase != BP_NEXT && bPhase != BP_DUP;
