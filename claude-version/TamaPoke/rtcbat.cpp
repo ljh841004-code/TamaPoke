@@ -61,13 +61,15 @@ void pmuEnablePanel() {
 
 // el estado de energia (I2C) se cachea ~2 s: leerlo en cada frame del loop
 // metia trafico I2C inutil y podia oscilar (parpadeo de brillo)
+bool fastGameNow();  // TamaPoke.ino (ko11.3)
 static uint32_t powerCacheT = 0;
 static int cachedPct = -1;
 static bool cachedCharging = false, cachedUsb = true;
 
 static void refreshPower() {
   uint32_t now = millis();
-  if (powerCacheT && now - powerCacheT < 2000) return;
+  // ko11.3: en los minijuegos rapidos cada 10 s (el bus I2C es para el tactil)
+  if (powerCacheT && now - powerCacheT < (fastGameNow() ? 10000u : 2000u)) return;
   powerCacheT = now ? now : 1;
   if (!pmuOk) { cachedPct = -1; cachedCharging = false; cachedUsb = true; return; }
   cachedPct = pmu.isBatteryConnect() ? pmu.getBatteryPercent() : -1;

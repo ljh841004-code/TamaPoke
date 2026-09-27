@@ -3,6 +3,7 @@
 struct TwoWire {
   void begin(int = 0, int = 0) {}
   void setTimeOut(int) {}
+  void setClock(uint32_t) {}
   void beginTransmission(int) {}
   int endTransmission(bool = true) { return 0; }
   void write(uint8_t) {}

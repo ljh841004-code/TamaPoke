@@ -212,7 +212,18 @@ void drawTrainResult(const char *score, const char *gain, uint16_t gainCol, bool
   else if (pet.lastTrainExp) snprintf(bn, sizeof(bn), XT(X_TRAIN_EXP_FMT), (unsigned long)pet.lastTrainExp);
   else if (pet.lastTrainCandy) snprintf(bn, sizeof(bn), "%s", XT(X_TRAIN_CANDY));
   if (bn[0]) drawFit(bn, 334, 340, UI_BAR_OK, 2);
+  drawPerfLine(362, ink);  // ko11.3
   gfx->flush();
+}
+
+// ko11.3: medida del minijuego, pequena (para ver de donde vienen los tirones)
+extern uint16_t perfRenderMax, perfStallMax;
+extern uint32_t perfFrames;
+void drawPerfLine(int y, uint16_t ink) {
+  if (!perfFrames) return;
+  char p[48];
+  snprintf(p, sizeof(p), XT(X_PERF_FMT), (unsigned)perfRenderMax, (unsigned)perfStallMax);
+  drawFit(p, y, 300, ink, 1);
 }
 
 // el bicho en el suelo, mirando al juego
@@ -232,6 +243,7 @@ void drawTimeBar(uint32_t left, uint32_t total, int y) {
 // ---------- defensa ----------
 
 void startDefense() {
+  perfReset();  // ko11.3
   defOpen = true;
   defStart = defLastStep = millis();
   defNextSpawn = defStart + 600;
@@ -343,6 +355,7 @@ static void spdNextRound() {
 }
 
 void startSpeed() {
+  perfReset();  // ko11.3
   spdOpen = true;
   spdRound = 0;
   spdScore = 0;

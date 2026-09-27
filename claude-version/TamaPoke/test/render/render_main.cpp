@@ -99,7 +99,9 @@ static void scenes(bool ko, const char *sfx) {
   for (int i = 0; i < 40; i++) { sackTap(); tick(60); }  // ko10.7: unos cuantos sacos rotos
   render(); shot("25_sack");
   for (int i = 0; i < 80; i++) { tick(85); render(); }   // se acaba el plazo
-  shot("25b_sack_result");
+  perfFrames = 120; perfRenderMax = 71; perfStallMax = 12;  // ko11.3: linea de medida
+  render(); shot("25b_sack_result");
+  perfReset();
   closeAll(); startGame(); tick(300); render(); shot("26_ball_game");
   // ko10.4: 3 pelotas cayendo a la vez (un rato despues de empezar)
   for (int f = 0; f < 36; f++) { tick(85); render(); }

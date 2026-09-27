@@ -35,7 +35,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko11.2"
+#define FW_VERSION "1.17-ko11.3"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -306,6 +306,7 @@ void setup() {
   rtcBegin();
   batBegin();
   pwrSetup();
+  i2cFastMode();  // ko11.3
   uint32_t e = rtcEpoch();
   gClockTrusted = e != 0;
   if (e == 0) {
@@ -377,8 +378,16 @@ void careAlert() {
   if (fire && audioEnabled()) sfxPlay(SFX_ALERT);
 }
 
+// ko11.3: medida en los minijuegos rapidos (se ve pequena en el resultado):
+// el render mas lento y el paron mas largo del resto del loop
+uint16_t perfRenderMax = 0, perfStallMax = 0;
+uint32_t perfFrames = 0;
+void drawPerfLine(int y, uint16_t ink);  // train.ino
+void perfReset() { perfRenderMax = perfStallMax = 0; perfFrames = 0; }
+
 void loop() {
   uint32_t now = millis();
+  uint32_t loopT0 = now, renderMs = 0;
   pet.update(now);
 
   // el amplificador sigue al estado de sueno (la llamada sale sola si no cambia).
@@ -411,7 +420,7 @@ void loop() {
   // pulsacion corta del PWR: pantalla on/off. fork KO (ko4): las dos guardan
   // ya (la larga llega antes de que el PMU corte la corriente a los 4 s)
   static uint32_t lastPwr = 0;
-  if (now - lastPwr > 250) {
+  if (now - lastPwr > (fastGameNow() ? 1000u : 250u)) {  // ko11.3: menos I2C jugando
     lastPwr = now;
     uint8_t pw = pwrPoll();
     if (pw & 1) {
@@ -472,7 +481,14 @@ void loop() {
   // congelado, el primer frame tras despertar sale en el acto.
   if (!screenOff && now - lastRender >= (uint32_t)((gameOpen || sackOpen || trainingFast()) ? 85 : 100)) {
     lastRender = now;
+    uint32_t r0 = millis();
     render();
+    renderMs = millis() - r0;
+  }
+  if (fastGameNow()) {
+    uint32_t stall = millis() - loopT0 - renderMs;
+    if (renderMs) { perfFrames++; if (renderMs > perfRenderMax) perfRenderMax = (uint16_t)renderMs; }
+    if (stall > perfStallMax) perfStallMax = (uint16_t)(stall > 65535 ? 65535 : stall);
   }
 }
 
@@ -708,6 +724,22 @@ void touchTaskStart() {
 
 void touchSample(bool pressed, int16_t x, int16_t y);
 uint16_t screenSig();
+
+// ko11.3: el bus I2C (tactil + PMU + RTC) iba a 100 kHz, el valor por defecto.
+// Con el dedo apoyado el tactil se lee cada 8 ms y ocupaba el bus buena parte
+// del tiempo; el loop esperaba su turno para el PMU/RTC (tirones al aporrear).
+// Los tres chips admiten 400 kHz. Si PMU o RTC no contestan a 400, se vuelve a 100
+static bool i2cProbe(uint8_t addr) {
+  Wire.beginTransmission(addr);
+  return Wire.endTransmission() == 0;
+}
+void i2cFastMode() {
+  bool pmuWas = i2cProbe(0x34), rtcWas = i2cProbe(0x51);
+  Wire.setClock(400000);
+  bool ok = (!pmuWas || i2cProbe(0x34)) && (!rtcWas || i2cProbe(0x51));
+  if (!ok) Wire.setClock(100000);
+  Serial.printf("I2C %s kHz\n", ok ? "400" : "100");
+}
 
 // el toque se resuelve al LEVANTAR el dedo para distinguir tap de deslizar
 void handleTouch() {
@@ -1475,10 +1507,16 @@ static void drawSeg7(int x, int y, int w, int h, int t, uint8_t d, uint16_t col)
 #define BIGCLK_W 44
 #define BIGCLK_H 76
 
+bool fastGameNow() { return gameOpen || sackOpen || trainingFast(); }  // ko11.3
+
 uint32_t clockEpoch() {  // hora del RTC, leida como mucho una vez por segundo
   static uint32_t at = 0, e = 0;
   uint32_t now = millis();
-  if (!at || now - at >= 1000) { at = now ? now : 1; uint32_t r = rtcEpoch(); if (r) e = r; }
+  // ko11.3: en los minijuegos rapidos el bus I2C es para el tactil: la hora se
+  // avanza con millis() y el RTC se vuelve a leer al salir
+  static uint32_t base = 0;
+  if (fastGameNow() && e) return e + (now - base) / 1000;
+  if (!at || now - at >= 1000) { at = now ? now : 1; uint32_t r = rtcEpoch(); if (r) e = r; base = now; }
   return e ? e : pet.lastSeenEpoch;
 }
 
@@ -1974,6 +2012,7 @@ void render() {
 // ---------- minijuego: toques con la pokeball ----------
 
 void startGame() {
+  perfReset();  // ko11.3
   if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
   gameOpen = true;
   gameOverUntil = 0;
@@ -2096,6 +2135,7 @@ uint32_t sackBagMs(uint16_t i) {
 }
 
 void startSack() {
+  perfReset();  // ko11.3
   if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
   sackOpen = true;
   sackBags = sackBagHits = 0;
@@ -2236,6 +2276,7 @@ void renderGame() {
     // ko9.2: el premio grande solo con record; ko10.3: si no, un poco de energia
     const char *msg = gameNewHi ? XT(X_GAME_REWARD) : gameScore ? XT(X_GAME_SMALL) : XT(X_GAME_NO_REWARD);
     drawFit(msg, 250, 330, gameNewHi ? UI_BAR_OK : ink, 2);
+    drawPerfLine(300, ink);  // ko11.3
     gfx->flush();
     return;
   }
