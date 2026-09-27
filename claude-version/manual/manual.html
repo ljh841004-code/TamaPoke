@@ -1,0 +1,1399 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>다마포케 사용 설명서</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="style.css">
+<style>
+/* ---------- 표지 ---------- */
+.cover { background: #fff; }
+.cover .top { position: absolute; left: 0; right: 0; top: 0; height: 105mm; background: linear-gradient(160deg, #f0492a, #d42a0b); }
+.cover .band { position: absolute; left: 0; right: 0; top: 101mm; height: 8mm; background: #2c2a33; }
+.cover .hole { position: absolute; left: 50%; top: 105mm; width: 84mm; height: 84mm; transform: translate(-50%, -50%);
+  border-radius: 50%; background: #2c2a33; }
+.cover .hole2 { position: absolute; left: 50%; top: 105mm; width: 74mm; height: 74mm; transform: translate(-50%, -50%);
+  border-radius: 50%; background: #fff; }
+.cover .scr { position: absolute; left: 50%; top: 105mm; transform: translate(-50%, -50%); }
+.cover .scr img { width: 66mm; height: 66mm; border-radius: 50%; display: block; border: 1.2mm solid #34313b; }
+.cover .title { position: absolute; top: 15mm; left: 0; right: 0; text-align: center; color: #fff; }
+.cover .title .en { font-size: 10pt; letter-spacing: 3pt; font-weight: 700; opacity: .85; }
+.cover .title h1 { margin: 1mm 0 0; font-size: 34pt; font-weight: 900; letter-spacing: -1pt; line-height: 1.1;
+  text-shadow: 0 1mm 0 rgba(0,0,0,.18); }
+.cover .title .sub { margin-top: 2mm; font-size: 12pt; font-weight: 700; }
+.cover .bottom { position: absolute; left: 0; right: 0; top: 152mm; text-align: center; }
+.cover .bottom .ver { display: inline-block; background: #2c2a33; color: #fff; font-weight: 700; font-size: 8.5pt;
+  border-radius: 9mm; padding: 1mm 4mm; }
+.cover .bottom .kw { margin-top: 3.2mm; font-size: 8pt; color: #6d6875; line-height: 1.7; }
+.cover .bottom .kw span { display: inline-block; background: #f4ede4; border-radius: 9mm; padding: 0 2.4mm; margin: .6mm .4mm; }
+.cover .dots { position: absolute; bottom: 8mm; left: 0; right: 0; text-align: center; font-size: 7pt; color: #b0a89e; }
+
+/* ---------- 차례 ---------- */
+.toc { display: grid; grid-template-columns: 1fr; gap: 1.7mm; }
+.toc a { display: flex; align-items: center; gap: 2.4mm; text-decoration: none; color: inherit;
+  background: #fff; border-radius: 2.6mm; padding: 1.7mm 2.6mm; border: 1px solid var(--line); }
+.toc .no { width: 7mm; height: 7mm; border-radius: 50%; color: #fff; font-weight: 900; font-size: 9pt;
+  display: flex; align-items: center; justify-content: center; flex: none; }
+.toc .tt { font-weight: 900; font-size: 9.6pt; }
+.toc .ds { font-size: 6.9pt; color: var(--sub); line-height: 1.35; }
+.toc .pg { margin-left: auto; font-weight: 900; font-size: 10pt; color: #b0a89e; }
+
+/* ---------- 뒤표지 ---------- */
+.back { background: #2c2a33; color: #eee; }
+.back .inner { color: #ddd; }
+.back h2 { color: #ffcf4a; }
+.back h2::before { background: #ffcf4a; }
+.back .vl { font-size: 7.2pt; line-height: 1.7; color: #cfc9d6; }
+.back .vl b { color: #fff; }
+.back .ball { position: absolute; bottom: 24mm; left: 50%; transform: translateX(-50%); width: 30mm; height: 30mm; border-radius: 50%;
+  background: linear-gradient(#e3350d 0 46%, #2c2a33 46% 54%, #fff 54%); border: 1mm solid #111; }
+.back .ball i { content: ''; position: absolute; left: 50%; top: 50%; width: 9mm; height: 9mm; transform: translate(-50%,-50%);
+  border-radius: 50%; background: #fff; border: 1mm solid #111; }
+.back .credit { position: absolute; bottom: 5mm; left: 10mm; right: 10mm; text-align: center; font-size: 6pt; color: #9e97a8; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<!-- ============================== 1 표지 ============================== -->
+<div class="page cover">
+  <div class="top"></div>
+  <div class="band"></div>
+  <div class="hole"></div>
+  <div class="hole2"></div>
+  <div class="scr"><img src="img/01_main.png" alt=""></div>
+  <div class="title">
+    <div class="en">TAMAPOKE</div>
+    <h1>다마포케</h1>
+    <div class="sub">사용 설명서</div>
+  </div>
+  <div class="bottom">
+    <div class="ver">펌웨어 v1.17-ko11.7 기준</div>
+    <div class="kw">
+      <span>돌보기</span><span>진화</span><span>훈련</span><span>야생 배틀</span><span>체육관</span><span>챔피언 리그</span><br>
+      <span>보관함</span><span>탐험</span><span>도감 251</span><span>날씨·계절</span><span>통신</span><span>SD 백업</span>
+    </div>
+  </div>
+  <div class="dots">손 안의 포켓몬 키우기 · 둥근 화면 ESP32-S3</div>
+</div>
+
+<!-- ============================== 2 차례 ============================== -->
+<div class="page c9">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>★</b>차례</span><h1>이 책의 차례</h1></div>
+    <p class="lead">다마포케는 둥근 화면 속에서 포켓몬을 알부터 키우는 작은 기기예요. 먹이고, 씻기고, 재우고, 훈련하고,
+      야생 포켓몬과 싸우며 도감 251마리를 채워 보세요.</p>
+    <div class="toc">
+      <a><span class="no" style="background:#e3350d">1</span><span><span class="tt">시작하기</span><br><span class="ds">기기 둘러보기 · 전원 · 첫 알 · 기본 화면 · 화면 이동</span></span><span class="pg">3</span></a>
+      <a><span class="no" style="background:#2f9e5a">2</span><span><span class="tt">돌보기</span><br><span class="ds">먹이 · 잠 · 목욕 · 게이지 · 돌봄 실수와 회복 · 포켓몬의 행동</span></span><span class="pg">7</span></a>
+      <a><span class="no" style="background:#ee8a1c">3</span><span><span class="tt">성장과 진화</span><br><span class="ds">스탯 카드 · 메달 · 레벨 · 진화 · 친밀도 진화 · 사탕 · 육성 마치기</span></span><span class="pg">11</span></a>
+      <a><span class="no" style="background:#d63c6b">4</span><span><span class="tt">훈련</span><br><span class="ds">공격(샌드백) · 방어 · 속도 · 공놀이 · 훈련 보상</span></span><span class="pg">17</span></a>
+      <a><span class="no" style="background:#2f6fd0">5</span><span><span class="tt">배틀</span><br><span class="ds">지역 16곳 · 배틀 조작 · 포획 · 레어 · 이벤트 · 체육관 · 챔피언 리그</span></span><span class="pg">19</span></a>
+      <a><span class="no" style="background:#7c4fc4">6</span><span><span class="tt">모으기</span><br><span class="ds">보관함 · 왕관 보관함 · 탐험 보내기 · 도감과 도감 보상</span></span><span class="pg">25</span></a>
+      <a><span class="no" style="background:#139a9a">7</span><span><span class="tt">세계와 통신</span><br><span class="ds">날씨 · 계절 · 배경 16곳 · 통신 대전과 교환</span></span><span class="pg">28</span></a>
+      <a><span class="no" style="background:#4f5d73">8</span><span><span class="tt">설정과 관리</span><br><span class="ds">시간 · 소리 · 언어 · WiFi · 세이브 백업 · SD카드 · 펌웨어 업데이트</span></span><span class="pg">30</span></a>
+      <a><span class="no" style="background:#b8860b">+</span><span><span class="tt">부록</span><br><span class="ds">문제 해결 · 한눈에 보는 숫자 · 버전 이야기</span></span><span class="pg">34</span></a>
+    </div>
+    <div class="tip" style="margin-top:3mm">이 책의 화면 사진은 실제 펌웨어로 그린 화면이에요. 포켓몬·숫자는 예시라서 내 기기와 다를 수 있어요.</div>
+  </div>
+  <div class="foot">TamaPoke 사용 설명서</div>
+</div>
+
+<!-- ============================== 3 기기 둘러보기 ============================== -->
+<div class="page c1">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>1</b>시작하기</span><h1>기기 둘러보기</h1></div>
+    <p class="lead">둥근 1.43인치 터치 화면에 버튼 하나. 손가락으로 톡톡 누르고 쓸어서 모든 걸 해요.</p>
+    <div class="row">
+      <div class="grow">
+        <table class="t">
+          <tr><th>부분</th><th>하는 일</th></tr>
+          <tr><td>둥근 터치 화면</td><td>누르기(탭), 쓸기(스와이프), 누르고 있기로 조작해요</td></tr>
+          <tr><td>PWR 버튼</td><td>화면 켜기·끄기, 전원 끄기 (아래 표)</td></tr>
+          <tr><td>USB-C</td><td>충전, PC 연결 (펌웨어·SD 파일 보내기)</td></tr>
+          <tr><td>SD카드</td><td>포켓몬 그림·울음소리·배경음, 세이브 백업, 업데이트 파일</td></tr>
+          <tr><td>배터리·시계</td><td>꺼져 있어도 시간이 흘러요. 돌아오면 그동안의 변화가 반영돼요</td></tr>
+          <tr><td>스피커</td><td>배경음, 울음소리, 효과음</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <h2>PWR 버튼</h2>
+    <table class="t">
+      <tr><th style="width:30%">누르는 법</th><th>결과</th></tr>
+      <tr><td>짧게 한 번</td><td>화면 끄기 / 켜기. 화면이 꺼져 있어도 포켓몬은 계속 살아 있어요 (배경음은 멈춤)</td></tr>
+      <tr><td>길게 (약 4초)</td><td>지금까지를 <b>저장한 뒤</b> 전원이 꺼져요</td></tr>
+      <tr><td>다시 켜기</td><td>꺼진 상태에서 PWR을 짧게 누르기</td></tr>
+      <tr><td>6초 누르기</td><td>완전히 껐다 켜기 (업데이트 뒤나 멈췄을 때)</td></tr>
+    </table>
+    <div class="note">화면은 한동안 만지지 않으면 저절로 어두워져요. 아무 곳이나 누르면 다시 밝아져요.</div>
+
+    <h2>켜질 때 보이는 것</h2>
+    <p>켜지는 동안 <b>전원 → 화면 → 터치 → 세이브 → SD → 시계 → WiFi → 소리</b> 순서로 준비 단계가 표시돼요.
+      도중에 멈추면 다음에 켤 때 어디서 멈췄는지 알려 주고, 두 번 연속 멈추면 <b>안전 모드</b>로 켜져요 (33쪽).</p>
+    <div class="tip">저장은 1분마다 자동으로 돼요. 전원을 끌 때는 PWR을 <b>길게</b> 눌러 주세요.</div>
+  </div>
+  <div class="foot">1 · 시작하기</div>
+</div>
+
+<!-- ============================== 4 첫 만남 ============================== -->
+<div class="page c1">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>1</b>시작하기</span><h1>처음 만나는 포켓몬</h1></div>
+    <h2>① 스타터 고르기</h2>
+    <p>처음 켜면 <b>“스타터를 선택하세요”</b> 화면이 나와요. <b>이상해씨 · 파이리 · 꼬부기</b> 중 하나를 눌러 고르세요.
+      고른 포켓몬이 알에서 태어나요.</p>
+    <div class="row mid">
+      <div class="shot l"><img src="img/17_next_from_box.png" alt=""><div class="cap"><b>알</b> — 톡톡 두드려 깨워요</div></div>
+      <div class="grow">
+        <h2>② 알 깨우기</h2>
+        <p>알을 <b>세 번</b> 누르면 “알을 톡톡…”, “움직여요!”, “거의 다 됐어요!” 하다가 태어나요.</p>
+        <p>태어날 때 포켓몬마다 <b>능력 편차</b>(공격·방어·속도 90~110%)가 정해져서 같은 포켓몬도 조금씩 달라요.
+          드물게 <b>색이 다른(샤이니)</b> 포켓몬이 태어나기도 해요.</p>
+      </div>
+    </div>
+
+    <h2>③ 이름 짓기</h2>
+    <div class="row">
+      <div class="grow">
+        <p>기본 화면 아래 <span class="arrow">▲</span> → 스탯 카드 첫 쪽에서 <b>이름을 누르면</b> 키보드가 나와요.
+          최대 6글자.</p>
+        <ul>
+          <li><b>천지인 한글 키보드</b>: ㅣ ㆍ ㅡ 로 모음, ㄱㅋ·ㄴㄹ… 는 누를 때마다 바뀌어요</li>
+          <li>같은 자음을 연달아 쓸 땐 <span class="k">띄움</span> (예: 각각 = ㄱㅣㆍㄱ <span class="k">띄움</span> ㄱㅣㆍㄱ)</li>
+          <li><span class="k b">ABC</span>로 영문 키보드, <span class="k g">OK</span>로 저장</li>
+        </ul>
+      </div>
+      <div class="shot m"><img src="img/27_keyboard_ko.png" alt=""><div class="cap">천지인 키보드</div></div>
+      <div class="shot m"><img src="img/28_keyboard_abc.png" alt=""><div class="cap">영문 키보드</div></div>
+    </div>
+    <div class="tip">키운 포켓몬의 이름은 통신 교환을 해도 그대로 따라가요.</div>
+  </div>
+  <div class="foot">1 · 시작하기</div>
+</div>
+
+<!-- ============================== 5 기본 화면 ============================== -->
+<div class="page c1">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>1</b>시작하기</span><h1>기본 화면 읽기</h1></div>
+    <div class="anno">
+      <div class="shot"><img src="img/01_main.png" alt=""></div>
+      <div class="pin" style="left:50%;top:3.5%"><span class="n">1</span></div>
+      <div class="pin" style="left:27%;top:13.5%"><span class="n">2</span></div>
+      <div class="pin" style="left:27%;top:21%"><span class="n">3</span></div>
+      <div class="pin" style="left:78%;top:25.5%"><span class="n">4</span></div>
+      <div class="pin" style="left:22%;top:34%"><span class="n">5</span></div>
+      <div class="pin" style="left:5.4%;top:52%"><span class="n">6</span></div>
+      <div class="pin" style="left:94.6%;top:52%"><span class="n">7</span></div>
+      <div class="pin" style="left:62%;top:52%"><span class="n">8</span></div>
+      <div class="pin" style="left:10%;top:71%"><span class="n">9</span></div>
+      <div class="pin" style="left:17%;top:84%"><span class="n">10</span></div>
+      <div class="pin" style="left:62%;top:95.5%"><span class="n">11</span></div>
+    </div>
+    <div class="legend" style="margin-top:3mm">
+      <div><span class="n">1</span><span><b>배터리</b> 남은 양</span></div>
+      <div><span class="n">7</span><span><span class="arrow">▶</span> <b>시간 설정·설정</b> 화면</span></div>
+      <div><span class="n">2</span><span><b>이름과 레벨</b> (최대 Lv.100)</span></div>
+      <div><span class="n">8</span><span><b>포켓몬</b> — 누르면 쓰다듬기</span></div>
+      <div><span class="n">3</span><span><b>상태 한마디</b> (배고파요, 행복해요…)</span></div>
+      <div><span class="n">9</span><span><b>게이지 4개</b> 포만·기분·기력·청결</span></div>
+      <div><span class="n">4</span><span><b>날씨·배경</b> 내 포켓몬 속성의 장소</span></div>
+      <div><span class="n">10</span><span><b>돌보기 버튼 4개</b> (7쪽)</span></div>
+      <div><span class="n">5</span><span><b>날짜와 큰 시계</b></span></div>
+      <div><span class="n">11</span><span><span class="arrow">▲</span> <b>스탯 카드</b> 열기</span></div>
+      <div><span class="n">6</span><span><span class="arrow">◀</span> <b>도감</b> 열기</span></div>
+      <div></div>
+    </div>
+    <div class="box tint" style="margin-top:2.4mm">
+      <b>화면 위에 가끔 나타나는 것</b>
+      <ul style="margin-top:.6mm">
+        <li><b>불꽃 숫자</b>(왼쪽 위): 매일 돌봐 준 <b>연속 일수</b></li>
+        <li><b>야생 포켓몬 알림</b>: 30초 안에 누르면 바로 배틀 (내 포켓몬 지역)</li>
+        <li><b>말풍선</b>: 필요한 것·기분 (10쪽) · <b>하트</b>: 좋아할 때 · <b>똥</b>: 청결이 빨리 줄어요</li>
+        <li><b>알림 띠</b>: 도감 보상, 탐험 귀환, 메달 획득</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot">1 · 시작하기</div>
+</div>
+
+<!-- ============================== 6 화면 이동 ============================== -->
+<div class="page c1">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>1</b>시작하기</span><h1>화면 이동과 터치</h1></div>
+    <p class="lead">화면 가장자리의 동그란 화살표를 누르거나, 같은 방향으로 쓸어도 돼요.</p>
+    <table class="t">
+      <tr><th>화면</th><th><span class="arrow">◀</span> 왼쪽</th><th><span class="arrow">▶</span> 오른쪽</th><th>맨 아래</th></tr>
+      <tr><td>기본 화면</td><td>도감</td><td>시간 설정</td><td><span class="arrow">▲</span> 스탯 카드</td></tr>
+      <tr><td>스탯 카드 (5쪽)</td><td>이전 쪽</td><td>다음 쪽</td><td><span class="arrow">▼</span> 닫기</td></tr>
+      <tr><td>도감</td><td>이전 쪽 (첫 쪽: 나가기)</td><td>다음 쪽</td><td><span class="arrow">▼</span> 나가기</td></tr>
+      <tr><td>훈련 / 배틀 메뉴</td><td>훈련 쪽</td><td>배틀 쪽</td><td><span class="arrow">▼</span> 닫기</td></tr>
+      <tr><td>시간·네트워크·백업</td><td>뒤로 가기</td><td>—</td><td>—</td></tr>
+    </table>
+
+    <h2>터치 방법</h2>
+    <div class="grid2">
+      <div class="box"><h3 style="margin-top:0">탭 (톡 누르기)</h3>버튼 누르기, 포켓몬 쓰다듬기, 알 깨우기. 메뉴에서는 아주 짧게 스친 터치는 무시돼요.</div>
+      <div class="box"><h3 style="margin-top:0">스와이프 (쓸기)</h3>아래→위: 스탯 카드 · 옆으로: 쪽 넘기기. 천천히 끌어도 돼요 (1.5초까지).</div>
+      <div class="box"><h3 style="margin-top:0">2초 누르고 있기</h3>훈련 게임 도중 <b>그만두기</b>. 기록은 그때까지 저장돼요.</div>
+      <div class="box"><h3 style="margin-top:0">두 번 탭</h3>도감 화면에서 <b>나가기</b>. “탭: 뒤로”라고 적힌 화면은 한 번만 눌러도 돼요.</div>
+    </div>
+
+    <h2>어디에 뭐가 있나요?</h2>
+    <table class="t plain">
+      <tr><th>하고 싶은 것</th><th>가는 길</th></tr>
+      <tr><td>훈련·야생 배틀·체육관</td><td>돌보기 버튼 중 <b>포켓볼</b> → 훈련 쪽 / <span class="arrow">▶</span> 배틀 쪽</td></tr>
+      <tr><td>보관함·통신</td><td><span class="arrow">▲</span> 스탯 카드 2쪽(배틀)의 버튼, 또는 배틀 쪽 <span class="k b">통신 2인</span></td></tr>
+      <tr><td>사탕 쓰기·사탕 가방</td><td><span class="arrow">▲</span> 스탯 카드 5쪽 (사탕)</td></tr>
+      <tr><td>소리·언어·WiFi·새로 시작</td><td><span class="arrow">▶</span> 시간 설정 화면의 버튼</td></tr>
+      <tr><td>세이브 백업·SD 업데이트</td><td><span class="arrow">▶</span> 시간 설정 → <span class="k b">WiFi</span> → 네트워크 화면</td></tr>
+    </table>
+  </div>
+  <div class="foot">1 · 시작하기</div>
+</div>
+
+<!-- ============================== 7 돌보기 버튼 ============================== -->
+<div class="page c2">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>2</b>돌보기</span><h1>돌보기 버튼 4개</h1></div>
+    <p class="lead">기본 화면 아래의 네 버튼으로 매일 돌봐 주세요. 잘 돌볼수록 빨리 크고, 강해지고, 친해져요.</p>
+    <div class="row">
+      <div class="grow">
+        <table class="t">
+          <tr><th style="width:22%">버튼</th><th>하는 일</th></tr>
+          <tr><td><img class="ico" src="img/btn_feed.png"> 먹이</td><td>열매 3가지(빨강·파랑·초록)와 <b>사탕</b> 중 하나를 골라 먹여요.<br>
+            열매 = 포만 +25 · 사탕 = 포만 +10, 기분 +12 (대신 살이 쪄요)</td></tr>
+          <tr><td><img class="ico" src="img/btn_ball.png"> 포켓볼</td><td><b>훈련 · 배틀 메뉴</b>를 열어요 (4·5장)</td></tr>
+          <tr><td><img class="ico" src="img/btn_moon.png"> 달</td><td>불 끄고 <b>재우기</b> / 깨우기. 자는 동안 기력이 빨리 차고 다른 게이지는 천천히 줄어요</td></tr>
+          <tr><td><img class="ico" src="img/btn_bath.png"> 물방울</td><td><b>목욕</b>. 청결 100, 똥도 치워요</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="shots even">
+      <div class="shot m"><img src="img/01b_feed_menu.png" alt=""><div class="cap"><b>먹이 고르기</b><br>좋아하는 음식엔 하트</div></div>
+      <div class="shot m"><img src="img/02_main_night.png" alt=""><div class="cap"><b>밤</b><br>어두워지면 재워 주세요</div></div>
+      <div class="shot m"><img src="img/63_beh_hungry.png" alt=""><div class="cap"><b>“배고파”</b><br>필요한 걸 말해요</div></div>
+    </div>
+
+    <h2>좋아하는 음식</h2>
+    <p>포켓몬마다 <b>좋아하는 음식이 하나</b> 있어요 (빨강·파랑·초록 열매, 사탕 중 하나, 약 1/4은 사탕파). 진화해도 바뀌지 않아요.</p>
+    <ul>
+      <li>좋아하는 걸 먹이면 <b>포만 +35</b>, 기분 UP, 하트, 유대감 +2</li>
+      <li>한 번 알아내면 스탯 카드에 “빨간 열매”처럼 표시되고, 먹이 메뉴에 하트가 붙어요</li>
+      <li>처음 알아내면 <b>“열매 발견” 메달</b>!</li>
+    </ul>
+    <h2>쓰다듬기</h2>
+    <p>포켓몬을 직접 누르면 쓰다듬어요. 기분 +5, 유대감 +1, 울음소리와 함께 포즈를 취하거나 빙글 돌아요.</p>
+    <div class="tip">사탕은 달콤하지만 <b>무게</b>가 늘어요. 무게가 50을 넘으면 쉽게 지쳐요 (기력이 두 배로 줄어요).</div>
+  </div>
+  <div class="foot">2 · 돌보기</div>
+</div>
+
+<!-- ============================== 8 게이지 ============================== -->
+<div class="page c2">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>2</b>돌보기</span><h1>게이지와 몸 상태</h1></div>
+    <p class="lead">게이지는 0~100. 초록 = 좋음, 노랑 = 조금 부족, 빨강 = 위험이에요.</p>
+    <table class="t">
+      <tr><th style="width:18%">게이지</th><th>줄어드는 이유</th><th style="width:34%">채우는 법</th></tr>
+      <tr><td>포만</td><td>깨어 있으면 1분에 2씩</td><td>먹이 (좋아하는 음식이 최고)</td></tr>
+      <tr><td>기분</td><td>1분에 1씩. 배고프거나(30↓) 더러우면(30↓) 더 빨리</td><td>쓰다듬기, 공놀이, 훈련, 좋아하는 음식</td></tr>
+      <tr><td>기력</td><td>1분에 1씩, 훈련·놀이할 때 많이</td><td>재우기 (1분에 +6)</td></tr>
+      <tr><td>청결</td><td>1분에 1씩 + <b>똥 1개마다 4씩 더</b></td><td>목욕</td></tr>
+    </table>
+    <div class="grid2">
+      <div class="box">
+        <h3 style="margin-top:0">똥</h3>
+        배가 부르면(포만 40↑) 가끔 똥을 싸요 (최대 3개). 똥이 있으면 청결이 뚝뚝 떨어지니 바로 목욕!
+      </div>
+      <div class="box">
+        <h3 style="margin-top:0">잠</h3>
+        자는 동안은 포만·기분·청결이 <b>약 4배 천천히</b> 줄고, 게이지가 바닥까지 가지 않아요. 밤(22~6시)엔 꾸벅꾸벅 졸아요.
+      </div>
+      <div class="box">
+        <h3 style="margin-top:0">알림음 “딩동”</h3>
+        똥을 싸거나 게이지가 <b>30 이하</b>로 떨어지면 한 번 울려요 (소리 켬 · 깨어 있음 · 화면 켜짐일 때).
+      </div>
+      <div class="box">
+        <h3 style="margin-top:0">무게</h3>
+        사탕을 먹으면 늘고, 시간이 지나면 조금씩 빠져요. 무게 0 + 실수 0 + Lv.5 이상이면 <b>“건강함” 메달</b>.
+      </div>
+    </div>
+    <h2>유대감 (친밀도)</h2>
+    <p>돌봐 줄 때마다 조금씩 올라가요 (먹이 +2, 놀기 +2, 쓰다듬기·목욕 +1). 돌봄 실수를 하면 1 내려가요.
+      스탯 카드 프로필에서 분홍 막대로 볼 수 있고, <b>100이면 “유대감 최대” 메달</b>.
+      <b>친밀도 70</b>이 되어야 진화하는 포켓몬도 있어요 (14쪽).</p>
+    <div class="note">기기가 꺼져 있던 시간도 흘러요. 다시 켜면 그동안 줄어든 만큼 반영되지만, 최대 2주까지만 계산하고 스탯이 15 아래로는 떨어지지 않아요.</div>
+  </div>
+  <div class="foot">2 · 돌보기</div>
+</div>
+
+<!-- ============================== 9 실수 ============================== -->
+<div class="page c2">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>2</b>돌보기</span><h1>돌봄 실수와 회복</h1></div>
+    <div class="row">
+      <div class="grow">
+        <h2>돌봄 실수란?</h2>
+        <p>게이지 하나라도 <b>10 이하</b>로 떨어지면 <b>실수 1회</b>가 기록돼요 (한 번 기록되면 1시간 동안은 다시 세지 않아요).</p>
+        <ul>
+          <li>실수 1번마다 <b>진화가 1레벨 늦어져요</b></li>
+          <li>유대감 −1</li>
+          <li>스탯 카드 진행도 쪽 “실수: N (탭: 원인)”을 누르면 가장 최근 실수의 <b>원인과 시간</b>이 5초 동안 보여요</li>
+        </ul>
+      </div>
+      <div class="shot m"><img src="img/03h_card_mistake_why.png" alt=""><div class="cap">최근 실수 원인</div></div>
+    </div>
+    <h2>실수 지우기 2가지</h2>
+    <div class="grid2">
+      <div class="box tint">
+        <h3 style="margin-top:0">① 12시간 잘 돌보기</h3>
+        모든 게이지를 <b>40 이상으로 12시간 연속</b> 유지하면 <b>실수 −1</b>, 방어 +1.
+        하나라도 40 아래로 내려가면 처음부터 다시. 자는 동안은 타이머가 멈춰요.
+        진행도 쪽에 “실수 회복까지 7시간 12분”처럼 보여요.
+      </div>
+      <div class="box tint">
+        <h3 style="margin-top:0">② 사탕 5개</h3>
+        스탯 카드 5쪽 <span class="k r">실수 만회 1회 (5)</span> — 사탕 5개로 실수 1개를 바로 지워요.
+        실수가 있을 때만 누를 수 있어요.
+      </div>
+    </div>
+    <div class="shots even">
+      <div class="shot s"><img src="img/03g_card_mistakes.png" alt=""><div class="cap">진행도 쪽</div></div>
+      <div class="shot s"><img src="img/03f_card_candy.png" alt=""><div class="cap">사탕 쓰기</div></div>
+    </div>
+    <h2>가출</h2>
+    <div class="warn"><b>네 게이지가 모두 0</b>인 채로 1시간이 지나면 포켓몬이 떠날 준비를 해요.
+      한 번이라도 돌봐 주면 괜찮아지지만, 가출로 끝나면 다음 파트너는 <b>무작위 알</b>만 받을 수 있어요.</div>
+    <div class="tip">바쁜 날엔 재워 두세요. 자는 동안은 게이지가 천천히 줄고 바닥까지 떨어지지 않아서 실수가 거의 생기지 않아요.</div>
+  </div>
+  <div class="foot">2 · 돌보기</div>
+</div>
+
+<!-- ============================== 10 행동 ============================== -->
+<div class="page c2">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>2</b>돌보기</span><h1>포켓몬의 하루</h1></div>
+    <p class="lead">기분이 좋으면 기본 화면에서 이런저런 행동을 해요. 보고만 있어도 즐거워요.</p>
+    <div class="grid3">
+      <div class="shot m"><img src="img/60_beh_skill.png" alt=""><div class="cap"><b>기술 연습</b><br>기 모으기 → 속성 기술 발사</div></div>
+      <div class="shot m"><img src="img/62_beh_happy.png" alt=""><div class="cap"><b>신남</b> (기분 80↑)<br>포즈 + 음표</div></div>
+      <div class="shot m"><img src="img/61_beh_bored.png" alt=""><div class="cap"><b>심심해</b><br>3분 넘게 안 놀아 주면 뒹굴뒹굴</div></div>
+      <div class="shot m"><img src="img/63_beh_hungry.png" alt=""><div class="cap"><b>필요한 것 말하기</b><br>게이지 45 미만: 배고파·씻고 싶어·Zzz</div></div>
+      <div class="shot m"><img src="img/64_beh_rain.png" alt=""><div class="cap"><b>비</b><br>몸을 털며 물방울</div></div>
+      <div class="shot m"><img src="img/65_beh_sun.png" alt=""><div class="cap"><b>햇볕</b><br>드러누워 일광욕</div></div>
+    </div>
+    <div class="box" style="margin-top:2.4mm">
+      <ul style="margin:0">
+        <li><b>눈</b>이 오면 덜덜 떨며 “추워”, <b>밤(22~6시)</b>엔 꾸벅꾸벅 “Zzz”</li>
+        <li><b>쓰다듬으면</b> 포즈를 취하거나 끄덕이고, 가끔 빙글 돌며 음표</li>
+        <li>행동 그림은 SD카드의 포켓몬 그림 파일에 들어 있어요 (구르기·기 모으기·발사·드러눕기)</li>
+      </ul>
+    </div>
+    <div class="note">상태 한마디: “행복해요”, “배고파요!”, “목욕이 필요해요!”, “지쳤어요…”, “슬퍼해요…”, “조금 통통해요…”</div>
+  </div>
+  <div class="foot">2 · 돌보기</div>
+</div>
+
+<!-- ============================== 11 스탯 카드 1 ============================== -->
+<div class="page c3">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>3</b>성장과 진화</span><h1>스탯 카드 ① 프로필·배틀</h1></div>
+    <p class="lead">기본 화면 맨 아래 <span class="arrow">▲</span>를 누르거나 아래에서 위로 쓸면 열려요. 모두 5쪽이에요.</p>
+    <div class="row">
+      <div class="shot l"><img src="img/03c_card_profile.png" alt=""><div class="cap"><b>1쪽 프로필</b></div></div>
+      <div class="grow">
+        <ul>
+          <li><b>이름</b>: 누르면 이름 바꾸기 (4쪽)</li>
+          <li><b>큰 그림</b>: 지금 모습 (샤이니면 이름 앞에 *)</li>
+          <li><b>연속 N 최고 M</b>: 매일 돌봐 준 날 수</li>
+          <li><b>유대감</b>: 분홍 막대 (0~100)</li>
+          <li><b>좋아하는 음식</b>: 알아내기 전엔 “좋아함 ???”</li>
+          <li><b>N일차</b>: 태어난 날이 1일차, 날짜가 바뀌면 +1</li>
+        </ul>
+      </div>
+    </div>
+    <div class="row" style="margin-top:2mm">
+      <div class="grow">
+        <ul>
+          <li><b>공격·방어·속도</b>: 종족 기본값 × 능력 편차 + 레벨 + 훈련으로 정해져요</li>
+          <li><b>무게</b>: 0~100 (사탕을 먹으면 늘어요)</li>
+          <li>버튼 4개: <span class="k g">야생 배틀</span> <span class="k b">통신 2인</span> <span class="k r">훈련</span> <span class="k y">보관함 N</span></li>
+          <li>맨 아래: 가진 <b>포켓볼·물약</b> 개수</li>
+        </ul>
+        <div class="tip">배틀에서 이기면 공격·방어·속도가 조금씩 올라요. 훈련은 능력을 더 크게 올려요 (17쪽).</div>
+      </div>
+      <div class="shot l"><img src="img/03_card_battle.png" alt=""><div class="cap"><b>2쪽 배틀</b></div></div>
+    </div>
+  </div>
+  <div class="foot">3 · 성장과 진화</div>
+</div>
+
+<!-- ============================== 12 스탯 카드 2 ============================== -->
+<div class="page c3">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>3</b>성장과 진화</span><h1>스탯 카드 ② 메달·진행도</h1></div>
+    <div class="row">
+      <div class="shot m"><img src="img/03d_card_medals.png" alt=""><div class="cap"><b>3쪽 메달</b></div></div>
+      <div class="grow">
+        <h2>메달 8개</h2>
+        <p class="small" style="margin-bottom:1mm">한 포켓몬을 키우는 동안 모아요. 얻으면 “메달!” 알림과 효과음.</p>
+        <div class="grid2" style="gap:1.2mm">
+          <div class="medal"><i></i><span><b>레벨 10</b></span></div>
+          <div class="medal"><i></i><span><b>레벨 25</b></span></div>
+          <div class="medal"><i></i><span><b>레벨 50</b></span></div>
+          <div class="medal"><i></i><span><b>열매 발견</b> 좋아하는 음식</span></div>
+          <div class="medal"><i></i><span><b>연속 7일</b> 매일 돌보기</span></div>
+          <div class="medal"><i></i><span><b>유대감 최대</b> 100</span></div>
+          <div class="medal"><i></i><span><b>최종 진화</b></span></div>
+          <div class="medal"><i></i><span><b>건강함</b> 무게 0·실수 0</span></div>
+        </div>
+      </div>
+    </div>
+    <h2>4쪽 진행도</h2>
+    <div class="row">
+      <div class="grow">
+        <ul>
+          <li><b>Lv.과 파란 EXP 막대</b>, “다음 레벨까지 ○ EXP”</li>
+          <li>“또는 육성 약 ○시간 ○분” — 시간만으로 오르는 데 남은 시간</li>
+          <li><b>진화</b>: “○레벨 이후에 진화”, “진화하려면 전부 40 이상”, “친밀도 42/70 필요”, “진화 준비 완료!”</li>
+          <li><b>실수: N (탭: 원인)</b> — 누르면 최근 실수 원인 (9쪽)</li>
+          <li>“실수 회복까지 ○시간 ○분” 또는 조건 안내</li>
+        </ul>
+      </div>
+      <div class="shot m"><img src="img/03b_card_progress.png" alt=""><div class="cap">진행도</div></div>
+      <div class="shot m"><img src="img/03l_card_friend_evo.png" alt=""><div class="cap">친밀도 진화</div></div>
+    </div>
+    <h2>5쪽 사탕</h2>
+    <p>지금 키우는 계열의 사탕 개수와 쓰는 곳이 나와요. 자세한 건 15쪽.</p>
+  </div>
+  <div class="foot">3 · 성장과 진화</div>
+</div>
+
+<!-- ============================== 13 레벨과 진화 ============================== -->
+<div class="page c3">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>3</b>성장과 진화</span><h1>레벨과 진화</h1></div>
+    <h2>경험치(EXP)로 레벨 업</h2>
+    <p>레벨 n이 되려면 n³ EXP가 필요해요 (원작과 같은 방식, 최대 <b>Lv.100</b>). EXP를 얻는 방법은 세 가지예요.</p>
+    <table class="t">
+      <tr><th style="width:24%">방법</th><th>얻는 양</th></tr>
+      <tr><td>배틀</td><td>이기거나 잡으면 <b>상대 종류 × 상대 레벨</b>만큼 (통신 대전은 절반, 지면 0)</td></tr>
+      <tr><td>육성 시간</td><td>시간만 흘러도 레벨 L → L+1 에 <b>L × 15분</b> (잘 때도 쌓여요. 게이지가 10 이하면 멈춤)</td></tr>
+      <tr><td>훈련</td><td>다음 레벨 필요량의 5%, 최고 기록이면 20% + 사탕 1</td></tr>
+    </table>
+    <p class="small">예) 꼬부기 → 어니부기(Lv.16) 약 30시간, 거북왕(Lv.36) 약 6.6일 · 미뇽 → 망나뇽(Lv.55) 약 15.5일 (시간만으로 키울 때)</p>
+
+    <h2>진화 레벨</h2>
+    <ul>
+      <li><b>3단계 포켓몬</b>: 첫 진화 <b>Lv.16</b>, 최종 진화는 원작 레벨 (원작이 20 미만이면 20). 예) 파이리 16 → 리자드 36</li>
+      <li><b>2단계 포켓몬</b>: 원작 레벨 그대로. 예) 피카츄 30, 꼬렛 20</li>
+      <li>돌봄 실수 1번마다 <b>1레벨씩 늦어져요</b></li>
+    </ul>
+    <h2>진화하는 법</h2>
+    <ol class="steps">
+      <li>레벨이 되고 <b>네 게이지가 모두 40 이상</b>이면 기본 화면에 빨간 <span class="k r">진화!</span> 버튼</li>
+      <li>누르면 “진화할까요?” → <span class="k r">진화</span> 또는 <span class="k">형태 유지</span></li>
+      <li>진화하면 빛나는 연출과 울음소리. 기술도 더 강한 모습으로 바뀌어요 (22쪽)</li>
+    </ol>
+    <div class="tip"><b>형태 유지</b>를 고르면 다음 레벨이 될 때 다시 물어봐요. 지금 모습이 좋으면 계속 미뤄도 돼요.</div>
+    <div class="note">야생 포켓몬은 자기 레벨에 맞는 진화 모습으로 나와요. 레벨 20 이상이면 피츄 대신 피카츄가 나오는 식이에요.</div>
+  </div>
+  <div class="foot">3 · 성장과 진화</div>
+</div>
+
+<!-- ============================== 14 특별한 진화 ============================== -->
+<div class="page c3">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>3</b>성장과 진화</span><h1>특별한 진화</h1></div>
+    <h2>친밀도 진화</h2>
+    <p>아래 포켓몬은 레벨과 함께 <b>유대감(친밀도) 70</b>이 필요해요. 카드에 “친밀도 N/70 필요”라고 보여요.</p>
+    <table class="t">
+      <tr><th>포켓몬</th><th>진화</th></tr>
+      <tr><td>피츄</td><td>→ 피카츄</td></tr>
+      <tr><td>삐 / 푸푸린</td><td>→ 삐삐 / 푸린</td></tr>
+      <tr><td>토게피</td><td>→ 토게틱</td></tr>
+      <tr><td>골뱃</td><td>→ 크로뱃</td></tr>
+      <tr><td>럭키</td><td>→ 해피너스</td></tr>
+    </table>
+    <div class="row mid">
+      <div class="grow">
+        <h2>이브이의 5갈래</h2>
+        <ul>
+          <li>친밀도 70 이상 + <b>낮</b> → <b>에브이</b></li>
+          <li>친밀도 70 이상 + <b>밤(20~6시)</b> → <b>블래키</b></li>
+          <li>그 밖에는 샤미드 · 쥬피썬더 · 부스터 중 하나 (도감에 없는 쪽이 먼저)</li>
+        </ul>
+      </div>
+      <div class="shot m"><img src="img/32_dex_umbreon.png" alt=""><div class="cap">블래키</div></div>
+    </div>
+    <h2>갈래 진화</h2>
+    <p>야돈 → 야도란/야도킹, 수륙챙이 → 강챙이/왕구리, 냄새꼬 → 라플레시아/아르코, 배루키 → 홍수몬/시라소몬/카포에라.
+      <b>도감에 아직 없는 쪽</b>으로 먼저 진화해요.</p>
+    <h2>교환 진화</h2>
+    <p>윤겔라·근육몬·데구리·고우스트, 롱스톤·스라크·시드라·폴리곤 등은 통신 교환으로 진화하지만,
+      <b>혼자서도 레벨로 진화</b>할 수 있어요 (Lv.40 등).</p>
+    <h2>1세대 ↔ 2세대 이어지는 진화</h2>
+    <p class="small" style="font-size:7.4pt">골뱃→크로뱃, 롱스톤→강철톤, 스라크→핫삼, 시드라→킹드라, 폴리곤→폴리곤2, 럭키→해피너스,
+      새끼 포켓몬(피츄·삐·푸푸린·뽀뽀라·에레키드·마그비·배루키)</p>
+  </div>
+  <div class="foot">3 · 성장과 진화</div>
+</div>
+
+<!-- ============================== 15 사탕 ============================== -->
+<div class="page c3">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>3</b>성장과 진화</span><h1>사탕과 사탕 가방</h1></div>
+    <p class="lead">사탕은 포켓몬 <b>계열</b>마다 따로 모여요 (파이리·리자드·리자몽 = 파이리 사탕).</p>
+    <div class="row">
+      <div class="grow">
+        <h2>사탕 얻기</h2>
+        <ul>
+          <li>이미 가진 포켓몬을 잡으면 <span class="k b">보관함 (사탕 1)</span> / <span class="k" style="background:#f06a9a;color:#fff;border-color:#f06a9a">사탕 3개로</span> 선택 (샤이니 +2, Lv.30↑ +1)</li>
+          <li>보관함에서 놓아주기 = 사탕 1</li>
+          <li>훈련 최고 기록 갱신 = 사탕 1</li>
+          <li>체육관 재대전·오늘의 도전·챔피언·탐험 보상</li>
+          <li>야생에서 이기거나 잡으면 5%로 <b>만능 사탕</b></li>
+        </ul>
+      </div>
+      <div class="shot m"><img src="img/09c_battle_dup.png" alt=""><div class="cap">이미 있는 포켓몬</div></div>
+    </div>
+    <h2>사탕 쓰기 (스탯 카드 5쪽)</h2>
+    <table class="t">
+      <tr><th>메뉴</th><th style="width:14%">사탕</th><th>효과</th></tr>
+      <tr><td>경험치 올리기</td><td>3</td><td>EXP 획득</td></tr>
+      <tr><td>기분 기력 포만 +20</td><td>1</td><td>세 게이지 +20</td></tr>
+      <tr><td>능력 편차 올리기</td><td>5</td><td>능력 편차 +2</td></tr>
+      <tr><td>다음 알 샤이니 UP</td><td>10</td><td>다음 알이 색다를 확률 ×4 (보관함 파트너를 골라도 다음 새 알까지 유지)</td></tr>
+      <tr><td>실수 만회 1회</td><td>5</td><td>돌봄 실수 −1 (실수가 있을 때만)</td></tr>
+    </table>
+    <div class="row">
+      <div class="grow">
+        <h2>사탕 가방</h2>
+        <p>5쪽 맨 위 <span class="k" style="background:#d6336c;color:#fff;border-color:#d6336c">사탕 가방 &gt;</span></p>
+        <ul>
+          <li>계열별 사탕 개수 목록</li>
+          <li>다른 계열 사탕 <b>3개 → 지금 계열 1개</b> 교환</li>
+          <li><b>만능 사탕 1개 → 지금 계열 5개</b></li>
+        </ul>
+      </div>
+      <div class="shot s"><img src="img/03j_candy_bag.png" alt=""><div class="cap">사탕 가방</div></div>
+      <div class="shot s"><img src="img/03k_candy_bag_trade.png" alt=""><div class="cap">교환</div></div>
+    </div>
+  </div>
+  <div class="foot">3 · 성장과 진화</div>
+</div>
+
+<!-- ============================== 16 육성 마치기 ============================== -->
+<div class="page c3">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>3</b>성장과 진화</span><h1>육성 마치기와 다음 파트너</h1></div>
+    <h2>세 가지 끝</h2>
+    <table class="t">
+      <tr><th style="width:18%">끝</th><th>언제</th><th style="width:30%">다음은</th></tr>
+      <tr><td>작별</td><td><b>최종 진화 + 3일</b>이 지나면 <span class="k r">작별</span> 버튼 → “작별할까요?” [작별] / [계속 함께]</td><td>다음 알이 샤이니일 확률 UP</td></tr>
+      <tr><td>놓아주기</td><td>기본 화면에서 포켓몬을 <b>3초 누르고 있기</b> → “놓아줄까요?” [예]</td><td>다음 파트너 고르기</td></tr>
+      <tr><td>가출</td><td>게이지 모두 0으로 1시간 (9쪽)</td><td>무작위 알만</td></tr>
+    </table>
+    <div class="row">
+      <div class="grow">
+        <h2>왕관 보관함</h2>
+        <p>작별하거나 놓아준 포켓몬은 <b>왕관 보관함</b>(최대 251)에 기념으로 남아요. 일반 보관함(60칸)과 따로라서 가득 차도 괜찮아요.
+          왕관 포켓몬은 놓아줄 수 없어요. 그 계열은 <b>“키운 계열”</b>이 돼요.</p>
+      </div>
+      <div class="shot m"><img src="img/11b_box_hall.png" alt=""><div class="cap">왕관 탭</div></div>
+    </div>
+    <div class="row">
+      <div class="shot m"><img src="img/11c_next_pick.png" alt=""><div class="cap">다음 파트너 고르기</div></div>
+      <div class="grow">
+        <h2>다음 파트너 고르기</h2>
+        <ul>
+          <li><span class="k o">새 알 (무작위)</span>: <b>아직 안 키운 계열</b>에서만 나와요</li>
+          <li><b>보관함 포켓몬</b>: 진화 전 <b>첫 모습 Lv.1</b>부터 (리자몽 → 파이리). 샤이니·능력 편차는 그대로</li>
+          <li>이미 키운 계열은 회색 (고를 수 없음). 모두 키우면 제한 없음</li>
+          <li>아래로 밀어도 새 알</li>
+        </ul>
+      </div>
+    </div>
+    <div class="tip">도감·보관함·사탕·배지·아이템은 파트너가 바뀌어도 그대로 이어져요.</div>
+  </div>
+  <div class="foot">3 · 성장과 진화</div>
+</div>
+
+<!-- ============================== 17 훈련 1 ============================== -->
+<div class="page c4">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>4</b>훈련</span><h1>훈련 메뉴와 공격 훈련</h1></div>
+    <div class="row">
+      <div class="grow">
+        <p>돌보기 버튼 <img class="ico" src="img/btn_ball.png"> 포켓볼 → <b>훈련 선택</b>. 네 가지 게임으로 능력을 키워요.
+          <span class="arrow">▶</span>를 누르면 배틀 쪽이에요.</p>
+        <table class="t plain">
+          <tr><th>훈련</th><th>오르는 능력</th></tr>
+          <tr><td><b>공격</b>: 빠르게 연타</td><td>공격</td></tr>
+          <tr><td><b>방어</b>: 떨어지는 볼 막기</td><td>방어</td></tr>
+          <tr><td><b>속도</b>: 나타난 볼 터치</td><td>속도</td></tr>
+          <tr><td><b>공놀이</b> (기본)</td><td>기분·기력</td></tr>
+        </table>
+        <div class="warn">게임 도중 그만두려면 화면을 <b>2초 누르고 있기</b>. 훈련 한 번에 기력 −12 (가득 차 있으면 약 8번).</div>
+      </div>
+      <div class="shot l"><img src="img/04_train_menu.png" alt=""><div class="cap">훈련 선택 (최고 기록 표시)</div></div>
+    </div>
+    <h2>공격 훈련 — 샌드백 연속 격파</h2>
+    <div class="row">
+      <div class="shot m"><img src="img/25_sack.png" alt=""><div class="cap">큰 숫자 = 부순 개수</div></div>
+      <div class="grow">
+        <ul>
+          <li>제한 시간 안에 샌드백을 연타해 부수면 다음 샌드백, 못 부수면 끝</li>
+          <li>필요한 타격 6 → 7 → 8 … 늘고, 시간은 4초에서 조금씩 줄어요 (최소 2초)</li>
+          <li><b style="color:#e8503a">빨간 막대</b> = 샌드백 체력, <b style="color:#3fa55b">초록 막대</b> = 남은 시간</li>
+          <li>총 타격 4번 = 공격 +1 (한 번에 최대 +18)</li>
+          <li>최고 기록 = 부순 샌드백 수</li>
+        </ul>
+      </div>
+      <div class="shot m"><img src="img/25b_sack_result.png" alt=""><div class="cap">결과</div></div>
+    </div>
+  </div>
+  <div class="foot">4 · 훈련</div>
+</div>
+
+<!-- ============================== 18 훈련 2 ============================== -->
+<div class="page c4">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>4</b>훈련</span><h1>방어·속도·공놀이</h1></div>
+    <div class="row">
+      <div class="shot s"><img src="img/05_train_defense.png" alt=""><div class="cap">방어</div></div>
+      <div class="grow">
+        <h3 style="margin-top:0">방어 — 떨어지는 볼 막기</h3>
+        <p>떨어지는 볼을 눌러 막아요. <b>3번 놓치면 끝</b>이고, 갈수록 빨라지고 자주 떨어져요. 막은 볼 2개 = 방어 +1 (최대 +18).</p>
+      </div>
+    </div>
+    <div class="row">
+      <div class="shot s"><img src="img/07_train_speed.png" alt=""><div class="cap">속도</div></div>
+      <div class="grow">
+        <h3 style="margin-top:0">속도 — 반응속도</h3>
+        <p>시계 방향 8곳 중 한 곳에 볼이 나타나면 재빨리 터치! 15라운드, <b>빨리 누를수록 점수</b>
+          (0.25초 = 75점, 최대 1500점). 결과에 “맞힘 15/15 평균 0.30초”. 맞힌 횟수만큼 속도 UP.</p>
+      </div>
+    </div>
+    <div class="row">
+      <div class="shot s"><img src="img/26b_ball_game_3balls.png" alt=""><div class="cap">공놀이</div></div>
+      <div class="grow">
+        <h3 style="margin-top:0">공놀이 — 기본 놀이</h3>
+        <p>공 3개가 동시에 떨어져요. 손가락을 <b>대는 순간</b> 공을 쳐요. 땅에 닿으면 기회 −1 (3번), 30초.
+          최고 기록을 넘으면 기분+기력, 못 넘어도 1번 이상 치면 기력 +5.</p>
+      </div>
+    </div>
+    <h2>훈련 보상 (공격·방어·속도)</h2>
+    <table class="t">
+      <tr><th>결과</th><th>보상</th></tr>
+      <tr><td>1점 이상</td><td>능력 <b>최소 +3</b> (최대 100) · EXP 다음 레벨의 5% · 기분 +6</td></tr>
+      <tr><td>최고 기록 갱신</td><td>EXP <b>20%</b> + <b>키우는 계열 사탕 1개</b> + “신기록!”</td></tr>
+    </table>
+    <div class="shots even">
+      <div class="shot s"><img src="img/06_train_defense_result.png" alt=""><div class="cap">방어 결과</div></div>
+      <div class="shot s"><img src="img/07b_train_speed_result.png" alt=""><div class="cap">속도 결과</div></div>
+    </div>
+    <div class="tip">결과 화면 아래 초록 글씨가 받은 보상이에요. Lv.100이면 사탕만 받아요.</div>
+  </div>
+  <div class="foot">4 · 훈련</div>
+</div>
+
+<!-- ============================== 19 야생 배틀: 지역 ============================== -->
+<div class="page c5">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>5</b>배틀</span><h1>야생 배틀 — 어디로 갈까?</h1></div>
+    <div class="row">
+      <div class="grow">
+        <p>포켓볼 버튼 → <span class="arrow">▶</span> 배틀 쪽 → <span class="k g">야생 배틀</span>. 지역을 고르면 그 지역 포켓몬이 나타나요.
+          한 쪽에 8곳씩 2쪽 (옆으로 넘기기). <b style="color:#f08a24">주황 테두리</b> = 내 포켓몬 속성의 지역.</p>
+        <table class="t plain" style="font-size:7pt">
+          <tr><th>지역 (속성)</th><th>지역 (속성)</th></tr>
+          <tr><td>초원 (노말)</td><td>늪 (독)</td></tr>
+          <tr><td>바닷가 (물)</td><td>사막 (땅) <span class="small">배지 7</span></td></tr>
+          <tr><td>숲 (풀)</td><td>유적 (에스퍼) <span class="small">배지 5</span></td></tr>
+          <tr><td>화산 (불꽃) <span class="small">배지 6</span></td><td>꽃밭 (벌레)</td></tr>
+          <tr><td>산 (바위)</td><td>묘지 (고스트) <span class="small">배지 2</span></td></tr>
+          <tr><td>설원 (얼음) <span class="small">배지 3</span></td><td>용의 계곡 (드래곤) <span class="small">배지 8</span></td></tr>
+          <tr><td>발전소 (전기)</td><td>도시 (악)</td></tr>
+          <tr><td>도장 (격투) <span class="small">배지 1</span></td><td>광산 (강철) <span class="small">배지 4</span></td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="shot m"><img src="img/44_region_pick.png" alt=""><div class="cap">1쪽</div></div>
+        <div class="shot m" style="margin-top:2mm"><img src="img/44b_region_pick2.png" alt=""><div class="cap">2쪽 (잠긴 곳 = 회색)</div></div>
+      </div>
+    </div>
+    <h2>지역 열기</h2>
+    <p>처음엔 <b>8곳</b>이 열려 있어요. 체육관 배지를 하나 딸 때마다 한 곳씩 열려요:
+      <b>도장 → 묘지 → 설원 → 광산 → 유적 → 화산 → 사막 → 용의 계곡</b>. 내 포켓몬 속성의 지역은 언제나 열려 있어요.</p>
+    <div class="shots even">
+      <div class="shot s"><img src="img/45_wild_power_plant_pikachu.png" alt=""><div class="cap">발전소의 피카츄</div></div>
+      <div class="shot s"><img src="img/46_wild_rare_raikou.png" alt=""><div class="cap">레어! 라이코</div></div>
+      <div class="shot s"><img src="img/09b_battle_next.png" alt=""><div class="cap">계속 만나기</div></div>
+    </div>
+    <div class="note">배틀이 끝나면 “다른 포켓몬을 계속 만날까요?” <span class="k g">계속 만나기</span> / <span class="k">나가기</span> (15초 뒤 자동으로 나가기).</div>
+  </div>
+  <div class="foot">5 · 배틀</div>
+</div>
+
+<!-- ============================== 20 배틀 조작 ============================== -->
+<div class="page c5">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>5</b>배틀</span><h1>배틀 화면과 포획</h1></div>
+    <div class="row">
+      <div class="shot l"><img src="img/08_battle_menu.png" alt=""><div class="cap">“파이리는 무엇을 할까?”</div></div>
+      <div class="grow">
+        <table class="t plain">
+          <tr><th>버튼</th><th>하는 일</th></tr>
+          <tr><td><span class="k">몸통박치기</span></td><td>기본 공격</td></tr>
+          <tr><td><span class="k r">속성 기술</span></td><td>내 속성 기술 (진화하면 더 강한 기술)</td></tr>
+          <tr><td><span class="k b">방어</span></td><td>이번 공격을 막아요</td></tr>
+          <tr><td><span class="k g">물약 N</span></td><td>체력 절반 회복</td></tr>
+          <tr><td><span class="k r">볼 N</span></td><td>포켓볼 던지기 (야생만)</td></tr>
+          <tr><td><span class="k">도망</span></td><td>배틀에서 빠져나가기 (야생만)</td></tr>
+        </table>
+      </div>
+    </div>
+    <h2>포켓몬 잡기</h2>
+    <p>상대 체력이 적을수록 잘 잡혀요. 체력 가득 <b>약 20%</b> → 거의 쓰러짐 <b>약 85%</b>. 희귀 포켓몬은 조금, 전설은 훨씬 어려워요.
+      잡은 포켓몬은 <b>보관함</b>으로 가요 (최대 60).</p>
+    <div class="shots even">
+      <div class="shot s"><img src="img/09_battle_caught.png" alt=""><div class="cap">잡았다!</div></div>
+      <div class="shot s"><img src="img/09a_battle_win_items.png" alt=""><div class="cap">승리 보상</div></div>
+      <div class="shot s"><img src="img/08b_battle_owned.png" alt=""><div class="cap">“보관함에 N마리”</div></div>
+    </div>
+    <h2>이기면</h2>
+    <ul>
+      <li><b>EXP</b> + 공격·방어·속도 조금 상승</li>
+      <li>포켓볼 <b>40%</b>, 물약 <b>35%</b> 확률로 1개씩 (최대 볼 20, 물약 15)</li>
+      <li><b>5%</b> 확률로 만능 사탕, <b>20%</b> 확률로 그 포켓몬이 보관함에 합류</li>
+      <li>져도 불이익은 없어요!</li>
+    </ul>
+    <div class="tip">야생 포켓몬은 내 포켓몬 강함의 90~105%로 나와서 늘 해볼 만한 상대예요. 이미 보관함에 있는 포켓몬이면 5초간 “보관함에 N마리”라고 알려 줘요.</div>
+  </div>
+  <div class="foot">5 · 배틀</div>
+</div>
+
+<!-- ============================== 21 출현과 레어 ============================== -->
+<div class="page c5">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>5</b>배틀</span><h1>누가 나올까? 출현 규칙</h1></div>
+    <h2>출현 순서</h2>
+    <ol class="steps">
+      <li><b>레어</b>: 조건이 맞을 때만 (전설 0.5%·Lv.40부터·도감 25마리 이상 / 희귀 1%). 금빛 반짝이와 특별 효과음!</li>
+      <li><b>시간대</b> 20%: 새벽(6~10시)·밤(20~6시)에만 나오는 포켓몬</li>
+      <li><b>지역 속성</b> 50%: 그 지역 속성의 포켓몬</li>
+      <li><b>공통</b>: 구구, 꼬렛, 깨비참, 꼬리선, 캐터피, 뿔충이, 나옹, 두두</li>
+    </ol>
+    <p class="small">새 포켓몬이 더 자주 나와요: 이미 본 포켓몬은 45%만 그대로 나오고 다시 뽑아요.</p>
+    <h2>전설·레어 포켓몬을 만나려면</h2>
+    <table class="t">
+      <tr><th>포켓몬</th><th>조건</th><th>포켓몬</th><th>조건</th></tr>
+      <tr><td>라이코</td><td>발전소 + 비</td><td>썬더</td><td>발전소 + 낮</td></tr>
+      <tr><td>앤테이</td><td>화산 + 여름 햇볕</td><td>파이어</td><td>화산 + 여름</td></tr>
+      <tr><td>스이쿤</td><td>바닷가 + 비</td><td>루기아</td><td>바닷가 + 밤</td></tr>
+      <tr><td>프리져</td><td>설원 + 눈</td><td>칠색조</td><td>여름 햇볕 + 새벽</td></tr>
+      <tr><td>세레비</td><td>숲 + 벚꽃</td><td>뮤</td><td>유적 + 밤</td></tr>
+      <tr><td>뮤츠</td><td>광산 + 밤</td><td colspan="2" style="font-weight:400">희귀 1%: 라프라스·잠만보·럭키·스라크·헤라크로스·애버라스·무장조 등</td></tr>
+    </table>
+    <div class="row mid">
+      <div class="grow">
+        <h2>기본 화면의 야생 알림</h2>
+        <p>가끔 기본 화면에 야생 포켓몬이 나타나요. <b>30초 안에</b> 누르면 내 포켓몬 속성의 지역에서 바로 배틀!</p>
+        <div class="note">날씨와 계절은 WiFi로 받은 날짜를 따라요. 시계가 맞지 않으면 늘 맑음이라 비·눈 조건 포켓몬이 나오지 않아요.</div>
+      </div>
+      <div class="shot m"><img src="img/53_region_locked.png" alt=""><div class="cap">잠긴 지역 (배지 필요)</div></div>
+    </div>
+  </div>
+  <div class="foot">5 · 배틀</div>
+</div>
+
+<!-- ============================== 22 이벤트·날씨·기술 ============================== -->
+<div class="page c5">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>5</b>배틀</span><h1>이벤트 · 날씨 · 기술</h1></div>
+    <div class="row">
+      <div class="grow">
+        <h2>요일 이벤트</h2>
+        <p>지역 선택 화면 위에 오늘의 이벤트가 보여요.</p>
+        <table class="t plain">
+          <tr><th>요일</th><th>이벤트</th></tr>
+          <tr><td>월</td><td>물 포켓몬이 자주 (4마리 중 1마리)</td></tr>
+          <tr><td>화</td><td>불꽃 포켓몬이 자주</td></tr>
+          <tr><td>수</td><td>풀 포켓몬이 자주</td></tr>
+          <tr><td>목</td><td>전기 포켓몬이 자주</td></tr>
+          <tr><td>금</td><td>에스퍼 포켓몬이 자주</td></tr>
+          <tr><td>토·일</td><td>색이 다른(샤이니) 포켓몬 <b>2배</b></td></tr>
+          <tr><td>보름달 밤</td><td>(20~6시) 전설 포켓몬 <b>3배</b></td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="shot m"><img src="img/44c_region_event.png" alt=""><div class="cap">요일 이벤트</div></div>
+        <div class="shot m" style="margin-top:1.5mm"><img src="img/44d_region_moon.png" alt=""><div class="cap">보름달 밤</div></div>
+      </div>
+    </div>
+    <h2>날씨가 배틀에 주는 영향</h2>
+    <div class="row">
+      <div class="shot xs"><img src="img/41_battle_rain.png" alt=""><div class="cap">비</div></div>
+      <div class="shot xs"><img src="img/41_battle_sunny.png" alt=""><div class="cap">햇볕</div></div>
+      <div class="shot xs"><img src="img/41_battle_snow.png" alt=""><div class="cap">눈</div></div>
+      <div class="grow">
+        <ul style="margin-top:1mm">
+          <li><b>비</b>: 물 ×1.5, 불꽃 ×0.5</li>
+          <li><b>햇볕</b>: 불꽃 ×1.5, 물 ×0.5</li>
+          <li><b>눈</b>: 얼음 ×1.5</li>
+          <li class="small">통신 대전은 날씨 영향 없음</li>
+        </ul>
+      </div>
+    </div>
+    <h2>기술과 이펙트</h2>
+    <div class="row">
+      <div class="grow">
+        <p>기술은 진화 단계에 따라 <b>기본 → 중간 → 최종</b>으로 바뀌어요 (예: 물대포 → 물의파동 → 하이드로펌프).
+          속성마다 불씨·물보라·덩굴채찍·번개·냉동빔 같은 이펙트가 있고, 최종 기술은 광선과 큰 폭발로 화면이 흔들려요.
+          <b>급소</b>면 화면이 흔들리고, <b>효과가 굉장했다</b>면 흰 충격파가 퍼져요.</p>
+      </div>
+      <div class="shot xs"><img src="img/fx_01_520.png" alt=""><div class="cap">불꽃</div></div>
+      <div class="shot xs"><img src="img/fx_05_520.png" alt=""><div class="cap">전기</div></div>
+      <div class="shot xs"><img src="img/tier_04_2_520.png" alt=""><div class="cap">최종 기술</div></div>
+    </div>
+  </div>
+  <div class="foot">5 · 배틀</div>
+</div>
+
+<!-- ============================== 23 체육관 ============================== -->
+<div class="page c5">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>5</b>배틀</span><h1>체육관 배지 8개</h1></div>
+    <p class="lead">배틀 쪽 <span class="k r">체육관 N/8</span>. 관장을 순서대로 이기고 배지를 모아요. 배지를 따면 새 지역이 열려요.</p>
+    <div class="row">
+      <div class="grow">
+        <table class="t">
+          <tr><th>#</th><th>관장</th><th>체육관</th><th>포켓몬</th></tr>
+          <tr><td>1</td><td>웅</td><td>산</td><td>바위</td></tr>
+          <tr><td>2</td><td>이슬</td><td>바닷가</td><td>물</td></tr>
+          <tr><td>3</td><td>마티스</td><td>발전소</td><td>전기</td></tr>
+          <tr><td>4</td><td>민화</td><td>숲</td><td>풀</td></tr>
+          <tr><td>5</td><td>독수</td><td>늪</td><td>독</td></tr>
+          <tr><td>6</td><td>초련</td><td>유적</td><td>에스퍼</td></tr>
+          <tr><td>7</td><td>강연</td><td>화산</td><td>불꽃</td></tr>
+          <tr><td>8</td><td>비주기</td><td>사막</td><td>땅</td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="shot m"><img src="img/50_gyms_p1.png" alt=""><div class="cap">체육관 목록</div></div>
+        <div class="shot m" style="margin-top:1.5mm"><img src="img/56_gym_badge.png" alt=""><div class="cap">배지 획득!</div></div>
+      </div>
+    </div>
+    <ul>
+      <li>관장 포켓몬 <b>2~3마리 연속</b>. 뒤로 갈수록 강해요 (마지막 관장 Lv.50)</li>
+      <li>체육관에서는 <b>도망과 포켓볼을 쓸 수 없어요</b></li>
+      <li>이기면 배지 + 지역 1곳 열림. 져도 배지는 사라지지 않아요</li>
+    </ul>
+    <h2>체육관 재대전</h2>
+    <div class="row">
+      <div class="grow">
+        <p>배지를 딴 체육관은 다시 도전할 수 있어요. 그 속성의 포켓몬 <b>무작위 3~4마리</b>(전설 제외), 레벨은 <b>내 레벨 −1~+2</b>.</p>
+        <p>체육관마다 <b>하루 1번</b> 사탕 +2 · 볼 +1 · 물약 +1. 목록에 “재대전 N승 (오늘 보상 있음/받음)”.</p>
+      </div>
+      <div class="shot s"><img src="img/57_gyms_rematch.png" alt=""><div class="cap">재대전 목록</div></div>
+    </div>
+  </div>
+  <div class="foot">5 · 배틀</div>
+</div>
+
+<!-- ============================== 24 리그·전당·도전 ============================== -->
+<div class="page c5">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>5</b>배틀</span><h1>챔피언 리그와 오늘의 도전</h1></div>
+    <div class="row">
+      <div class="grow">
+        <h2>챔피언 리그</h2>
+        <p>체육관 목록 <b>3쪽</b>, 배지 8개부터 <span class="k y">챔피언 도전!</span></p>
+        <ul>
+          <li>서로 다른 속성의 <b>최종 진화 6마리</b>, 내 레벨 +2~+6</li>
+          <li>이기면 <b>사탕 +10 · 볼 +3 · 물약 +3</b> + 명예의 전당</li>
+          <li><b>연승</b>: 이기면 +1, 지면 0 (배지는 그대로). “연승 N (최고 M연승)”</li>
+        </ul>
+      </div>
+      <div class="shot m"><img src="img/59_league_fame.png" alt=""><div class="cap">챔피언 쪽</div></div>
+    </div>
+    <div class="shots even">
+      <div class="shot s"><img src="img/59b_league_intro.png" alt=""><div class="cap">6마리를 이겨라!</div></div>
+      <div class="shot s"><img src="img/59c_league_win.png" alt=""><div class="cap">우승!</div></div>
+      <div class="shot s"><img src="img/59d_fame_grid.png" alt=""><div class="cap">명예의 전당 목록</div></div>
+      <div class="shot s"><img src="img/59e_fame_detail.png" alt=""><div class="cap">왕관 쓴 챔피언</div></div>
+    </div>
+    <h2>명예의 전당</h2>
+    <p>우승한 포켓몬의 이름·레벨·날짜·능력 편차가 기록돼요 (최대 60, 왕관 보관함과 따로).
+      <span class="k p">명예의 전당 (N)</span> → 3×3 목록(최신 순) → 누르면 <b>큰 그림 + 왕관</b>, “N번째 챔피언 N연승”. 좌우로 쪽 넘기기.</p>
+    <div class="row">
+      <div class="shot s"><img src="img/51_daily.png" alt=""><div class="cap">오늘의 도전</div></div>
+      <div class="grow">
+        <h2>오늘의 도전</h2>
+        <p>배틀 쪽 <span class="k p">오늘의 도전</span>. 날짜마다 지역 1곳과 상대 3마리가 정해져요 (하루 동안 같음).
+          <b>3연승</b>하면 하루 1번 <b>볼 +2 · 물약 +2 · 사탕 +3</b>.</p>
+      </div>
+    </div>
+    <div class="note">체육관·챔피언·명예의 전당 화면에서는 전용 배경음이 나와요 (SD카드에 파일이 있을 때, 32쪽).</div>
+  </div>
+  <div class="foot">5 · 배틀</div>
+</div>
+
+<!-- ============================== 25 보관함 ============================== -->
+<div class="page c6">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>6</b>모으기</span><h1>보관함</h1></div>
+    <p class="lead">잡거나 합류한 포켓몬이 모이는 곳. 스탯 카드 2쪽 <span class="k y">보관함 N</span>.</p>
+    <div class="row">
+      <div class="shot l"><img src="img/10_box.png" alt=""><div class="cap">보관함 목록</div></div>
+      <div class="grow">
+        <ul>
+          <li>최대 <b>60마리</b>, 한 쪽에 5마리 (<span class="k">&lt;</span> <span class="k">&gt;</span> 로 넘기기)</li>
+          <li>같은 포켓몬은 <b>모아서 같은 색 + x2</b></li>
+          <li>포켓볼 표시 = 잡은 포켓몬, “승리” = 이겨서 합류</li>
+          <li>* 표시 = 색이 다른(샤이니) 포켓몬</li>
+          <li>위쪽 탭: <span class="k o">보관함 n/60</span> / <span class="k">왕관 n</span></li>
+          <li>포켓몬을 누르면 상세 화면 + <b>울음소리</b></li>
+        </ul>
+      </div>
+    </div>
+    <div class="row" style="margin-top:2mm">
+      <div class="grow">
+        <h2>상세 화면</h2>
+        <p>도감 번호·레벨·타입·어떻게 들어왔는지. 아래 버튼 3개:</p>
+        <ul>
+          <li><span class="k r">놓아주기</span> — 보내 주고 <b>사탕 1개</b></li>
+          <li><span class="k g">탐험</span> — 탐험 보내기 (26쪽)</li>
+          <li><span class="k">닫기</span></li>
+        </ul>
+        <p class="small">“다음 육성 포켓몬은 여기서 나와요” — 육성을 마치면 보관함 포켓몬을 다음 파트너로 고를 수 있어요 (16쪽).</p>
+      </div>
+      <div class="shot m"><img src="img/11_box_detail.png" alt=""><div class="cap">상세</div></div>
+    </div>
+    <div class="tip">보관함이 가득 차면 새로 잡은 포켓몬이 들어가지 못해요. 겹치는 포켓몬은 놓아주고 사탕으로 바꿔 두세요.</div>
+  </div>
+  <div class="foot">6 · 모으기</div>
+</div>
+
+<!-- ============================== 26 탐험 ============================== -->
+<div class="page c6">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>6</b>모으기</span><h1>탐험 보내기</h1></div>
+    <p class="lead">보관함 포켓몬을 고향 지역으로 탐험 보내 선물을 받아 와요.</p>
+    <div class="shots even">
+      <div class="shot m"><img src="img/11e_exp_pick.png" alt=""><div class="cap"><b>① 시간 고르기</b><br>2 · 4 · 8시간</div></div>
+      <div class="shot m"><img src="img/11f_exp_away.png" alt=""><div class="cap"><b>② 탐험 중</b><br>아래 줄에 남은 시간</div></div>
+      <div class="shot m"><img src="img/11h_exp_result.png" alt=""><div class="cap"><b>③ 귀환!</b><br>눌러서 받기</div></div>
+    </div>
+    <ol class="steps">
+      <li>보관함 → 포켓몬 → <span class="k g">탐험</span> → <span class="k g">2시간</span> <span class="k g">4시간</span> <span class="k g">8시간</span></li>
+      <li>한 번에 <b>1마리</b>만. 탐험 중에는 보관함에서 빠져요 (“탐험 중: 이름 4:00 남음”)</li>
+      <li>돌아오면 기본 화면에 알림, 보관함 아래 <b>초록 줄 “귀환! 눌러서 받기”</b></li>
+    </ol>
+    <h2>받는 선물</h2>
+    <table class="t">
+      <tr><th>선물</th><th>2시간</th><th>4시간</th><th>8시간</th></tr>
+      <tr><td>그 포켓몬 사탕</td><td>3</td><td>6</td><td>12</td></tr>
+      <tr><td>만능 사탕</td><td>3%</td><td>10%</td><td>30%</td></tr>
+      <tr><td>새 포켓몬 (그 지역)</td><td>10%</td><td>20%</td><td>40%</td></tr>
+      <tr><td>포켓볼</td><td>1</td><td>2</td><td>4</td></tr>
+      <tr><td>물약</td><td>1</td><td>1</td><td>2</td></tr>
+    </table>
+    <p class="small">Lv.30 이상인 포켓몬은 사탕을 더 가져와요 (+1 · +2 · +4).</p>
+    <div class="tip">자기 전에 8시간 탐험을 보내 두면 아침에 선물이 기다리고 있어요.</div>
+  </div>
+  <div class="foot">6 · 모으기</div>
+</div>
+
+<!-- ============================== 27 도감 ============================== -->
+<div class="page c6">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>6</b>모으기</span><h1>도감 251과 도감 보상</h1></div>
+    <div class="row">
+      <div class="grow">
+        <p>기본 화면 <span class="arrow">◀</span>. 1세대와 2세대를 합친 <b>251마리</b>, 16쪽 (2세대는 11쪽부터, 아래 점이 주황색).</p>
+        <ul>
+          <li><b>검은 실루엣</b> = 아직 못 만난 포켓몬</li>
+          <li>누르면 <b>상세</b>: 타입, 종족값, 진화, 처음 발견한 날, 만남·포획 수 + 울음소리</li>
+          <li>제목 아래 “잡음 N/251 다음 보상 M종”</li>
+          <li><b>두 번 탭</b> 또는 <span class="arrow">▼</span>로 나가기</li>
+        </ul>
+      </div>
+      <div class="shot l"><img src="img/12_dex_grid.png" alt=""><div class="cap">도감</div></div>
+    </div>
+    <div class="shots even">
+      <div class="shot s"><img src="img/13_dex_detail.png" alt=""><div class="cap">상세</div></div>
+      <div class="shot s"><img src="img/14_dex_unknown.png" alt=""><div class="cap">못 만난 포켓몬</div></div>
+      <div class="shot s"><img src="img/30_dex_gen2_grid.png" alt=""><div class="cap">2세대 쪽</div></div>
+      <div class="shot s"><img src="img/01b_main_dex_reward.png" alt=""><div class="cap">보상 알림</div></div>
+    </div>
+    <h2>도감 보상 (잡거나 키운 종 수)</h2>
+    <table class="t">
+      <tr><th>종 수</th><th>보상</th><th>종 수</th><th>보상</th></tr>
+      <tr><td>10종</td><td>볼 +5</td><td>151종</td><td>만능 사탕 +5 · 샤이니 부적</td></tr>
+      <tr><td>30종</td><td>물약 +5</td><td>200종</td><td>만능 사탕 +5</td></tr>
+      <tr><td>50종</td><td>만능 사탕 +1</td><td>251종</td><td>만능 사탕 +10 · 샤이니 부적</td></tr>
+      <tr><td>100종</td><td>만능 사탕 +3</td><td></td><td></td></tr>
+    </table>
+    <div class="note">보상은 기본 화면에서 3초마다 하나씩 알림 띠로 받아요. 전설 포켓몬(라이코·앤테이·스이쿤·루기아·칠색조·세레비)은 도감 25마리 이상부터 나와요.</div>
+  </div>
+  <div class="foot">6 · 모으기</div>
+</div>
+
+<!-- ============================== 28 날씨·배경 ============================== -->
+<div class="page c7">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>7</b>세계와 통신</span><h1>날씨 · 계절 · 배경</h1></div>
+    <div class="shots even">
+      <div class="shot xs"><img src="img/43_main_rain.png" alt=""><div class="cap"><b>비</b><br>봄·여름·가을</div></div>
+      <div class="shot xs"><img src="img/43_main_snow.png" alt=""><div class="cap"><b>눈</b><br>12~2월</div></div>
+      <div class="shot xs"><img src="img/43_main_sunny.png" alt=""><div class="cap"><b>햇볕</b><br>6~8월 맑은 낮</div></div>
+      <div class="shot xs"><img src="img/43_main_blossom.png" alt=""><div class="cap"><b>벚꽃</b><br>3~5월</div></div>
+      <div class="shot xs"><img src="img/43_main_leaves.png" alt=""><div class="cap"><b>낙엽</b><br>9~11월</div></div>
+    </div>
+    <p>날씨는 <b>5분마다</b> 계절에 맞는 확률로 바뀌어요. 배경은 시간에 따라 <b>새벽·낮·노을·밤</b>으로 물들어요.
+      기본 화면은 <b>내 포켓몬 속성</b>의 장소, 야생 배틀은 <b>고른 지역</b>이 배경이에요.</p>
+    <h2>배경 16곳</h2>
+    <div class="grid3" style="grid-template-columns:repeat(4,1fr);gap:1.4mm">
+      <div class="bio"><img src="img/bio00.png"><span>초원 · 노말</span></div>
+      <div class="bio"><img src="img/bio01.png"><span>바닷가 · 물</span></div>
+      <div class="bio"><img src="img/bio02.png"><span>숲 · 풀</span></div>
+      <div class="bio"><img src="img/bio03.png"><span>화산 · 불꽃</span></div>
+      <div class="bio"><img src="img/bio04.png"><span>산 · 바위</span></div>
+      <div class="bio"><img src="img/bio05.png"><span>설원 · 얼음</span></div>
+      <div class="bio"><img src="img/bio06.png"><span>발전소 · 전기</span></div>
+      <div class="bio"><img src="img/bio07.png"><span>도장 · 격투</span></div>
+      <div class="bio"><img src="img/bio08.png"><span>늪 · 독</span></div>
+      <div class="bio"><img src="img/bio09.png"><span>사막 · 땅</span></div>
+      <div class="bio"><img src="img/bio10.png"><span>유적 · 에스퍼</span></div>
+      <div class="bio"><img src="img/bio11.png"><span>꽃밭 · 벌레</span></div>
+      <div class="bio"><img src="img/bio12.png"><span>묘지 · 고스트</span></div>
+      <div class="bio"><img src="img/bio13.png"><span>용의 계곡 · 드래곤</span></div>
+      <div class="bio"><img src="img/bio14.png"><span>도시 · 악</span></div>
+      <div class="bio"><img src="img/bio15.png"><span>광산 · 강철</span></div>
+    </div>
+    <div class="row mid" style="margin-top:2.4mm">
+      <div class="shot xs"><img src="img/43_main_night_clear.png" alt=""><div class="cap">밤</div></div>
+      <div class="grow">
+        <div class="note" style="margin:0">날씨·계절은 <b>WiFi로 맞춘 날짜</b>를 따라요. 큰 시계 위에 “2026.09.25 (금)”처럼 날짜가 보이면 준비 완료.
+          시계가 맞지 않으면 늘 맑음이에요.</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">7 · 세계와 통신</div>
+</div>
+
+<!-- ============================== 29 통신 ============================== -->
+<div class="page c7">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>7</b>세계와 통신</span><h1>통신 대전과 교환</h1></div>
+    <p class="lead">다마포케 두 대가 가까이 있으면 WiFi 공유기 없이 직접 연결돼요 (ESP-NOW).</p>
+    <div class="row">
+      <div class="grow">
+        <ol class="steps">
+          <li>두 기기 모두 배틀 쪽 <span class="k b">통신 2인</span> (또는 스탯 카드 2쪽)</li>
+          <li>둘 다 같은 메뉴를 눌러요: <span class="k r">대전</span> 또는 <span class="k b">교환</span></li>
+          <li>서로를 찾으면 자동으로 연결돼요</li>
+        </ol>
+        <p class="small">“다른 기기도 통신을 여세요” — 상대가 같은 화면을 열 때까지 기다려요. 위쪽 탭 = 닫기.</p>
+      </div>
+      <div class="shot l"><img src="img/24_link_menu.png" alt=""><div class="cap">통신</div></div>
+    </div>
+    <div class="grid2" style="margin-top:2mm">
+      <div class="box tint">
+        <h3 style="margin-top:0">대전</h3>
+        지금 키우는 포켓몬끼리 자동으로 싸워요. 두 기기가 같은 배틀을 똑같이 계산해서 보여 줘요.
+        이기면 EXP (야생의 절반). 날씨 영향은 없어요.
+      </div>
+      <div class="box tint">
+        <h3 style="margin-top:0">교환</h3>
+        지금 키우는 포켓몬을 서로 바꿔요. 양쪽이 모두 확인해야 바뀌어요.
+        이름·능력 편차·훈련 기록·샤이니가 그대로 가요. 교환 진화 포켓몬은 여기서 진화할 수 있어요.
+      </div>
+    </div>
+    <h2>통신으로 시간 받기</h2>
+    <p>배터리가 다 되어 시계가 초기화되었을 때, <b>시간이 맞는 친구 기기와 통신</b>하면 시간을 자동으로 받아 와요.</p>
+    <div class="warn">통신은 <b>두 기기의 펌웨어가 같은 통신 형식</b>이어야 돼요 (ko10.4 이상끼리). 되도록 같은 버전으로 맞춰 주세요.</div>
+    <p class="small">배틀 쪽 아래 “야생승 N 통신 N/N 교환 N”에 기록이 쌓여요.</p>
+  </div>
+  <div class="foot">7 · 세계와 통신</div>
+</div>
+
+<!-- ============================== 30 설정 ============================== -->
+<div class="page c8">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>8</b>설정과 관리</span><h1>시간 · 소리 · 언어</h1></div>
+    <div class="row">
+      <div class="grow">
+        <h2>시간 설정 화면</h2>
+        <p>기본 화면 <span class="arrow">▶</span>. 나갈 땐 <span class="arrow">◀</span> (시간은 바뀌지 않아요).</p>
+        <ul>
+          <li><span class="k">-</span> <span class="k">+</span> 로 시·분, <span class="k g">OK</span>로 저장</li>
+          <li>위쪽 <b>날짜 버튼</b>을 누르면 월·일 맞추기</li>
+          <li><span class="k g">소리 켬</span> 소리 설정 · <span class="k b">WiFi</span> 네트워크 · <span class="k">KO &gt;</span> 언어</li>
+          <li><span class="k r">새로 시작</span> 처음부터 (아래)</li>
+          <li>맨 아래 <b>펌웨어 버전</b>. 옆의 <b style="color:#2f9e5a">초록 점 ●</b> = 새 저장 공간 배치(ko11.6)가 적용된 기기</li>
+        </ul>
+      </div>
+      <div>
+        <div class="shot m"><img src="img/15_clock_settings.png" alt=""><div class="cap">시간 설정</div></div>
+        <div class="shot m" style="margin-top:1.5mm"><img src="img/15b_clock_date.png" alt=""><div class="cap">날짜 맞추기</div></div>
+      </div>
+    </div>
+    <div class="note">직접 맞춘 시간도 꺼져 있던 시간을 반영해요 (배터리를 뺐다 끼운 뒤 등, 최대 2주).</div>
+    <div class="row">
+      <div class="shot m"><img src="img/16_sound.png" alt=""><div class="cap">소리 설정</div></div>
+      <div class="grow">
+        <h2>소리 설정</h2>
+        <ul>
+          <li><span class="k g">소리 켜짐</span> 전체 켜기/끄기</li>
+          <li><b>배경음 · 포켓몬 목소리 · 시스템</b> 음량을 따로</li>
+          <li>배경음(bgm.wav) 길이 표시 — 0분 30초면 파일이 잘린 것</li>
+        </ul>
+        <h2>언어</h2>
+        <p><span class="k">KO &gt;</span>를 누를 때마다 한국어 · English · Español · Français · Deutsch · Italiano · Português · 日本語.</p>
+      </div>
+    </div>
+    <h2>새로 시작 (초기화)</h2>
+    <div class="row mid">
+      <div class="grow">
+        <p>시간 설정 → <span class="k r">새로 시작</span> → 빨간 버튼을 <b>3초 동안 누르고 있기</b>.
+          포켓몬·도감·보관함·메달·기록·아이템이 <b>모두 지워지고</b> 스타터 고르기부터 다시 시작해요.
+          WiFi·소리·언어 설정과 SD카드 파일은 남아요.</p>
+      </div>
+      <div class="shot s"><img src="img/23_reset.png" alt=""><div class="cap">새로 시작</div></div>
+    </div>
+  </div>
+  <div class="foot">8 · 설정과 관리</div>
+</div>
+
+<!-- ============================== 31 네트워크 ============================== -->
+<div class="page c8">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>8</b>설정과 관리</span><h1>WiFi와 네트워크</h1></div>
+    <p class="lead">WiFi는 <b>시간을 맞추는 데</b>만 써요. 시간이 맞아야 날짜·요일 이벤트·날씨·계절이 제대로 움직여요.</p>
+    <div class="row">
+      <div class="shot l"><img src="img/18_net.png" alt=""><div class="cap">네트워크 (시간 설정 → WiFi)</div></div>
+      <div class="grow">
+        <table class="t plain" style="font-size:7.1pt">
+          <tr><th>버튼</th><th>하는 일</th></tr>
+          <tr><td>시간대 <span class="k">-</span><span class="k">+</span></td><td>한국은 UTC+9:00</td></tr>
+          <tr><td><span class="k g">지금 시간 맞추기</span></td><td>저장된 WiFi로 바로 맞춤</td></tr>
+          <tr><td><span class="k b">WiFi 설정하기</span></td><td>휴대폰으로 WiFi 등록 (아래)</td></tr>
+          <tr><td><span class="k">자동 켬</span></td><td>켤 때 + 하루 1번 자동으로 맞춤</td></tr>
+          <tr><td><span class="k">개방 WiFi 켬</span></td><td>비밀번호 없는 WiFi로도 시간만 받기</td></tr>
+          <tr><td><span class="k o">SD 업데이트</span></td><td>펌웨어 업데이트 (33쪽)</td></tr>
+          <tr><td><span class="k" style="background:#666;color:#fff;border-color:#666">세이브 백업</span></td><td>SD카드 백업·복원 (32쪽)</td></tr>
+        </table>
+      </div>
+    </div>
+    <h2>WiFi 등록하기 (QR)</h2>
+    <div class="row">
+      <div class="grow">
+        <ol class="steps">
+          <li><span class="k b">WiFi 설정하기</span>를 누르면 큰 <b>QR코드</b>가 나와요</li>
+          <li>휴대폰 카메라로 QR을 찍으면 <b>TamaPoke-XXXX</b> WiFi에 바로 연결 (비밀번호 tamapoke)</li>
+          <li>뜨는 페이지(안 뜨면 <b>192.168.4.1</b>)에서 집 WiFi를 목록에서 고르고 비밀번호 입력</li>
+          <li>끝나면 시간이 맞춰지고 “최근: 09/25 12:45”처럼 표시</li>
+        </ol>
+        <ul>
+          <li>WiFi는 <b>최대 5개</b>까지 기억. 가장 신호가 센 곳으로 연결해요</li>
+          <li>로그인 페이지가 있는 공용 WiFi는 시간을 못 받으면 다음 WiFi로 넘어가요</li>
+        </ul>
+      </div>
+      <div class="shot m"><img src="img/18b_portal_qr.png" alt=""><div class="cap">QR 연결 화면</div></div>
+    </div>
+    <div class="note">WiFi 설정 화면에서 화면이 살짝 깜박일 수 있어요. 사용에는 문제없어요. WiFi 비밀번호는 SD 백업에 들어가지 않아요.</div>
+  </div>
+  <div class="foot">8 · 설정과 관리</div>
+</div>
+
+<!-- ============================== 32 SD카드·백업 ============================== -->
+<div class="page c8">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>8</b>설정과 관리</span><h1>SD카드와 세이브 백업</h1></div>
+    <h2>SD카드 안의 파일</h2>
+    <table class="t" style="font-size:7pt">
+      <tr><th>파일 (mons 폴더)</th><th>내용</th></tr>
+      <tr><td>p001~p251.bin, ps001~ps251.bin</td><td>포켓몬 그림 / 색이 다른(샤이니) 그림 (동작 포함)</td></tr>
+      <tr><td>thumbs.bin</td><td>도감의 작은 그림 251마리</td></tr>
+      <tr><td>cry001~cry251.wav</td><td>울음소리 (16kHz 모노 16비트 WAV)</td></tr>
+      <tr><td>bgm.wav, bgm2.wav</td><td>기본 화면 배경음 (곡이 끝날 때마다 무작위)</td></tr>
+      <tr><td>battle_wild / gym / champ.wav</td><td>야생 · 체육관 · 챔피언 배틀 배경음</td></tr>
+      <tr><td>fame.wav, fame2.wav</td><td>명예의 전당 (챔피언 쪽 화면)</td></tr>
+      <tr><td>update.bin</td><td>SD 업데이트용 펌웨어 (다 쓰면 update_done.bin)</td></tr>
+    </table>
+    <p class="small">파일이 없으면 “스프라이트 없음”이나 작은 그림·기본 곡으로 대신해요. 울음소리·음악은 개인용으로만 써 주세요.</p>
+    <h2>세이브 백업</h2>
+    <div class="row">
+      <div class="grow">
+        <p>네트워크 → <span class="k" style="background:#666;color:#fff;border-color:#666">세이브 백업</span>.
+          SD카드 <b>tpsave/save0.bak · save1.bak</b>에 번갈아 저장해요 (쓰고 다시 읽어 확인).</p>
+        <ul>
+          <li><b style="color:#2f6fd0">자동 (파란색)</b>: 하루 1번 + 부화·진화·새 파트너·챔피언·작별 때</li>
+          <li><b style="color:#b8860b">수동 (노란색)</b>: <span class="k g">지금 백업</span></li>
+          <li>백업을 누르면 <b>복원</b> (확인 창 → 다시 켜짐)</li>
+          <li>훈련·배틀 중이나 화면이 꺼져 있을 땐 자동 백업을 쉬어요</li>
+        </ul>
+      </div>
+      <div class="shot m"><img src="img/18c_backup.png" alt=""><div class="cap">백업 목록</div></div>
+    </div>
+    <div class="row mid">
+      <div class="shot s"><img src="img/18d_backup_confirm.png" alt=""><div class="cap">복원 확인</div></div>
+      <div class="shot s"><img src="img/18e_backup_boot_ask.png" alt=""><div class="cap">켤 때 물어봐요</div></div>
+      <div class="grow">
+        <div class="tip" style="margin:0">세이브가 지워진 채 켜졌는데 SD에 백업이 있으면 <b>“SD카드에 백업이 있어요”</b> → <span class="k g">복원</span> / <span class="k">새로 시작</span>을 물어봐요.</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">8 · 설정과 관리</div>
+</div>
+
+<!-- ============================== 33 업데이트·안전 모드 ============================== -->
+<div class="page c8">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>8</b>설정과 관리</span><h1>펌웨어 업데이트</h1></div>
+    <p class="lead">새 기능이 담긴 펌웨어로 바꿔요. 두 방법 모두 <b>포켓몬은 그대로</b> 남아요.</p>
+    <div class="row">
+      <div class="grow">
+        <h2>A. SD카드로 (추천)</h2>
+        <ol class="steps">
+          <li>PC Chrome에서 웹 설치 페이지 → <b>Connect board</b> → <b>pick them manually</b>로 <b>update.bin</b> 보내기 (SD카드 mons 폴더로 가요)</li>
+          <li>시간 설정 → <span class="k b">WiFi</span> → <span class="k o">SD 업데이트</span> → <span class="k g">업데이트</span></li>
+          <li>진행 막대가 끝나면 자동으로 다시 켜져요</li>
+        </ol>
+        <p class="small">새 펌웨어를 예비 영역에 다 쓰고 검사가 끝난 뒤에만 바꿔요. 도중에 실패하면 원래 펌웨어 그대로예요.</p>
+      </div>
+      <div class="shot m"><img src="img/19_update.png" alt=""><div class="cap">현재 / 파일 버전</div></div>
+    </div>
+    <h2>B. PC에서 esptool로</h2>
+    <ol class="steps">
+      <li>Chrome/Edge에서 ESP Tool (esptool-js) → Baudrate 115200 → Connect</li>
+      <li>주소 <b>0xe000</b>에 <b>tamapoke-ko-…-app-0xe000.bin</b> → Program</li>
+      <li>끝나면 USB를 뽑고 PWR 6초로 껐다 켜기. 시간 설정 화면에 새 버전이 보이면 성공</li>
+    </ol>
+    <div class="warn"><b>Erase Flash는 누르지 마세요.</b> 주소 0x0에 올리는 통합 이미지(…ko11.7.bin)는 <b>저장 데이터를 초기화</b>해요.
+      앱 파일은 0x10000이 아니라 꼭 <b>0xe000</b>에.</div>
+    <h2>켜질 때 멈추면 — 부팅 진단과 안전 모드</h2>
+    <ul>
+      <li>켜지다 멈춰 다시 시작되면 다음에 <b>“last stop: 단계 이름”</b>과 원인(CRASH, BROWNOUT…)을 보여 주고 4초 기다려요</li>
+      <li><b>2번 연속</b> 멈추면 <b>안전 모드</b>: SD카드·WiFi·소리 없이 켜요. 세이브는 건드리지 않아요</li>
+      <li>정상으로 20초 넘게 돌면 기록이 지워져요</li>
+    </ul>
+  </div>
+  <div class="foot">8 · 설정과 관리</div>
+</div>
+
+<!-- ============================== 34 FAQ ============================== -->
+<div class="page c9">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>+</b>부록</span><h1>이럴 땐 이렇게</h1></div>
+    <table class="t plain" style="font-size:7.3pt">
+      <tr><th style="width:36%">증상</th><th>해 보세요</th></tr>
+      <tr><td><b>화면이 안 켜져요</b></td><td>PWR 짧게 → 충전 확인 → PWR 6초로 껐다 켜기</td></tr>
+      <tr><td><b>켜지다가 계속 다시 시작돼요</b></td><td>PWR 버튼이 케이스에 눌린 채 끼워지지 않았는지 확인. “last stop” 화면을 사진으로 남겨 두세요. 2번 연속이면 안전 모드로 켜져요</td></tr>
+      <tr><td><b>PC가 USB를 인식 못 해요</b></td><td>다른 USB 케이블(데이터용)로. 그래도 안 되면 <b>BOOT 버튼을 누른 채</b> USB를 꽂기</td></tr>
+      <tr><td><b>포켓몬이 “?”나 작은 그림</b></td><td>SD카드 mons 폴더에 그림 파일(p/ps***.bin, thumbs.bin)이 있는지 확인</td></tr>
+      <tr><td><b>소리가 안 나요</b></td><td>시간 설정 → 소리 켬, 음량 확인. 배경음은 SD카드의 wav 파일이 필요해요</td></tr>
+      <tr><td><b>시간이 틀려요</b></td><td>네트워크 → 시간대(UTC+9) 확인 → 지금 시간 맞추기. WiFi가 없으면 시간 설정에서 직접</td></tr>
+      <tr><td><b>날씨가 늘 맑아요</b></td><td>날짜가 맞는지 확인 (큰 시계 위 날짜). WiFi로 한 번 맞추면 돼요</td></tr>
+      <tr><td><b>진화 버튼이 안 나와요</b></td><td>네 게이지 모두 40 이상? 실수로 늦어졌나? 친밀도 70 필요한 포켓몬? (스탯 카드 진행도)</td></tr>
+      <tr><td><b>지역이 회색이에요</b></td><td>체육관 배지가 더 필요해요 (19쪽)</td></tr>
+      <tr><td><b>통신 연결이 안 돼요</b></td><td>두 기기 모두 같은 메뉴(대전/교환)를 열었는지, 펌웨어 버전이 비슷한지 확인</td></tr>
+      <tr><td><b>세이브가 사라졌어요</b></td><td>네트워크 → 세이브 백업에서 복원 (켤 때 물어보기도 해요)</td></tr>
+      <tr><td><b>메뉴 터치가 가끔 안 먹어요</b></td><td>화면이 바뀐 직후 0.25초는 터치를 무시해요. 한 번 더 또렷하게 톡</td></tr>
+      <tr><td><b>훈련 중 그만두고 싶어요</b></td><td>화면을 2초 누르고 있기</td></tr>
+      <tr><td><b>전부 처음부터 하고 싶어요</b></td><td>시간 설정 → 새로 시작 → 3초 누르기 (30쪽)</td></tr>
+    </table>
+    <div class="tip">문제가 생기면 먼저 <b>세이브 백업 → 지금 백업</b>을 해 두면 안심이에요.</div>
+  </div>
+  <div class="foot">부록</div>
+</div>
+
+<!-- ============================== 35 숫자 ============================== -->
+<div class="page c9">
+  <div class="inner">
+    <div class="hd"><span class="chip"><b>+</b>부록</span><h1>한눈에 보는 숫자</h1></div>
+    <div class="grid2" style="gap:2.4mm">
+      <div>
+        <table class="t plain" style="font-size:6.9pt;margin-top:0">
+          <tr><th colspan="2">돌보기·성장</th></tr>
+          <tr><td>먹이</td><td>열매 +25, 좋아하는 것 +35, 사탕 +10</td></tr>
+          <tr><td>돌봄 실수</td><td>게이지 10 이하 (1시간에 1번까지)</td></tr>
+          <tr><td>실수 회복</td><td>모두 40↑ 12시간 → −1</td></tr>
+          <tr><td>가출</td><td>게이지 모두 0으로 1시간</td></tr>
+          <tr><td>작별</td><td>최종 진화 + 3일</td></tr>
+          <tr><td>진화</td><td>레벨 + 모두 40↑ (+친밀도 70)</td></tr>
+          <tr><td>첫 진화</td><td>Lv.16 (3단계 포켓몬)</td></tr>
+          <tr><td>육성 시간</td><td>Lv.L → L+1 = L × 15분</td></tr>
+          <tr><td>최대 레벨</td><td>Lv.100</td></tr>
+          <tr><td>기력 회복</td><td>잠자기 1분에 +6</td></tr>
+        </table>
+        <table class="t plain" style="font-size:6.9pt">
+          <tr><th colspan="2">훈련</th></tr>
+          <tr><td>기력 소모</td><td>한 번에 −12</td></tr>
+          <tr><td>능력 상승</td><td>최소 +3, 한 번 최대 +18</td></tr>
+          <tr><td>EXP</td><td>5% (신기록 20% + 사탕 1)</td></tr>
+          <tr><td>속도 점수</td><td>15라운드, 최대 1500</td></tr>
+        </table>
+      </div>
+      <div>
+        <table class="t plain" style="font-size:6.9pt;margin-top:0">
+          <tr><th colspan="2">배틀·보상</th></tr>
+          <tr><td>야생 승리</td><td>볼 40%, 물약 35%, 만능 사탕 5%, 합류 20%</td></tr>
+          <tr><td>보유 상한</td><td>볼 20, 물약 15</td></tr>
+          <tr><td>포획률</td><td>체력 가득 약 20% → 빈사 약 85%</td></tr>
+          <tr><td>재대전</td><td>하루 1번 사탕 2·볼 1·물약 1</td></tr>
+          <tr><td>오늘의 도전</td><td>3연승 볼 2·물약 2·사탕 3</td></tr>
+          <tr><td>챔피언</td><td>사탕 10·볼 3·물약 3</td></tr>
+          <tr><td>물약</td><td>체력 절반 회복</td></tr>
+          <tr><td>야생 알림</td><td>30초 안에 누르기</td></tr>
+        </table>
+        <table class="t plain" style="font-size:6.9pt">
+          <tr><th colspan="2">모으기·저장</th></tr>
+          <tr><td>보관함</td><td>60 (왕관 251, 전당 60)</td></tr>
+          <tr><td>탐험</td><td>2·4·8시간, 1마리씩</td></tr>
+          <tr><td>도감</td><td>251 (보상 10~251종)</td></tr>
+          <tr><td>WiFi 기억</td><td>최대 5개</td></tr>
+          <tr><td>자동 저장</td><td>1분마다 + SD 백업 하루 1번</td></tr>
+          <tr><td>날씨 바뀜</td><td>5분마다</td></tr>
+        </table>
+      </div>
+    </div>
+    <h2>사탕 쓰는 곳</h2>
+    <p style="font-size:7.6pt">경험치 3 · 게이지 +20 1 · 능력 편차 +2 5 · 다음 알 샤이니 ×4 10 · 실수 만회 5 · 교환 다른 계열 3 → 1 · 만능 1 → 5</p>
+  </div>
+  <div class="foot">부록</div>
+</div>
+
+<!-- ============================== 36 뒤표지 ============================== -->
+<div class="page back">
+  <div class="inner">
+    <h2 style="margin-top:0">다마포케가 자라 온 길</h2>
+    <div class="vl">
+      <b>ko1</b> 야생 배틀·통신 대전/교환·WiFi 시간·한국어 &nbsp; <b>ko2</b> SD카드 소리 &nbsp; <b>ko4</b> 큰 시계·보관함·도감 기록·훈련 3종·배틀 아이템·실시간 저장<br>
+      <b>ko5</b> SD카드 업데이트 &nbsp; <b>ko6</b> USB 방식 정리 &nbsp; <b>ko7</b> 경험치 레벨·타입별 이펙트 &nbsp; <b>ko8</b> 새로 시작·WiFi 5개·QR·부드러운 글꼴·한글 이름<br>
+      <b>ko9</b> 좋아하는 음식·N일차·육성 시간 레벨업·알림음 &nbsp; <b>ko10</b> 2세대 251마리 &nbsp; <b>ko10.1</b> 지역 16곳·날씨·계절·배경 16종<br>
+      <b>ko10.2</b> 육성 2배 빠르게 &nbsp; <b>ko10.3</b> 공놀이 개선 &nbsp; <b>ko10.4</b> 체육관 배지·오늘의 도전·사탕·진화 기술<br>
+      <b>ko10.5</b> 왕관 보관함·다음 파트너 &nbsp; <b>ko10.6</b> 실수 회복·방어/속도 훈련 &nbsp; <b>ko10.7</b> 샌드백·훈련 보상<br>
+      <b>ko10.8</b> 기본 화면 행동·빠른 연타 &nbsp; <b>ko10.8.1</b> 화살표 이동 &nbsp; <b>ko10.9</b> 실수 원인·날짜 기준 일차 &nbsp; <b>ko10.10</b> 실수 만회<br>
+      <b>ko11</b> 체육관 재대전·챔피언 리그·명예의 전당·사탕 가방 &nbsp; <b>ko11.1</b> 전당 화면·아이템 조정 &nbsp; <b>ko11.2~11.4</b> 훈련 중 렉 해결<br>
+      <b>ko11.5</b> 부팅 진단·안전 모드 &nbsp; <b>ko11.6</b> SD 세이브 백업·공간 정리 &nbsp; <b>ko11.6.1</b> ◀ 뒤로가기·챔피언 연승<br>
+      <b>ko11.7</b> 탐험 보내기·친밀도 진화·요일/보름달 이벤트·도감 보상·훈련 최소 +3
+    </div>
+    <div style="margin-top:16mm;text-align:center;color:#fff">
+      <div style="font-size:20pt;font-weight:900;letter-spacing:-.5pt">오늘도 잘 돌봐 주세요!</div>
+      <div style="font-size:8pt;color:#cfc9d6;margin-top:1mm">포만 · 기분 · 기력 · 청결, 네 게이지가 40 이상이면 포켓몬이 쑥쑥 자라요.</div>
+    </div>
+  </div>
+  <div class="ball"><i></i></div>
+  <div class="credit">
+    TamaPoke KO v1.17-ko11.7 (클로드 버전) · 원본 socquique/TamaPoke v1.17<br>
+    포켓몬 그림: PMDCollab SpriteCollab (CC BY-NC) · 글꼴: Noto Sans KR (SIL OFL)<br>
+    Pokémon © Nintendo / Creatures / GAME FREAK. 개인이 즐기려고 만든 비공식 팬 프로젝트예요.
+  </div>
+</div>
+
+</body>
+</html>

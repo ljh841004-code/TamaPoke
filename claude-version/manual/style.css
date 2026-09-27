@@ -1,0 +1,189 @@
+/* 다마포케 사용 설명서 — A5 (148 x 210 mm) 한 쪽 = .page 하나 */
+@page { size: 148mm 210mm; margin: 0; }
+
+:root {
+  --paper: #fbf6ef;
+  --ink: #2c2a33;
+  --sub: #6d6875;
+  --line: #e8ddd0;
+  --red: #e3350d;
+  --c: #e3350d;       /* 장 색 (각 .page 클래스가 바꿈) */
+  --c2: #fde3dc;      /* 장 색 옅게 */
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: #888; }
+body {
+  font-family: 'Noto Sans KR', sans-serif;
+  color: var(--ink);
+  font-size: 8.3pt;
+  line-height: 1.5;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  counter-reset: pg;
+  word-break: keep-all;
+}
+@media screen { .page { margin: 6mm auto; box-shadow: 0 2px 10px rgba(0,0,0,.35); } }
+
+.page {
+  width: 148mm; height: 210mm; position: relative; overflow: hidden;
+  background: var(--paper); page-break-after: always; break-after: page;
+  counter-increment: pg;
+}
+.inner { position: absolute; top: 9mm; left: 10mm; right: 10mm; bottom: 12mm; }
+
+/* 장 색 */
+.c1 { --c: #e3350d; --c2: #fde3dc; }  /* 시작하기 */
+.c2 { --c: #2f9e5a; --c2: #dcf3e4; }  /* 돌보기 */
+.c3 { --c: #ee8a1c; --c2: #fdebd3; }  /* 성장·진화 */
+.c4 { --c: #d63c6b; --c2: #fbdfe8; }  /* 훈련 */
+.c5 { --c: #2f6fd0; --c2: #dce8fa; }  /* 배틀 */
+.c6 { --c: #7c4fc4; --c2: #ebe1f8; }  /* 모으기 */
+.c7 { --c: #139a9a; --c2: #d8f1f1; }  /* 세계·통신 */
+.c8 { --c: #4f5d73; --c2: #e2e6ed; }  /* 설정·관리 */
+.c9 { --c: #b8860b; --c2: #f7ecd0; }  /* 부록 */
+
+/* 머리 */
+.hd { display: flex; align-items: center; gap: 2.5mm; margin-bottom: 3.2mm; }
+.chip {
+  background: var(--c); color: #fff; font-weight: 700; font-size: 7pt;
+  padding: .6mm 2.6mm .6mm 1.2mm; border-radius: 9mm; display: flex; align-items: center; gap: 1.6mm;
+  white-space: nowrap;
+}
+.chip b {
+  background: #fff; color: var(--c); border-radius: 50%; width: 4.6mm; height: 4.6mm;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 7pt; font-weight: 900;
+}
+.hd h1 { margin: 0; font-size: 15pt; font-weight: 900; letter-spacing: -.3pt; line-height: 1.2; }
+.lead { color: var(--sub); margin: -1.6mm 0 3mm; font-size: 8pt; }
+
+/* 바닥 쪽번호 */
+.foot {
+  position: absolute; bottom: 5mm; left: 10mm; right: 10mm; display: flex; align-items: center;
+  font-size: 6.4pt; color: #a59d93;
+}
+.foot::before { content: ''; flex: 1; border-top: 1px solid var(--line); margin-right: 2.5mm; }
+.foot::after {
+  content: counter(pg); margin-left: 2.5mm; font-weight: 900; color: #fff; background: var(--c);
+  width: 6mm; height: 6mm; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 7pt;
+}
+.page:nth-of-type(even) .foot { flex-direction: row-reverse; }
+.page:nth-of-type(even) .foot::before { margin-right: 0; margin-left: 2.5mm; }
+.page:nth-of-type(even) .foot::after { margin-left: 0; margin-right: 2.5mm; }
+
+/* 제목·글 */
+h2 {
+  font-size: 9.6pt; margin: 3mm 0 1.4mm; font-weight: 900; color: var(--c);
+  display: flex; align-items: center; gap: 1.6mm;
+}
+h2::before { content: ''; width: 1.3mm; height: 3.8mm; border-radius: 1mm; background: var(--c); }
+h2:first-child { margin-top: 0; }
+h3 { font-size: 8.6pt; margin: 2mm 0 .8mm; font-weight: 700; }
+p { margin: 0 0 1.6mm; }
+ul { margin: 0 0 1.6mm; padding-left: 4.2mm; }
+li { margin: .25mm 0; }
+li::marker { color: var(--c); }
+b, strong { font-weight: 700; }
+.em { color: var(--c); font-weight: 700; }
+.small { font-size: 7pt; color: var(--sub); }
+.center { text-align: center; }
+
+/* 화면 사진 (둥근 화면) */
+.shot { text-align: center; }
+.shot img {
+  display: block; margin: 0 auto; width: 34mm; height: 34mm; border-radius: 50%;
+  border: .9mm solid #34313b; box-shadow: 0 0 0 .5mm #d9d0c5, 0 1.2mm 2.4mm rgba(0,0,0,.18);
+  background: #fff;
+}
+.shot.xl img { width: 70mm; height: 70mm; border-width: 1.3mm; }
+.shot.l img  { width: 44mm; height: 44mm; }
+.shot.m img  { width: 30mm; height: 30mm; }
+.shot.s img  { width: 25mm; height: 25mm; border-width: .7mm; }
+.shot.xs img { width: 21mm; height: 21mm; border-width: .6mm; }
+.cap { font-size: 6.8pt; color: var(--sub); margin-top: 1.1mm; line-height: 1.3; }
+.cap b { color: var(--ink); }
+
+/* 배치 */
+.row { display: flex; gap: 3mm; align-items: flex-start; }
+.row.mid { align-items: center; }
+.row > .grow { flex: 1; min-width: 0; }
+.shots { display: flex; justify-content: space-between; gap: 1.5mm; margin: 1.5mm 0 2mm; }
+.shots.even > .shot { flex: 1; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2.4mm; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2mm; }
+
+/* 상자 */
+.box { background: #fff; border: 1px solid var(--line); border-radius: 2.6mm; padding: 2.2mm 2.8mm; margin-bottom: 2.2mm; }
+.box.tint { background: var(--c2); border-color: transparent; }
+.box > :last-child { margin-bottom: 0; }
+.tip, .warn, .note {
+  border-radius: 2.2mm; padding: 1.8mm 2.6mm 1.8mm 2.6mm; margin: 1.6mm 0 2.2mm; font-size: 7.6pt;
+  position: relative;
+}
+.tip  { background: #fff4cf; }
+.warn { background: #ffe4dd; }
+.note { background: #e8f1fb; }
+.tip::before, .warn::before, .note::before {
+  font-weight: 900; font-size: 6.6pt; color: #fff; border-radius: 1.2mm; padding: .1mm 1.3mm;
+  margin-right: 1.4mm; position: relative; top: -.2mm;
+}
+.tip::before  { content: 'TIP'; background: #e0a800; }
+.warn::before { content: '주의'; background: #e3350d; }
+.note::before { content: '참고'; background: #2f6fd0; }
+.tip > :last-child, .warn > :last-child, .note > :last-child { margin-bottom: 0; }
+
+/* 표 */
+table.t { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 7.4pt; margin: 1mm 0 2.2mm;
+  background: #fff; border-radius: 2.2mm; overflow: hidden; border: 1px solid var(--line); }
+table.t th { background: var(--c); color: #fff; font-weight: 700; padding: 1mm 1.6mm; text-align: left; }
+table.t td { padding: .8mm 1.6mm; border-top: 1px solid #f0e8de; vertical-align: top; }
+table.t tr:nth-child(even) td { background: #fdfaf6; }
+table.t td:first-child { font-weight: 700; white-space: nowrap; }
+table.t.plain td:first-child { font-weight: 400; }
+
+/* 버튼·키 모양 */
+.k { display: inline-block; border: 1px solid #cfc5b8; background: #fff; border-radius: 1.3mm; padding: 0 1.3mm;
+  font-weight: 700; font-size: .92em; line-height: 1.45; white-space: nowrap; }
+.k.g { background: #5bbb6a; color: #fff; border-color: #5bbb6a; }
+.k.b { background: #4a90d0; color: #fff; border-color: #4a90d0; }
+.k.r { background: #e8503a; color: #fff; border-color: #e8503a; }
+.k.y { background: #e4ae25; color: #fff; border-color: #e4ae25; }
+.k.p { background: #7b4fc4; color: #fff; border-color: #7b4fc4; }
+.k.o { background: #f08a24; color: #fff; border-color: #f08a24; }
+.arrow { display: inline-flex; width: 3.6mm; height: 3.6mm; border-radius: 50%; border: .3mm solid #333; color: #333;
+  align-items: center; justify-content: center; font-size: 5.5pt; background: #fff; vertical-align: -.5mm; }
+
+/* 번호 동그라미 */
+.n { display: inline-flex; width: 4.2mm; height: 4.2mm; border-radius: 50%; background: var(--c); color: #fff;
+  font-size: 6.4pt; font-weight: 900; align-items: center; justify-content: center; flex: none; vertical-align: -.6mm; }
+.steps { list-style: none; padding: 0; counter-reset: st; }
+.steps > li { counter-increment: st; padding-left: 5.6mm; position: relative; margin: .8mm 0; }
+.steps > li::before {
+  content: counter(st); position: absolute; left: 0; top: .5mm; width: 4.2mm; height: 4.2mm; border-radius: 50%;
+  background: var(--c); color: #fff; font-size: 6.4pt; font-weight: 900; display: flex; align-items: center; justify-content: center;
+}
+
+/* 게이지 막대 */
+.bar { display: inline-block; width: 12mm; height: 2mm; border-radius: 1mm; background: #e1d9ce; vertical-align: 0; overflow: hidden; }
+.bar i { display: block; height: 100%; }
+
+/* 주석 달린 큰 화면 */
+.anno { position: relative; width: 70mm; height: 70mm; margin: 0 auto; }
+.anno .shot img { width: 70mm; height: 70mm; border-width: 1.3mm; }
+.pin { position: absolute; transform: translate(-50%, -50%); }
+.pin .n { width: 4.6mm; height: 4.6mm; font-size: 6.8pt; box-shadow: 0 0 0 .5mm #fff; }
+
+.legend { display: grid; grid-template-columns: 1fr 1fr; gap: .6mm 3mm; font-size: 7.5pt; }
+.legend > div { display: flex; gap: 1.4mm; align-items: flex-start; }
+
+/* 배경 띠 */
+.bio { border-radius: 1.6mm; overflow: hidden; position: relative; height: 10mm; }
+.bio img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bio span { position: absolute; left: 1mm; bottom: .8mm; background: rgba(255,255,255,.88); border-radius: 1mm;
+  font-size: 6.2pt; font-weight: 700; padding: 0 1.1mm; }
+
+/* 메달 */
+.medal { display: flex; gap: 1.6mm; align-items: center; background: #fff; border: 1px solid var(--line);
+  border-radius: 2mm; padding: 1mm 1.6mm; font-size: 7.2pt; }
+.medal i { width: 5.2mm; height: 5.2mm; border-radius: 50%; flex: none;
+  background: radial-gradient(circle at 35% 35%, #fff3b0, #e0a800 60%, #a87400); box-shadow: inset 0 0 0 .4mm #c99200; }
+.ico { width: 5.2mm; height: 5.2mm; vertical-align: -1.6mm; }
