@@ -945,11 +945,11 @@ void bakRequest() { bakPending = true; }
 
 static void bakSetMsg(XId m) { bakMsg = (int8_t)m; bakMsgUntil = millis() + 3000; }
 
-static bool bakDoBackup() {
+static bool bakDoBackup(bool manual = false) {
   if (!sdReady) { bakSetMsg(X_BAK_NOSD); return false; }
   pet.saveNow();  // lo ultimo tambien
   uint32_t e = clockEpoch();
-  bool ok = bakBackupNow(pet.speciesId, pet.level(), gClockTrusted ? e : 0);
+  bool ok = bakBackupNow(pet.speciesId, pet.level(), gClockTrusted ? e : 0, manual);
   bakLastT = millis() ? millis() : 1;
   bakPending = false;
   if (ok && gClockTrusted) bakKnownDay = (int32_t)(e / 86400);
@@ -1045,8 +1045,20 @@ void renderBackup() {
   for (int i = 0; i < 2; i++) {
     int y = BAK_ROW_Y + i * (BAK_ROW_H + BAK_ROW_GAP);
     bool ok = bakSlots[i].ok;
-    gfx->fillRoundRect(73, y, 320, BAK_ROW_H, 14, ok ? UI_WHITE : UI_TRACK);
+    // ko11.6.1: manual = amarillo claro, automatica = azul claro, con su etiqueta
+    bool manual = ok && (bakSlots[i].h.flags & BAKF_MANUAL);
+    uint16_t bg = !ok ? UI_TRACK : manual ? C565(0xff, 0xf0, 0xc0) : C565(0xd8, 0xea, 0xff);
+    gfx->fillRoundRect(73, y, 320, BAK_ROW_H, 14, bg);
     gfx->drawRoundRect(73, y, 320, BAK_ROW_H, 14, i == nw ? UI_BAR_OK : UI_INK);
+    if (ok) {  // etiqueta a la izquierda
+      uint16_t tc = manual ? C565(0xc0, 0x80, 0x10) : C565(0x30, 0x70, 0xc0);
+      gfx->fillRoundRect(84, y + 8, 50, 24, 8, tc);
+      gfx->setTextColor(UI_WHITE);
+      setSize(1);
+      const char *tg = XT(manual ? X_BAK_MANUAL : X_BAK_AUTO_TAG);
+      setCur(84 + (50 - textW(tg, 1)) / 2, y + 12);
+      printT(tg);
+    }
     if (!ok) {
       drawFit(XT(X_BAK_EMPTY), y + 24, 280, 0x8410, 2);
       continue;
@@ -1088,7 +1100,7 @@ void backupTap(int16_t x, int16_t y) {
   }
   if (navHit(NAV_L, x, y)) { xScreen = XS_NET; sfxPlay(SFX_TAP); return; }  // ko11.6.1: vuelve a la red
   if (inRect(x, y, 113, BAK_NOW_Y, 240, 44)) {
-    bool ok = bakDoBackup();
+    bool ok = bakDoBackup(true);  // ko11.6.1: marcada como manual
     if (sdReady) bakSetMsg(ok ? X_BAK_DONE : X_BAK_FAIL);
     bakInfo(bakSlots);
     sfxPlay(ok ? SFX_MEDAL : SFX_DENY);

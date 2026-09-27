@@ -76,7 +76,7 @@ static bool addEntry(BakWriter &w, nvs_handle_t h, const char *ns, const nvs_ent
   }
 }
 
-bool bakBackupNow(int16_t dex, uint16_t lvl, uint32_t epoch) {
+bool bakBackupNow(int16_t dex, uint16_t lvl, uint32_t epoch, bool manual) {
   uint8_t *buf = bakBuf();
   if (!sdReady || !buf) return false;
   BakSlot s[2];
@@ -85,7 +85,7 @@ bool bakBackupNow(int16_t dex, uint16_t lvl, uint32_t epoch) {
   uint8_t slot = nw < 0 ? 0 : (uint8_t)(1 - nw);  // se pisa la mas vieja: la otra queda
   uint32_t seq = nw < 0 ? 1 : s[nw].h.seq + 1;
   BakWriter w(buf, BAK_MAX_BYTES);
-  w.begin(seq, epoch, dex, lvl);
+  w.begin(seq, epoch, dex, lvl, manual ? BAKF_MANUAL : 0);
   for (const BakNs &b : BAK_NS) {
     const char *part = partFor(b.big);
     nvs_handle_t h;

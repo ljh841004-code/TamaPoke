@@ -161,11 +161,11 @@ void bakInfo(BakSlot out[2]) {
   memset(out, 0, sizeof(BakSlot) * 2);
   if (!gBakDemo) return;
   out[0].ok = true; memcpy(out[0].h.magic, "TPBK", 4); out[0].h.seq = 4; out[0].h.epoch = 1790505000u; out[0].h.dex = 25; out[0].h.lvl = 23;
-  out[1].ok = true; memcpy(out[1].h.magic, "TPBK", 4); out[1].h.seq = 5; out[1].h.epoch = 1790591400u; out[1].h.dex = 26; out[1].h.lvl = 31;
+  out[1].ok = true; memcpy(out[1].h.magic, "TPBK", 4); out[1].h.seq = 5; out[1].h.epoch = 1790591400u; out[1].h.dex = 26; out[1].h.lvl = 31; out[1].h.flags = BAKF_MANUAL;
 }
 int bakNewest(const BakSlot s[2]) {
   if (s[0].ok && s[1].ok) return s[1].h.seq > s[0].h.seq ? 1 : 0;
   return s[0].ok ? 0 : s[1].ok ? 1 : -1;
 }
-bool bakBackupNow(int16_t, uint16_t, uint32_t) { return true; }
+bool bakBackupNow(int16_t, uint16_t, uint32_t, bool) { return true; }
 bool bakRestore(uint8_t) { return false; }

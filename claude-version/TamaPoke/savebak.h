@@ -24,8 +24,9 @@ struct __attribute__((packed)) BakHdr {
   uint32_t epoch;    // cuando se hizo (0 = sin reloj)
   int16_t dex;       // el que se estaba criando (para ensenarlo al restaurar)
   uint16_t lvl;
-  uint32_t reserved;
+  uint32_t flags;    // ko11.6.1: BAKF_* (antes "reserved" = 0)
 };
+enum : uint32_t { BAKF_MANUAL = 1 };  // hecha con [ahora] (si no, automatica)
 static_assert(sizeof(BakHdr) == 24, "BakHdr");
 
 static inline uint32_t bakCrc32(const uint8_t *p, size_t n, uint32_t crc = 0) {
@@ -40,7 +41,7 @@ static inline uint32_t bakCrc32(const uint8_t *p, size_t n, uint32_t crc = 0) {
 class BakWriter {
 public:
   BakWriter(uint8_t *buf, size_t cap) : b_(buf), cap_(cap) {}
-  void begin(uint32_t seq, uint32_t epoch, int16_t dex, uint16_t lvl) {
+  void begin(uint32_t seq, uint32_t epoch, int16_t dex, uint16_t lvl, uint32_t flags = 0) {
     n_ = 0;
     ok_ = cap_ >= sizeof(BakHdr) + 4;
     if (!ok_) return;
@@ -52,6 +53,7 @@ public:
     h.epoch = epoch;
     h.dex = dex;
     h.lvl = lvl;
+    h.flags = flags;
     memcpy(b_, &h, sizeof(h));
     n_ = sizeof(h);
   }
@@ -123,5 +125,5 @@ static inline bool bakParse(const uint8_t *buf, size_t len, BakHdr *hdr, BakRecF
 struct BakSlot { bool ok; BakHdr h; };
 void bakInfo(BakSlot out[2]);                         // las dos ranuras de la SD (CRC comprobado)
 int bakNewest(const BakSlot s[2]);                    // -1 si no hay ninguna valida
-bool bakBackupNow(int16_t dex, uint16_t lvl, uint32_t epoch);  // escribe en la ranura mas vieja
+bool bakBackupNow(int16_t dex, uint16_t lvl, uint32_t epoch, bool manual = false);  // en la ranura mas vieja
 bool bakRestore(uint8_t slot);                        // NVS <- ranura; hay que reiniciar despues

@@ -64,3 +64,19 @@ TEST(savebak, no_cabe_no_se_escribe) {
   w2.begin(1, 0, 1, 1);
   CHECK(!w2.add("un_espacio_muy_largo", "k", 1, big, 1));  // nombres de NVS: 15 max
 }
+
+// ko11.6.1: la marca de copia manual va en la cabecera
+TEST(savebak, marca_manual) {
+  std::vector<uint8_t> buf(256);
+  BakWriter w(buf.data(), buf.size());
+  w.begin(3, 0, 25, 9, BAKF_MANUAL);
+  size_t n = w.finish();
+  BakHdr h;
+  CHECK(bakParse(buf.data(), n, &h));
+  CHECK(h.flags & BAKF_MANUAL);
+  BakWriter a(buf.data(), buf.size());
+  a.begin(4, 0, 25, 9);
+  n = a.finish();
+  CHECK(bakParse(buf.data(), n, &h));
+  CHECK_EQ(h.flags, 0u);
+}
