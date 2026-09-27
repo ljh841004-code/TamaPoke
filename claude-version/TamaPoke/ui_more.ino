@@ -37,6 +37,110 @@ static void boxSortView(Box &b) {
 static uint8_t boxView(int k) { return boxOrd[k]; }
 uint32_t boxConfirmUntil = 0; // segundo toque en "soltar" para confirmar
 
+// ---- ko11.7: expediciones (ver expeditionReward en battle.cpp) ----
+static const uint8_t EXP_HOURS[3] = { 2, 4, 8 };
+#define EXP_STRIP_Y 392
+bool expPick = false;          // eligiendo cuantas horas
+bool expResOpen = false;       // ventana con lo que trajo
+static ExpReward expRes;
+static int16_t expResDex = 0, expNewDex = 0;
+static uint8_t expGotBalls = 0, expGotPotions = 0;
+
+static void expSend(uint8_t idx, uint8_t hours) {
+  BoxMon m;
+  if (pet.exped.on || !box.take(idx, m)) return;
+  uint32_t now = clockEpoch();
+  pet.exped.on = 1;
+  pet.exped.hours = hours;
+  pet.exped.dex = m.dex;
+  pet.exped.lvl = m.lvl;
+  pet.exped.flags = m.flags;
+  pet.exped.gA = m.geneAtk;
+  pet.exped.gD = m.geneDef;
+  pet.exped.gS = m.geneSpe;
+  pet.exped.epoch = m.epoch;
+  pet.exped.start = now;
+  pet.exped.end = now + (uint32_t)hours * 3600u;
+  pet.saveNow();
+  expPick = false;
+  boxSel = -1;
+  char t[64];
+  snprintf(t, sizeof(t), XT(X_EXP_LEFT_FMT), dexName(m.dex));
+  showToast(t);
+  sfxPlay(SFX_PLAY);
+}
+
+static void expCollect() {
+  if (!pet.exped.on) return;
+  if (box.full()) { showToast(XT(X_EXP_FULL)); sfxPlay(SFX_DENY); return; }
+  BoxMon m;
+  memset(&m, 0, sizeof(m));
+  m.dex = pet.exped.dex;
+  m.lvl = pet.exped.lvl;
+  m.flags = pet.exped.flags;
+  m.geneAtk = pet.exped.gA;
+  m.geneDef = pet.exped.gD;
+  m.geneSpe = pet.exped.gS;
+  m.epoch = pet.exped.epoch;
+  box.put(m);
+  BRng rng((uint32_t)random(0x7fffffff) ^ clockEpoch());
+  expRes = expeditionReward(pet.exped.hours, pet.exped.lvl, rng);
+  expResDex = m.dex;
+  pet.addCandy(m.dex, expRes.candy);
+  uint8_t b0 = pet.balls, p0 = pet.potions;
+  pet.giveItems(expRes.balls, expRes.potions);
+  expGotBalls = pet.balls - b0;
+  expGotPotions = pet.potions - p0;
+  if (expRes.rare && pet.rareCandy < 999) pet.rareCandy++;
+  expNewDex = 0;
+  if (expRes.newMon && !box.full()) {  // un Pokemon de su region se viene con el
+    Battler w = makeWildIn(DEX_TBL[m.dex].biome, m.lvl, (uint8_t)sceneHour(), 0, 0, rng, nullptr);
+    if (box.add(w.dex, w.lvl, false, true, clockEpoch())) {
+      expNewDex = w.dex;
+      dexLog.caught(w.dex, clockEpoch());
+    }
+  }
+  memset(&pet.exped, 0, sizeof(pet.exped));
+  pet.saveNow();
+  expResOpen = true;
+  sfxPlay(SFX_MEDAL);
+}
+
+static void drawExpResult() {
+  gfx->fillRoundRect(48, 110, 370, 240, 22, UI_WHITE);
+  gfx->drawRoundRect(48, 110, 370, 240, 22, UI_INK);
+  char l[64];
+  snprintf(l, sizeof(l), XT(X_EXP_RESULT_FMT), dexName(expResDex));
+  drawFit(l, 132, 330, UI_INK, 2);
+  int y = 172;
+  snprintf(l, sizeof(l), XT(X_EXP_CANDY_FMT), dexName(expResDex), expRes.candy);
+  drawFit(l, y, 330, UI_INK, 2); y += 32;
+  if (expGotBalls || expGotPotions) {
+    snprintf(l, sizeof(l), XT(X_EXP_ITEMS_FMT), expGotBalls, expGotPotions);
+    drawFit(l, y, 330, UI_INK, 2); y += 32;
+  }
+  if (expRes.rare) { drawFit(XT(X_EXP_RARE), y, 330, UI_BAR_OK, 2); y += 32; }
+  if (expNewDex) {
+    snprintf(l, sizeof(l), XT(X_EXP_NEW_FMT), dexName(expNewDex));
+    drawFit(l, y, 330, C565(0xc0, 0x40, 0x90), 2); y += 32;
+  }
+  drawFit(XT(X_EXP_TAP_CLOSE), 322, 200, 0x8410, 1);
+}
+
+// en loop(): aviso en la pantalla principal cuando vuelve (una vez)
+void expLoop() {
+  static int16_t told = 0;
+  if (!pet.exped.on) { told = 0; return; }
+  if (told == pet.exped.dex) return;
+  if (clockEpoch() >= pet.exped.end && !extraOpen() && !galleryOpen && !cardOpen && !clockOpen && !screenOff) {
+    char t[64];
+    snprintf(t, sizeof(t), XT(X_EXP_TOAST_FMT), dexName(pet.exped.dex));
+    showToast(t);
+    sfxPlay(SFX_MEDAL);
+    told = pet.exped.dex;
+  }
+}
+
 static void drawCrown(int x, int y, uint16_t c) {
   gfx->fillRect(x, y + 8, 18, 6, c);
   gfx->fillTriangle(x, y + 8, x + 3, y, x + 6, y + 8, c);
@@ -104,9 +208,26 @@ void renderBoxDetail() {
   bool conf = timeLeft(boxConfirmUntil) > 0;
   if (boxHall) {  // ko10.5: los de corona son recuerdos: no se sueltan
     drawBtn(165, 300, 136, 48, UI_TRACK, UI_INK, XT(X_CLOSE));
-  } else {
-    drawBtn(93, 300, 136, 48, UI_BAR_BAD, UI_WHITE, XT(conf ? X_RELEASE_Q : X_RELEASE));
-    drawBtn(237, 300, 136, 48, UI_TRACK, UI_INK, XT(X_CLOSE));
+  } else {  // ko11.7: [soltar] [explorar] [cerrar]
+    drawBtn(73, 300, 100, 48, UI_BAR_BAD, UI_WHITE, XT(conf ? X_RELEASE_Q : X_RELEASE));
+    bool away = pet.exped.on;
+    drawBtn(183, 300, 100, 48, away ? UI_TRACK : C565(0x3a, 0x9a, 0x5a), away ? 0x8410 : UI_WHITE,
+            XT(away ? X_EXP_BUSY : X_EXP_BTN));
+    drawBtn(293, 300, 100, 48, UI_TRACK, UI_INK, XT(X_CLOSE));
+    if (expPick) {  // elegir horas
+      gfx->fillRoundRect(58, 120, 350, 200, 20, UI_WHITE);
+      gfx->drawRoundRect(58, 120, 350, 200, 20, UI_INK);
+      drawFit(XT(X_EXP_Q), 146, 320, UI_INK, 2);
+      char hm[40];
+      snprintf(hm, sizeof(hm), XT(X_EXP_HOME_FMT), XT((XId)(X_REG_0 + DEX_TBL[m.dex].biome)));
+      drawFit(hm, 176, 320, 0x8410, 1);
+      for (int i = 0; i < 3; i++) {
+        char hb[12];
+        snprintf(hb, sizeof(hb), XT(X_EXP_H_FMT), (unsigned)EXP_HOURS[i]);
+        drawBtn(78 + i * 106, 204, 98, 48, C565(0x3a, 0x9a, 0x5a), UI_WHITE, hb);
+      }
+      drawBtn(153, 264, 160, 42, UI_TRACK, UI_INK, XT(X_BAK_CANCEL));
+    }
   }
   gfx->flush();
 }
@@ -175,11 +296,27 @@ void renderBox() {
     snprintf(pg, sizeof(pg), "%u/%u", boxPage + 1, boxPages());
     drawFit(pg, BOX_NAV_Y + 10, 100, UI_INK, 2);
   }
-  drawFit(T(S_BACK), 404, 200, UI_INK, 2);
+  if (pet.exped.on) {  // ko11.7: la expedicion en curso (o de vuelta)
+    char el[64];
+    uint32_t now = clockEpoch();
+    bool back = now >= pet.exped.end;
+    if (back) snprintf(el, sizeof(el), XT(X_EXP_BACK_FMT), dexName(pet.exped.dex));
+    else {
+      uint32_t left = pet.exped.end - now;
+      snprintf(el, sizeof(el), XT(X_EXP_AWAY_FMT), dexName(pet.exped.dex), (unsigned)(left / 3600),
+               (unsigned)(left / 60 % 60));
+    }
+    drawBtn(88, EXP_STRIP_Y, 290, 30, back ? UI_BAR_OK : C565(0xd8, 0xea, 0xff), back ? UI_WHITE : UI_INK, el);
+  } else {
+    drawFit(T(S_BACK), 404, 200, UI_INK, 2);
+  }
+  if (expResOpen) drawExpResult();
   gfx->flush();
 }
 
 void boxSwipe() {  // deslizar: cierra la ficha, o la caja si estaba en la lista
+  expPick = false;
+  expResOpen = false;
   if (boxSel >= 0) boxSel = -1;
   else xScreen = XS_NONE;
 }
@@ -191,7 +328,19 @@ void boxTap(int16_t x, int16_t y) {
       audioCry(cb().at((uint8_t)boxSel).dex);
       return;
     }
-    if (!boxHall && y >= 300 && y < 348 && x >= 93 && x < 229) {  // el salon no suelta
+    if (expPick) {  // ko11.7: horas de la expedicion
+      for (int i = 0; i < 3; i++)
+        if (inRect(x, y, 78 + i * 106, 204, 98, 48)) { expSend((uint8_t)boxSel, EXP_HOURS[i]); return; }
+      if (inRect(x, y, 153, 264, 160, 42)) { expPick = false; sfxPlay(SFX_TAP); }
+      return;
+    }
+    if (!boxHall && y >= 300 && y < 348 && x >= 183 && x < 283) {  // ko11.7: explorar
+      if (pet.exped.on) { sfxPlay(SFX_DENY); return; }
+      expPick = true;
+      sfxPlay(SFX_TAP);
+      return;
+    }
+    if (!boxHall && y >= 300 && y < 348 && x >= 73 && x < 173) {  // el salon no suelta
       if (timeLeft(boxConfirmUntil)) {
         pet.addCandy(box.at((uint8_t)boxSel).dex, 1);  // ko10.4: soltar da 1 caramelo
         pet.saveNow();
@@ -207,6 +356,12 @@ void boxTap(int16_t x, int16_t y) {
       boxSel = -1;
       boxConfirmUntil = 0;
     }
+    return;
+  }
+  if (expResOpen) { expResOpen = false; sfxPlay(SFX_TAP); return; }  // ko11.7: cerrar el resultado
+  if (pet.exped.on && inRect(x, y, 88, EXP_STRIP_Y, 290, 30)) {  // ko11.7: recoger
+    if (clockEpoch() >= pet.exped.end) expCollect();
+    else sfxPlay(SFX_TAP);
     return;
   }
   // ko10.5: pestanas caja / salon de la fama
@@ -228,7 +383,7 @@ void boxTap(int16_t x, int16_t y) {
   int k = boxPage * BOX_ROWS + r;
   Box &bx = cb();
   boxSortView(bx);
-  if (k < bx.count()) { boxSel = boxView(k); audioCry(bx.at((uint8_t)boxSel).dex); }  // ko9.1: su grito
+  if (k < bx.count()) { boxSel = boxView(k); expPick = false; audioCry(bx.at((uint8_t)boxSel).dex); }  // ko9.1: su grito
 }
 
 // ======================================================================
@@ -1116,4 +1271,51 @@ void renderBakAsk() {
 void bakAskTap(int16_t x, int16_t y) {
   if (inRect(x, y, 78, 288, 150, 44)) { bakAsk = false; bakRestoreAndRestart(bakAskSlot); return; }
   if (inRect(x, y, 238, 288, 150, 44)) { bakAsk = false; sfxPlay(SFX_TAP); }  // empezar de cero
+}
+
+// ======================================================================
+// ko11.7: premios de la pokedex (especies capturadas o criadas)
+// ======================================================================
+static const uint8_t DEXRW_AT[7] = { 10, 30, 50, 100, 151, 200, 251 };
+
+uint16_t dexCaughtCount() {
+  uint16_t n = 0;
+  for (int16_t d = 1; d <= DEX_COUNT; d++)
+    if (dexLog.caughtCount(d) > 0 || pet.isRegistered(d)) n++;
+  return n;
+}
+
+// el siguiente objetivo (0 = todos dados)
+uint8_t dexNextReward() {
+  for (int i = 0; i < 7; i++) if (!(pet.dexRewards & (1 << i))) return DEXRW_AT[i];
+  return 0;
+}
+
+// en loop(): da como mucho un premio cada vez (con su aviso)
+void dexRewardLoop(uint32_t now) {
+  static uint32_t last = 0;
+  if (now - last < 3000 || extraOpen() || fastGameNow() || pet.awaitingStarter() || galleryOpen || cardOpen ||
+      clockOpen || screenOff) return;  // el aviso se ve en la pantalla principal
+  last = now;
+  uint16_t n = dexCaughtCount();
+  for (int i = 0; i < 7; i++) {
+    if ((pet.dexRewards & (1 << i)) || n < DEXRW_AT[i]) continue;
+    switch (i) {
+      case 0: pet.giveItems(5, 0); break;
+      case 1: pet.giveItems(0, 5); break;
+      case 2: pet.rareCandy += 1; break;
+      case 3: pet.rareCandy += 3; break;
+      case 4: pet.rareCandy += 5; pet.shinyCharm = true; break;
+      case 5: pet.rareCandy += 5; break;
+      default: pet.rareCandy += 10; pet.shinyCharm = true; break;
+    }
+    if (pet.rareCandy > 999) pet.rareCandy = 999;
+    pet.dexRewards |= (uint8_t)(1 << i);
+    pet.saveNow();
+    char t[80];
+    snprintf(t, sizeof(t), XT(X_DEXRW_FMT), DEXRW_AT[i], XT((XId)(X_DEXRW_0 + i)));
+    showToast(t);
+    sfxPlay(SFX_MEDAL);
+    return;
+  }
 }

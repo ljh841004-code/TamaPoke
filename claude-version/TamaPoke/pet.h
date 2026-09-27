@@ -133,6 +133,7 @@ public:
   // ko11.7: expedicion en curso (el Pokemon sale de la caja mientras tanto)
   struct __attribute__((packed)) Expedition { uint8_t on, hours; int16_t dex; uint16_t lvl; uint8_t flags, gA, gD, gS;
                                               uint32_t epoch, start, end; } exped = {};
+  uint8_t dexRewards = 0;  // ko11.7: premios de la pokedex ya dados (bit i = DEXRW_AT[i])
   // ko10.11: caramelo universal (sale a veces en los salvajes) y cambios
   uint16_t rareCandy = 0;
   bool candyTrade(int16_t famDex, uint16_t times);  // 3 de otra familia -> 1 de la actual (x times)

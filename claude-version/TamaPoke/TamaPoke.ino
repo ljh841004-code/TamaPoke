@@ -41,7 +41,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko11.6.1"
+#define FW_VERSION "1.17-ko11.7"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -117,6 +117,10 @@ void bakAskTap(int16_t x, int16_t y);
 void bakAutoLoop(uint32_t now);
 void bakBootCheck();
 void bakRequest();
+void expLoop();  // ko11.7 (ui_more.ino)
+void dexRewardLoop(uint32_t now);
+uint16_t dexCaughtCount();
+uint8_t dexNextReward();
 bool cardOpen = false;        // ficha del bicho (deslizar vertical)
 bool kbOpen = false;          // teclado para renombrar al bicho
 char nameBuf[20] = "";   // ko8: lo ya escrito (apodo en hangul: hasta 18 bytes)
@@ -593,6 +597,8 @@ void loop() {
   handleSerial();
   extraLoop(now);  // fork KO: red, tongsin, batallas (ui_extra.ino)
   bakAutoLoop(now);  // ko11.6: copia de la partida en la SD
+  expLoop();         // ko11.7: aviso de vuelta de la expedicion
+  dexRewardLoop(now);  // ko11.7: premios de la pokedex
   ensureMon();
   static int16_t crySpecies = -1;  // grito al nacer/evolucionar/cambiar (/mons/cryNNN.wav)
   if (!pet.isEgg() && pet.speciesId != crySpecies) {
@@ -3404,7 +3410,13 @@ void renderGallery() {
   printT(head);
   // ko11: que generacion es esta pagina
   bool g2 = galleryPage >= GAL_GEN1_PAGES;
-  drawFit(XT(g2 ? X_GEN2 : X_GEN1), 70, 200, g2 ? UI_BAR_WARN : 0x8410, 1);
+  // ko11.7: generacion + capturados y el siguiente premio
+  char gl[96];
+  uint8_t nx = dexNextReward();
+  int k = snprintf(gl, sizeof(gl), "%s   ", XT(g2 ? X_GEN2 : X_GEN1));
+  if (nx) snprintf(gl + k, sizeof(gl) - k, XT(X_DEXRW_NEXT_FMT), dexCaughtCount(), nx);
+  else snprintf(gl + k, sizeof(gl) - k, XT(X_DEXRW_DONE_FMT), dexCaughtCount());
+  drawFit(gl, 70, 300, g2 ? UI_BAR_WARN : 0x8410, 1);
 
   for (int r = 0; r < 4; r++) {
     for (int c = 0; c < 4; c++) {

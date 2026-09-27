@@ -43,6 +43,11 @@ static void scenes(bool ko, const char *sfx) {
   render(); shot("02_main_night");
   gMockEpoch = 1790343900; pet.lastSeenEpoch = gMockEpoch;
   // ko10.8: comportamientos de la pantalla principal
+  {  // ko11.7: aviso de premio de la pokedex
+    char t[80];
+    snprintf(t, sizeof(t), XT(X_DEXRW_FMT), 50, XT(X_DEXRW_2));
+    showToast(t); render(); shot("01b_main_dex_reward"); toastUntil = 0;
+  }
   {
     uint8_t j0 = pet.joy, h0 = pet.hygiene;
     pet.joy = 90; pet.hygiene = 90;  // contento (si no, sale la cara triste)
@@ -69,6 +74,12 @@ static void scenes(bool ko, const char *sfx) {
   pet.exp = expForLevel(17) + 400;  // fork KO (ko7): barra de EXP
   cardPage = 3;
   render(); shot("03b_card_progress");
+  {  // ko11.7: evolucion por amistad (Pichu con poco vinculo)
+    int16_t sp = pet.speciesId; uint32_t ex = pet.exp; uint8_t bd = pet.bond;
+    pet.speciesId = 172; pet.exp = expForLevel(30); pet.bond = 42; ensureMon();
+    render(); shot("03l_card_friend_evo");
+    pet.speciesId = sp; pet.exp = ex; pet.bond = bd; ensureMon();
+  }
   pet.careMistakes = 2; render(); shot("03g_card_mistakes");  // ko10.6: cuanto falta para perdonar uno
   pet.mistWhy = MW_FOOD; pet.mistEpoch = 1790343900 - 3600; mistWhyUntil = gMockMillis + 5000;
   render(); shot("03h_card_mistake_why");  // ko10.9: causa al tocar
@@ -289,6 +300,13 @@ static void scenes(bool ko, const char *sfx) {
   {
     closeAll(); pet.energy = 80;
     openRegionPick(); regionPage = 0; render(); shot("44_region_pick"); regionPage = 1; render(); shot("44b_region_pick2");
+    {  // ko11.7: evento del dia bajo el titulo
+      uint32_t keep = gMockEpoch; bool kt = gClockTrusted;
+      gClockTrusted = true; regionPage = 0;
+      gMockEpoch = 1790589600u; pet.lastSeenEpoch = gMockEpoch; gMockMillis += 1100; render(); shot("44c_region_event");
+      gMockEpoch = 1790463600u; pet.lastSeenEpoch = gMockEpoch; gMockMillis += 1100; render(); shot("44d_region_moon");
+      gMockEpoch = keep; pet.lastSeenEpoch = keep; gClockTrusted = kt; gMockMillis += 1100;
+    }
     gMockEpoch = 1772356800u; pet.lastSeenEpoch = gMockEpoch;  // lluvia (marzo)
     startWildIn(6);
     foePmd.unload();
@@ -321,6 +339,11 @@ static void scenes(bool ko, const char *sfx) {
   box.add(16, 18, false, true, gMockEpoch);   // ko10.4: repetidos (x2 Pidgey)
   openBox(); render(); shot("10_box");
   boxSel = 1; render(); shot("11_box_detail");
+  // ko11.7: expedicion
+  expPick = true; render(); shot("11e_exp_pick"); expPick = false;
+  expSend(1, 4); boxSel = -1; render(); shot("11f_exp_away");
+  pet.exped.end = gMockEpoch; render(); shot("11g_exp_back");
+  expCollect(); render(); shot("11h_exp_result"); expResOpen = false;
   // ko10.5: fin de un ciclo -> criado a la caja (corona) y eleccion del siguiente
   boxSel = -1;
   hall.addRaised(6, 36, false, 108, 101, 99, gMockEpoch);
