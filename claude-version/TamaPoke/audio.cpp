@@ -134,7 +134,8 @@ static void audioTask(void *) {
   uint32_t cryLen = 0, cryAt = 0;
   MusicRoute route;
   bool suspended = false;
-  // ko11: musica normal = bgm.wav y bgm2.wav (si esta) al azar: al acabar una
+  // ko11: musica normal = bgm.wav y bgm2.wav (si esta) al azar (y el salon de la
+  // fama igual: fame.wav / fame2.wav): al acabar una
   // cancion se sortea la siguiente. Sin bgm2.wav, bgm.wav en bucle como siempre
   uint8_t bgmPick = 0;
   bool bgmSwap = false;
@@ -177,7 +178,8 @@ static void audioTask(void *) {
                 if (tr == MT_GYM) path = "/mons/battle_gym.wav";
                 else if (tr == MT_CHAMP) path = "/mons/battle_champ.wav";
               } else if (tr == MT_FAME) {
-                path = "/mons/fame.wav";
+                path = bgmPick ? "/mons/fame2.wav" : "/mons/fame.wav";  // ko11: 2 al azar
+                if (bgmPick && !SD_MMC.exists(path)) path = "/mons/fame.wav";
               } else if (bgmPick) {
                 path = "/mons/bgm2.wav";  // ko11: la segunda cancion normal (Pallet Town...)
               }
@@ -199,7 +201,8 @@ static void audioTask(void *) {
             uint32_t before = music.loops;
             musicSamples = music.read(musicBlock, 256);
             // ko11: acabo una cancion normal: sortear la siguiente (bgm.wav / bgm2.wav)
-            if (music.loops != before && !(request & 1u) && (uint8_t)(request >> 24) == MT_NORMAL) {
+            uint8_t trk = (uint8_t)(request >> 24);
+            if (music.loops != before && !(request & 1u) && (trk == MT_NORMAL || trk == MT_FAME)) {
               uint8_t next = (uint8_t)(esp_random() & 1u);
               if (next != bgmPick) { bgmPick = next; bgmSwap = true; }
             }
