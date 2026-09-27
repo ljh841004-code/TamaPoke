@@ -10,11 +10,13 @@
 #define BOX_ROW_H 46
 #define BOX_ROW_GAP 4
 #define BOX_NAV_Y 352
-#define BOX_TAB_Y 34      // ko10.5: pestanas [caja] [corona]
-#define BOX_TAB_H 40
-#define BOX_TAB_W 150
-#define BOX_TAB_X1 80
-#define BOX_TAB_X2 236
+// ko11.8: pestanas un poco mas abajo y estrechas (antes y=34, 150 de ancho: en la
+// pantalla redonda se cortaban las esquinas)
+#define BOX_TAB_Y 44      // ko10.5: pestanas [caja] [corona]
+#define BOX_TAB_H 38
+#define BOX_TAB_W 132
+#define BOX_TAB_X1 97
+#define BOX_TAB_X2 237
 uint8_t boxPage = 0;
 int16_t boxSel = -1;          // indice en la caja con la ficha abierta, -1 = lista
 bool boxHall = false;         // ko10.5: pestana del salon de la fama (corona)
@@ -229,6 +231,7 @@ void renderBoxDetail() {
       drawBtn(153, 264, 160, 42, UI_TRACK, UI_INK, XT(X_BAK_CANCEL));
     }
   }
+  if (!expPick) drawNav(NAV_L, UI_INK);  // ko11.8: <- volver a la lista
   gfx->flush();
 }
 
@@ -307,9 +310,8 @@ void renderBox() {
                (unsigned)(left / 60 % 60));
     }
     drawBtn(88, EXP_STRIP_Y, 290, 30, back ? UI_BAR_OK : C565(0xd8, 0xea, 0xff), back ? UI_WHITE : UI_INK, el);
-  } else {
-    drawFit(T(S_BACK), 404, 200, UI_INK, 2);
   }
+  drawNav(NAV_L, UI_INK);  // ko11.8: salir con la flecha (antes solo tocando abajo)
   if (expResOpen) drawExpResult();
   gfx->flush();
 }
@@ -323,6 +325,7 @@ void boxSwipe() {  // deslizar: cierra la ficha, o la caja si estaba en la lista
 
 void boxTap(int16_t x, int16_t y) {
   if (boxSel >= 0) {  // ficha: soltar (dos toques) o cerrar
+    if (!expPick && navHit(NAV_L, x, y)) { boxSel = -1; boxConfirmUntil = 0; sfxPlay(SFX_TAP); return; }  // ko11.8
     // ko9.1: tocar al Pokemon repite su grito
     if (y >= 80 && y < 200 && x >= 120 && x < 346) {
       audioCry(cb().at((uint8_t)boxSel).dex);
@@ -364,13 +367,14 @@ void boxTap(int16_t x, int16_t y) {
     else sfxPlay(SFX_TAP);
     return;
   }
+  if (navHit(NAV_L, x, y)) { xScreen = XS_NONE; sfxPlay(SFX_TAP); return; }  // ko11.8: <- salir
   // ko10.5: pestanas caja / salon de la fama
   if (y >= BOX_TAB_Y && y < BOX_TAB_Y + BOX_TAB_H) {
     if (x >= BOX_TAB_X1 && x < BOX_TAB_X1 + BOX_TAB_W && boxHall) { boxHall = false; boxPage = 0; sfxPlay(SFX_TAP); }
     else if (x >= BOX_TAB_X2 && x < BOX_TAB_X2 + BOX_TAB_W && !boxHall) { boxHall = true; boxPage = 0; sfxPlay(SFX_TAP); }
     return;
   }
-  if (y < BOX_TAB_Y || y >= 392) { xScreen = XS_NONE; return; }  // arriba / "atras"
+  if (y < BOX_TAB_Y - 10 || y >= 392) { xScreen = XS_NONE; return; }  // arriba / abajo: salir (como antes)
   if (y >= BOX_NAV_Y && y < BOX_NAV_Y + 36) {
     if (x < CX && boxPage > 0) boxPage--;
     else if (x >= CX && boxPage + 1 < boxPages()) boxPage++;
