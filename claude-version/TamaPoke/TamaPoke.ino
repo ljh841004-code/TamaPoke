@@ -35,7 +35,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko11.4"
+#define FW_VERSION "1.17-ko11.5"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -239,6 +239,107 @@ int16_t tX0, tY0, tXl, tYl; // gesto en curso (inicio y ultima posicion)
 uint32_t tStart = 0;
 bool holdFired = false;
 
+// ---------- ko11.5: diagnostico de arranque + modo seguro ----------
+// Si la placa se reinicia en bucle (USB aparece y desaparece, pantalla negra),
+// no hay forma de ver donde muere. Cada paso del arranque se apunta en memoria
+// RTC (sobrevive a un reinicio por fallo) y, si se ve, tambien en pantalla.
+// Al volver a arrancar tras un fallo: se espera 4 s al monitor serie, se dice
+// en que paso murio la vez anterior y por que, y desde el 2o fallo seguido se
+// entra en MODO SEGURO: sin SD, sin WiFi, sin sonido (y sin tactil si murio
+// ahi). La partida NO se toca.
+static const char *const BOOT_NAMES[] = {
+  "-", "serial", "pmu", "display", "touch", "save:pet", "save:box", "save:hall", "save:fame",
+  "save:migrate", "save:dex", "sd", "sd:thumbs", "rtc", "power", "i2c", "clock", "wifi", "audio",
+  "music", "first frame", "running", "ok"
+};
+enum : uint8_t { BS_SERIAL = 1, BS_PMU, BS_GFX, BS_TOUCH, BS_PET, BS_BOX, BS_HALL, BS_FAME, BS_MIGRATE,
+                 BS_DEX, BS_SD, BS_THUMBS, BS_RTC, BS_POWER, BS_I2C, BS_CLOCK, BS_NET, BS_AUDIO,
+                 BS_MUSIC, BS_FRAME, BS_RUN, BS_OK };
+#ifdef ESP_PLATFORM
+RTC_NOINIT_ATTR static uint32_t rbMagic, rbStep, rbFails;
+#else
+static uint32_t rbMagic, rbStep, rbFails;
+#endif
+static uint8_t bootPrevStep = 0;
+static int bootPrevReason = 0;
+bool safeMode = false;
+static bool bootGfxUp = false;
+static const char *resetName(int r) {
+#ifdef ESP_PLATFORM
+  switch (r) {
+    case ESP_RST_POWERON: return "power on";
+    case ESP_RST_SW: return "restart";
+    case ESP_RST_PANIC: return "CRASH (panic)";
+    case ESP_RST_INT_WDT: return "CRASH (int wdt)";
+    case ESP_RST_TASK_WDT: return "CRASH (task wdt)";
+    case ESP_RST_WDT: return "CRASH (wdt)";
+    case ESP_RST_BROWNOUT: return "BROWNOUT (power)";
+    case ESP_RST_DEEPSLEEP: return "deep sleep";
+    case ESP_RST_USB: return "usb";
+    default: break;
+  }
+#endif
+  (void)r;
+  return "other";
+}
+static void bootDrawStatus(const char *line1) {
+  if (!bootGfxUp) return;
+  gfx->fillScreen(0x0000);
+  gfx->setTextColor(0xFFFF);
+  gfx->setTextSize(2);
+  gfx->setCursor(60, 150);
+  gfx->print("TamaPoke boot");
+  gfx->setCursor(60, 190);
+  gfx->print(line1);
+  if (bootPrevStep && bootPrevStep < BS_OK) {
+    gfx->setTextColor(0xFBE0);
+    gfx->setCursor(40, 250);
+    char ls[48];
+    snprintf(ls, sizeof(ls), "last stop: %u %s", bootPrevStep, BOOT_NAMES[bootPrevStep]);
+    gfx->print(ls);
+    gfx->setCursor(40, 280);
+    gfx->print(resetName(bootPrevReason));
+    if (safeMode) { gfx->setCursor(40, 320); gfx->setTextColor(0xF800); gfx->print("SAFE MODE: no SD/WiFi/sound"); }
+  }
+  gfx->flush();
+}
+void bootStep(uint8_t s) {
+  rbStep = s;
+  Serial.printf("BOOT %u %s\n", s, BOOT_NAMES[s]);
+  if (s < BS_FRAME) {
+    char l[40];
+    snprintf(l, sizeof(l), "%u/%u %s", s, (unsigned)BS_OK, BOOT_NAMES[s]);
+    bootDrawStatus(l);
+  }
+}
+static void bootDiagBegin() {
+#ifdef ESP_PLATFORM
+  bootPrevReason = (int)esp_reset_reason();
+#endif
+  if (rbMagic != 0x7B0071A5u) { rbMagic = 0x7B0071A5u; rbStep = 0; rbFails = 0; }
+  bootPrevStep = (uint8_t)(rbStep <= BS_OK ? rbStep : 0);
+  bool died = bootPrevStep != 0 && bootPrevStep != BS_OK && bootPrevReason != 1 /*POWERON*/;
+  rbFails = died ? rbFails + 1 : 0;
+  safeMode = rbFails >= 2;
+  if (rbFails) {  // tras un fallo: tiempo para abrir la consola y leerlo
+#ifdef ESP_PLATFORM
+    uint32_t t0 = millis();
+    while (!Serial && millis() - t0 < 4000) delay(10);
+    delay(300);
+#endif
+  }
+  Serial.printf("BOOT prev: step %u (%s), reason %d %s, fails %u%s\n", bootPrevStep,
+                BOOT_NAMES[bootPrevStep], bootPrevReason, resetName(bootPrevReason), (unsigned)rbFails,
+                safeMode ? " -> SAFE MODE" : "");
+}
+// en loop(): marca el primer frame y, a los 20 s estable, arranque correcto
+void bootDiagLoop() {
+  static uint8_t phase = 0;
+  if (phase == 0) { bootStep(BS_FRAME); phase = 1; return; }
+  if (phase == 1) { bootStep(BS_RUN); phase = 2; return; }
+  if (phase == 2 && millis() > 20000) { rbStep = BS_OK; rbFails = 0; phase = 3; Serial.println("BOOT ok"); }
+}
+
 void setup() {
   Serial.setRxBufferSize(8192);  // la transferencia a SD llega en bloques de 2 KB
   Serial.begin(115200);
@@ -247,6 +348,8 @@ void setup() {
   // y nadie lo vacia) -> con timeout 0 los mensajes se descartan
   Serial.setTxTimeoutMs(0);
   // TP_VERSION_TAG + 6 = FW_VERSION; usarla aqui evita que el enlazador la quite
+  bootDiagBegin();  // ko11.5
+  bootStep(BS_SERIAL);
   Serial.printf("TamaPoke fw v%s\n", TP_VERSION_TAG + sizeof(UPD_TAG) - 1);
   loadLang();  // idioma guardado (KO por defecto)
   Wire.begin(IIC_SDA, IIC_SCL);
@@ -268,37 +371,50 @@ void setup() {
   // CRITICO: encender la alimentacion del panel (BLDO1=OLED VDD 3.3V) ANTES de
   // inicializar el display. Si el PMU se reseteo (drenaje total), este rail
   // queda OFF y la pantalla se ve negra aunque el resto de la placa funcione.
+  bootStep(BS_PMU);
   pmuEnablePanel();
 
   // QSPI a 80MHz (por defecto 40): el flush del framebuffer es el cuello de
   // botella del fps (~56ms a 40MHz). Si el panel mostrara basura, bajar a 40M.
+  bootStep(BS_GFX);
   if (!gfx->begin(80000000)) Serial.println("gfx->begin() fallo");
+  else bootGfxUp = true;
   panel->setBrightness(180);
   applyLangFont();  // fuente del idioma guardado (clasica salvo CJK)
 
+  bootStep(BS_TOUCH);
   touch.setPins(TP_RESET, TP_INT);
   bool touchOk = false;
-  for (int i = 0; i < 3 && !touchOk; i++) {  // a veces falla al primer intento
+  // ko11.5: modo seguro y murio en el tactil la vez anterior: sin tactil
+  bool skipTouch = safeMode && bootPrevStep == BS_TOUCH;
+  for (int i = 0; i < 3 && !touchOk && !skipTouch; i++) {  // a veces falla al primer intento
     touchOk = touch.begin(Wire, 0x5A, IIC_SDA, IIC_SCL);
     if (!touchOk) delay(150);
   }
   if (!touchOk) Serial.println("CST9217 no detectado");
   // begin() deja el chip en modo comando (lee la identidad y no sale);
   // hace falta un reset por hardware para que vuelva a reportar toques
-  touch.reset();
-  touch.setMaxCoordinates(LCD_WIDTH, LCD_HEIGHT);
-  touch.setMirrorXY(true, true);  // el panel esta montado girado 180 grados
-  // INT activo-bajo: salta cuando hay datos. Gatea las lecturas I2C (ver loop)
-  pinMode(TP_INT, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(TP_INT), touchIsr, FALLING);
+  if (!skipTouch) {
+    touch.reset();
+    touch.setMaxCoordinates(LCD_WIDTH, LCD_HEIGHT);
+    touch.setMirrorXY(true, true);  // el panel esta montado girado 180 grados
+    // INT activo-bajo: salta cuando hay datos. Gatea las lecturas I2C (ver loop)
+    pinMode(TP_INT, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(TP_INT), touchIsr, FALLING);
 #ifdef ESP_PLATFORM
-  touchTaskStart();  // ko10.8: lector tactil en su tarea (ver handleTouch)
+    touchTaskStart();  // ko10.8: lector tactil en su tarea (ver handleTouch)
 #endif
+  }
 
+  bootStep(BS_PET);
   pet.begin();
+  bootStep(BS_BOX);
   box.begin();
+  bootStep(BS_HALL);
   hall.begin();
+  bootStep(BS_FAME);
   fame.begin();  // ko10.11
+  bootStep(BS_MIGRATE);
   // ko10.5: los criados que ko10.5 aun guardaba en la caja pasan al salon
   for (int i = box.count() - 1; i >= 0; i--)
     if (box.at((uint8_t)i).flags & BOXF_RAISED) {
@@ -306,16 +422,23 @@ void setup() {
       if (box.take((uint8_t)i, m))
         hall.addRaised(m.dex, m.lvl, m.flags & BOXF_SHINY, m.geneAtk, m.geneDef, m.geneSpe, m.epoch);
     }
+  bootStep(BS_DEX);
   dexLog.begin();
   pet.endHook = onPetEnd;  // ko10.5: el que se va a la caja; luego se elige el siguiente
-  sdBegin();
-  thumbs.load();
+  bootStep(BS_SD);
+  if (!safeMode) sdBegin();  // ko11.5: modo seguro = sin SD
+  bootStep(BS_THUMBS);
+  if (!safeMode) thumbs.load();
 
   // reloj real: aplica el tiempo que estuvo apagado
+  bootStep(BS_RTC);
   rtcBegin();
+  bootStep(BS_POWER);
   batBegin();
   pwrSetup();
-  i2cFastMode();  // ko11.3
+  bootStep(BS_I2C);
+  if (!safeMode) i2cFastMode();  // ko11.3
+  bootStep(BS_CLOCK);
   uint32_t e = rtcEpoch();
   gClockTrusted = e != 0;
   if (e == 0) {
@@ -339,9 +462,13 @@ void setup() {
   }
   pet.syncClock(e);
 
+  bootStep(BS_NET);
   netBegin();    // WiFi/NTP: la primera sincronizacion va sola a los pocos segundos
-  audioBegin();  // ES8311 + I2S + amplificador (suena un jingle de arranque)
-  if (sdReady) audioLoadMusic();  // /mons/bgm.wav y /mons/battle_wild.wav si existen
+  if (safeMode) netSafeMode();  // ko11.5: sin sincronizar sola
+  bootStep(BS_AUDIO);
+  if (!safeMode) audioBegin();  // ES8311 + I2S + amplificador (suena un jingle de arranque)
+  bootStep(BS_MUSIC);
+  if (sdReady && !safeMode) audioLoadMusic();  // /mons/bgm.wav y /mons/battle_wild.wav si existen
 
   lastInteract = millis();
 }
@@ -491,6 +618,7 @@ void loop() {
   if (!screenOff && now - lastRender >= (uint32_t)((gameOpen || sackOpen || trainingFast()) ? 85 : 100)) {
     lastRender = now;
     uint32_t r0 = millis();
+    bootDiagLoop();  // ko11.5
     render();
     renderMs = millis() - r0;
   }

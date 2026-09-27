@@ -108,6 +108,8 @@ void netBegin() {
   snprintf(gApName, sizeof(gApName), "TamaPoke-%02X%02X", mac[4], mac[5]);
 }
 
+void netSafeMode() { gAuto = false; }
+
 bool netConfigured() { return gNSaved > 0; }
 const char *netSsid() { return gSsid[0] ? gSsid : gSaved[0]; }
 uint8_t netSavedCount() { return gNSaved; }

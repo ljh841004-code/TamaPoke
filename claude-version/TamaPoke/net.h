@@ -17,6 +17,7 @@ enum NetState : uint8_t {
 };
 
 void netBegin();
+void netSafeMode();  // ko11.5: sin sincronizacion automatica (no se guarda)
 bool netConfigured();
 const char *netSsid();
 int16_t netTzMin();              // minutos respecto a UTC (Corea = +540)

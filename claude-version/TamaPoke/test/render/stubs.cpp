@@ -42,6 +42,7 @@ const char *gSdRoot = ".";
 
 // ---- red / tongsin ----
 void netBegin() {}
+void netSafeMode() {}
 bool netConfigured() { return true; }
 const char *netSsid() { return "MyHome_2.4G"; }
 int16_t netTzMin() { return 540; }
