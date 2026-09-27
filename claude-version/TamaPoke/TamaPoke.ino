@@ -92,8 +92,16 @@ PmdMon galleryPmd;  // sprite grande de la vista detalle de la galeria (PMD/TPK2
 // galeria pokedex
 bool galleryOpen = false;
 bool galleryDirty = false;
-int galleryPage = 0;        // 16 paginas de 16 (ko10: 251 especies)
-#define GAL_PAGES ((DEX_COUNT + 15) / 16)
+int galleryPage = 0;        // ko11: 10 paginas de gen 1 + 7 de gen 2
+// ko11: la gen 2 empieza pagina nueva (antes la pagina 10 mezclaba 145-151 con 152-160)
+#define GAL_GEN1_PAGES ((151 + 15) / 16)
+#define GAL_PAGES (GAL_GEN1_PAGES + (DEX_COUNT - 151 + 15) / 16)
+// especie de la casilla idx (0..15) de la pagina p; 0 = casilla vacia
+int16_t galDex(int p, int idx) {
+  int16_t d = p < GAL_GEN1_PAGES ? (int16_t)(p * 16 + idx + 1) : (int16_t)(152 + (p - GAL_GEN1_PAGES) * 16 + idx);
+  if (p < GAL_GEN1_PAGES && d > 151) return 0;
+  return d > DEX_COUNT ? 0 : d;
+}
 int16_t galleryDetail = 0;  // dex en vista detalle, 0 = rejilla
 
 bool screenOff = false;       // pulsacion corta del boton PWR
@@ -3141,11 +3149,14 @@ void renderGallery() {
   setSize(3);
   setCur(centerX(head, 3), 36);
   printT(head);
+  // ko11: que generacion es esta pagina
+  bool g2 = galleryPage >= GAL_GEN1_PAGES;
+  drawFit(XT(g2 ? X_GEN2 : X_GEN1), 70, 200, g2 ? UI_BAR_WARN : 0x8410, 1);
 
   for (int r = 0; r < 4; r++) {
     for (int c = 0; c < 4; c++) {
-      int16_t dex = galleryPage * 16 + r * 4 + c + 1;
-      if (dex > DEX_COUNT) break;
+      int16_t dex = galDex(galleryPage, r * 4 + c);
+      if (!dex) break;
       int x = GAL_X + c * GAL_CELL, y = GAL_Y + r * GAL_CELL;
       const uint8_t *t = thumbs.get(dex);
       if (t) {
@@ -3171,7 +3182,7 @@ void renderGallery() {
   // los de gen 2 en color de acento)
   for (int i = 0; i < GAL_PAGES; i++) {
     int x = CX - (GAL_PAGES - 1) * 5 + i * 10;
-    uint16_t col = i * 16 + 1 > 151 ? UI_BAR_WARN : UI_INK;
+    uint16_t col = i >= GAL_GEN1_PAGES ? UI_BAR_WARN : UI_INK;
     if (i == galleryPage) gfx->fillCircle(x, 416, 4, col);
     else gfx->drawCircle(x, 416, 2, col);
   }
@@ -3229,8 +3240,8 @@ void galleryTap(int16_t x, int16_t y) {
   if (x < GAL_X || y < GAL_Y) return;
   int c = (x - GAL_X) / GAL_CELL, r = (y - GAL_Y) / GAL_CELL;
   if (c > 3 || r > 3) return;
-  int16_t dex = galleryPage * 16 + r * 4 + c + 1;
-  if (dex > DEX_COUNT) return;
+  int16_t dex = galDex(galleryPage, r * 4 + c);
+  if (!dex) return;
   galleryDetail = dex;
   galleryPmd.load(dex, pet.isShinyRegistered(dex));
   // ko9.1: los ya vistos o criados dicen su nombre; los "???" no
