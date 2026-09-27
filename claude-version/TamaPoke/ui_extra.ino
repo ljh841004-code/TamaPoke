@@ -360,6 +360,7 @@ BRng bRng(1);
 uint32_t evDur(const BEvent &e) {
   switch (e.kind) {
     case EV_HIT: return (e.eff != 2 || e.crit) ? 1900 : 1400;
+    case EV_COUNTER: return 1500;  // ko11.8
     case EV_FAINT: return 1500;
     default: return 1200;
   }
@@ -382,6 +383,11 @@ void evMessages(const BEvent &e) {
       else if (e.crit) strncpy(bvL2, XT(X_CRIT), sizeof(bvL2) - 1);
       break;
     case EV_GUARD: txFmt(bvL1, sizeof(bvL1), X_GUARDS, who); break;
+    case EV_COUNTER:  // ko11.8: se protegio y devuelve el golpe
+      txFmt(bvL1, sizeof(bvL1), X_COUNTER, who);
+      if (e.eff == 4) strncpy(bvL2, XT(X_SUPER), sizeof(bvL2) - 1);
+      else if (e.eff == 1) strncpy(bvL2, XT(X_NOTVERY), sizeof(bvL2) - 1);
+      break;
     case EV_RUN_OK: strncpy(bvL1, XT(X_FLED), sizeof(bvL1) - 1); break;
     case EV_RUN_FAIL: strncpy(bvL1, XT(X_CANT_RUN), sizeof(bvL1) - 1); break;
     case EV_FAINT: txFmt(bvL1, sizeof(bvL1), X_FAINTED, who); break;
@@ -397,7 +403,7 @@ void evMessages(const BEvent &e) {
   }
   bvL1[sizeof(bvL1) - 1] = 0;
   bvL2[sizeof(bvL2) - 1] = 0;
-  if (e.kind == EV_HIT && e.dmg) sfxPlay(SFX_PLAY);
+  if ((e.kind == EV_HIT || e.kind == EV_COUNTER) && e.dmg) sfxPlay(SFX_PLAY);
   else if (e.kind == EV_FAINT) sfxPlay(SFX_DENY);
   else if (e.kind == EV_HEAL) sfxPlay(SFX_HEART);
   else if (e.kind == EV_CATCH) sfxPlay(SFX_MEDAL);
@@ -865,11 +871,16 @@ void drawBattlers() {
   if (bPhase == BP_PLAY && bqI < bqN) {
     const BEvent &e = bq[bqI];
     bool me = evIsMe(e.side);
-    if (e.kind == EV_HIT || e.kind == EV_MISS) {
+    if (e.kind == EV_HIT || e.kind == EV_MISS || e.kind == EV_COUNTER) {
       int lunge = (t < 350) ? (int)(t / 12) : (t < 550 ? (int)((550 - t) / 7) : 0);
       if (me) { meAct = PMD_ATTACK; meX += lunge; meG -= lunge / 2; }
       else    { foeAct = PMD_ATTACK; foeX -= lunge; foeG += lunge / 2; }
-      if (e.kind == EV_HIT && e.eff && t > 350 && t < 1000) {
+      if (e.kind == EV_COUNTER && t < 700) {  // ko11.8: el escudo aun se ve al devolver el golpe
+        int r = 34 + (int)((t / 10) % 20);
+        if (me) gfx->drawCircle(meX, meG - 50, r, 0x4C98);
+        else gfx->drawCircle(foeX, foeG - 40, r, 0x4C98);
+      }
+      if ((e.kind == EV_HIT || e.kind == EV_COUNTER) && e.eff && t > 350 && t < 1000) {
         bool blink = ((t / 80) % 2) == 0;
         if (me) { foeAct = PMD_HURT; foeHide = blink; }
         else    { meAct = PMD_HURT; meHide = blink; }
@@ -936,12 +947,12 @@ void drawBattlers() {
   // fork KO (ko7): efecto del ataque encima de los dos
   if (bPhase == BP_PLAY && bqI < bqN) {
     const BEvent &e = bq[bqI];
-    if (e.kind == EV_HIT || e.kind == EV_MISS) {
+    if (e.kind == EV_HIT || e.kind == EV_MISS || e.kind == EV_COUNTER) {
       bool me = evIsMe(e.side);
       uint8_t fx = e.move == BA_TYPE ? (me ? bvMeType : bvFoeType) : 0xFF;
       int ax = me ? 140 : 316, ay = me ? 200 : 116, tx = me ? 316 : 140, ty = me ? 116 : 200;
       drawMoveFx(fx, ax + bvShakeX, ay + bvShakeY, tx + bvShakeX, ty + bvShakeY, t,
-                 e.kind == EV_HIT && e.eff, e.eff, e.move == BA_TYPE ? (me ? bvMeTier : bvFoeTier) : 0);
+                 (e.kind == EV_HIT || e.kind == EV_COUNTER) && e.eff, e.eff, e.move == BA_TYPE ? (me ? bvMeTier : bvFoeTier) : 0);
     }
   }
 }

@@ -23,6 +23,7 @@ enum BEvKind : uint8_t {
   EV_HEAL,       // bebe una pocion: dmg = vida recuperada
   EV_CATCH,      // la pokeball atrapa al rival (fin de la batalla)
   EV_BREAK,      // el rival se escapa de la pokeball
+  EV_COUNTER,    // ko11.8: se protegio, le dieron y devuelve el golpe (dmg, eff; nunca falla ni es critico)
 };
 
 struct Battler {
@@ -158,6 +159,7 @@ int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
 // fork KO (ko4): probabilidad (%) de capturar al rival con una pokeball. Sube
 // cuanta menos vida le quede; los raros cuestan mas y los legendarios mucho mas.
 uint8_t catchChance(const Battler &foe);
+uint16_t counterDamage(const Battler &at, const Battler &df, BRng &rng, uint8_t *effOut);  // ko11.8
 
 // batalla completa entre dos IA (tongsin). Devuelve ganador: 0 = a, 1 = b.
 // ev puede ser nullptr (solo el resultado); nEv recibe cuantos eventos se escribieron.

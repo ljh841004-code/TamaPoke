@@ -110,6 +110,66 @@ TEST(battle, proteger_reduce_el_dano_y_cura) {
   CHECK(conGuard < sinGuard);
 }
 
+// ko11.8: protegerse y recibir el golpe -> contraataque (a los dos lados igual)
+TEST(battle, contraataque_tras_protegerse) {
+  int counters = 0, misses = 0;
+  for (uint32_t s = 1; s <= 300; s++) {
+    for (int side = 0; side < 2; side++) {
+      Battler a = makeBattler(6, 40, 120, 90, 50), b = makeBattler(9, 40, 90, 120, 150);
+      BRng rng(s);
+      BEvent ev[BATTLE_MAX_EVENTS];
+      BAct actA = side ? BA_TACKLE : BA_GUARD, actB = side ? BA_GUARD : BA_TACKLE;
+      int n = battleTurn(a, b, actA, actB, rng, ev, BATTLE_MAX_EVENTS, false);
+      CHECK(n <= BATTLE_MAX_EVENTS);
+      uint8_t guarder = side ? 1 : 0;
+      bool hit = false, miss = false, counter = false;
+      for (int i = 0; i < n; i++) {
+        if (ev[i].kind == EV_HIT && ev[i].side != guarder && ev[i].dmg) hit = true;
+        if (ev[i].kind == EV_MISS) miss = true;
+        if (ev[i].kind == EV_COUNTER) {
+          counter = true;
+          CHECK_EQ(ev[i].side, guarder);          // devuelve el que se protegia
+          CHECK(!ev[i].crit);
+          CHECK(ev[i].dmg >= 1);
+          CHECK(i > 0 && ev[i - 1].kind == EV_HIT);  // justo despues del golpe recibido
+          CHECK_EQ(ev[i].hpA, a.hp);  // (ultimo evento del turno en este caso)
+        }
+      }
+      CHECK_EQ(counter, hit);  // solo si el golpe entro
+      if (counter) counters++;
+      if (miss) { misses++; CHECK(!counter); }
+    }
+  }
+  CHECK(counters > 300);
+  CHECK(misses > 0);
+}
+
+TEST(battle, contraataque_mas_flojo_que_un_placaje) {
+  Battler a = makeBattler(6, 40, 120, 90, 50), b = makeBattler(9, 40, 90, 120, 150);
+  uint32_t full = 0, cnt = 0;
+  for (uint32_t s = 1; s <= 200; s++) {
+    BRng r(s);
+    uint8_t eff;
+    cnt += counterDamage(a, b, r, &eff);
+    CHECK_EQ(eff, (uint8_t)2);
+  }
+  for (uint32_t s = 1; s <= 200; s++) {  // placajes normales que entran (sin critico)
+    Battler x = a, y = b;
+    BRng r(s);
+    BEvent ev[BATTLE_MAX_EVENTS];
+    int n = battleTurn(x, y, BA_TACKLE, BA_GUARD, r, ev, BATTLE_MAX_EVENTS, false);
+    for (int i = 0; i < n; i++)
+      if (ev[i].kind == EV_HIT && ev[i].side == 0 && !ev[i].crit) full += ev[i].dmg * 2u;  // x2: el escudo lo partio
+  }
+  CHECK(cnt * 10 < full * 7);  // ~ la mitad de un placaje (los fallos bajan 'full' un poco)
+  CHECK(cnt * 10 > full * 3);
+  Battler g = makeBattler(92, 40, 90, 90, 90);  // fantasma: el placaje no le hace nada
+  BRng r(1);
+  uint8_t eff = 9;
+  CHECK_EQ(counterDamage(a, g, r, &eff), (uint16_t)0);
+  CHECK_EQ(eff, (uint8_t)0);
+}
+
 TEST(battle, huir_termina_el_turno_sin_ataques) {
   Battler a = makeBattler(25, 30, 80, 60, 300), b = makeBattler(74, 30, 80, 60, 1);
   BRng rng(11);

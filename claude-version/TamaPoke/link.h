@@ -31,7 +31,7 @@ struct __attribute__((packed)) LinkPet {
 // tamano de mensaje la version 1 ni se oye (se descarta por longitud).
 // 3 (ko10): especies de gen 2 (152-251); un ko9 no sabria que hacer con ellas
 // 4 (ko10.4): cada mensaje lleva la hora; el que la perdio la toma del otro
-#define LINK_PROTO_VER 4
+#define LINK_PROTO_VER 5  // ko11.8: contraataque tras protegerse (cambian las batallas simuladas)
 
 void linkStart(LinkMode mode, const LinkPet &mine);
 void linkStop();

@@ -476,8 +476,9 @@ static void push(BEvent *ev, int maxEv, int &n, uint8_t side, uint8_t kind, uint
 
 // un ataque de "at" a "df"; devuelve true si df se debilito
 static bool doAttack(Battler &at, Battler &df, uint8_t move, uint8_t side, BRng &rng,
-                     BEvent *ev, int maxEv, int &n, Battler &a, Battler &b) {
+                     BEvent *ev, int maxEv, int &n, Battler &a, Battler &b, bool *landed = nullptr) {
   uint8_t acc = (move == BA_TYPE) ? MOVE_TYPE_ACC : MOVE_TACKLE_ACC;
+  if (landed) *landed = false;
   if (rng.below(100) >= acc) {
     push(ev, maxEv, n, side, EV_MISS, move, 2, false, 0, a, b);
     return false;
@@ -496,6 +497,7 @@ static bool doAttack(Battler &at, Battler &df, uint8_t move, uint8_t side, BRng 
   }
   if (d > df.hp) d = df.hp;
   df.hp -= (uint16_t)d;
+  if (landed) *landed = d > 0;
   push(ev, maxEv, n, side, EV_HIT, move, eff, crit, (uint16_t)d, a, b);
   if (df.hp == 0) {
     push(ev, maxEv, n, side ^ 1, EV_FAINT, move, 2, false, 0, a, b);
@@ -514,6 +516,18 @@ uint8_t catchChance(const Battler &foe) {
   if (ch < 3) ch = 3;
   if (ch > 90) ch = 90;
   return (uint8_t)ch;
+}
+
+// ko11.8: contraataque tras protegerse con exito: placaje a media potencia,
+// sin fallo ni critico (sigue contando el tipo: un fantasma no lo nota)
+uint16_t counterDamage(const Battler &at, const Battler &df, BRng &rng, uint8_t *effOut) {
+  uint8_t eff;
+  uint32_t d = rawDamage(at, df, BA_TACKLE, &eff);
+  if (effOut) *effOut = eff;
+  if (!eff) return 0;
+  d = d * (85 + rng.below(16)) / 100 / 2;
+  if (d < 1) d = 1;
+  return (uint16_t)(d > df.hp ? df.hp : d);
 }
 
 static bool wildOnly(BAct a) { return a == BA_RUN || a == BA_POTION || a == BA_BALL; }
@@ -572,7 +586,21 @@ int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
     if (act[s] != BA_TACKLE && act[s] != BA_TYPE) continue;
     Battler &me = *side[s], &op = *side[s ^ 1];
     if (me.hp == 0) continue;
-    if (doAttack(me, op, act[s], s, rng, ev, maxEv, n, a, b)) break;
+    bool landed = false;
+    if (doAttack(me, op, act[s], s, rng, ev, maxEv, n, a, b, &landed)) break;
+    // ko11.8: el otro se protegia y el golpe entro: devuelve un golpe (los dos lados igual)
+    if (landed && op.guard && op.hp > 0) {
+      uint8_t eff;
+      uint16_t d = counterDamage(op, me, rng, &eff);
+      if (eff) {
+        me.hp -= d;
+        push(ev, maxEv, n, s ^ 1, EV_COUNTER, BA_TACKLE, eff, false, d, a, b);
+        if (me.hp == 0) {
+          push(ev, maxEv, n, s, EV_FAINT, BA_TACKLE, 2, false, 0, a, b);
+          break;
+        }
+      }
+    }
   }
   a.guard = b.guard = false;
   return n < maxEv ? n : maxEv;

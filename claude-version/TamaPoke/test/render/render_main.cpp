@@ -193,6 +193,18 @@ static void scenes(bool ko, const char *sfx) {
   }
   bq[0].crit = true; bq[0].eff = 4; bq[0].move = BA_TACKLE; bqT = gMockMillis;
   gMockMillis = bqT + 480; render(); shot("fx_crit_super");
+  // ko11.8: se protege, le pegan y devuelve el golpe (el mio y el del rival)
+  for (int who = 0; who < 2; who++) {
+    bPhase = BP_PLAY; bqAisMe = true; bqN = 3; bqI = 0;
+    memset(bq, 0, sizeof(BEvent) * 3);
+    uint8_t g = who ? 1 : 0;  // quien se protege
+    bq[0].side = g; bq[0].kind = EV_GUARD; bq[0].move = BA_GUARD; bq[0].eff = 2;
+    bq[1].side = g ^ 1; bq[1].kind = EV_HIT; bq[1].move = BA_TACKLE; bq[1].eff = 2; bq[1].dmg = 6;
+    bq[2].side = g; bq[2].kind = EV_COUNTER; bq[2].move = BA_TACKLE; bq[2].eff = 2; bq[2].dmg = 4;
+    for (int i = 0; i < 3; i++) { bq[i].hpA = bMe.hp; bq[i].hpB = bFoe.hp; }
+    bqI = 2; bqT = gMockMillis; evMessages(bq[2]);
+    gMockMillis = bqT + 420; render(); shot(who ? "21c_counter_foe" : "21b_counter_me");
+  }
   bPhase = BP_MENU; bqN = 0;
   {  // ko11.1: victoria salvaje con objetos por probabilidad
     uint8_t b0 = pet.balls, p0 = pet.potions;
