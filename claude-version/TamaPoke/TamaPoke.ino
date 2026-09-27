@@ -790,7 +790,13 @@ bool inPetZone(int16_t x, int16_t y) {
 // y bajaba mientras se pintaba, los dos toques salian como uno solo y "no
 // contaba" (el saco 4-5 del entrenamiento de ataque pide ya ~3 golpes/s).
 // Wire lleva cerrojo propio en el core 3.x, asi que convive con PMU y RTC.
-struct TouchEv { int16_t x, y; uint8_t pressed; };
+struct TouchEv { int16_t x, y; uint8_t pressed; uint32_t t; };  // ko11.6: t = cuando se leyo
+// ko11.6: hora del evento que se esta procesando (0 = ahora). Los toques se
+// procesan por tandas entre frames (el render ocupa ~70 ms): con millis() un
+// toque rapido llegaba con apoyar+levantar en la MISMA tanda, median 0 ms y
+// el filtro de roces (< 60 ms) lo tiraba. En los menus "a veces no entraba".
+uint32_t gTouchEvT = 0;
+static inline uint32_t touchNow() { return gTouchEvT ? gTouchEvT : millis(); }
 #ifdef ESP_PLATFORM
 static QueueHandle_t gTouchQ = nullptr;
 static volatile bool gTouchHeld = false;
@@ -834,6 +840,7 @@ static void touchTask(void *) {
     }
     if (p != was) {  // apoyar/levantar: nunca se pierde (la cola se vacia cada loop)
       e.x = p ? x : lx; e.y = p ? y : ly; e.pressed = p;
+      e.t = millis();
       xQueueSend(gTouchQ, &e, 0);
       qx = e.x; qy = e.y;
     } else if (p && (abs(x - qx) > 3 || abs(y - qy) > 3) && uxQueueSpacesAvailable(gTouchQ) > 8) {
@@ -842,6 +849,7 @@ static void touchTask(void *) {
       // enviaba nunca y el gesto acababa pareciendo un toque (deslizar arriba
       // desde abajo para abrir la ficha "no iba")
       e.x = x; e.y = y; e.pressed = 1;
+      e.t = millis();
       xQueueSend(gTouchQ, &e, 0);
       qx = x; qy = y;
     }
@@ -885,7 +893,9 @@ void handleTouch() {
   bool any = false;
   while (gTouchQ && xQueueReceive(gTouchQ, &e, 0) == pdTRUE) {
     any = true;
+    gTouchEvT = e.t ? e.t : 1;  // ko11.6: medir con la hora de lectura, no la de proceso
     touchSample(e.pressed, e.x, e.y);
+    gTouchEvT = 0;
   }
   // dedo quieto apoyado: sin eventos, pero las pulsaciones largas miden tiempo
   static uint32_t lastHold = 0;
@@ -938,10 +948,10 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
   if (pressed && !wasPressed) {  // empieza el gesto
     tX0 = tXl = x;
     tY0 = tYl = y;
-    tStart = millis();
+    tStart = touchNow();
     holdFired = false;
     swallowGesture = (dimStage > 0) || screenOff;  // si estaba a oscuras, solo despierta
-    if (timeLeft(navGuardUntil)) swallowGesture = true;  // ko10.11: toque "de rebote" tras abrir algo
+    if ((int32_t)(navGuardUntil - touchNow()) > 0) swallowGesture = true;  // ko11.6: hora del evento  // ko10.11: toque "de rebote" tras abrir algo
     screenOff = false;
     lastInteract = millis();
     // ko10.3: la pelota se golpea al APOYAR el dedo (antes al levantarlo: con la
@@ -972,7 +982,7 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
     tYl = y;
     lastInteract = millis();
     int dx = tXl - tX0, dy = tYl - tY0;
-    uint32_t dt = millis() - tStart;
+    uint32_t dt = touchNow() - tStart;  // ko11.6: duracion real del toque
     if (!holdFired && !swallowGesture) {
       // ko10.8: arrastres lentos (hasta 1,5 s) y algo torcidos tambien valen: manda
       // el eje dominante (antes < 0,8 s y la otra direccion < 70 px)
@@ -987,7 +997,7 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
         onTap(tX0, tY0);
         // ko10.11: si el toque abrio/cerro una pantalla, 250 ms sin toques: un
         // segundo toque pegado no debe pulsar lo que haya debajo en la nueva
-        if (screenSig() != sig0) navGuardUntil = millis() + 250;
+        if (screenSig() != sig0) navGuardUntil = touchNow() + 250;
       }
     }
   }
