@@ -1492,7 +1492,16 @@ bool ownsSpecies(int16_t dex) {
 
 // tras el resultado: el repetido (si lo hay) y luego "seguir?"
 static void afterResult() {
-  if (bKind != BK_WILD) { endBattleScreen(); return; }  // ko10.4: entrenador: se vuelve
+  // ko10.11: tras un gimnasio se vuelve a la lista de gimnasios (en la pagina de
+  // ese gimnasio, con la medalla nueva a la vista) y tras el reto del dia, a su
+  // pantalla. Antes volvia a la principal y habia que entrar otra vez
+  if (bKind == BK_GYM) {
+    foePmd.unload();
+    openGyms();
+    gymPage = bGym / GY_PER_PAGE;
+    return;
+  }
+  if (bKind == BK_DAILY) { foePmd.unload(); openDaily(); return; }
   bPhase = bDupPending ? BP_DUP : BP_NEXT;
   bPhaseT = millis();
 }
