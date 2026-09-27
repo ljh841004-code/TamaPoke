@@ -627,19 +627,54 @@ void championTeam(uint16_t petLvl, uint32_t seed, Battler out[CHAMP_TEAM]) {
 // ---- ko10.11: salvajes de tu talla
 uint32_t battlerPower(const Battler &b) { return (uint32_t)b.maxHp + b.atk + b.def + b.spe; }
 
-void wildMatchPower(Battler &foe, const Battler &me, BRng &rng) {
-  const DexEntry &e = DEX_TBL[foe.dex];
-  uint32_t target = battlerPower(me) * (90 + rng.below(16)) / 100;  // 90-105 %
-  int best = foe.lvl;
+// ko11: la forma que toca a ese nivel (Caterpie Lv57 -> Butterfree, Dragonite Lv25 -> Dratini)
+static int16_t formForLevel(int16_t dex, uint16_t lv, BRng &rng) {
+  for (int g = 0; g < 3; g++) {  // bajar mientras no llegue al nivel de su evolucion
+    int16_t pre = dexPrevo(dex);
+    if (pre <= 0) break;
+    uint8_t need = evoLevel(pre);
+    if (need && lv < need) dex = pre;
+    else break;
+  }
+  for (int g = 0; g < 3 && DEX_TBL[dex].evolvesTo; g++) {  // subir si ya le toca
+    uint8_t need = evoLevel(dex);
+    if (!need || lv < need) break;
+    int16_t opts[8];
+    int k = dexEvoOptions(dex, opts);
+    dex = opts[k > 1 ? rng.below(k) : 0];
+  }
+  return dex;
+}
+
+static int bestLevelFor(int16_t dex, uint32_t target, int anchor) {
+  const DexEntry &e = DEX_TBL[dex];
+  int best = anchor;
   uint32_t bestDiff = 0xFFFFFFFFu;
-  for (int lv = (int)foe.lvl - 6; lv <= (int)foe.lvl + 10; lv++) {
+  for (int lv = anchor - 6; lv <= anchor + 10; lv++) {
     if (lv < 2 || lv > LEVEL_MAX) continue;
     uint32_t p = (uint32_t)battleHp(e.bHp, (uint16_t)lv) + wildStat(e.bAtk, 100, (uint16_t)lv) +
                  wildStat(e.bDef, 100, (uint16_t)lv) + wildStat(e.bSpe, 100, (uint16_t)lv);
     uint32_t d = p > target ? p - target : target - p;
     if (d < bestDiff) { bestDiff = d; best = lv; }
   }
+  return best;
+}
+
+void wildMatchPower(Battler &foe, const Battler &me, BRng &rng) {
+  uint32_t target = battlerPower(me) * (90 + rng.below(16)) / 100;  // 90-105 %
+  int anchor = foe.lvl;
+  int16_t dex = foe.dex;
+  int best = anchor;
+  // ko11: nivel de tu talla y luego la forma de ese nivel; si la forma cambia,
+  // se vuelve a ajustar el nivel (siempre dentro de -6..+10 del original)
+  for (int pass = 0; pass < 3; pass++) {
+    best = bestLevelFor(dex, target, anchor);
+    int16_t nd = formForLevel(dex, (uint16_t)best, rng);
+    if (nd == dex) break;
+    dex = nd;
+  }
+  const DexEntry &e = DEX_TBL[dex];
   uint8_t gA = 90 + rng.below(21), gD = 90 + rng.below(21), gS = 90 + rng.below(21);
-  foe = makeBattler(foe.dex, (uint16_t)best, wildStat(e.bAtk, gA, (uint16_t)best),
+  foe = makeBattler(dex, (uint16_t)best, wildStat(e.bAtk, gA, (uint16_t)best),
                     wildStat(e.bDef, gD, (uint16_t)best), wildStat(e.bSpe, gS, (uint16_t)best));
 }

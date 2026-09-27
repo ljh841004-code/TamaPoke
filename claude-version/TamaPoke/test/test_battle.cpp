@@ -515,7 +515,7 @@ TEST(wild, salvaje_de_tu_talla) {
     Battler f = makeBattler(d, 47, 60, 60, 60);
     wildMatchPower(f, me, r);
     CHECK(f.lvl >= 41 && f.lvl <= 57);
-    CHECK_EQ((int)f.dex, (int)d);           // la especie no cambia
+    CHECK_EQ((int)DEX_FAM[f.dex], (int)DEX_FAM[d]);  // misma familia (ko11: forma segun nivel)
     uint32_t fp = battlerPower(f);
     total++;
     if (fp >= mp * 70 / 100 && fp <= mp * 125 / 100) ok++;
@@ -527,4 +527,15 @@ TEST(wild, salvaje_de_tu_talla) {
   wildMatchPower(c, me, r1);
   wildMatchPower(g, me, r2);
   CHECK(c.lvl > g.lvl);
+  // ko11: la forma cuadra con el nivel: nada de un Caterpie Lv50 ni un Dragonite Lv20
+  for (uint32_t sd = 1; sd < 300; sd++) {
+    BRng r(sd);
+    int16_t d = (int16_t)(1 + r.below(DEX_COUNT));
+    Battler f = makeBattler(d, (uint16_t)(5 + r.below(80)), 50, 50, 50);
+    Battler m = makeBattler(9, (uint16_t)(5 + r.below(90)), (uint16_t)(20 + r.below(200)), 100, 100);
+    wildMatchPower(f, m, r);
+    if (DEX_TBL[f.dex].evolvesTo && evoLevel(f.dex)) CHECK(f.lvl < evoLevel(f.dex));
+    int16_t pre = dexPrevo(f.dex);
+    if (pre > 0 && evoLevel(pre)) CHECK(f.lvl >= evoLevel(pre));
+  }
 }

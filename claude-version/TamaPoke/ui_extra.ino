@@ -333,6 +333,8 @@ uint8_t bGroup = WG_COMMON;  // de que grupo salio el rival (WG_RARE: brillo al 
 enum : uint8_t { BK_WILD = 0, BK_GYM, BK_DAILY, BK_CHAMP };  // ko10.11: liga
 uint8_t bKind = BK_WILD;
 uint8_t bvOwned = 0;      // ko10.11: de esta especie en la caja
+int16_t bExpDex = 0;      // ko11: la EXP del salvaje sale de su especie y nivel ANTES de ajustarlo
+uint16_t bExpLvl = 0;
 uint32_t bvOwnedT = 0;
 uint8_t bGym = 0;
 Battler bTeam[CHAMP_TEAM];  // ko10.11: la liga lleva 6 (antes 3)
@@ -1182,6 +1184,8 @@ void startWildIn(uint8_t region) {
     bool fresh = !dexDiscovered(bFoe.dex) || (dexLog.caughtCount(bFoe.dex) == 0 && !ownsSpecies(bFoe.dex));
     if (bGroup == WG_RARE || fresh || bRng.below(100) < 45) break;
   }
+  bExpDex = bFoe.dex;  // ko11: la EXP no se infla por subirle el nivel
+  bExpLvl = bFoe.lvl;
   wildMatchPower(bFoe, bMe, bRng);  // ko10.11: de tu talla (90-105 % de tu fuerza)
   bool shiny = bRng.below(64) == 0;
   bvSetup(bMe, bFoe, nullptr, shiny);
@@ -1666,7 +1670,9 @@ void finishBattle(bool won, bool fled, bool caught) {
   bPhaseT = millis();
   if (!bRewarded) {
     bRewarded = true;
-    pet.battleResult(bLink ? BATTLE_LINK : BATTLE_WILD, won, fled, caught, bFoe.dex, bFoe.lvl);
+    bool wildExp = bKind == BK_WILD && !bLink && bExpDex;  // ko11
+    pet.battleResult(bLink ? BATTLE_LINK : BATTLE_WILD, won, fled, caught, wildExp ? bExpDex : bFoe.dex,
+                     wildExp ? bExpLvl : bFoe.lvl);
     bvMeLvl = pet.level();  // fork KO (ko7): la caja de vida ensena el nivel nuevo
     sfxPlay(pet.lastLvlUp ? SFX_LEVEL : won || caught ? SFX_MEDAL : SFX_BYE);  // ko7: subida de nivel
     // fork KO: el capturado va siempre a la caja; el vencido, solo a veces
