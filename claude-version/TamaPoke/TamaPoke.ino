@@ -35,7 +35,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko11.1"
+#define FW_VERSION "1.17-ko11.2"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -438,7 +438,10 @@ void loop() {
   // esperaba a que se atenuara, y un corte de luz en pleno uso perdia minutos.
   // Solo escribe las ~12 claves que cambia el paso del tiempo (ver flushSave):
   // el paron es de milisegundos y el desgaste de la flash, asumible.
-  if (pet.savePending()) pet.flushSave();
+  // ko11.2: durante los minijuegos rapidos no: escribir la flash para las dos
+  // CPU un momento (tirones de musica e imagen al aporrear). Al terminar el
+  // juego se guarda entero y lo pendiente se vuelca en el primer loop de fuera
+  if (pet.savePending() && !(gameOpen || sackOpen || trainingFast())) pet.flushSave();
 
   // anota la hora real cada 30 s (se persiste en cada save del juego)
   static uint32_t lastClock = 0;

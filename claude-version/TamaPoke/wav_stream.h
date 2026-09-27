@@ -8,8 +8,15 @@
 template<class Reader> class WavStream {
   Reader file;
   uint32_t dataStart = 0, dataBytes = 0, played = 0;
-  uint8_t cache[8192];
-  size_t at = 0, count = 0;
+  // ko11.2: anillo de lectura adelantada. Antes se leia de golpe al vaciarse
+  // (8 KiB de una vez justo cuando no quedaba nada): si en ese momento la tarea
+  // se retrasaba, el I2S (90 ms de colchon) se quedaba sin datos y la musica
+  // daba tirones. Ahora se rellena a trozos de 2 KiB en cuanto hay hueco, asi
+  // que el anillo casi siempre esta lleno (~256 ms de margen).
+  static constexpr size_t RING = 8192, CHUNK = 2048;
+  uint8_t cache[RING];
+  size_t head = 0, count = 0;  // lectura (bytes) y bytes validos del anillo
+  uint32_t fillPos = 0;        // siguiente byte del chunk data a leer del fichero
 public:
   uint32_t loops = 0;  // ko11: vueltas completas desde open()
 private:
@@ -18,8 +25,27 @@ private:
     return uint32_t(p[0]) | uint32_t(p[1]) << 8 |
            uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24;
   }
+  // rellena el anillo mientras quede un trozo libre (o este vacio). Un fallo
+  // de lectura cierra: nunca repetir audio corrupto
+  void fill() {
+    while (valid() && (count == 0 || RING - count >= CHUNK)) {
+      if (fillPos == dataBytes) {
+        fillPos = 0;
+        if (!file.seek(dataStart)) { close(); return; }
+      }
+      size_t tail = (head + count) % RING;
+      size_t want = RING - count;
+      if (want > RING - tail) want = RING - tail;  // hueco contiguo
+      if (want > CHUNK) want = CHUNK;
+      if (want > dataBytes - fillPos) want = dataBytes - fillPos;
+      size_t got = file.read(cache + tail, want);
+      if (got != want) { close(); return; }
+      count += want;
+      fillPos += want;
+    }
+  }
 public:
-  void close() { file.close(); dataStart = dataBytes = played = 0; at = count = 0; }
+  void close() { file.close(); dataStart = dataBytes = played = fillPos = 0; head = count = 0; }
   bool valid() const { return dataBytes != 0; }
   uint32_t position() const { return played; }
   uint32_t lengthBytes() const { return dataBytes; }  // ko10.4: duracion = bytes / 32000 s
@@ -45,6 +71,7 @@ public:
         if (!format || !bytes || (bytes & 1)) break;
         dataStart = start; dataBytes = bytes;
         played = resume < bytes ? resume & ~1u : 0;
+        fillPos = played;
         if (file.seek(dataStart + played)) return true;
         break;
       }
@@ -55,24 +82,24 @@ public:
   }
   // Exactly loops the data chunk, excluding metadata, including partial tails.
   // A short read is an I/O failure: stop instead of looping corrupt audio.
+  // allowIO=false: only the read-ahead (another task owns the SD card).
   size_t read(int16_t *out, size_t samples, bool allowIO = true) {
     size_t done = 0;
+    if (allowIO) fill();
     while (done < samples && valid()) {
-      if (at == count) {
-        if (!allowIO) break; // consume read-ahead while another task owns SD
-        if (played == dataBytes) {
-          played = 0;
-          loops++;  // ko11: una vuelta completa (para cambiar de cancion al acabar)
-          if (!file.seek(dataStart)) { close(); break; }
-        }
-        size_t want = dataBytes - played;
-        if (want > sizeof(cache)) want = sizeof(cache);
-        count = file.read(cache, want); at = 0;
-        if (count != want) { close(); break; }
+      if (count < 2) {
+        if (!allowIO) break;
+        fill();
+        if (count < 2) break;
       }
-      out[done++] = (int16_t)u16(cache + at);
-      at += 2; played += 2;
+      if (played == dataBytes) {  // la vuelta cuenta al consumir, no al leer
+        played = 0;
+        loops++;  // ko11: una vuelta completa (para cambiar de cancion al acabar)
+      }
+      out[done++] = (int16_t)u16(cache + head);
+      head = (head + 2) % RING; count -= 2; played += 2;
     }
+    if (allowIO) fill();  // ko11.2: dejar el anillo lleno para el siguiente bloque
     return done;
   }
 };

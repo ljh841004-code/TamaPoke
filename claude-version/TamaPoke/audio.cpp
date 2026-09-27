@@ -327,7 +327,11 @@ void audioBegin() {
 
   gQ = xQueueCreate(8, sizeof(AudioCommand));
   if (!gQ) return;
-  if (xTaskCreatePinnedToCore(audioTask, "audio", 6144, nullptr, 1, nullptr, 0) != pdPASS) {
+  // ko11.2: prioridad 5 (antes 1), por encima del tactil (2) en el mismo nucleo:
+  // al aporrear en los entrenamientos el tactil lee el I2C cada 8 ms y dejaba a
+  // la musica esperando. La tarea pasa casi todo el tiempo bloqueada en
+  // i2s.write (colchon lleno), asi que no le quita tiempo a nadie
+  if (xTaskCreatePinnedToCore(audioTask, "audio", 6144, nullptr, 5, nullptr, 0) != pdPASS) {
     vQueueDelete(gQ); gQ = nullptr; return;
   }
   gReady = true;

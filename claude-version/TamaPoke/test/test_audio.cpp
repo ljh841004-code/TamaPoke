@@ -114,3 +114,13 @@ TEST(Audio, WavStreamCountsLoops) {
   CHECK_EQ(ws.read(buf, 1), (size_t)1);  // vuelve a empezar
   CHECK_EQ(ws.loops, 1u);
 }
+
+// ko11.2: el anillo se rellena a trozos en cuanto hay hueco (margen siempre casi lleno)
+TEST(Audio, ReadAheadTopsUpInChunks) {
+  WavStream<MemoryFile> s;CHECK(s.open(MemoryFile(wav(100000))));
+  int16_t b[256];
+  for(int i=0;i<4;i++) CHECK_EQ(s.read(b,256),256u);  // 2 KiB consumidos -> se rellena
+  int n=0;while(s.read(b,256,false)==256u) n++;
+  CHECK_EQ(n,16);  // 8 KiB enteros de colchon, no lo que sobraba del bloque anterior
+  CHECK_EQ(b[0],(int16_t)(4*256+15*256));
+}
