@@ -588,3 +588,10 @@ void resetTap(int16_t x, int16_t y) {
     sfxPlay(SFX_TAP);
   }
 }
+
+// ko10.11: "que pantalla hay" (para el antirrebote de navegacion en handleTouch)
+uint16_t screenSig() {
+  return (uint16_t)xScreen | (cardOpen ? 1u << 8 : 0) | (galleryOpen ? 1u << 9 : 0) |
+         (trainMenuOpen ? 1u << 10 : 0) | (clockOpen ? 1u << 11 : 0) | (kbOpen ? 1u << 12 : 0) |
+         (galleryDetail ? 1u << 13 : 0) | (gameOpen || sackOpen || trainingFast() ? 1u << 14 : 0);
+}

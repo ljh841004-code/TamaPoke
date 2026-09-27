@@ -224,6 +224,7 @@ uint32_t holdStart = 0;     // pulsacion larga sobre el bicho
 uint32_t confirmUntil = 0;  // dialogo "soltar?" activo hasta este millis
 uint8_t choiceKind = 0;     // dialogo de decision: 0 ninguno, 1 evolucion, 2 despedida
 uint32_t choiceUntil = 0;   // se cierra solo a este millis
+uint32_t navGuardUntil = 0;  // ko10.11: tras cambiar de pantalla, el siguiente toque inmediato se ignora
 uint32_t mistWhyUntil = 0;  // ko10.9: mostrar la causa del ultimo descuido (ficha)
 int16_t tX0, tY0, tXl, tYl; // gesto en curso (inicio y ultima posicion)
 uint32_t tStart = 0;
@@ -632,6 +633,7 @@ static void touchTask(void *) {
   bool was = false;
   int16_t lx = 0, ly = 0;  // ultima posicion leida
   int16_t qx = 0, qy = 0;  // ultima posicion ENVIADA (arrastre lento: ver abajo)
+  uint32_t upT = 0;        // ko10.11: cuando se leyo "levantado" (antirrebote)
   for (;;) {
     vTaskDelay(pdMS_TO_TICKS(8));
     // solo tocamos el bus si el chip aviso por INT o si el dedo sigue abajo (hay
@@ -646,6 +648,15 @@ static void touchTask(void *) {
     int16_t x, y;
     bool p = touch.getPoint(&x, &y, 1) > 0;
     TouchEv e;
+    // ko10.11: antirrebote al levantar. Leyendo cada 8 ms, un toque normal a veces
+    // "suelta" 10-30 ms a mitad y salian DOS toques: el que abria un menu pulsaba
+    // tambien lo que quedaba debajo en la pantalla nueva (p. ej. del boton de
+    // gimnasio directo a una batalla). Se da por levantado tras 35 ms sin dedo
+    if (was && !p) {
+      if (!upT) upT = millis() ? millis() : 1;
+      if (millis() - upT < 35) continue;  // aun puede ser un rebote
+    }
+    if (p) upT = 0;
     if (p != was) {  // apoyar/levantar: nunca se pierde (la cola se vacia cada loop)
       e.x = p ? x : lx; e.y = p ? y : ly; e.pressed = p;
       xQueueSend(gTouchQ, &e, 0);
@@ -661,6 +672,7 @@ static void touchTask(void *) {
     }
     if (p) { lx = x; ly = y; }
     was = p;
+    if (!p) upT = 0;
     gTouchLX = lx; gTouchLY = ly;
     gTouchHeld = was;
   }
@@ -673,6 +685,7 @@ void touchTaskStart() {
 #endif
 
 void touchSample(bool pressed, int16_t x, int16_t y);
+uint16_t screenSig();
 
 // el toque se resuelve al LEVANTAR el dedo para distinguir tap de deslizar
 void handleTouch() {
@@ -737,6 +750,7 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
     tStart = millis();
     holdFired = false;
     swallowGesture = (dimStage > 0) || screenOff;  // si estaba a oscuras, solo despierta
+    if (timeLeft(navGuardUntil)) swallowGesture = true;  // ko10.11: toque "de rebote" tras abrir algo
     screenOff = false;
     lastInteract = millis();
     // ko10.3: la pelota se golpea al APOYAR el dedo (antes al levantarlo: con la
@@ -774,7 +788,13 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
       int adx = abs(dx), ady = abs(dy);
       if (adx > 80 && ady * 5 < adx * 4 && dt < 1500) onSwipe(dx > 0 ? 1 : -1);
       else if (ady > 80 && adx * 5 < ady * 4 && dt < 1500) onSwipeV(dy > 0 ? 1 : -1);
-      else if (dt < 1500 && abs(dx) < 40 && abs(dy) < 40) onTap(tX0, tY0);
+      else if (dt < 1500 && abs(dx) < 40 && abs(dy) < 40) {
+        uint16_t sig0 = screenSig();
+        onTap(tX0, tY0);
+        // ko10.11: si el toque abrio/cerro una pantalla, 250 ms sin toques: un
+        // segundo toque pegado no debe pulsar lo que haya debajo en la nueva
+        if (screenSig() != sig0) navGuardUntil = millis() + 250;
+      }
     }
   }
   wasPressed = pressed;
