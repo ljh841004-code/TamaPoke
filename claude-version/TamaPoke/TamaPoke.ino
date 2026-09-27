@@ -161,10 +161,10 @@ struct Btn {
 // ko10.9: botones de 46x46 (antes 52): con la flecha de la ficha debajo, los de
 // 52 subian hasta pisar las barras. El icono sigue igual (32 px)
 Btn buttons[4] = {
-  { 140, 394, SPR_ICON_FOOD },   // comer
-  { 202, 402, SPR_ICON_PLAY },   // jugar
-  { 264, 402, SPR_ICON_LIGHT },  // luz
-  { 326, 394, SPR_ICON_CLEAN },  // bano
+  { 140, 388, SPR_ICON_FOOD },   // comer   (ko10.9: 6-10 px mas arriba)
+  { 202, 392, SPR_ICON_PLAY },   // jugar
+  { 264, 392, SPR_ICON_LIGHT },  // luz
+  { 326, 388, SPR_ICON_CLEAN },  // bano
 };
 // ko10.8: flechas en los bordes para navegar tocando (deslizar sigue valiendo).
 // Deslizar fallaba a veces y el gesto acababa como toque (p. ej. cerrando la ficha)
@@ -1833,7 +1833,7 @@ void render() {
     }
     char reg[24];
     snprintf(reg, sizeof(reg), T(S_POKEDEX_FMT), dexDiscoveredCount());
-    gfx->fillRect(0, 312, 466, 154, gNight ? UI_BG_NIGHT : UI_BG_DAY);
+    gfx->fillRect(0, 306, 466, 160, gNight ? UI_BG_NIGHT : UI_BG_DAY);  // ko10.9: 312 -> 306
     gfx->setTextColor(inkColor());
     setSize(2);
     setCur(centerX(reg, 2), 348);
@@ -1849,7 +1849,7 @@ void render() {
     drawBath();
     drawPoops();
     // panel inferior: base limpia para barras y botones sobre el paisaje
-    gfx->fillRect(0, 312, 466, 154, gNight ? UI_BG_NIGHT : UI_BG_DAY);
+    gfx->fillRect(0, 306, 466, 160, gNight ? UI_BG_NIGHT : UI_BG_DAY);  // ko10.9: 312 -> 306
     drawBars();
     drawButtons();
     if (mainNavAllowed()) {  // ko10.8
@@ -2311,7 +2311,11 @@ void applyClock() {
   uint32_t e = wxDaysFromDate(clockY, (uint8_t)clockMo, (uint8_t)clockD) * 86400u +
                (uint32_t)clockH * 3600 + (uint32_t)clockM * 60;
   rtcSetEpoch(e);
-  pet.setClock(e);
+  // ko10.9: si el RTC perdio la hora (bateria fuera), ponerla a mano tambien aplica
+  // el tiempo apagado (como el NTP o la hora de un amigo). Antes solo movia el
+  // reloj y la crianza "perdia" esas horas (edad, dia de crianza, barras)
+  if (gRtcWasLost) pet.syncClock(e);
+  else pet.setClock(e);
   gRtcWasLost = false;
   gClockTrusted = true;  // la hora ya es de fiar (tambien para pasarla por tongsin)
   clockOpen = false;
@@ -3922,10 +3926,12 @@ void drawPoops() {
 }
 
 void drawBars() {
-  drawBar(78, 318, T(S_BAR_FOOD), pet.fullness);
-  drawBar(244, 318, T(S_BAR_JOY), pet.joy);
-  drawBar(78, 346, T(S_BAR_ENE), pet.energy);
-  drawBar(244, 346, T(S_BAR_HYG), pet.hygiene);
+  // ko10.9: todo el panel un poco mas arriba (318/346 -> 312/338) para separar
+  // los botones de la flecha de la ficha, que se queda donde esta
+  drawBar(78, 312, T(S_BAR_FOOD), pet.fullness);
+  drawBar(244, 312, T(S_BAR_JOY), pet.joy);
+  drawBar(78, 338, T(S_BAR_ENE), pet.energy);
+  drawBar(244, 338, T(S_BAR_HYG), pet.hygiene);
 }
 
 // Separacion entre la etiqueta y su barra en la fila de necesidades. Estaba fija
@@ -3986,7 +3992,7 @@ void drawNav(uint8_t k, uint16_t ink) {
 bool navHit(uint8_t k, int16_t x, int16_t y) {
   if (k == NAV_L) return x < 62 && y > NAV_Y - 55 && y < NAV_Y + 55;
   if (k == NAV_R) return x > 404 && y > NAV_Y - 55 && y < NAV_Y + 55;
-  return y > 428 && x > CX - 55 && x < CX + 55;
+  return y > 424 && x > CX - 55 && x < CX + 55;  // ko10.9: frontera a medio camino boton/flecha
 }
 
 // pantalla principal: izquierda = pokedex, derecha = hora/ajustes, abajo = ficha
