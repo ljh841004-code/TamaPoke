@@ -327,6 +327,7 @@ uint8_t bPhase = BP_INTRO;
 int bvShakeX = 0, bvShakeY = 0;  // fork KO (ko7): temblor de la escena (critico)
 uint32_t bPhaseT = 0;
 bool bWon = false, bFled = false, bLink = false, bRewarded = false;
+uint8_t bItems = 0;  // ko11.1: objetos ganados (1=bola 2=pocion)
 // ko10.1: region del salvaje (= escenario 0..15). La de mi Pokemon por defecto
 uint8_t bRegion = 0;
 uint8_t bGroup = WG_COMMON;  // de que grupo salio el rival (WG_RARE: brillo al aparecer)
@@ -1051,7 +1052,17 @@ void renderBattleView() {
       ly += 26;
     }
     if (good && !bLink) {  // fork KO (ko4): objetos y caja
-      if (ly < 374) { drawFit(bWon ? XT(X_REWARD_ITEMS) : XT(X_REWARD), ly, 320, UI_INK, 2); ly += 26; }
+      if (ly < 374) {
+        char it[48];
+        it[0] = 0;
+        if (bItems & 1) strncat(it, XT(X_GOT_BALL), sizeof(it) - 1);
+        if (bItems & 2) {
+          if (it[0]) strncat(it, "  ", sizeof(it) - strlen(it) - 1);
+          strncat(it, XT(X_GOT_POTION), sizeof(it) - strlen(it) - 1);
+        }
+        drawFit(it[0] ? it : XT(X_REWARD), ly, 320, UI_INK, 2);
+        ly += 26;
+      }
       if (bBoxMsg >= 0 && ly <= 374) {
         drawFit(XT((XId)bBoxMsg), ly, 320, bBoxMsg == X_BOX_FULL ? UI_BAR_BAD : UI_INK, 2);
         ly += 26;
@@ -1085,6 +1096,7 @@ void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool fo
   bvL1[0] = bvL2[0] = 0;
   bqN = bqI = 0;
   bWon = bFled = bRewarded = false;
+  bItems = 0;
   bDupPending = false;  // ko10.4
   bNote[0] = 0;
   bvMeFainted = bvFoeFainted = false;
@@ -1679,6 +1691,7 @@ void finishBattle(bool won, bool fled, bool caught) {
     bool wildExp = bKind == BK_WILD && !bLink && bExpDex;  // ko11
     pet.battleResult(bLink ? BATTLE_LINK : BATTLE_WILD, won, fled, caught, wildExp ? bExpDex : bFoe.dex,
                      wildExp ? bExpLvl : bFoe.lvl);
+    if (won && bKind == BK_WILD && !bLink) bItems = pet.wildWinItems();  // ko11.1: por probabilidad
     bvMeLvl = pet.level();  // fork KO (ko7): la caja de vida ensena el nivel nuevo
     sfxPlay(pet.lastLvlUp ? SFX_LEVEL : won || caught ? SFX_MEDAL : SFX_BYE);  // ko7: subida de nivel
     // fork KO: el capturado va siempre a la caja; el vencido, solo a veces
@@ -1703,8 +1716,7 @@ void finishBattle(bool won, bool fled, bool caught) {
       if (pet.gymWins[bGym] < 255) pet.gymWins[bGym]++;
       if (gymRewardToday(bGym)) {
         pet.gymDay[bGym] = todayDay16();
-        pet.balls = pet.balls > 98 ? 99 : pet.balls + 1;
-        pet.potions = pet.potions > 98 ? 99 : pet.potions + 1;
+        pet.giveItems(1, 1);
         pet.addCandy(pet.speciesId, 2);
         strncpy(bNote, XT(X_REMATCH_REWARD), sizeof(bNote) - 1);
       } else {
@@ -1714,8 +1726,7 @@ void finishBattle(bool won, bool fled, bool caught) {
       pet.saveNow();
     } else if (won && bKind == BK_CHAMP) {  // ko10.11: campeon: al salon de la fama de la liga
       if (pet.champWins < 65535) pet.champWins++;
-      pet.balls = pet.balls > 94 ? 99 : pet.balls + 5;
-      pet.potions = pet.potions > 94 ? 99 : pet.potions + 5;
+      pet.giveItems(3, 3);  // ko11.1: antes +5/+5
       pet.addCandy(pet.speciesId, 10);
       if (fame.full()) fame.release(0);  // lleno: se va el mas antiguo
       // ko11.1: con sus genes (la ficha del salon los ensena)
@@ -1729,8 +1740,7 @@ void finishBattle(bool won, bool fled, bool caught) {
       if (day && pet.dailyDoneDay != day) {  // el premio, una vez al dia
         pet.dailyDoneDay = day;
         pet.dailyClears++;
-        pet.balls = pet.balls > 96 ? 99 : pet.balls + 3;
-        pet.potions = pet.potions > 96 ? 99 : pet.potions + 3;
+        pet.giveItems(2, 2);  // ko11.1: antes +3/+3
         pet.addCandy(pet.speciesId, 3);
         strncpy(bNote, XT(X_DAILY_WIN), sizeof(bNote) - 1);
         bNote[sizeof(bNote) - 1] = 0;

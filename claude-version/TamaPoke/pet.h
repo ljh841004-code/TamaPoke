@@ -77,6 +77,12 @@ static const uint8_t CANDY_COST[CU_COUNT] = { 3, 1, 5, 10, 5 };
 // batallas: de donde viene el resultado
 enum : uint8_t { BATTLE_WILD = 0, BATTLE_LINK };
 
+// ko11.1: menos objetos (sobraban)
+constexpr uint8_t BALL_MAX = 20;
+constexpr uint8_t POTION_MAX = 10;
+constexpr uint8_t WILD_BALL_PCT = 40;
+constexpr uint8_t WILD_POTION_PCT = 30;
+
 class Pet {
 public:
   // Estadisticas 0..100
@@ -141,7 +147,7 @@ public:
   uint16_t linkBattles = 0;
   uint16_t trades = 0;     // intercambios completados
   // fork KO (ko4): objetos de batalla y records de los entrenamientos nuevos
-  uint8_t balls = 5;       // pokeballs (se ganan 2 por victoria salvaje)
+  uint8_t balls = 5;       // pokeballs (ko11.1: 40% por victoria salvaje, tope BALL_MAX)
   uint8_t potions = 2;     // pociones: curan la mitad de la vida en batalla
   uint16_t defHi = 0;      // record del entrenamiento de defensa (pokeballs paradas)
   // ko10.7: premio de cada sesion de entrenamiento (pantalla de resultado)
@@ -203,6 +209,10 @@ public:
   uint32_t careMinutesLeft() const;  // minutos de crianza que faltan para subir
   bool useBall();    // gasta una pokeball (false si no quedan)
   bool usePotion();  // gasta una pocion
+  // ko11.1: objetos con tope (no se acumulan); lo que ya pasaba del tope se conserva
+  void giveItems(uint8_t b, uint8_t p);
+  // ko11.1: premio de victoria salvaje por probabilidad; devuelve bits 1=bola 2=pocion
+  uint8_t wildWinItems();
   // fork KO (ko4): el siguiente a criar sale de la caja (tras la despedida)
   void adoptMon(int16_t dex, uint16_t lvl, bool shiny, uint8_t gA, uint8_t gD, uint8_t gS);
   // ko10.5: lo llama update() al acabar una ceremonia (how = CER_*), ANTES de

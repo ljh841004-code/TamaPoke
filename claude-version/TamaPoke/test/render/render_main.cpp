@@ -181,6 +181,15 @@ static void scenes(bool ko, const char *sfx) {
   bq[0].crit = true; bq[0].eff = 4; bq[0].move = BA_TACKLE; bqT = gMockMillis;
   gMockMillis = bqT + 480; render(); shot("fx_crit_super");
   bPhase = BP_MENU; bqN = 0;
+  {  // ko11.1: victoria salvaje con objetos por probabilidad
+    uint8_t b0 = pet.balls, p0 = pet.potions;
+    mockForceRandom(25);
+    finishBattle(true, false, false);
+    mockClearForcedRandom();
+    render(); shot("09a_battle_win_items");
+    pet.balls = b0; pet.potions = p0;
+    bPhase = BP_MENU; bqN = 0; bRewarded = false; bWon = false; bItems = 0; bNote[0] = 0; bBoxMsg = -1;
+  }
   bvFoeHp = bvFoeTgt = bFoe.hp = bFoe.maxHp / 3;
   finishBattle(false, false, true);
   bvFoeCaught = true;

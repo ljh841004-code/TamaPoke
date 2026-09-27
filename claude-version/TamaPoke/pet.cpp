@@ -1060,9 +1060,7 @@ void Pet::battleResult(uint8_t kind, bool won, bool fled, bool caught,
     lastExpGain = gx;
     lastLvlUp = addExp(gx);
     if (kind == BATTLE_WILD && won) {
-      wildWins++;
-      balls = balls > 97 ? 99 : balls + 2;      // fork KO: +2 pokeballs
-      potions = potions > 97 ? 99 : potions + 2;  // y +2 pociones
+      wildWins++;  // ko11.1: los objetos los da la pantalla (wildWinItems / premios propios)
     } else if (kind == BATTLE_LINK) {
       linkWins++;
     }
@@ -1074,6 +1072,18 @@ void Pet::battleResult(uint8_t kind, bool won, bool fled, bool caught,
   }
   registerCare();
   save();
+}
+
+void Pet::giveItems(uint8_t b, uint8_t p) {
+  if (b && balls < BALL_MAX) balls = balls + b > BALL_MAX ? BALL_MAX : balls + b;
+  if (p && potions < POTION_MAX) potions = potions + p > POTION_MAX ? POTION_MAX : potions + p;
+}
+
+uint8_t Pet::wildWinItems() {
+  uint8_t bits = 0;
+  if (balls < BALL_MAX && random(100) < WILD_BALL_PCT) { balls++; bits |= 1; }
+  if (potions < POTION_MAX && random(100) < WILD_POTION_PCT) { potions++; bits |= 2; }
+  return bits;
 }
 
 bool Pet::useBall() {

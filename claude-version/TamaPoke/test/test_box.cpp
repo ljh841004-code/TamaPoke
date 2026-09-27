@@ -177,18 +177,46 @@ TEST(items, bola_atrapa_o_falla_y_el_rival_ataca) {
 }
 
 // ---------------------------------------------------------------- premios
-TEST(items, victoria_salvaje_da_2_bolas_y_2_pociones) {
+TEST(items, victoria_salvaje_ya_no_da_objetos_fijos) {
   Pet p;
   freshPet(p, 4);
   uint8_t b0 = p.balls, p0 = p.potions;
   p.battleResult(BATTLE_WILD, true, false);
-  CHECK_EQ(p.balls, (uint8_t)(b0 + 2));
-  CHECK_EQ(p.potions, (uint8_t)(p0 + 2));
+  CHECK_EQ(p.balls, b0);  // ko11.1: los da wildWinItems()
+  CHECK_EQ(p.potions, p0);
   CHECK_EQ(p.wildWins, (uint16_t)1);
-  p.balls = 98; p.potions = 99;
-  p.battleResult(BATTLE_WILD, true, false);
-  CHECK_EQ(p.balls, (uint8_t)99);  // tope 99
-  CHECK_EQ(p.potions, (uint8_t)99);
+}
+
+TEST(items, premio_salvaje_por_probabilidad_y_tope) {
+  Pet p;
+  freshPet(p, 4);
+  p.balls = 0; p.potions = 0;
+  mockForceRandom(0);  // siempre sale
+  CHECK_EQ(p.wildWinItems(), (uint8_t)3);
+  CHECK_EQ(p.balls, (uint8_t)1);
+  CHECK_EQ(p.potions, (uint8_t)1);
+  mockForceRandom(99);  // nunca sale
+  CHECK_EQ(p.wildWinItems(), (uint8_t)0);
+  mockForceRandom(35);  // bola (40%) si, pocion (30%) no
+  CHECK_EQ(p.wildWinItems(), (uint8_t)1);
+  p.balls = BALL_MAX; p.potions = POTION_MAX;
+  mockForceRandom(0);
+  CHECK_EQ(p.wildWinItems(), (uint8_t)0);  // tope
+  CHECK_EQ(p.balls, BALL_MAX);
+  mockClearForcedRandom();
+}
+
+TEST(items, giveItems_con_tope_y_sin_quitar) {
+  Pet p;
+  freshPet(p, 4);
+  p.balls = 19; p.potions = 9;
+  p.giveItems(3, 3);
+  CHECK_EQ(p.balls, BALL_MAX);
+  CHECK_EQ(p.potions, POTION_MAX);
+  p.balls = 50; p.potions = 40;  // partidas viejas: se conserva lo que habia
+  p.giveItems(2, 2);
+  CHECK_EQ(p.balls, (uint8_t)50);
+  CHECK_EQ(p.potions, (uint8_t)40);
 }
 
 TEST(items, perder_o_huir_no_castiga) {

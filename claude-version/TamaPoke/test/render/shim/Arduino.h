@@ -39,6 +39,8 @@ void delay(uint32_t);
 void yield();
 long random(long howbig);
 long random(long lo, long hi);
+void mockForceRandom(long v);
+void mockClearForcedRandom();
 void randomSeed(unsigned long);
 uint32_t esp_random();
 void *ps_malloc(size_t n);

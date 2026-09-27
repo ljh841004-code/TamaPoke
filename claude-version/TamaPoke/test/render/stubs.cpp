@@ -18,7 +18,13 @@ void delay(uint32_t ms) { gMockMillis += ms; }
 void yield() {}
 static uint32_t gSeed = 12345;
 static uint32_t nextRand() { gSeed ^= gSeed << 13; gSeed ^= gSeed >> 17; gSeed ^= gSeed << 5; return gSeed; }
-long random(long n) { return n > 0 ? (long)(nextRand() % (uint32_t)n) : 0; }
+static long gForcedRand = -1;  // ko11.1: forzar random() en capturas
+void mockForceRandom(long v) { gForcedRand = v; }
+void mockClearForcedRandom() { gForcedRand = -1; }
+long random(long n) {
+  if (gForcedRand >= 0) return n > 0 ? gForcedRand % n : 0;
+  return n > 0 ? (long)(nextRand() % (uint32_t)n) : 0;
+}
 long random(long lo, long hi) { return hi > lo ? lo + random(hi - lo) : lo; }
 void randomSeed(unsigned long s) { gSeed = s ? s : 1; }
 uint32_t esp_random() { return nextRand(); }
