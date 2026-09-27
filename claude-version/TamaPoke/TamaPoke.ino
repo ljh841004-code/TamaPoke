@@ -636,11 +636,12 @@ static void touchTask(void *) {
   int16_t lx = 0, ly = 0;  // ultima posicion leida
   int16_t qx = 0, qy = 0;  // ultima posicion ENVIADA (arrastre lento: ver abajo)
   uint32_t upT = 0;        // ko10.11: cuando se leyo "levantado" (antirrebote)
+  uint8_t downN = 0;       // ko10.11: lecturas seguidas con dedo (antirrebote al apoyar)
   for (;;) {
     vTaskDelay(pdMS_TO_TICKS(8));
     // solo tocamos el bus si el chip aviso por INT o si el dedo sigue abajo (hay
     // que detectar el levantamiento). Leer el CST9217 dormido se colgaba ~1s.
-    if (!gTouchIrq && !was) continue;
+    if (!gTouchIrq && !was && !downN) continue;  // ko10.11: downN: confirmando un apoyo
     gTouchIrq = false;
     // Un ciclo de solo direccion antes de leer: sin esto getPoint() se colgaba
     // 1000 ms con el chip dormido (issue #16; medido en placa: 5 parones en 60 s
@@ -659,6 +660,13 @@ static void touchTask(void *) {
       if (millis() - upT < 35) continue;  // aun puede ser un rebote
     }
     if (p) upT = 0;
+    // ko10.11: al apoyar, 2 lecturas seguidas (>= 8 ms) antes de darlo por bueno:
+    // un roce de una sola lectura ya no cuenta
+    if (p && !was) {
+      if (++downN < 2) continue;
+    } else if (!p) {
+      downN = 0;
+    }
     if (p != was) {  // apoyar/levantar: nunca se pierde (la cola se vacia cada loop)
       e.x = p ? x : lx; e.y = p ? y : ly; e.pressed = p;
       xQueueSend(gTouchQ, &e, 0);
@@ -790,7 +798,10 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
       int adx = abs(dx), ady = abs(dy);
       if (adx > 80 && ady * 5 < adx * 4 && dt < 1500) onSwipe(dx > 0 ? 1 : -1);
       else if (ady > 80 && adx * 5 < ady * 4 && dt < 1500) onSwipeV(dy > 0 ? 1 : -1);
-      else if (dt < 1500 && abs(dx) < 40 && abs(dy) < 40) {
+      // ko10.11: un toque de verdad dura algo; los roces de < 60 ms (rozar la
+      // pantalla al pasar el dedo) ya no pulsan nada en los menus. Los juegos
+      // rapidos no pasan por aqui (cuentan al apoyar)
+      else if (dt >= 60 && dt < 1500 && abs(dx) < 40 && abs(dy) < 40) {
         uint16_t sig0 = screenSig();
         onTap(tX0, tY0);
         // ko10.11: si el toque abrio/cerro una pantalla, 250 ms sin toques: un
