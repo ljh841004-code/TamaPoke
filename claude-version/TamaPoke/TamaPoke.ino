@@ -3011,7 +3011,12 @@ void renderCardProgress() {
     evo = T(S_FINAL_FORM);
   } else {
     int needed = pet.evolveNeed();
-    if (pet.level() >= needed) {
+    if (pet.level() >= needed && pet.needsFriendship() && pet.bond < FRIEND_EVO_BOND) {
+      // ko11.7: evoluciona por amistad: falta vinculo
+      snprintf(evoBuf, sizeof(evoBuf), XT(X_EVO_FRIEND_FMT), pet.bond, FRIEND_EVO_BOND);
+      evo = evoBuf;
+      evoCol = UI_BAR_WARN;
+    } else if (pet.level() >= needed) {
       if (pet.lowestStat() >= 40) { evo = T(S_EVO_READY); evoCol = UI_BAR_OK; }
       else { evo = T(S_EVO_BLOCKED); evoCol = UI_BAR_BAD; }
     } else {

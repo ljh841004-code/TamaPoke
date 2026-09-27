@@ -45,6 +45,7 @@ public:
   // ko10.5: el que se acaba de criar, con sus genes y la marca de criado
   bool addRaised(int16_t dex, uint16_t lvl, bool shiny, uint8_t gA, uint8_t gD, uint8_t gS, uint32_t epoch);
   bool take(uint8_t i, BoxMon &out);  // saca el i-esimo (para criarlo)
+  bool put(const BoxMon &m);          // ko11.7: vuelve tal cual (de una expedicion)
   bool release(uint8_t i);            // lo suelta
   int pickRandom() const;             // indice al azar, -1 si vacia
   void wipe();                        // fork KO (ko8): [nuevo comienzo]

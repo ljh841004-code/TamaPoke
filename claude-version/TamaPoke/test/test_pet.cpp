@@ -1188,3 +1188,49 @@ TEST(save, el_autoguardado_se_marca_y_se_vuelca) {
   p.flushSave();
   CHECK(!p.savePending());
 }
+
+// ko11.7: evolucion por amistad
+TEST(PetEvo, amistad_pichu_y_eevee) {
+  Pet p;
+  makePet(p, 25);
+  p.speciesId = 172;  // Pichu
+  p.exp = expForLevel(40);
+  setStats(p, 90, 90, 90, 90);
+  p.careMistakes = 0;
+  p.bond = 30;
+  CHECK(p.needsFriendship());
+  CHECK(!p.canEvolveNow());  // nivel de sobra, pero poco vinculo
+  p.bond = 80;
+  CHECK(p.canEvolveNow());
+  p.evolve();
+  CHECK_EQ(p.speciesId, (int16_t)25);
+
+  p.speciesId = 133;  // Eevee
+  p.bond = 90;
+  p.lastSeenEpoch = 1790589600u;  // 10:00 -> Espeon
+  p.evolve();
+  CHECK_EQ(p.speciesId, (int16_t)196);
+  p.speciesId = 133;
+  p.lastSeenEpoch = 1790589600u + 12 * 3600;  // 22:00 -> Umbreon
+  p.evolve();
+  CHECK_EQ(p.speciesId, (int16_t)197);
+  for (int i = 0; i < 20; i++) {  // sin amistad: nunca Espeon/Umbreon
+    p.speciesId = 133;
+    p.bond = 10;
+    p.evolve();
+    CHECK(p.speciesId == 134 || p.speciesId == 135 || p.speciesId == 136);
+  }
+}
+
+// ko11.7: una sesion con algun acierto sube al menos 3 (sin record tambien)
+TEST(PetTrain, minimo_tres_por_sesion) {
+  Pet p;
+  makePet(p, 4);
+  p.trAtk = 10; p.trDef = 10; p.trSpe = 10;
+  CHECK_EQ(p.trainStrength(2, 0), (uint8_t)3);   // 2 golpes: antes 0
+  CHECK_EQ(p.trainDefense(1), (uint8_t)3);       // 1 parada: antes 0
+  CHECK_EQ(p.trainSpeed(1, 50), (uint8_t)3);
+  CHECK_EQ(p.trainStrength(0, 0), (uint8_t)0);   // sin tocar nada, nada
+  p.trAtk = 99;
+  CHECK_EQ(p.trainStrength(2, 0), (uint8_t)1);   // tope 100
+}

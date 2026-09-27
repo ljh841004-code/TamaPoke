@@ -81,8 +81,21 @@ enum : uint8_t { WS_MORNING = 1, WS_DAY = 2, WS_NIGHT = 4, WS_ANY = 7 };
 #define WILD_LEGEND_MIN_LVL 40
 uint8_t wildSlot(uint8_t hour);
 // wx = WX_* de weather.h, season = SEASON_*; group (opcional) dice de que grupo salio
+// ko11.7: eventos del dia (la hora LOCAL). Lunes agua, martes fuego, miercoles
+// planta, jueves electrico, viernes psiquico; sabado y domingo shiny x2. Y las
+// noches de luna llena, los legendarios salen el triple
+enum : uint8_t { DEV_NONE = 0, DEV_TYPE, DEV_SHINY };
+struct DayEvent { uint8_t kind; uint8_t ptype; bool moonNight; };
+bool fullMoon(uint32_t epoch);            // luna llena ese dia (±1 dia)
+DayEvent dayEvent(uint32_t localEpoch);   // 0 = sin reloj: sin evento
+#define EVENT_TYPE_PCT 25                 // dia de un tipo: 1 de cada 4 es de ese tipo
+#define EVENT_MOON_MULT 3
 Battler makeWildIn(uint8_t region, uint16_t petLvl, uint8_t hour, uint8_t wx, uint8_t season,
-                   BRng &rng, uint8_t *group);
+                   BRng &rng, uint8_t *group, const DayEvent *ev = nullptr);
+// ---- ko11.7: expediciones (un Pokemon de la caja se va unas horas a su
+// region y vuelve con cosas). Horas: 2, 4 u 8
+struct ExpReward { uint8_t candy, balls, potions, rare; bool newMon; };
+ExpReward expeditionReward(uint8_t hours, uint16_t lvl, BRng &rng);
 // ---- ko10.4: gimnasios (8 medallas de Kanto) y reto del dia
 #define GYM_COUNT 8
 #define GYM_MAX_TEAM 3

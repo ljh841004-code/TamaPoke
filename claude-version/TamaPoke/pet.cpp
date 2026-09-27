@@ -495,8 +495,14 @@ uint16_t Pet::evolveNeed() const {
   return lv > LEVEL_MAX ? LEVEL_MAX : lv;  // al tope sigue siendo alcanzable
 }
 
+static bool friendEvoDex(int16_t d) {
+  return d == 172 || d == 173 || d == 174 || d == 175 || d == 42 || d == 113;
+}
+bool Pet::needsFriendship() const { return !isEgg() && friendEvoDex(speciesId); }
+
 bool Pet::canEvolveNow() const {
   if (isEgg() || sleeping || ceremony != CER_NONE) return false;
+  if (needsFriendship() && bond < FRIEND_EVO_BOND) return false;  // ko11.7
   uint16_t need = evolveNeed();
   return need && level() >= need && lowestStat() >= 40;
 }
@@ -570,6 +576,18 @@ void Pet::evolve() {
   // la que falte en la pokedex (ko10: generico, antes solo Eevee)
   int16_t opts[8], nuevas[8];
   int n = dexEvoOptions(speciesId, opts), m = 0;
+  if (speciesId == 133) {  // ko11.7: Eevee. Vinculo alto: Espeon (dia) / Umbreon (noche)
+    if (bond >= FRIEND_EVO_BOND) {
+      uint8_t h = lastSeenEpoch ? (uint8_t)(lastSeenEpoch / 3600 % 24) : 12;
+      opts[0] = (h >= 20 || h < 6) ? 197 : 196;
+      n = 1;
+    } else {  // sin amistad: solo las de piedra (Vaporeon, Jolteon, Flareon)
+      int k = 0;
+      for (int i = 0; i < n; i++) if (opts[i] != 196 && opts[i] != 197) opts[k++] = opts[i];
+      n = k;
+    }
+    next = opts[0];
+  }
   for (int i = 0; i < n; i++)
     if (!isRegistered(opts[i])) nuevas[m++] = opts[i];
   if (m) next = nuevas[random(m)];
@@ -738,6 +756,7 @@ uint8_t Pet::trainStrength(uint16_t hits, uint16_t bags) {
   trainBonus(bags > 0, bags > strHi);
   uint8_t gain = hits / 4;          // ~4 golpes = 1 punto de entrenamiento
   if (gain > 18) gain = 18;         // tope por sesion: la FUE se forja a fuego lento
+  if (hits > 0 && gain < TRAIN_MIN_GAIN) gain = TRAIN_MIN_GAIN;  // ko11.7: jugar siempre da algo
   uint8_t antes = trAtk;
   uint16_t v = (uint16_t)trAtk + gain;
   trAtk = v > 100 ? 100 : (uint8_t)v;
@@ -760,6 +779,7 @@ uint8_t Pet::trainStrength(uint16_t hits, uint16_t bags) {
 // y cansa igual que el saco. Devuelve lo que de verdad subio.
 static uint8_t trainGain(uint8_t &tr, uint16_t raw) {
   uint8_t gain = raw > 18 ? 18 : (uint8_t)raw;
+  if (raw > 0 && gain < TRAIN_MIN_GAIN) gain = TRAIN_MIN_GAIN;  // ko11.7: minimo por sesion jugada
   uint8_t antes = tr;
   uint16_t v = (uint16_t)tr + gain;
   tr = v > 100 ? 100 : (uint8_t)v;
@@ -769,7 +789,7 @@ static uint8_t trainGain(uint8_t &tr, uint16_t raw) {
 uint8_t Pet::trainDefense(uint16_t blocked) {
   if (ceremony != CER_NONE || isEgg()) return 0;
   trainBonus(blocked > 0, blocked > defHi);
-  uint8_t gain = trainGain(trDef, blocked / 2);  // ~2 pokeballs paradas = 1 punto
+  uint8_t gain = trainGain(trDef, blocked ? (blocked / 2 ? blocked / 2 : 1) : 0);  // ~2 paradas = 1 punto (ko11.7: min 3)
   energy = dropTo(energy, 12, 5);
   fullness = dropTo(fullness, 5, 5);
   int burn = (int)weight - blocked / 2;
@@ -883,6 +903,7 @@ void Pet::save() {
   prefs.putUShort("chs", champStreak);  // ko11.6.1
   prefs.putUShort("chb", champBest);
   prefs.putBytes("fstk", fameStreak, sizeof(fameStreak));
+  prefs.putBytes("exped", &exped, sizeof(exped));  // ko11.7
   prefs.putUShort("rcandy", rareCandy);
   prefs.putUInt("age", ageMinutes);
   prefs.putUInt("exp", exp);
@@ -954,6 +975,8 @@ void Pet::load() {
   champBest = prefs.getUShort("chb", 0);
   if (champBest < champStreak) champBest = champStreak;
   if (prefs.getBytes("fstk", fameStreak, sizeof(fameStreak)) != sizeof(fameStreak)) memset(fameStreak, 0, sizeof(fameStreak));
+  if (prefs.getBytes("exped", &exped, sizeof(exped)) != sizeof(exped) || exped.dex < 1 || exped.dex > DEX_COUNT)
+    memset(&exped, 0, sizeof(exped));  // ko11.7
   rareCandy = prefs.getUShort("rcandy", 0);
   ageMinutes = prefs.getUInt("age", 0);
   // fork KO (ko7): guardados de antes (nivel = horas, hasta Lv338+) empiezan

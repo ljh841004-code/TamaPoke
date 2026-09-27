@@ -1198,16 +1198,17 @@ void startWildIn(uint8_t region) {
   uint32_t ep = pet.lastSeenEpoch;
   // ko10.11: hasta 3 tiradas; una especie ya vista/capturada se queda solo al 45 %
   // (asi salen mas nuevas). Los raros se quedan siempre
+  DayEvent ev = dayEvent(gClockTrusted ? clockEpoch() : 0);  // ko11.7: evento del dia
   for (int t = 0; t < 3; t++) {
     bFoe = makeWildIn(bRegion, pet.level(), (uint8_t)sceneHour(), sceneWeather(), wxSeason(wxMonth(ep)),
-                      bRng, &bGroup);
+                      bRng, &bGroup, &ev);
     bool fresh = !dexDiscovered(bFoe.dex) || (dexLog.caughtCount(bFoe.dex) == 0 && !ownsSpecies(bFoe.dex));
     if (bGroup == WG_RARE || fresh || bRng.below(100) < 45) break;
   }
   bExpDex = bFoe.dex;  // ko11: la EXP no se infla por subirle el nivel
   bExpLvl = bFoe.lvl;
   wildMatchPower(bFoe, bMe, bRng);  // ko10.11: de tu talla (90-105 % de tu fuerza)
-  bool shiny = bRng.below(64) == 0;
+  bool shiny = bRng.below(ev.kind == DEV_SHINY ? 32 : 64) == 0;  // ko11.7: fin de semana x2
   bvSetup(bMe, bFoe, nullptr, shiny);
   // ko10.11: cuantos de esta especie hay ya en la caja (se ensena unos segundos)
   bvOwned = 0;
@@ -1264,7 +1265,16 @@ static void drawRegionArrow(int x, bool left) {
 
 void renderRegionPick() {
   screenBase();
-  drawFit(XT(X_REGION_Q), 52, 300, UI_INK, 3);
+  drawFit(XT(X_REGION_Q), 44, 300, UI_INK, 3);
+  // ko11.7: el evento de hoy, bajo el titulo
+  DayEvent ev = dayEvent(gClockTrusted ? clockEpoch() : 0);
+  if (ev.kind != DEV_NONE) {
+    char el[80];
+    if (ev.moonNight) snprintf(el, sizeof(el), "%s", XT(X_EVENT_MOON));
+    else if (ev.kind == DEV_TYPE) snprintf(el, sizeof(el), XT(X_EVENT_TYPE_FMT), typeName(ev.ptype));
+    else snprintf(el, sizeof(el), "%s", XT(X_EVENT_SHINY));
+    drawFit(el, 80, 330, C565(0xc0, 0x40, 0x90), 1);
+  }
   uint8_t mine = petRegion();
   for (int k = 0; k < RG_PER_PAGE; k++) {
     int i = regionPage * RG_PER_PAGE + k;

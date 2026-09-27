@@ -82,6 +82,13 @@ bool Box::take(uint8_t i, BoxMon &out) {
   return release(i);
 }
 
+bool Box::put(const BoxMon &m) {
+  if (full() || m.dex < 1 || m.dex > DexLog::N) return false;
+  mons[n++] = m;
+  save();
+  return true;
+}
+
 bool Box::release(uint8_t i) {
   if (i >= n) return false;
   memmove(&mons[i], &mons[i + 1], sizeof(BoxMon) * (n - i - 1));

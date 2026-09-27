@@ -252,17 +252,50 @@ static int timeCount(uint8_t region, uint8_t slot) {
   return n;
 }
 
+// ko11.7: luna llena. Luna nueva de referencia: 6-1-2000 18:14 UTC; mes sinodico
+// 29,530589 dias. Llena = edad 13,8..15,8 dias (el dia de la llena y el siguiente)
+bool fullMoon(uint32_t epoch) {
+  if (epoch < 947182440u) return false;
+  uint64_t ageMs = ((uint64_t)(epoch - 947182440u) * 1000ull) % 2551442877ull;  // mes sinodico en ms
+  uint32_t ageMin = (uint32_t)(ageMs / 60000ull);  // minutos desde la luna nueva
+  return ageMin >= 19872 && ageMin <= 22752;         // 13,8 .. 15,8 dias
+}
+
+DayEvent dayEvent(uint32_t e) {
+  DayEvent ev = { DEV_NONE, 0, false };
+  if (!e) return ev;
+  static const int8_t WD_TYPE[7] = { -1, PT_WATER, PT_FIRE, PT_GRASS, PT_ELECTRIC, PT_PSYCHIC, -1 };
+  uint8_t wd = (uint8_t)((e / 86400u + 4) % 7);  // 0 = domingo
+  if (wd == 0 || wd == 6) ev.kind = DEV_SHINY;
+  else { ev.kind = DEV_TYPE; ev.ptype = (uint8_t)WD_TYPE[wd]; }
+  uint8_t h = (uint8_t)(e / 3600 % 24);
+  ev.moonNight = (h >= 20 || h < 6) && fullMoon(e);
+  return ev;
+}
+
 Battler makeWildIn(uint8_t region, uint16_t petLvl, uint8_t hour, uint8_t wx, uint8_t season,
-                   BRng &rng, uint8_t *group) {
+                   BRng &rng, uint8_t *group, const DayEvent *ev) {
   if (region >= REGION_COUNT) region = 0;
   uint8_t slot = wildSlot(hour);
   int lv = wildLevel(petLvl, rng);
-  // 1. raros
+  // 1. raros (ko11.7: luna llena de noche = legendarios x3)
   uint32_t roll = rng.below(1000), acc = 0;
   for (const WildRare &r : WILD_RARE) {
     if (!rareOk(r, region, petLvl, slot, wx, season)) continue;
-    acc += r.permil;
+    uint32_t pm = r.permil;
+    if (ev && ev->moonNight && DEX_TBL[r.dex].rarity == R_LEGENDARIO) pm *= EVENT_MOON_MULT;
+    acc += pm;
     if (roll < acc) { if (group) *group = WG_RARE; return wildBattler(r.dex, lv, rng); }
+  }
+  // ko11.7: dia de un tipo: 1 de cada 4, una forma base de ese tipo (no legendaria)
+  if (ev && ev->kind == DEV_TYPE && rng.below(100) < EVENT_TYPE_PCT) {
+    int16_t pool[DEX_COUNT];
+    int n = 0;
+    for (int16_t d = 1; d <= DEX_COUNT; d++) {
+      const DexEntry &e = DEX_TBL[d];
+      if (e.ptype == ev->ptype && e.rarity != R_LEGENDARIO && !hasPreEvo(d)) pool[n++] = d;
+    }
+    if (n) { if (group) *group = WG_REGION; return wildBattler(pool[rng.below(n)], lv, rng); }
   }
   uint32_t p = rng.below(100);
   // 2. por hora
@@ -339,6 +372,18 @@ Battler makeTrainerMon(int16_t dex, uint16_t lvl) {
   if (dex < 1 || dex > DEX_COUNT) dex = 16;
   const DexEntry &e = DEX_TBL[dex];
   return makeBattler(dex, lvl, wildStat(e.bAtk, 105, lvl), wildStat(e.bDef, 105, lvl), wildStat(e.bSpe, 105, lvl));
+}
+
+ExpReward expeditionReward(uint8_t hours, uint16_t lvl, BRng &rng) {
+  ExpReward r = { 0, 0, 0, 0, false };
+  uint8_t u = hours >= 8 ? 4 : hours >= 4 ? 2 : 1;  // "unidades" de 2 h
+  r.candy = (uint8_t)(u * 3 + (lvl >= 30 ? u : 0));  // de su familia (mas si es fuerte)
+  r.balls = u;
+  r.potions = (uint8_t)((u + 1) / 2);
+  uint8_t rarePct = u >= 4 ? 30 : u >= 2 ? 10 : 3;
+  if (rng.below(100) < rarePct) r.rare = 1;
+  r.newMon = rng.below(100) < (uint32_t)(10 * u);  // 10 / 20 / 40 %
+  return r;
 }
 
 uint8_t badgeCount(uint8_t badges) {

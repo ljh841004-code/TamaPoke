@@ -539,3 +539,48 @@ TEST(wild, salvaje_de_tu_talla) {
     if (pre > 0 && evoLevel(pre)) CHECK(f.lvl >= evoLevel(pre));
   }
 }
+
+// ko11.7: eventos del dia
+TEST(event, dias_y_luna) {
+  // 2026-09-28 lunes 10:00 (hora local) -> agua
+  DayEvent e = dayEvent(1790589600u);
+  CHECK_EQ(e.kind, (uint8_t)DEV_TYPE);
+  CHECK_EQ(e.ptype, (uint8_t)PT_WATER);
+  // 2026-09-27 domingo -> shiny x2
+  CHECK_EQ(dayEvent(1790503200u).kind, (uint8_t)DEV_SHINY);
+  CHECK_EQ(dayEvent(0).kind, (uint8_t)DEV_NONE);
+  // luna llena 2026-09-26 16:49 UTC; luna nueva 2024-01-11
+  CHECK(fullMoon(1790441340u));
+  CHECK(!fullMoon(1704974220u));
+  // de noche con luna llena
+  CHECK(dayEvent(1790463600u).moonNight);   // 2026-09-26 23:00
+  CHECK(!dayEvent(1790434800u).moonNight);  // 2026-09-26 15:00 (de dia)
+}
+
+TEST(event, dia_de_tipo_sube_ese_tipo) {
+  DayEvent ev = { DEV_TYPE, PT_FIRE, false };
+  int withEv = 0, without = 0;
+  for (int i = 0; i < 3000; i++) {
+    BRng a(1000 + i), b(1000 + i);
+    if (DEX_TBL[makeWildIn(0, 20, 12, 0, 0, a, nullptr, &ev).dex].ptype == PT_FIRE) withEv++;
+    if (DEX_TBL[makeWildIn(0, 20, 12, 0, 0, b, nullptr).dex].ptype == PT_FIRE) without++;
+  }
+  CHECK(withEv > without + 300);
+}
+
+// ko11.7: expediciones: mas horas, mas premio
+TEST(expedition, premio_crece_con_las_horas) {
+  int newMon[3] = {0, 0, 0}, rare[3] = {0, 0, 0};
+  const uint8_t H[3] = {2, 4, 8};
+  for (int k = 0; k < 3; k++)
+    for (int i = 0; i < 2000; i++) {
+      BRng r(77 + i);
+      ExpReward e = expeditionReward(H[k], 20, r);
+      newMon[k] += e.newMon; rare[k] += e.rare;
+      if (i == 0) CHECK(e.candy >= 3 && e.balls >= 1);
+    }
+  CHECK(newMon[0] < newMon[1] && newMon[1] < newMon[2]);
+  CHECK(rare[0] < rare[2]);
+  BRng r(1);
+  CHECK(expeditionReward(8, 50, r).candy > expeditionReward(2, 50, r).candy);
+}

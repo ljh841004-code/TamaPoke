@@ -78,6 +78,8 @@ static const uint8_t CANDY_COST[CU_COUNT] = { 3, 1, 5, 10, 5 };
 enum : uint8_t { BATTLE_WILD = 0, BATTLE_LINK };
 
 // ko11.1: menos objetos (sobraban)
+constexpr uint8_t TRAIN_MIN_GAIN = 3;   // ko11.7: entrenar (con algun acierto) sube al menos 3
+constexpr uint8_t FRIEND_EVO_BOND = 70;  // ko11.7
 constexpr uint8_t BALL_MAX = 20;
 constexpr uint8_t POTION_MAX = 15;  // ko11.6.1: antes 10
 constexpr uint8_t WILD_BALL_PCT = 40;
@@ -128,6 +130,9 @@ public:
   // ko11.6.1: racha de la liga (se corta al perder en ella; las medallas NO se pierden)
   uint16_t champStreak = 0, champBest = 0;
   uint8_t fameStreak[60] = {};  // racha de cada entrada del salon de la fama (mismo orden, 0 = sin dato)
+  // ko11.7: expedicion en curso (el Pokemon sale de la caja mientras tanto)
+  struct __attribute__((packed)) Expedition { uint8_t on, hours; int16_t dex; uint16_t lvl; uint8_t flags, gA, gD, gS;
+                                              uint32_t epoch, start, end; } exped = {};
   // ko10.11: caramelo universal (sale a veces en los salvajes) y cambios
   uint16_t rareCandy = 0;
   bool candyTrade(int16_t famDex, uint16_t times);  // 3 de otra familia -> 1 de la actual (x times)
@@ -261,7 +266,11 @@ public:
   float evolveT() const {     // progreso de la animacion de evolucion 0..1
     return 1.0f - (float)timeLeft(evolveUntil) / (float)EVOLVE_ANIM_MS;
   }
-  bool canEvolveNow() const;  // condiciones de evolucion cumplidas (lista)
+  bool canEvolveNow() const;
+  // ko11.7: evolucion por amistad (como en oro/plata): ademas del nivel pide
+  // vinculo >= FRIEND_EVO_BOND. Pichu, Cleffa, Igglybuff, Togepi, Golbat, Chansey.
+  // Eevee con vinculo alto: de dia Espeon, de noche Umbreon (si no, las otras)
+  bool needsFriendship() const;  // condiciones de evolucion cumplidas (lista)
   void evolve();              // dispara la transformacion (la llama un toque del usuario)
   bool canFarewellNow() const;  // forma final + 7 dias: lista para despedirse (boton)
   bool canRunawayNow() const;   // abandono total 1h: lista para escaparse (boton triste)
