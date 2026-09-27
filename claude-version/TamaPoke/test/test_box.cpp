@@ -809,6 +809,16 @@ TEST(candy, usos_gastan_y_aplican) {
   CHECK(!p.candyCanUse(CU_SHINY));
   p.newEgg();
   CHECK(!p.shinyCharm);
+  // ko10.10: si ese huevo se cambia por uno de la caja, el shiny UP se devuelve
+  CHECK(p.eggCharm);
+  p.adoptMon(4, 1, false, 100, 100, 100);
+  CHECK(p.shinyCharm);
+  CHECK(!p.eggCharm);
+  p.newEgg();                 // el siguiente huevo lo gasta de verdad
+  CHECK(!p.shinyCharm);
+  for (int i = 0; i < 3; i++) p.eggTap();  // 3 toques: nace
+  CHECK(!p.isEgg());
+  CHECK(!p.eggCharm);         // nacio: ya no se devuelve
   // sin bastantes caramelos no se gasta nada
   Pet r;
   freshPet(r, 4);

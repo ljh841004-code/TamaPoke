@@ -107,6 +107,7 @@ public:
   // Pokemon que crias si es de esa familia. Del jugador: persisten entre crianzas
   uint16_t candy[PET_DEX_MAX + 1] = { 0 };
   bool shinyCharm = false;  // el proximo huevo tiene 4 veces mas opciones de shiny
+  bool eggCharm = false;    // ko10.10: el huevo actual gasto el shinyCharm (si se cambia por uno de la caja, se devuelve)
   // ko10.4: medallas de gimnasio (bit i = gimnasio i) y reto del dia (del jugador)
   uint8_t badges = 0;
   uint32_t dailyDoneDay = 0;   // dia (epoch/86400) del ultimo reto superado

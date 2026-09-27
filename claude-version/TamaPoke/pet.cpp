@@ -30,6 +30,7 @@ void Pet::newEgg() {
   // sorteo shiny: 1/48 base, mejor con despedida y con racha/vinculo altos
   int shinyBase = (lastEnd == CER_FAREWELL ? 24 : 48) - careBonus();
   if (shinyBase < 8) shinyBase = 8;
+  eggCharm = shinyCharm;  // ko10.10: se recuerda para devolverlo si no llega a nacer
   if (shinyCharm) { shinyBase /= 4; shinyCharm = false; }  // ko10.4: caramelos x10
   if (shinyBase < 2) shinyBase = 2;
   eggShiny = (random(shinyBase) == 0);
@@ -464,6 +465,7 @@ void Pet::release() {
 void Pet::hatch() {
   speciesId = eggTarget;
   shiny = eggShiny;
+  eggCharm = false;  // ko10.10: el shiny UP ya se uso en este huevo
   // genes del individuo: 90-110% por stat (cada crianza es unica)
   geneAtk = 90 + random(21);
   geneDef = 90 + random(21);
@@ -852,6 +854,7 @@ void Pet::save() {
   prefs.putBytes("candy", candy, sizeof(candy));  // ko10.4
   prefs.putBytes("famr", famRaised, sizeof(famRaised));  // ko10.5
   prefs.putBool("scharm", shinyCharm);
+  prefs.putBool("echarm", eggCharm);
   prefs.putUChar("badge", badges);  // ko10.4
   prefs.putUInt("dday", dailyDoneDay);
   prefs.putUShort("dclr", dailyClears);
@@ -914,6 +917,7 @@ void Pet::load() {
   if (prefs.getBytes("candy", candy, sizeof(candy)) != sizeof(candy)) memset(candy, 0, sizeof(candy));
   for (auto &c : candy) if (c > CANDY_MAX) c = CANDY_MAX;
   shinyCharm = prefs.getBool("scharm", false);
+  eggCharm = prefs.getBool("echarm", false);
   badges = prefs.getUChar("badge", 0);
   dailyDoneDay = prefs.getUInt("dday", 0);
   dailyClears = prefs.getUShort("dclr", 0);
@@ -1063,6 +1067,9 @@ void Pet::adoptMon(int16_t dex, uint16_t lvl, bool isShiny, uint8_t gA, uint8_t 
   if (dex < 1 || dex > DEX_COUNT) { newEgg(); return; }
   ceremony = CER_NONE;
   neglectTicks = 0;
+  // ko10.10: el huevo que se descarta habia gastado el "shiny UP" de caramelos:
+  // se devuelve para el proximo huevo (antes se perdia al elegir de la caja)
+  if (eggCharm) { shinyCharm = true; eggCharm = false; }
   speciesId = dex;
   prevSpeciesId = -1;
   shiny = isShiny;
