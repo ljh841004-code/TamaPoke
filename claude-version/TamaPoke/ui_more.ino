@@ -1057,7 +1057,7 @@ void renderBackup() {
   drawFit(XT(X_BAK_AUTO), 362, 320, 0x8410, 1);
   if (bakMsg >= 0 && timeLeft(bakMsgUntil))
     drawFit(XT((XId)bakMsg), 390, 300, bakMsg == X_BAK_DONE ? UI_BAR_OK : UI_BAR_BAD, 2);
-  drawTopExitHint(424);
+  drawBackArrow();  // ko11.6.1
   if (bakSel >= 0) drawBakConfirm(XT(X_BAK_CONFIRM), bakSel, X_BAK_RESTORE, X_BAK_CANCEL);
   gfx->flush();
 }
@@ -1079,7 +1079,7 @@ void backupTap(int16_t x, int16_t y) {
     else if (inRect(x, y, 238, 288, 150, 44)) { bakSel = -1; sfxPlay(SFX_TAP); }
     return;
   }
-  if (topDoubleTap(y)) { xScreen = XS_NET; return; }  // vuelve a la red
+  if (navHit(NAV_L, x, y)) { xScreen = XS_NET; sfxPlay(SFX_TAP); return; }  // ko11.6.1: vuelve a la red
   if (inRect(x, y, 113, BAK_NOW_Y, 240, 44)) {
     bool ok = bakDoBackup();
     if (sdReady) bakSetMsg(ok ? X_BAK_DONE : X_BAK_FAIL);

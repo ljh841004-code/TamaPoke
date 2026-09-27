@@ -243,7 +243,7 @@ void renderNet() {
           XT(netOpenAllowed() ? X_OPEN_ON : X_OPEN_OFF));
   drawBtn(NET_UPD_X, NET_UPD_Y, NET_UPD_W, NET_UPD_H, 0xFB20, UI_WHITE, XT(X_UPD_BTN));
   drawBtn(NET_BAK_X, NET_UPD_Y, NET_BAK_W, NET_UPD_H, 0x6B4D, UI_WHITE, XT(X_BAK_BTN));  // ko11.6
-  drawTopExitHint(424);  // ko11.6: doble toque arriba (antes "tocar arriba", con el aviso abajo junto a [SD])
+  drawBackArrow();  // ko11.6.1: flecha izquierda = volver (antes "tocar arriba", con el aviso abajo junto a [SD])
   gfx->flush();
 }
 
@@ -252,8 +252,7 @@ void netTap(int16_t x, int16_t y) {
     if (y >= 400) netStopPortal();  // ko8: [volver] bajo el QR
     return;
   }
-  if (topDoubleTap(y)) { closeNet(); return; }  // ko11.6: doble toque arriba
-  if (y < TOP_EXIT_Y) return;
+  if (navHit(NAV_L, x, y)) { closeNet(); sfxPlay(SFX_TAP); return; }  // ko11.6.1: flecha = volver
   if (inRect(x, y, NET_UPD_X, NET_UPD_Y, NET_UPD_W, NET_UPD_H)) { openUpdate(); return; }
   if (inRect(x, y, NET_BAK_X, NET_UPD_Y, NET_BAK_W, NET_UPD_H)) { openBackup(); return; }  // ko11.6
   if (y >= NET_TZ_Y && y < NET_TZ_Y + 44) {
