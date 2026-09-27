@@ -768,3 +768,149 @@ void candyBagTap(int16_t x, int16_t y) {
   bagSel = bagFam[k];
   sfxPlay(SFX_TAP);
 }
+
+// ======================================================================
+// ko11.1: salon de la fama de la liga. Rejilla (el mas reciente primero) con
+// corona; al tocar uno, su ficha: sprite grande con corona, fecha y genes
+// ======================================================================
+#define FM_COLS 3
+#define FM_ROWS 3
+#define FM_CELL 96
+#define FM_X (CX - FM_COLS * FM_CELL / 2)
+#define FM_Y 92
+static uint8_t famePage = 0;
+static int16_t fameSel = -1;  // indice en fame (0 = el mas antiguo), -1 = rejilla
+
+static uint8_t famePages() {
+  uint8_t n = fame.count();
+  return n ? (uint8_t)((n + FM_COLS * FM_ROWS - 1) / (FM_COLS * FM_ROWS)) : 1;
+}
+
+// corona dorada grande (centrada en cx, con la base en y)
+static void drawCrownBig(int cx, int y, int w) {
+  uint16_t gold = C565(0xf0, 0xc0, 0x30), dark = C565(0xa0, 0x70, 0x10), red = C565(0xe0, 0x30, 0x40);
+  int h = w / 2, x = cx - w / 2;
+  gfx->fillRect(x, y - h / 3, w, h / 3, gold);
+  gfx->fillTriangle(x, y - h / 3, x + w / 6, y - h, x + w / 3, y - h / 3, gold);
+  gfx->fillTriangle(x + w / 3, y - h / 3, cx, y - h - h / 4, x + 2 * w / 3, y - h / 3, gold);
+  gfx->fillTriangle(x + 2 * w / 3, y - h / 3, x + 5 * w / 6, y - h, x + w, y - h / 3, gold);
+  gfx->drawRect(x, y - h / 3, w, h / 3, dark);
+  gfx->fillCircle(cx, y - h / 6, h / 8 + 1, red);
+  gfx->fillCircle(x + w / 6, y - h, h / 10 + 1, red);
+  gfx->fillCircle(x + 5 * w / 6, y - h, h / 10 + 1, red);
+  gfx->fillCircle(cx, y - h - h / 4, h / 10 + 1, red);
+}
+
+void openFame() {
+  xScreen = XS_FAME;
+  famePage = 0;
+  fameSel = -1;
+  sfxPlay(SFX_TAP);
+}
+
+void fameClose() {
+  if (fameSel >= 0) { fameSel = -1; galleryPmd.unload(); return; }
+  galleryPmd.unload();
+  xScreen = XS_GYM;  // vuelve a la pagina de la liga
+  gymPage = 2;
+}
+
+bool fameSwipe(int dir) {
+  if (xScreen != XS_FAME) return false;
+  if (fameSel >= 0) { fameClose(); return true; }
+  int p = (int)famePage + (dir > 0 ? -1 : 1);
+  if (p >= 0 && p < famePages()) { famePage = (uint8_t)p; sfxPlay(SFX_TAP); }
+  return true;
+}
+
+static void fameDetail() {
+  const BoxMon &m = fame.at((uint8_t)fameSel);
+  drawFit(XT(X_FAME_TITLE), 30, 300, C565(0xb0, 0x80, 0x10), 2);
+  const int ground = 250;
+  int top = ground - 120;
+  if (galleryPmd.loaded && galleryPmd.acts[PMD_IDLE].frames) {
+    // ko11.1: retrato grande y quieto (frame 0) para que la corona quede justo en la cabeza
+    const PmdAct &ia = galleryPmd.acts[PMD_IDLE];
+    uint8_t sc = ia.h ? 210 / ia.h : 4;
+    sc = sc < 2 ? 2 : sc > 6 ? 6 : sc;
+    drawPmdActM(galleryPmd, PMD_IDLE, CX, ground, 0, true, false, 6, 210);
+    int r0 = 0;
+    for (; r0 < ia.h; r0++) {
+      const uint8_t *row = ia.data + r0 * ia.w;
+      bool hit = false;
+      for (int c = 0; c < ia.w && !hit; c++) hit = row[c] != 0xFF;
+      if (hit) break;
+    }
+    top = ground - ((ia.base ? ia.base : ia.h) - r0) * sc;
+  } else {
+    const uint8_t *th = thumbs.get(m.dex);
+    if (th) drawThumb(th, CX - 60, ground - 120, 3, false);
+  }
+  if (top < 96) top = 96;
+  drawCrownBig(CX, top + 4, 64);
+  char b[64];
+  snprintf(b, sizeof(b), "%s%s  Lv%u", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex), m.lvl);
+  drawFit(b, 262, 340, UI_INK, 3);
+  char when[32];
+  when[0] = 0;
+  if (m.epoch) {
+    int yy;
+    uint8_t mo, dd;
+    wxDate(m.epoch, &yy, &mo, &dd, nullptr);
+    snprintf(when, sizeof(when), XT(X_FAME_DATE_FMT), (unsigned)yy, mo, dd);
+  }
+  snprintf(b, sizeof(b), XT(X_FAME_NTH_FMT), (unsigned)(fameSel + 1));
+  if (when[0]) { size_t l = strlen(b); snprintf(b + l, sizeof(b) - l, "  %s", when); }
+  drawFit(b, 306, 340, C565(0xb0, 0x80, 0x10), 2);
+  if (m.geneAtk) {
+    snprintf(b, sizeof(b), XT(X_FAME_GENES_FMT), m.geneAtk, m.geneDef, m.geneSpe);
+    drawFit(b, 336, 320, 0x8410, 2);
+  }
+  drawFit(XT(X_FAME_TAP), 392, 240, UI_INK, 1);
+  drawNav(NAV_DOWN, UI_INK);
+}
+
+void renderFame() {
+  screenBase();
+  if (fameSel >= 0 && fameSel < fame.count()) { fameDetail(); gfx->flush(); return; }
+  char t[40];
+  snprintf(t, sizeof(t), XT(X_FAME_BTN_FMT), fame.count());
+  drawFit(t, 36, 320, C565(0xb0, 0x80, 0x10), 3);
+  uint8_t n = fame.count();
+  for (int k = 0; k < FM_COLS * FM_ROWS; k++) {
+    int idx = famePage * FM_COLS * FM_ROWS + k;
+    if (idx >= n) break;
+    const BoxMon &m = fame.at((uint8_t)(n - 1 - idx));  // el mas reciente primero
+    int x = FM_X + (k % FM_COLS) * FM_CELL, y = FM_Y + (k / FM_COLS) * FM_CELL;
+    gfx->fillRoundRect(x + 4, y + 4, FM_CELL - 8, FM_CELL - 8, 14, (m.flags & BOXF_SHINY) ? C565(0xff, 0xf0, 0xc0) : UI_WHITE);
+    gfx->drawRoundRect(x + 4, y + 4, FM_CELL - 8, FM_CELL - 8, 14, C565(0xb0, 0x80, 0x10));
+    const uint8_t *th = thumbs.get(m.dex);
+    if (th) drawThumb(th, x + 8, y + 14, 2, false);
+    drawCrownBig(x + FM_CELL / 2, y + 22, 26);
+  }
+  if (famePages() > 1) {
+    snprintf(t, sizeof(t), XT(X_BAG_PAGE_FMT), famePage + 1, famePages());
+    drawFit(t, 392, 200, UI_INK, 1);
+  }
+  if (famePage > 0) drawNav(NAV_L, UI_INK);
+  if (famePage + 1 < famePages()) drawNav(NAV_R, UI_INK);
+  drawNav(NAV_DOWN, UI_INK);
+  gfx->flush();
+}
+
+void fameTap(int16_t x, int16_t y) {
+  if (fameSel >= 0) { fameClose(); sfxPlay(SFX_TAP); return; }  // la ficha: cualquier toque vuelve
+  if (navHit(NAV_DOWN, x, y)) { fameClose(); sfxPlay(SFX_TAP); return; }
+  if (navHit(NAV_L, x, y)) { fameSwipe(1); return; }
+  if (navHit(NAV_R, x, y)) { fameSwipe(-1); return; }
+  if (x < FM_X || y < FM_Y) return;
+  int c = (x - FM_X) / FM_CELL, r = (y - FM_Y) / FM_CELL;
+  if (c >= FM_COLS || r >= FM_ROWS) return;
+  int idx = famePage * FM_COLS * FM_ROWS + r * FM_COLS + c;
+  uint8_t n = fame.count();
+  if (idx >= n) return;
+  fameSel = (int16_t)(n - 1 - idx);
+  const BoxMon &m = fame.at((uint8_t)fameSel);
+  galleryPmd.load((uint8_t)m.dex, m.flags & BOXF_SHINY);
+  audioCry(m.dex);
+}

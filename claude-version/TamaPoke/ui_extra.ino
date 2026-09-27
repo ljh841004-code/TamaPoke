@@ -12,7 +12,8 @@ enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_
                  XS_REGION,    // ko10.1: elegir region antes del salvaje
                  XS_GYM, XS_DAILY,  // ko10.4: gimnasios y reto del dia
                  XS_NEXTPICK,       // ko10.5: elegir el siguiente tras un ciclo
-                 XS_CANDY };        // ko10.11: bolsa de caramelos
+                 XS_CANDY,          // ko10.11: bolsa de caramelos
+                 XS_FAME };         // ko11.1: salon de la fama (campeones de la liga)
 uint8_t xScreen = XS_NONE;
 
 // aviso breve en la pantalla principal
@@ -1460,40 +1461,45 @@ static void gymFooter() {
 #define LG_ROW_Y 232
 #define LG_ROW_H 30
 #define LG_ROWS 4
+#define LG_FAME_Y 206
+#define LG_FAME_H 48
 static void renderLeague() {
   bool open = badgeCount(pet.badges) >= GYM_COUNT;
   if (open) drawBtn(GY_X + 20, LG_BTN_Y, GY_W - 40, LG_BTN_H, C565(0xd8, 0xa8, 0x20), UI_WHITE, XT(X_CHAMP_BTN));
   else drawBtn(GY_X + 20, LG_BTN_Y, GY_W - 40, LG_BTN_H, UI_TRACK, 0x8410, XT(X_CHAMP_LOCK));
-  char w[32];
+  char w[48];
   snprintf(w, sizeof(w), XT(X_CHAMP_WINS_FMT), pet.champWins);
   drawFit(w, 178, 300, UI_INK, 2);
-  drawFit(XT(X_FAME_TITLE), 204, 300, C565(0xb0, 0x80, 0x10), 2);
+  // ko11.1: el salon de la fama es una pantalla aparte (antes lista pequena que se pisaba)
   uint8_t n = fame.count();
-  if (!n) drawFit(XT(X_FAME_EMPTY), LG_ROW_Y + 20, 300, 0x8410, 1);
-  for (uint8_t r = 0; r < LG_ROWS && r < n; r++) {  // los mas recientes primero
-    const BoxMon &m = fame.at((uint8_t)(n - 1 - r));
-    int y = LG_ROW_Y + r * LG_ROW_H;
-    const uint8_t *th = thumbs.get(m.dex);
-    if (th) drawThumb(th, 118, y - 22, 1, false);
-    char l[48], when[12];
+  snprintf(w, sizeof(w), XT(X_FAME_BTN_FMT), n);
+  drawBtn(GY_X + 20, LG_FAME_Y, GY_W - 40, LG_FAME_H, n ? C565(0x7a, 0x4a, 0xa8) : UI_TRACK, n ? UI_WHITE : 0x8410, w);
+  if (!n) drawFit(XT(X_FAME_EMPTY), LG_FAME_Y + LG_FAME_H + 16, 300, 0x8410, 1);
+  else {  // el ultimo campeon, en una linea
+    const BoxMon &m = fame.at((uint8_t)(n - 1));
+    char l[64], when[12];
     when[0] = 0;
     if (m.epoch) {
       uint8_t mo, dd;
       wxDate(m.epoch, nullptr, &mo, &dd, nullptr);
       snprintf(when, sizeof(when), "%u/%u", mo, dd);
     }
-    snprintf(l, sizeof(l), "%s%s Lv%u  %s", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex), m.lvl, when);
-    gfx->setTextColor(UI_INK);
-    setSize(2);
-    setCur(166, y);
-    printT(l);
+    char nm[40];
+    snprintf(nm, sizeof(nm), "%s%s Lv%u %s", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex), m.lvl, when);
+    snprintf(l, sizeof(l), XT(X_FAME_LAST_FMT), nm);
+    drawFit(l, LG_FAME_Y + LG_FAME_H + 14, 320, UI_INK, 2);
   }
-  if (gymMsg && timeLeft(gymMsgUntil)) drawFit(gymMsg, 360, 300, UI_BAR_BAD, 1);
-  else gymDots();
+  if (gymMsg && timeLeft(gymMsgUntil)) drawFit(gymMsg, 340, 300, UI_BAR_BAD, 1);
+  gymDots();
   gymFooter();
 }
 
 static void leagueTap(int16_t x, int16_t y) {
+  if (inRect(x, y, GY_X + 20, LG_FAME_Y, GY_W - 40, LG_FAME_H)) {  // ko11.1: salon de la fama
+    if (fame.count()) openFame();
+    else sfxPlay(SFX_DENY);
+    return;
+  }
   if (!inRect(x, y, GY_X + 20, LG_BTN_Y, GY_W - 40, LG_BTN_H)) return;
   if (badgeCount(pet.badges) < GYM_COUNT) {
     sfxPlay(SFX_DENY); gymMsg = XT(X_CHAMP_LOCK); gymMsgUntil = millis() + 1800; return;
@@ -1712,7 +1718,8 @@ void finishBattle(bool won, bool fled, bool caught) {
       pet.potions = pet.potions > 94 ? 99 : pet.potions + 5;
       pet.addCandy(pet.speciesId, 10);
       if (fame.full()) fame.release(0);  // lleno: se va el mas antiguo
-      fame.add(pet.speciesId, pet.level(), pet.shiny, false, clockEpoch());
+      // ko11.1: con sus genes (la ficha del salon los ensena)
+      fame.addRaised(pet.speciesId, pet.level(), pet.shiny, pet.geneAtk, pet.geneDef, pet.geneSpe, clockEpoch());
       strncpy(bNote, XT(X_CHAMP_WIN), sizeof(bNote) - 1);
       bNote[sizeof(bNote) - 1] = 0;
       pet.saveNow();
@@ -2085,7 +2092,7 @@ void updateLink() {
 // ko11: que pista toca ahora (ver audioSetMusicTrack)
 uint8_t musicTrackNow() {
   if (battleMusicActive()) return bKind == BK_GYM ? MT_GYM : bKind == BK_CHAMP ? MT_CHAMP : MT_NORMAL;
-  if (xScreen == XS_GYM && gymPage == 2) return MT_FAME;  // la pagina de la liga y el salon
+  if ((xScreen == XS_GYM && gymPage == 2) || xScreen == XS_FAME) return MT_FAME;  // liga y salon
   return MT_NORMAL;
 }
 
@@ -2128,6 +2135,7 @@ bool extraRender() {
     case XS_DAILY: renderDaily(); return true;
     case XS_NEXTPICK: renderNextPick(); return true;  // ko10.5
     case XS_CANDY: renderCandyBag(); return true;     // ko10.11
+    case XS_FAME: renderFame(); return true;          // ko11.1
     default: return false;
   }
 }
@@ -2147,6 +2155,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_DAILY: dailyTap(x, y); return true;
     case XS_NEXTPICK: nextPickTap(x, y); return true;
     case XS_CANDY: candyBagTap(x, y); return true;
+    case XS_FAME: fameTap(x, y); return true;
     default: return false;
   }
 }
@@ -2160,6 +2169,7 @@ bool extraSwipe() {
   if (xScreen == XS_UPD) { xScreen = XS_NET; return true; }
   if (xScreen == XS_RESET) { xScreen = XS_NONE; clockOpen = true; return true; }
   if (xScreen == XS_CANDY) { xScreen = XS_NONE; return true; }  // ko10.11: vertical = cerrar
+  if (xScreen == XS_FAME) { fameClose(); return true; }       // ko11.1
   if (xScreen == XS_REGION || xScreen == XS_GYM || xScreen == XS_DAILY || xScreen == XS_NEXTPICK) {
     xScreen = XS_NONE;  // ko10.5: en la eleccion, cerrar = quedarse el huevo
     return true;

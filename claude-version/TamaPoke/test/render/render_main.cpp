@@ -258,6 +258,9 @@ static void scenes(bool ko, const char *sfx) {
     fame.add(pet.speciesId, pet.level(), pet.shiny, false, gMockEpoch);
     pet.champWins = 3;
     render(); shot("59_league_fame");
+    openFame(); render(); shot("59d_fame_grid");
+    fameTap(FM_X + FM_CELL + 10, FM_Y + 10); render(); shot("59e_fame_detail");
+    fameClose(); fameClose();
     leagueTap(GY_X + 40, LG_BTN_Y + 10); render(); shot("59b_league_intro");
     bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
     finishBattle(true, false, false); render(); shot("59c_league_win");
