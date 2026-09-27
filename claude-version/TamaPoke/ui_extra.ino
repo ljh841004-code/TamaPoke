@@ -56,9 +56,12 @@ bool inRect(int16_t x, int16_t y, int rx, int ry, int rw, int rh) {
   return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
 }
 
+// ko11.6.1: antes negro + circulo de fondo. Si el volcado DMA del frame anterior
+// aun leia el framebuffer, se colaba el negro a medio pintar: la pantalla de red
+// "parpadeaba" sin parar. La pantalla es redonda: las esquinas no se ven, asi
+// que se pinta todo del color de fondo (la escena principal ya lo hacia asi)
 void screenBase() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->fillScreen(UI_BG_DAY);
 }
 
 // ======================================================================

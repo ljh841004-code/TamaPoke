@@ -1753,8 +1753,7 @@ void drawBigClock(bool night) {
 
 // primera partida: elige inicial entre Bulbasaur / Charmander / Squirtle
 void renderStarterSelect() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
   const char *t = T(S_CHOOSE_STARTER);
   gfx->setTextColor(UI_INK);
   setSize(2);
@@ -2641,8 +2640,7 @@ void drawClockBtn(int x, int y, const char *l) {
 static const char *const LANG_CODES[LANG_COUNT] = { "ES", "EN", "FR", "DE", "IT", "PT", "JA", "KO" };
 
 void renderClock() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
   gfx->setTextColor(UI_INK);
   setSize(3);
   setCur(centerX(T(S_SET_TIME), 3), 30);  // ko10.4: sitio para la pildora de fecha
@@ -3101,8 +3099,7 @@ static void cardCandyTap(int16_t x, int16_t y) {
 }
 
 void renderCard() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
   if (cardPage == 0) renderCardProfile();
   else if (cardPage == 1) renderCardStats();
   else if (cardPage == 2) renderCardMedals();
@@ -3196,8 +3193,7 @@ static void kbCleanName(char *s) {
 }
 
 void renderKeyboard() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
   drawFit(T(S_NAME), 36, 200, UI_INK, 2);
   // lo escrito
   char t[64];
@@ -3332,8 +3328,7 @@ uint16_t dexDiscoveredCount() {
 
 // ficha de la pokedex (fork KO, ko4): datos basicos + historial
 void renderDexDetail() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
   int16_t dx = galleryDetail;
   const DexEntry &d = DEX_TBL[dx];
   bool disc = dexDiscovered(dx);
@@ -3393,8 +3388,7 @@ void renderGallery() {
   if (!galleryDirty) return;  // la rejilla es estatica
   galleryDirty = false;
 
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
   char head[24];
   snprintf(head, sizeof(head), T(S_POKEDEX_FMT), dexDiscoveredCount());
   gfx->setTextColor(UI_INK);

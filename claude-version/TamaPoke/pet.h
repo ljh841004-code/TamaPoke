@@ -79,9 +79,9 @@ enum : uint8_t { BATTLE_WILD = 0, BATTLE_LINK };
 
 // ko11.1: menos objetos (sobraban)
 constexpr uint8_t BALL_MAX = 20;
-constexpr uint8_t POTION_MAX = 10;
+constexpr uint8_t POTION_MAX = 15;  // ko11.6.1: antes 10
 constexpr uint8_t WILD_BALL_PCT = 40;
-constexpr uint8_t WILD_POTION_PCT = 30;
+constexpr uint8_t WILD_POTION_PCT = 35;  // ko11.6.1: antes 30
 
 class Pet {
 public:

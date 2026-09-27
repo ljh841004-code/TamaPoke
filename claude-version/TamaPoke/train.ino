@@ -117,8 +117,7 @@ static void renderBattlePage() {
 }
 
 void renderTrainMenu() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
   if (trainMenuPage == 0) renderTrainPage();
   else renderBattlePage();
   if (timeLeft(trainMsgUntil) && trainMsg) drawFit(trainMsg, 336, 320, UI_BAR_BAD, 2);

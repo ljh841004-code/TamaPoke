@@ -87,8 +87,7 @@ static void boxDate(uint32_t e, char *out, size_t n) {
 
 void renderBoxDetail() {
   const BoxMon &m = cb().at(boxSel);
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
   char head[48];
   snprintf(head, sizeof(head), "%s%s", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex));
   drawFit(head, 44, 300, DEX_TBL[m.dex].accent, 3);
@@ -115,8 +114,7 @@ void renderBoxDetail() {
 void renderBox() {
   if (boxSel >= 0 && boxSel < cb().count()) { renderBoxDetail(); return; }
   boxSel = -1;
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
   // ko10.5: dos pestanas: la caja y el salon de la fama (corona)
   char t1[24], t2[24];
   snprintf(t1, sizeof(t1), XT(X_BOX_TITLE_FMT), box.count(), BOX_MAX);
@@ -262,8 +260,7 @@ static bool nextPickable(const BoxMon &m) { return pet.allFamsRaised() || !pet.i
 static uint8_t nextPages() { return box.count() ? (box.count() + NP_ROWS - 1) / NP_ROWS : 1; }
 
 void renderNextPick() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
   drawFit(XT(X_NEXT_TITLE), 34, 320, UI_INK, 2);
   drawBtn(93, NP_EGG_Y, 280, 48, UI_BAR_WARN, UI_INK, XT(X_NEXT_EGG));
   boxSortView(box);
@@ -357,8 +354,7 @@ void openSound() {
 }
 
 void renderSound() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
   drawFit(XT(X_SOUND_TITLE), 40, 300, UI_INK, 3);
   bool on = audioEnabled();
   drawBtn(133, 78, 200, 40, on ? UI_BAR_OK : UI_TRACK, on ? UI_WHITE : UI_INK,
@@ -442,8 +438,7 @@ void openUpdate() {
 }
 
 static void updScreenBase() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
   drawFit(XT(X_UPD_TITLE), 48, 300, UI_INK, 3);
 }
 
@@ -551,8 +546,7 @@ void doResetGame() {
 }
 
 void renderReset() {
-  gfx->fillScreen(RGB565_BLACK);
-  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
   drawFit(XT(X_RESET_TITLE), 40, 300, UI_INK, 3);
   if (rstDone) {
     drawFit(XT(X_RESET_DONE), 220, 320, UI_INK, 3);

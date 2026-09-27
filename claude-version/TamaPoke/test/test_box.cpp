@@ -209,7 +209,7 @@ TEST(items, premio_salvaje_por_probabilidad_y_tope) {
 TEST(items, giveItems_con_tope_y_sin_quitar) {
   Pet p;
   freshPet(p, 4);
-  p.balls = 19; p.potions = 9;
+  p.balls = 19; p.potions = POTION_MAX - 1;
   p.giveItems(3, 3);
   CHECK_EQ(p.balls, BALL_MAX);
   CHECK_EQ(p.potions, POTION_MAX);
