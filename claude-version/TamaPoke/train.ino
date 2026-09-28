@@ -67,8 +67,13 @@ extern bool vbOpen;  // ko11.9 (volley.ino)
 bool trainingFast() { return defOpen || spdOpen || vbOpen; }  // toques al apoyar el dedo
 bool trainingOpen() { return trainMenuOpen || trainingFast(); }
 
+// ko11.17: el menu se abre desde la principal o desde la ficha: [<] vuelve ahi
+static bool trainFromCard = false;
+static uint8_t trainFromCardPage = 0;
 void openTrainMenu() {
   if (pet.isEgg() || pet.ceremony) return;
+  trainFromCard = cardOpen;
+  trainFromCardPage = cardPage;
   cardOpen = false;
   trainMenuOpen = true;
   trainMenuPage = 0;  // ko9.1: siempre empieza en entrenamiento
@@ -84,10 +89,26 @@ static uint32_t trainBackUntil = 0;
 static bool trainOutsideClose() { return !timeLeft(trainBackUntil); }
 
 void backToTrainMenu() {
+  bool fc = trainFromCard;  // ko11.17: sigue sabiendo de donde vino
   openTrainMenu();
+  trainFromCard = fc;
   swallowGesture = true;
   navGuardUntil = millis() + 600;
   trainBackUntil = millis() + 2000;
+}
+
+// ko11.17: volver a este menu desde un submenu (region, gimnasios, tongsin...)
+void reopenTrainMenu(uint8_t page) {
+  bool fc = trainFromCard;
+  openTrainMenu();
+  trainFromCard = fc;
+  trainMenuPage = page > 1 ? 1 : page;
+}
+// [<] / cerrar: a la ficha si se abrio desde ella, si no a la principal
+static void trainMenuClose() {
+  trainMenuOpen = false;
+  if (trainFromCard && !pet.isEgg()) { cardOpen = true; cardPage = trainFromCardPage; }
+  trainFromCard = false;
 }
 
 // ---------- menu ----------
@@ -159,8 +180,8 @@ void renderTrainMenu() {
   if (timeLeft(trainMsgUntil) && trainMsg) drawFit(trainMsg, 350, 320, UI_BAR_BAD, 2);
   drawTrainMenuDots();
   drawFit(T(S_BACK), 396, 220, UI_INK, 2);
-  if (trainMenuPage > 0) drawNav(NAV_L, UI_INK);  // ko10.8
-  else drawNav(NAV_R, UI_INK);
+  drawNav(NAV_L, UI_INK);  // ko11.17: en la 1a pagina = volver (principal o ficha)
+  if (trainMenuPage == 0) drawNav(NAV_R, UI_INK);
   drawNav(NAV_DOWN, UI_INK);
   uiFlush();
 }
@@ -169,31 +190,29 @@ void renderTrainMenu() {
 bool trainMenuSwipe(int dir) {
   if (!trainMenuOpen) return false;
   int p = (int)trainMenuPage + (dir > 0 ? -1 : 1);  // izquierda avanza (como la ficha)
-  if (p < 0 || p > 1) { if (trainOutsideClose()) trainMenuOpen = false; }
+  if (p < 0 || p > 1) { if (trainOutsideClose()) trainMenuClose(); }
   else { trainMenuPage = (uint8_t)p; trainMsgUntil = 0; sfxPlay(SFX_TAP); }
   return true;
 }
 
 static void battlePageTap(int16_t x, int16_t y) {
-  if (x < TRM_X || x >= TRM_X + TRM_W) { if (trainOutsideClose()) trainMenuOpen = false; return; }
+  if (x < TRM_X || x >= TRM_X + TRM_W) { if (trainOutsideClose()) trainMenuClose(); return; }
   int row = (y >= TRB_Y1 && y < TRB_Y1 + TRB_H) ? 0 : (y >= TRB_Y2 && y < TRB_Y2 + TRB_H) ? 1 : -1;
   if (row < 0) {
-    if ((y < TRB_Y1 || y > 380) && trainOutsideClose()) trainMenuOpen = false;
+    if ((y < TRB_Y1 || y > 380) && trainOutsideClose()) trainMenuClose();
     return;
   }
   bool right = x >= TRB_X2;
   if (!right && x >= TRM_X + TRB_W) return;  // hueco entre columnas
   if (row == 0 && right) {                   // tongsin
-    trainMenuOpen = false;
-    openLinkMenu();
+    openLinkMenu();  // ko11.17: cierra el menu (y [<] vuelve a esta pagina)
     sfxPlay(SFX_TAP);
     return;
   }
   // salvaje, gimnasio y reto: mismos motivos que battleAllowed(), avisados aqui
   if (!pet.canBattle()) { trainMsg = XT(X_CANT_NOW); trainMsgUntil = millis() + 2500; sfxPlay(SFX_DENY); return; }
   if (row == 0 && pet.tooTiredToBattle()) { trainMsg = XT(X_TOO_TIRED); trainMsgUntil = millis() + 2500; sfxPlay(SFX_DENY); return; }
-  trainMenuOpen = false;
-  if (row == 0) openRegionPick();  // ko10.1: primero se elige a donde ir
+  if (row == 0) openRegionPick();  // ko10.1: primero se elige a donde ir (ko11.17: cierra el menu)
   else if (!right) openGyms();     // ko10.4
   else openDaily();
 }
@@ -201,12 +220,13 @@ static void battlePageTap(int16_t x, int16_t y) {
 void trainMenuTap(int16_t x, int16_t y) {
   // ko10.8: flechas
   if (navHit(NAV_L, x, y) && trainMenuPage == 1) { trainMenuPage = 0; trainMsgUntil = 0; sfxPlay(SFX_TAP); return; }
+  if (navHit(NAV_L, x, y)) { trainMenuClose(); sfxPlay(SFX_TAP); return; }  // ko11.17: [<] volver
   if (navHit(NAV_R, x, y) && trainMenuPage == 0) { trainMenuPage = 1; trainMsgUntil = 0; sfxPlay(SFX_TAP); return; }
-  if (navHit(NAV_DOWN, x, y)) { if (trainOutsideClose()) { trainMenuOpen = false; sfxPlay(SFX_TAP); } return; }
+  if (navHit(NAV_DOWN, x, y)) { if (trainOutsideClose()) { trainMenuClose(); sfxPlay(SFX_TAP); } return; }
   if (trainMenuPage == 1) { battlePageTap(x, y); return; }
-  if (x < TRM_X || x >= TRM_X + TRM_W || y < TRM_Y) { if (trainOutsideClose()) trainMenuOpen = false; return; }
+  if (x < TRM_X || x >= TRM_X + TRM_W || y < TRM_Y) { if (trainOutsideClose()) trainMenuClose(); return; }
   int i = (y - TRM_Y) / (TRM_H + TRM_GAP);
-  if (i >= TRM_N) { if (trainOutsideClose()) trainMenuOpen = false; return; }
+  if (i >= TRM_N) { if (trainOutsideClose()) trainMenuClose(); return; }
   if ((y - TRM_Y) % (TRM_H + TRM_GAP) >= TRM_H) return;  // entre dos filas
   if (pet.sleeping || pet.isEgg() || pet.ceremony) {
     trainMsg = XT(X_CANT_NOW); trainMsgUntil = millis() + 2500; sfxPlay(SFX_DENY); return;
@@ -651,6 +671,6 @@ void trainingPress(int16_t x, int16_t y) {  // al apoyar el dedo (juegos rapidos
 void trainingQuit() { defOpen = spdOpen = vbOpen = false; }
 
 bool trainingSwipe() {
-  if (trainMenuOpen) { trainMenuOpen = false; return true; }
+  if (trainMenuOpen) { trainMenuClose(); return true; }
   return trainingFast();
 }

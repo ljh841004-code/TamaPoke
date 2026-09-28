@@ -17,6 +17,30 @@ enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_
                  XS_BGM };  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
 uint8_t xScreen = XS_NONE;
 
+// ko11.17: [<] vuelve a la pantalla DESDE LA QUE se abrio el menu (la ficha, el
+// menu de entrenamiento o la hora), no siempre a la principal. retMark() se
+// llama al abrir, ANTES de cerrar la pantalla de origen; entre pantallas extra
+// (red -> copias, gimnasios -> salon) no cambia: cada una sabe a cual volver
+enum : uint8_t { RET_MAIN = 0, RET_CARD, RET_TRAIN, RET_CLOCK };
+uint8_t gRet = RET_MAIN, gRetPage = 0;
+void retMark() {
+  if (xScreen != XS_NONE) return;
+  if (cardOpen) { gRet = RET_CARD; gRetPage = cardPage; }
+  else if (trainMenuOpen) { gRet = RET_TRAIN; gRetPage = trainMenuPage; }
+  else if (clockOpen) { gRet = RET_CLOCK; gRetPage = 0; }
+  else { gRet = RET_MAIN; gRetPage = 0; }
+}
+void reopenTrainMenu(uint8_t page);  // train.ino
+void goBack() {
+  xScreen = XS_NONE;
+  uint8_t r = gRet;
+  gRet = RET_MAIN;
+  if (r == RET_CARD && !pet.isEgg()) { cardOpen = true; cardPage = gRetPage; }
+  else if (r == RET_TRAIN && !pet.isEgg()) reopenTrainMenu(gRetPage);
+  else if (r == RET_CLOCK) clockOpen = true;
+  navGuardUntil = millis() + 300;  // el dedo que toco [<] no pulsa lo de debajo
+}
+
 // aviso breve en la pantalla principal
 char toastBuf[96] = "";
 uint32_t toastUntil = 0;
@@ -105,11 +129,11 @@ void screenBase() {
 #define NET_UPD_Y 370
 #define NET_UPD_H 40
 
-void openNet() { xScreen = XS_NET; }
+void openNet() { retMark(); clockOpen = false; xScreen = XS_NET; }
 
 void closeNet() {
   if (netPortalOn()) netStopPortal();
-  xScreen = XS_NONE;
+  goBack();  // ko11.17: a la hora (desde donde se abre)
 }
 
 // la hora local llega del NTP: al RTC y al juego
@@ -1395,6 +1419,8 @@ bool regionOpen(uint8_t r) { return r == petRegion() || regionUnlocked(r, pet.ba
 
 void openRegionPick() {
   if (!battleAllowed(true)) return;
+  retMark();
+  trainMenuOpen = false;
   xScreen = XS_REGION;
   cardOpen = false;
   regionPage = petRegion() / RG_PER_PAGE;  // empieza en la pagina de mi region
@@ -1441,6 +1467,7 @@ void renderRegionPick() {
     }
   }
   if (regionPage > 0) drawRegionArrow(40, true);
+  else drawNav(NAV_L, UI_INK);  // ko11.17: en la 1a pagina = volver
   if (regionPage < 1) drawRegionArrow(426, false);
   if (timeLeft(regionMsgUntil)) {  // ko10.4: "faltan medallas"
     drawFit(XT(X_REGION_LOCKED), RG_DOTS_Y - 8, 300, UI_BAR_BAD, 1);
@@ -1473,7 +1500,11 @@ bool regionSwipe(int dir) {
 }
 
 void regionTap(int16_t x, int16_t y) {
-  if (inRect(x, y, RG_BACK_X, RG_BACK_Y, RG_ART_W, 44)) { sfxPlay(SFX_TAP); xScreen = XS_NONE; return; }
+  if (inRect(x, y, RG_BACK_X, RG_BACK_Y, RG_ART_W, 44) || (regionPage == 0 && navHit(NAV_L, x, y))) {
+    sfxPlay(SFX_TAP);
+    goBack();  // ko11.17: a donde estaba (ficha / menu de entrenamiento / principal)
+    return;
+  }
   if (inRect(x, y, RG_ART_X, RG_BACK_Y, RG_ART_W, 44)) { battleArtToggle(); return; }  // ko11.16.1
   if (y >= RG_ARROW_Y - 40 && y < RG_ARROW_Y + 40) {  // flechas (zona amplia)
     if (x < RG_X - 4) { regionTurn(regionPage - 1); return; }
@@ -1514,6 +1545,9 @@ static void gymDots();
 static void gymFooter();
 bool gymRewardToday(uint8_t i);
 void openGyms() {
+  retMark();
+  trainMenuOpen = false;
+  cardOpen = false;
   xScreen = XS_GYM;
   uint8_t nb = badgeCount(pet.badges);
   gymPage = nb >= GYM_COUNT ? 2 : nb >= GY_PER_PAGE ? 1 : 0;  // la pagina del proximo (con 8, la liga)
@@ -1578,9 +1612,9 @@ bool gymSwipe(int dir) {
 }
 
 void gymTap(int16_t x, int16_t y) {
-  if (inRect(x, y, CX - 80, GY_BACK_Y, 160, 40)) { sfxPlay(SFX_TAP); xScreen = XS_NONE; return; }
-  // ko10.11: flechas de pagina y la pagina de la liga
-  if (navHit(NAV_L, x, y)) { if (gymPage > 0) gymSwipe(1); return; }
+  if (inRect(x, y, CX - 80, GY_BACK_Y, 160, 40)) { sfxPlay(SFX_TAP); goBack(); return; }  // ko11.17
+  // ko10.11: flechas de pagina y la pagina de la liga (ko11.17: en la 1a, [<] = volver)
+  if (navHit(NAV_L, x, y)) { if (gymPage > 0) gymSwipe(1); else { sfxPlay(SFX_TAP); goBack(); } return; }
   if (navHit(NAV_R, x, y)) { if (gymPage < GY_PAGES - 1) gymSwipe(-1); return; }
   if (gymPage == 2) { leagueTap(x, y); return; }
   if (x < GY_X || x >= GY_X + GY_W || y < GY_Y) return;
@@ -1628,7 +1662,7 @@ static void gymDots() {
 
 static void gymFooter() {
   drawBtn(CX - 80, GY_BACK_Y, 160, 40, UI_TRACK, UI_INK, T(S_BACK));
-  if (gymPage > 0) drawNav(NAV_L, UI_INK);
+  drawNav(NAV_L, UI_INK);  // ko11.17: pagina anterior, o volver en la 1a
   if (gymPage < GY_PAGES - 1) drawNav(NAV_R, UI_INK);
   uiFlush();
 }
@@ -1701,6 +1735,9 @@ static void leagueTap(int16_t x, int16_t y) {
 
 // ---- reto del dia
 void openDaily() {
+  retMark();
+  trainMenuOpen = false;
+  cardOpen = false;
   xScreen = XS_DAILY;
   sfxPlay(SFX_TAP);
 }
@@ -1742,11 +1779,12 @@ void renderDaily() {
   }
   if (gymMsg && timeLeft(gymMsgUntil)) drawFit(gymMsg, 356, 300, UI_BAR_BAD, 1);
   drawBtn(CX - 80, GY_BACK_Y, 160, 40, UI_TRACK, UI_INK, T(S_BACK));
+  drawNav(NAV_L, UI_INK);  // ko11.17: volver
   uiFlush();
 }
 
 void dailyTap(int16_t x, int16_t y) {
-  if (inRect(x, y, CX - 80, GY_BACK_Y, 160, 40)) { sfxPlay(SFX_TAP); xScreen = XS_NONE; return; }
+  if (inRect(x, y, CX - 80, GY_BACK_Y, 160, 40) || navHit(NAV_L, x, y)) { sfxPlay(SFX_TAP); goBack(); return; }  // ko11.17
   uint32_t day = todayNum();
   if (!day || !inRect(x, y, CX - 90, 300, 180, 50)) return;
   if (!pet.canBattle() || pet.tooTiredToBattle()) {
@@ -2108,6 +2146,8 @@ bool linkTradeApplied = false;
 #define LM_BTN_H 60
 
 void openLinkMenu() {
+  retMark();
+  trainMenuOpen = false;
   cardOpen = false;
   xScreen = XS_LINKMENU;
 }
@@ -2134,11 +2174,12 @@ void renderLinkMenu() {
   snprintf(rec, sizeof(rec), XT(X_RECORD_FMT), pet.wildWins, pet.linkWins, pet.linkBattles, pet.trades);
   drawFit(rec, 306, 340, UI_INK, 2);
   drawFit(XT(X_TAP_CLOSE), 400, 300, UI_INK, 2);
+  drawNav(NAV_L, UI_INK);  // ko11.17: volver
   uiFlush();
 }
 
 void linkMenuTap(int16_t x, int16_t y) {
-  if (y < 72 || y > 380) { xScreen = XS_NONE; return; }
+  if (navHit(NAV_L, x, y) || y < 72 || y > 380) { sfxPlay(SFX_TAP); goBack(); return; }  // ko11.17
   LinkMode m = LINK_NONE;
   if (inRect(x, y, LM_BTN_X, LM_BATTLE_Y, LM_BTN_W, LM_BTN_H)) m = LINK_BATTLE;
   else if (inRect(x, y, LM_BTN_X, LM_TRADE_Y, LM_BTN_W, LM_BTN_H)) m = LINK_TRADE;
@@ -2411,15 +2452,16 @@ bool extraTap(int16_t x, int16_t y) {
 // los deslizamientos dentro de las pantallas nuevas: solo cerrar donde tiene sentido
 bool extraSwipe() {
   if (xScreen == XS_NET) { closeNet(); return true; }
-  if (xScreen == XS_LINKMENU) { xScreen = XS_NONE; return true; }
+  if (xScreen == XS_LINKMENU) { goBack(); return true; }
   if (xScreen == XS_BOX) { boxSwipe(); return true; }
-  if (xScreen == XS_VOL) { xScreen = XS_NONE; clockOpen = true; return true; }
+  if (xScreen == XS_VOL) { goBack(); return true; }
   if (xScreen == XS_BGM) { xScreen = XS_VOL; return true; }  // ko11.8
   if (xScreen == XS_UPD) { xScreen = XS_NET; return true; }
-  if (xScreen == XS_RESET) { xScreen = XS_NONE; clockOpen = true; return true; }
-  if (xScreen == XS_CANDY) { xScreen = XS_NONE; return true; }  // ko10.11: vertical = cerrar
+  if (xScreen == XS_RESET) { goBack(); return true; }
+  if (xScreen == XS_CANDY) { goBack(); return true; }  // ko10.11: vertical = cerrar
   if (xScreen == XS_FAME) { fameClose(); return true; }       // ko11.1
-  if (xScreen == XS_REGION || xScreen == XS_GYM || xScreen == XS_DAILY || xScreen == XS_NEXTPICK) {
+  if (xScreen == XS_REGION || xScreen == XS_GYM || xScreen == XS_DAILY) { goBack(); return true; }  // ko11.17
+  if (xScreen == XS_NEXTPICK) {
     xScreen = XS_NONE;  // ko10.5: en la eleccion, cerrar = quedarse el huevo
     return true;
   }

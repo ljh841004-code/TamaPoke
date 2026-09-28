@@ -171,6 +171,7 @@ static void drawCrown(int x, int y, uint16_t c) {
 static uint8_t boxPages() { return cb().count() ? (cb().count() + BOX_ROWS - 1) / BOX_ROWS : 1; }
 
 void openBox() {
+  retMark();
   cardOpen = false;
   boxHall = false;
   boxOrb = false;
@@ -350,7 +351,7 @@ void boxSwipe() {  // deslizar: cierra la ficha, o la caja si estaba en la lista
   expPick = false;
   expResOpen = false;
   if (boxSel >= 0) boxSel = -1;
-  else xScreen = XS_NONE;
+  else goBack();  // ko11.17
 }
 
 static void boxTabTap(int16_t x) {
@@ -422,10 +423,10 @@ void boxTap(int16_t x, int16_t y) {
     else sfxPlay(SFX_TAP);
     return;
   }
-  if (navHit(NAV_L, x, y)) { xScreen = XS_NONE; sfxPlay(SFX_TAP); return; }  // ko11.8: <- salir
+  if (navHit(NAV_L, x, y)) { sfxPlay(SFX_TAP); goBack(); return; }  // ko11.8: <- salir (ko11.17: a donde estaba)
   // ko10.5: pestanas caja / salon de la fama
   if (y >= BOX_TAB_Y && y < BOX_TAB_Y + BOX_TAB_H) { boxTabTap(x); return; }
-  if (y < BOX_TAB_Y - 10 || y >= 392) { xScreen = XS_NONE; return; }  // arriba / abajo: salir (como antes)
+  if (y < BOX_TAB_Y - 10 || y >= 392) { goBack(); return; }  // arriba / abajo: salir (como antes)
   if (y >= BOX_NAV_Y && y < BOX_NAV_Y + 36) {
     if (x < CX && boxPage > 0) boxPage--;
     else if (x >= CX && boxPage + 1 < boxPages()) boxPage++;
@@ -573,13 +574,13 @@ void orbBagTap(int16_t x, int16_t y) {
   }
   if (navHit(NAV_L, x, y)) {
     if (orbPage > 0) orbPage--;
-    else xScreen = XS_NONE;
+    else goBack();
     sfxPlay(SFX_TAP);
     return;
   }
   if (navHit(NAV_R, x, y)) { if (orbPage + 1 < orbPages()) orbPage++; sfxPlay(SFX_TAP); return; }
   if (y >= BOX_TAB_Y && y < BOX_TAB_Y + BOX_TAB_H) { boxTabTap(x); return; }
-  if (y < BOX_TAB_Y - 10 || y >= 392) { xScreen = XS_NONE; return; }
+  if (y < BOX_TAB_Y - 10 || y >= 392) { goBack(); return; }
   for (int i = 0; i < ORB_PER_PAGE; i++) {
     int k = orbPage * ORB_PER_PAGE + i;
     if (k >= n) break;
@@ -712,6 +713,7 @@ void nextPickPoll() {
 #define VOL_BAR_W 190
 
 void openSound() {
+  retMark();
   clockOpen = false;
   xScreen = XS_VOL;
 }
@@ -741,6 +743,7 @@ void renderSound() {
   // ko11.8: elegir que fondos suenan (la duracion de cada uno esta en esa pantalla)
   drawBtn(113, VOL_BGM_Y, 240, 34, UI_WHITE, UI_INK, XT(X_BGM_PICK_BTN));
   drawBtn(143, VOL_DONE_Y, 180, 40, UI_BAR_OK, UI_WHITE, XT(X_VOL_DONE));
+  drawNav(NAV_L, UI_INK);  // ko11.17: volver a la hora
   uiFlush();
 }
 
@@ -760,9 +763,9 @@ void soundTap(int16_t x, int16_t y) {
     sfxPlay(SFX_TAP);
     return;
   }
-  if ((y >= VOL_DONE_Y - 4 && x >= 133 && x < 333) || y < 72) {  // completar -> hora
-    xScreen = XS_NONE;
-    clockOpen = true;
+  if ((y >= VOL_DONE_Y - 4 && x >= 133 && x < 333) || y < 72 || navHit(NAV_L, x, y)) {  // completar -> hora
+    sfxPlay(SFX_TAP);
+    goBack();
     return;
   }
   for (int i = 0; i < 3; i++) {
@@ -845,8 +848,8 @@ void renderBgmPick() {
     uint16_t tc = now == (int8_t)i ? UI_WHITE : UI_INK;
     gfx->fillTriangle(px + 16, py + 9, px + 16, py + 27, px + 31, py + 18, tc);
   }
+  drawNav(NAV_L, UI_INK);  // ko11.17: pagina anterior, o volver al sonido en la 1a
   if (pages > 1) {
-    drawNav(NAV_L, UI_INK);
     drawNav(NAV_R, UI_INK);
     char pg[12];
     snprintf(pg, sizeof(pg), "%u/%u", (unsigned)(bgmPage + 1), (unsigned)pages);
@@ -874,7 +877,12 @@ void bgmPickTap(int16_t x, int16_t y) {
     sfxPlay(SFX_TAP);
     return;
   }
-  if (pages > 1 && navHit(NAV_L, x, y)) { bgmPage = (bgmPage + pages - 1) % pages; sfxPlay(SFX_TAP); return; }
+  if (navHit(NAV_L, x, y)) {  // ko11.17
+    if (bgmPage > 0) bgmPage--;
+    else xScreen = XS_VOL;
+    sfxPlay(SFX_TAP);
+    return;
+  }
   if (pages > 1 && navHit(NAV_R, x, y)) { bgmPage = (bgmPage + 1) % pages; sfxPlay(SFX_TAP); return; }
   if (y < BGMP_Y0 - 4) return;
   uint8_t r = (y - (BGMP_Y0 - 4)) / BGMP_H;
@@ -963,6 +971,7 @@ void renderUpdate() {
     drawFit(XT(X_UPD_HINT), 206, 380, UI_INK, 1);
     drawBtn(133, 330, 200, 48, UI_TRACK, UI_INK, T(S_BACK));
   }
+  if (updResult == 0) drawNav(NAV_L, UI_INK);  // ko11.17: volver a la red
   uiFlush();
 }
 
@@ -979,10 +988,10 @@ void updateTap(int16_t x, int16_t y) {
       if (ok) { delay(1500); ESP.restart(); }
       return;
     }
-    if (y >= 250 && y < 302 && x >= 238 && x < 378) { xScreen = XS_NET; return; }
+    if ((y >= 250 && y < 302 && x >= 238 && x < 378) || navHit(NAV_L, x, y)) { xScreen = XS_NET; return; }
     return;
   }
-  if (y >= 320 || y < 72) xScreen = XS_NET;
+  if (y >= 320 || y < 72 || navHit(NAV_L, x, y)) xScreen = XS_NET;  // ko11.17: [<] = a la red
 }
 
 // ======================================================================
@@ -997,6 +1006,7 @@ bool rstHint = false;
 bool rstDone = false;
 
 void openReset() {
+  retMark();
   clockOpen = false;
   rstHint = false;
   rstDone = false;
@@ -1051,15 +1061,15 @@ void renderReset() {
   drawFit(XT(X_RESET_HOLD), RST_BTN_Y - 12, 2 * RST_BTN_R - 10, UI_WHITE, 2);
   if (rstHint) drawFit(XT(X_RESET_HINT), 196, 340, UI_INK, 2);
   drawBtn(163, 372, 140, 40, UI_WHITE, UI_INK, XT(X_UPD_CANCEL));
+  drawNav(NAV_L, UI_INK);  // ko11.17: volver a la hora
   uiFlush();
 }
 
 void resetTap(int16_t x, int16_t y) {
   if (rstInButton(x, y)) { rstHint = true; sfxPlay(SFX_DENY); return; }  // toque corto: no basta
-  if (y >= 364 || y < 72) {  // cancelar -> vuelve a la hora
-    xScreen = XS_NONE;
-    clockOpen = true;
+  if (y >= 364 || y < 72 || navHit(NAV_L, x, y)) {  // cancelar -> vuelve a la hora
     sfxPlay(SFX_TAP);
+    goBack();
   }
 }
 
@@ -1098,6 +1108,7 @@ static void bagBuild() {
 static uint8_t bagPages() { return bagN ? (uint8_t)((bagN + BAG_ROWS - 1) / BAG_ROWS) : 1; }
 
 void openCandyBag() {
+  retMark();
   xScreen = XS_CANDY;
   cardOpen = false;
   bagBuild();
@@ -1170,7 +1181,7 @@ void renderCandyBag() {
     snprintf(b, sizeof(b), XT(X_BAG_PAGE_FMT), bagPage + 1, bagPages());
     drawFit(b, 408, 200, UI_INK, 1);
   }
-  if (bagPage > 0) drawNav(NAV_L, UI_INK);
+  drawNav(NAV_L, UI_INK);  // ko11.17: pagina anterior, o volver en la 1a
   if (bagPage + 1 < bagPages()) drawNav(NAV_R, UI_INK);
   drawNav(NAV_DOWN, UI_INK);
   // ventana de la seleccion
@@ -1247,8 +1258,8 @@ void candyBagTap(int16_t x, int16_t y) {
     }
     return;
   }
-  if (navHit(NAV_DOWN, x, y)) { xScreen = XS_NONE; sfxPlay(SFX_TAP); return; }
-  if (navHit(NAV_L, x, y)) { candyBagSwipe(1); return; }
+  if (navHit(NAV_DOWN, x, y)) { sfxPlay(SFX_TAP); goBack(); return; }
+  if (navHit(NAV_L, x, y)) { if (bagPage > 0) candyBagSwipe(1); else { sfxPlay(SFX_TAP); goBack(); } return; }  // ko11.17
   if (navHit(NAV_R, x, y)) { candyBagSwipe(-1); return; }
   if (inRect(x, y, BAG_ROW_X, BAG_RARE_Y, BAG_ROW_W, BAG_ROW_H)) { bagSel = 0; sfxPlay(SFX_TAP); return; }
   if (inRect(x, y, CX - 125, BAG_SHARD_BTN_Y, 250, 34)) {  // ko11.15.1: sobrantes -> trozos
@@ -1400,7 +1411,7 @@ void renderFame() {
     snprintf(t, sizeof(t), XT(X_BAG_PAGE_FMT), famePage + 1, famePages());
     drawFit(t, 392, 200, UI_INK, 1);
   }
-  if (famePage > 0) drawNav(NAV_L, UI_INK);
+  drawNav(NAV_L, UI_INK);  // ko11.17: pagina anterior, o volver a la liga en la 1a
   if (famePage + 1 < famePages()) drawNav(NAV_R, UI_INK);
   drawNav(NAV_DOWN, UI_INK);
   uiFlush();
@@ -1409,7 +1420,7 @@ void renderFame() {
 void fameTap(int16_t x, int16_t y) {
   if (fameSel >= 0) { fameClose(); sfxPlay(SFX_TAP); return; }  // la ficha: cualquier toque vuelve
   if (navHit(NAV_DOWN, x, y)) { fameClose(); sfxPlay(SFX_TAP); return; }
-  if (navHit(NAV_L, x, y)) { fameSwipe(1); return; }
+  if (navHit(NAV_L, x, y)) { if (famePage > 0) fameSwipe(1); else { fameClose(); sfxPlay(SFX_TAP); } return; }
   if (navHit(NAV_R, x, y)) { fameSwipe(-1); return; }
   if (x < FM_X || y < FM_Y) return;
   int c = (x - FM_X) / FM_CELL, r = (y - FM_Y) / FM_CELL;

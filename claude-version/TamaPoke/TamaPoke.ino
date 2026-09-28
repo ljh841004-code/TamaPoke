@@ -1367,7 +1367,7 @@ void onTap(int16_t x, int16_t y) {
   if (pet.ceremony) return;  // durante la despedida no hay botones
   if (cardOpen) {
     // ko10.8: flechas (antes de todo lo demas: tocar fuera cierra la ficha)
-    if (navHit(NAV_L, x, y)) { if (cardPage > 0) { cardPage--; sfxPlay(SFX_TAP); } return; }
+    if (navHit(NAV_L, x, y)) { if (cardPage > 0) cardPage--; else cardOpen = false; sfxPlay(SFX_TAP); return; }  // ko11.17: 1a pagina = cerrar
     if (navHit(NAV_R, x, y)) { if (cardPage < CARD_PAGES - 1) { cardPage++; sfxPlay(SFX_TAP); } return; }
     if (navHit(NAV_DOWN, x, y)) { cardOpen = false; sfxPlay(SFX_TAP); return; }
     if (cardPage == 4) cardCandyTap(x, y);        // ko10.4: caramelos
@@ -1380,7 +1380,7 @@ void onTap(int16_t x, int16_t y) {
              x >= CARD_COL1_X && x < CARD_COL2_X + CARD_COL_W) {
       bool right = x >= CARD_COL2_X - 3;
       bool row2 = y >= CARD_ROW2_Y - 4;
-      if (!row2 && !right) { cardOpen = false; openRegionPick(); }  // salvaje (ko10.1: region)
+      if (!row2 && !right) openRegionPick();                  // salvaje (ko10.1: region; cierra la ficha)
       else if (!row2) openLinkMenu();                          // tongsin (cierra la ficha)
       else if (!right) openTrainMenu();                        // ko4: entrenamiento
       else openBox();                                          // ko4: caja
@@ -3392,8 +3392,7 @@ void clockTap(int16_t x, int16_t y) {
       return;
     }
     if (x >= WIFI_PILL_X && x < WIFI_PILL_X + WIFI_PILL_W) {  // fork KO: red / NTP
-      clockOpen = false;
-      openNet();
+      openNet();  // ko11.17: cierra la hora y [<] vuelve a ella
       sfxPlay(SFX_TAP);
       return;
     }
@@ -3754,7 +3753,7 @@ void renderCard() {
   setSize(2);
   setCur(centerX(T(S_BACK), 2), 398);
   printT(T(S_BACK));
-  if (cardPage > 0) drawNav(NAV_L, UI_INK);  // ko10.8
+  drawNav(NAV_L, UI_INK);  // ko10.8 (ko11.17: en la 1a pagina = volver)
   if (cardPage < CARD_PAGES - 1) drawNav(NAV_R, UI_INK);
   drawNav(NAV_DOWN, UI_INK);
   uiFlush();

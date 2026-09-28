@@ -580,6 +580,42 @@ static void scenes(bool ko, const char *sfx) {
   tick(300); render(); shot("17_next_from_box");
 }
 
+// ko11.17: [<] vuelve a la pantalla desde la que se abrio cada menu
+static void navCheck(const char *name, bool ok) { printf("  NAV %s: %s\n", ok ? "ok  " : "FAIL", name); }
+static void navChecks() {
+  const int LX = 20, LY = 200;  // flecha izquierda
+  closeAll(); cardOpen = true; cardPage = 3; openBox(); boxTap(LX, LY);
+  navCheck("ficha -> caja -> [<]", xScreen == XS_NONE && cardOpen && cardPage == 3);
+  closeAll(); cardOpen = true; cardPage = 4; openCandyBag(); candyBagTap(LX, LY);
+  navCheck("ficha -> caramelos -> [<]", xScreen == XS_NONE && cardOpen && cardPage == 4);
+  closeAll(); openBox(); boxTap(LX, LY);
+  navCheck("principal -> caja -> [<]", xScreen == XS_NONE && !cardOpen && !trainMenuOpen);
+  closeAll(); cardOpen = true; cardPage = 1; openTrainMenu(); tick(3000); trainMenuTap(LX, LY);
+  navCheck("ficha -> entrenamiento -> [<]", !trainMenuOpen && cardOpen && cardPage == 1);
+  closeAll(); openTrainMenu(); trainMenuPage = 1; tick(3000); pet.energy = 80;
+  openRegionPick(); bool reg = xScreen == XS_REGION; regionTap(LX, LY);
+  navCheck("entrenamiento(batallas) -> region -> [<]", reg && xScreen == XS_NONE && trainMenuOpen && trainMenuPage == 1);
+  closeAll(); openTrainMenu(); trainMenuPage = 1; openGyms(); gymPage = 0; gymTap(LX, LY);
+  navCheck("entrenamiento -> gimnasios -> [<]", xScreen == XS_NONE && trainMenuOpen && trainMenuPage == 1);
+  closeAll(); openTrainMenu(); trainMenuPage = 1; openDaily(); dailyTap(LX, LY);
+  navCheck("entrenamiento -> reto -> [<]", xScreen == XS_NONE && trainMenuOpen);
+  closeAll(); openTrainMenu(); trainMenuPage = 1; openLinkMenu(); linkMenuTap(LX, LY);
+  navCheck("entrenamiento -> tongsin -> [<]", xScreen == XS_NONE && trainMenuOpen);
+  closeAll(); cardOpen = true; cardPage = 0; openLinkMenu(); linkMenuTap(LX, LY);
+  navCheck("ficha -> tongsin -> [<]", xScreen == XS_NONE && cardOpen);
+  closeAll(); openClock(); openNet(); netTap(LX, LY);
+  navCheck("hora -> red -> [<]", xScreen == XS_NONE && clockOpen);
+  closeAll(); openClock(); openSound(); soundTap(LX, LY);
+  navCheck("hora -> sonido -> [<]", xScreen == XS_NONE && clockOpen);
+  closeAll(); openClock(); openSound(); openBgmPick(); bgmPickTap(LX, LY);
+  navCheck("sonido -> fondos -> [<]", xScreen == XS_VOL);
+  closeAll(); openClock(); openReset(); resetTap(LX, LY);
+  navCheck("hora -> reinicio -> [<]", xScreen == XS_NONE && clockOpen);
+  closeAll(); cardOpen = true; cardPage = 0; onTap(LX, LY);
+  navCheck("ficha (1a pagina) -> [<]", !cardOpen);
+  closeAll(); tick(3000);
+}
+
 int main(int argc, char **argv) {
   gSdRoot = argc > 1 ? argv[1] : "sd";
   mkdir("build/shots", 0755);
@@ -601,6 +637,7 @@ int main(int argc, char **argv) {
   openClock(); onTap(233, 311);
   printf("  wifi tap: clockOpen=%d xScreen=%d (XS_NET=%d)\n", clockOpen, xScreen, XS_NET);
   xScreen = XS_NONE;
+  navChecks();
   scenes(true, "");
   scenes(false, "_en");
   return 0;
