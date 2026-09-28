@@ -147,3 +147,25 @@ TEST(Volley, auto_move_runs_to_the_ball_and_air_hits_spike) {
   CHECK(h.b.spiked);
   CHECK_EQ(h.spikes[0], (uint16_t)1);
 }
+
+TEST(Volley, power_spike_sometimes_faster) {
+  // ko11.9.4: ~25% de los remates son 강스파이크 (mas rapidos, peores de recibir)
+  int power = 0, n = 0;
+  float vPow = 0, vNorm = 0;
+  for (uint32_t seed = 1; seed <= 200; seed++) {
+    VolleyGame g;
+    g.begin(seed, 0);
+    g.autoMove0 = true;
+    g.step(VB_SERVE_MS + 10, false);
+    g.jump(0);
+    g.step(250, false);
+    g.b.x = g.p[0].x + 10; g.b.y = g.bodyY(0) - g.p[0].hitR; g.b.vx = 0; g.b.vy = 50;
+    g.substep(0.01f, 10);
+    if (!g.b.spiked) continue;
+    n++;
+    if (g.b.power) { power++; vPow += fabsf(g.b.vx); } else vNorm += fabsf(g.b.vx);
+  }
+  CHECK(n > 150);
+  CHECK(power > n / 10 && power < n * 2 / 5);
+  CHECK(vPow / power > vNorm / (n - power) * 1.15f);
+}

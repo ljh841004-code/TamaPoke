@@ -136,7 +136,8 @@ static void scenes(bool ko, const char *sfx) {
   closeAll();
   // entrenamiento
   closeAll(); openTrainMenu();
-  pet.allStrHi = 12; pet.allDefHi = 31; pet.allSpeHi = 1180; pet.allGameHi = 22; pet.allVbBest = 4;  // ko11.9.2
+  pet.allStrHi = 12; pet.allDefHi = 31; pet.allSpeHi = 1180; pet.allGameHi = 22; pet.allVbBest = 14;  // ko11.9.2
+  pet.vbStreak = 12; pet.vbBest = 13;  // ko11.9.4: el texto mas largo que cabe
   render(); shot("04_train_menu");
   trainMenuPage = 1; render(); shot("04b_train_menu_battle"); trainMenuPage = 0;
   // ko11.9: voleibol, el que se esta criando (Ivysaur) contra uno al azar (Psyduck)
@@ -156,6 +157,7 @@ static void scenes(bool ko, const char *sfx) {
       tick(20); render();
       if (!gotSpike && vb.state == VB_PLAY && vb.b.spiked && vb.b.spikeSide == 0 && vb.t - vb.p[0].spikeT > 60) {
         shot("72_volley_spike"); gotSpike = true;
+        vb.b.power = true; render(); shot("72b_volley_power"); vb.b.power = false;  // ko11.9.4
       }
       if (!gotPoint && vb.state == VB_POINT && vb.stateT > 200) { shot("73_volley_point"); gotPoint = true; }
     }

@@ -105,7 +105,10 @@ static void renderTrainPage() {
     printT(XT(LABEL[i]));
     char b[48];
     uint16_t a = all[i] > best[i] ? all[i] : best[i];
-    snprintf(b, sizeof(b), XT(i == 4 ? X_VB_BEST_ALL_FMT : X_BEST_ALL_FMT), best[i], a);  // ko11.9: voleibol = racha
+    if (i == 4)  // ko11.9.4: voleibol: racha actual + record de este bicho + historico
+      snprintf(b, sizeof(b), XT(X_VB_NOW_FMT), (unsigned)pet.vbStreak, (unsigned)best[i], (unsigned)a);
+    else
+      snprintf(b, sizeof(b), XT(X_BEST_ALL_FMT), best[i], a);
     setSize(1);
     setCur(TRM_X + 26, y + 28);
     printT(b);

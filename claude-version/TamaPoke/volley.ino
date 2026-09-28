@@ -101,6 +101,10 @@ static void vbDrawBall(int x, int y, uint32_t now) {
     }
   }
   drawMap(SPR_ICON_PLAY, 16, x - 16, y - 16, 2, false);  // pokeball
+  if (vb.b.spiked && vb.b.power) {  // ko11.9.4: 강스파이크: el efecto de la tecnica de su tipo va con la pelota
+    int16_t d = vb.b.spikeSide ? vbFoeDex : pet.speciesId;
+    drawMoveFx(DEX_TBL[d].ptype, x, y, x, y, 350 + (now % 600), true, 2, moveTier(d));
+  }
 }
 
 static void vbDrawNet() {
@@ -201,7 +205,14 @@ void renderVolley() {
     bool mine = vb.lastScorer == 0;
     drawFit(XT(mine ? X_VB_POINT : X_VB_LOSTPT), 150, 300, mine ? UI_BAR_OK : UI_BAR_BAD, 3);
   } else if (vb.state == VB_PLAY && vb.b.spiked && vb.t - vb.p[vb.b.spikeSide].spikeT < 600) {
-    drawFit(XT(X_VB_SPIKE), 124, 300, C565(0xe8, 0x50, 0x20), 3);
+    if (vb.b.power) {  // ko11.9.4: "불꽃세례 강스파이크!"
+      int16_t d = vb.b.spikeSide ? vbFoeDex : pet.speciesId;
+      char l[64];
+      snprintf(l, sizeof(l), XT(X_VB_POWER_FMT), moveName(BA_TYPE, DEX_TBL[d].ptype, moveTier(d)));
+      drawFit(l, 124, 320, DEX_TBL[d].accent, 3);
+    } else {
+      drawFit(XT(X_VB_SPIKE), 124, 300, C565(0xe8, 0x50, 0x20), 3);
+    }
   }
 
   if (vb.state == VB_OVER) {  // resultado

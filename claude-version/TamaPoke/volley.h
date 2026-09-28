@@ -25,6 +25,9 @@
 #define VB_JUMP_V 470.0f
 #define VB_MAXV 720.0f
 #define VB_SPIKE_MAXV 1000.0f  // remate: tope de velocidad
+#define VB_POWER_PCT 25        // ko11.9.4: % de remates que salen como 강스파이크
+#define VB_POWER_SPEED 1.22f   //   ... mas rapidos
+#define VB_POWER_DIG 20        //   ... y quitan este % a recibirlos bien
 
 enum : uint8_t { VB_SERVE = 0, VB_PLAY, VB_POINT, VB_OVER };
 
@@ -45,6 +48,7 @@ struct VbPlayer {
 struct VbBall {
   float x = 0, y = 0, vx = 0, vy = 0;
   bool spiked = false;
+  bool power = false;          // ko11.9.4: 강스파이크 (tecnica del tipo): mas rapida y dificil de recibir
   uint8_t spikeSide = 0;
 };
 
@@ -99,6 +103,7 @@ struct VolleyGame {
     b.y = VB_GROUND - 190;
     b.vx = b.vy = 0;
     b.spiked = false;
+    b.power = false;
     state = VB_SERVE;
     stateT = 0;
     aiErr = (float)((int)rng.below(121) - 60) * (1.0f - aiLevel * 0.16f);
@@ -301,20 +306,24 @@ struct VolleyGame {
       // ko11.9.1: con autoMove0 el jugador remata solo si toca la pelota en el aire
       bool wantSpike = q.spikeUntil > t || (s == 0 && autoMove0);
       bool canSpike = airborne(s) && wantSpike && ny < 0.6f && b.y < VB_NET_TOP - 30;
-      if (canSpike) canSpike = spikeAim(s, q.spikePow, &spVx, &spVy);
+      bool power = canSpike && rng.below(100) < VB_POWER_PCT;  // ko11.9.4
+      if (canSpike) canSpike = spikeAim(s, q.spikePow * (power ? VB_POWER_SPEED : 1.0f), &spVx, &spVy);
       if (canSpike) {  // remate: fuerte y hacia abajo, cae dentro del otro campo
         b.vx = spVx;
         b.vy = spVy;
         b.spiked = true;
+        b.power = power;
         b.spikeSide = (uint8_t)s;
         q.spikeUntil = 0;
         q.spikeT = t;
         spikes[s]++;
-      } else if (b.spiked && b.spikeSide != s && rng.below(100) >= q.dig) {
+      } else if (b.spiked && b.spikeSide != s &&
+                 rng.below(100) >= (b.power ? (q.dig > VB_POWER_DIG ? q.dig - VB_POWER_DIG : 0) : q.dig)) {
         // remate mal recibido: la pelota rebota en el cuerpo hacia atras y cae en su campo
         b.vx = -dir * (90 + (float)rng.below(90));
         b.vy = 60;
         b.spiked = false;
+        b.power = false;
         q.coolUntil = t + 900;
         hits[s]++;
         b.x = cx + nx * (rr + 1);
@@ -325,6 +334,7 @@ struct VolleyGame {
         b.vy = ny * 420;
         if (b.vy > -360) b.vy = -360 - (float)rng.below(70);
         b.spiked = false;
+        b.power = false;
       }
       b.x = cx + nx * (rr + 1);
       b.y = cy + ny * (rr + 1);
