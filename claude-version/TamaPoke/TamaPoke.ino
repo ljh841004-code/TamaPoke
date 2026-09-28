@@ -94,6 +94,8 @@ struct {
 enum : uint8_t { BUB_NONE = 0, BUB_DOTS, BUB_BORED, BUB_HUNGRY, BUB_DIRTY, BUB_SLEEPY,
                  BUB_NOTE, BUB_RAIN, BUB_COLD, BUB_SUN };
 #define PET_GROUND 304  // linea de suelo de la mascota
+#define PET_MAXS 6      // ko11.10.1: con el dibujo liso el bicho se veia algo pequeno: x6 (antes x5)
+#define PET_FITH 200    //   alto objetivo del lienzo IDLE (antes 170)
 PmdMon galleryPmd;  // sprite grande de la vista detalle de la galeria (PMD/TPK2, legal)
 
 // galeria pokedex
@@ -1879,23 +1881,27 @@ void drawScene(uint8_t biome, uint32_t now, bool night) {
 // ---------- reloj grande de fondo (fork KO, ko4) ----------
 // La hora real en el cielo, detras del bicho: digitos de 7 segmentos con trazo
 // redondeado (la fuente 5x7 escalada a este tamano se veia a bloques).
-static void drawSeg7(int x, int y, int w, int h, int t, uint8_t d, uint16_t col) {
+// g > 0: cada segmento g px mas ancho por cada lado (el contorno, se pinta antes)
+static void drawSeg7(int x, int y, int w, int h, int t, uint8_t d, uint16_t col, int g) {
   static const uint8_t SEG[10] = { 0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F };
   uint8_t m = SEG[d % 10];
   int hh = h / 2, r = t / 2;
-  if (m & 0x01) gfx->fillRoundRect(x + r, y, w - t, t, r, col);                  // arriba
-  if (m & 0x02) gfx->fillRoundRect(x + w - t, y + r, t, hh - r + r / 2, r, col);  // arriba dcha
-  if (m & 0x04) gfx->fillRoundRect(x + w - t, y + hh, t, hh - r, r, col);        // abajo dcha
-  if (m & 0x08) gfx->fillRoundRect(x + r, y + h - t, w - t, t, r, col);          // abajo
-  if (m & 0x10) gfx->fillRoundRect(x, y + hh, t, hh - r, r, col);                // abajo izda
-  if (m & 0x20) gfx->fillRoundRect(x, y + r, t, hh - r + r / 2, r, col);         // arriba izda
-  if (m & 0x40) gfx->fillRoundRect(x + r, y + hh - r, w - t, t, r, col);         // centro
+  auto seg = [&](int sx, int sy, int sw, int sh) {
+    gfx->fillRoundRect(sx - g, sy - g, sw + 2 * g, sh + 2 * g, r + g, col);
+  };
+  if (m & 0x01) seg(x + r, y, w - t, t);                  // arriba
+  if (m & 0x02) seg(x + w - t, y + r, t, hh - r + r / 2);  // arriba dcha
+  if (m & 0x04) seg(x + w - t, y + hh, t, hh - r);        // abajo dcha
+  if (m & 0x08) seg(x + r, y + h - t, w - t, t);          // abajo
+  if (m & 0x10) seg(x, y + hh, t, hh - r);                // abajo izda
+  if (m & 0x20) seg(x, y + r, t, hh - r + r / 2);         // arriba izda
+  if (m & 0x40) seg(x + r, y + hh - r, w - t, t);         // centro
 }
 
 #define BIGCLK_Y 134   // ko10.1: bajo la fecha (y 114), que va bajo el mensaje de estado (y 90)
 #define BIGDATE_Y 113
-#define BIGCLK_W 44
-#define BIGCLK_H 76
+#define BIGCLK_W 38    // ko11.10.1: algo mas pequeno (antes 44x76) para dejar sitio al bicho
+#define BIGCLK_H 64
 
 bool fastGameNow() { return gameOpen || sackOpen || trainingFast(); }  // ko11.3
 
@@ -1915,20 +1921,27 @@ void drawBigClock(bool night) {
   if (!e) return;
   int hh = (e / 3600) % 24, mm = (e / 60) % 60;
   uint16_t sky = lerp565(gSkyTop, gSkyBot, BIGCLK_Y + BIGCLK_H / 2, HORIZON);
-  // claro y algo transparente: se lee bien, pero sigue siendo "fondo"
-  uint16_t col = night ? lerp565(sky, UI_INK_NIGHT, 7, 16) : lerp565(sky, UI_WHITE, 12, 16);
-  const int gap = 12, colon = 20, t = 10;
+  // claro y algo transparente: se lee bien, pero sigue siendo "fondo".
+  // ko11.10.1: con contorno del color del cielo pero mas oscuro (de dia azul, de
+  // noche casi negro): se distingue mejor sobre nubes, sol o montes
+  uint16_t col = night ? lerp565(sky, UI_INK_NIGHT, 9, 16) : lerp565(sky, UI_WHITE, 13, 16);
+  uint16_t edge = night ? lerp565(sky, C565(0x02, 0x04, 0x10), 10, 16) : lerp565(sky, C565(0x18, 0x48, 0x88), 9, 16);
+  const int gap = 11, colon = 18, t = 9, g = 2;
   int total = 4 * BIGCLK_W + 2 * gap + colon + 2 * gap - gap;  // HH : MM
-  int x = CX - total / 2, y = BIGCLK_Y;
-  drawSeg7(x, y, BIGCLK_W, BIGCLK_H, t, hh / 10, col); x += BIGCLK_W + gap;
-  drawSeg7(x, y, BIGCLK_W, BIGCLK_H, t, hh % 10, col); x += BIGCLK_W + gap / 2;
-  if ((e % 2) == 0) {  // los dos puntos parpadean al segundo
-    gfx->fillCircle(x + colon / 2, y + BIGCLK_H / 3, 5, col);
-    gfx->fillCircle(x + colon / 2, y + BIGCLK_H * 2 / 3, 5, col);
+  int x0 = CX - total / 2, y = BIGCLK_Y;
+  for (int pass = 0; pass < 2; pass++) {  // 0: contorno, 1: relleno
+    uint16_t c = pass ? col : edge;
+    int gg = pass ? 0 : g, x = x0;
+    drawSeg7(x, y, BIGCLK_W, BIGCLK_H, t, hh / 10, c, gg); x += BIGCLK_W + gap;
+    drawSeg7(x, y, BIGCLK_W, BIGCLK_H, t, hh % 10, c, gg); x += BIGCLK_W + gap / 2;
+    if ((e % 2) == 0) {  // los dos puntos parpadean al segundo
+      gfx->fillCircle(x + colon / 2, y + BIGCLK_H / 3, 5 + gg, c);
+      gfx->fillCircle(x + colon / 2, y + BIGCLK_H * 2 / 3, 5 + gg, c);
+    }
+    x += colon + gap / 2;
+    drawSeg7(x, y, BIGCLK_W, BIGCLK_H, t, mm / 10, c, gg); x += BIGCLK_W + gap;
+    drawSeg7(x, y, BIGCLK_W, BIGCLK_H, t, mm % 10, c, gg);
   }
-  x += colon + gap / 2;
-  drawSeg7(x, y, BIGCLK_W, BIGCLK_H, t, mm / 10, col); x += BIGCLK_W + gap;
-  drawSeg7(x, y, BIGCLK_W, BIGCLK_H, t, mm % 10, col);
   // ko10.1: fecha encima, en letra pequena ("2026.09.25 (금)"); debajo la taparian
   // los brillos de alegria del Pokemon
   int yy; uint8_t mo, dd, wd;
@@ -3840,7 +3853,7 @@ void drawCeremony() {
       x = CX - (int)(((t - 0.30f) / 0.70f) * (CX + 120));
       fade = (t > 0.6f) && ((now / 160) % 2 == 0);  // parpadea hacia la silueta
     }
-    drawPmdAct(act, x, y, now, true, fade, 5);  // fade=silueta: se difumina al irse
+    drawPmdActM(pmd, act, x, y, now, true, fade, PET_MAXS, PET_FITH);  // fade=silueta: se difumina al irse
     // lagrima cayendo del bicho
     if (t < 0.55f) {
       int ty = y - 150 + (int)((now / 6) % 40);
@@ -3869,7 +3882,7 @@ void drawCeremony() {
     act = pmd.has(PMD_WALKR) ? PMD_WALKR : PMD_IDLE;
     x = CX + (int)(((t - 0.45f) / 0.55f) * (CX + 140));
   }
-  drawPmdAct(act, x, y, now, true, false, 5);
+  drawPmdActM(pmd, act, x, y, now, true, false, PET_MAXS, PET_FITH);
   if (pet.showHeart())                     // corazon grande siguiendo al bicho
     drawMap(SPR_HEART, 32, x + 50, y - 190, 2, false);
 }
@@ -3972,8 +3985,8 @@ void drawEvolveFX(uint32_t now) {
   // final (t>0.9) se queda fija en la nueva para el fogonazo de revelado
   int period = 60 + (int)(220 * (1.0f - t));
   bool showOld = t < 0.9f && evoPmd.loaded && ((now / period) % 2) == 0;
-  if (showOld) drawPmdActM(evoPmd, PMD_IDLE, cx, PET_GROUND, 0, true, true, 5, 170);
-  else drawPmdAct(PMD_IDLE, cx, PET_GROUND, 0, true, true, 5);
+  if (showOld) drawPmdActM(evoPmd, PMD_IDLE, cx, PET_GROUND, 0, true, true, PET_MAXS, PET_FITH);
+  else drawPmdActM(pmd, PMD_IDLE, cx, PET_GROUND, 0, true, true, PET_MAXS, PET_FITH);
   // chispas que salen disparadas
   for (int i = 0; i < 10; i++) {
     float a = i * (float)(PI / 5) + t * 4.0f;
@@ -4414,8 +4427,8 @@ void drawPetPMD() {
     gfx->fillEllipse((int)beh.x, PET_GROUND - 2, 60, 10, lerp565(soil, C565(0, 0, 0), 3, 16));
     gfx->fillEllipse((int)beh.x, PET_GROUND - 2, 44, 7, lerp565(soil, C565(0, 0, 0), 6, 16));
   }
-  drawPmdAct(act, (int)beh.x, PET_GROUND, (beh.mode == 3 && petFxT != 0xFFFFFFFFu) ? petFxT : now - beh.t0,
-             loop || act == PMD_IDLE, false, 5);
+  drawPmdActM(pmd, act, (int)beh.x, PET_GROUND, (beh.mode == 3 && petFxT != 0xFFFFFFFFu) ? petFxT : now - beh.t0,
+              loop || act == PMD_IDLE, false, PET_MAXS, PET_FITH);
   {  // ko11.9.2: pulsacion larga para soltarlo: el circulo se llena en 3 s
     float hp = petHoldProgress();
     if (hp > 0) {

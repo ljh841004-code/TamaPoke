@@ -941,7 +941,7 @@ void drawBattlers() {
   if (!foeHide && !foeGone) {
     if (foePmd.loaded) {
       if (!foePmd.has(foeAct)) foeAct = PMD_IDLE;
-      drawPmdActM(foePmd, foeAct, foeX, foeG, now, true, foeSil, 3, 170);
+      drawPmdActM(foePmd, foeAct, foeX, foeG, now, true, foeSil, 4, 170);  // ko11.10.1: x4 (antes x3)
     } else {
       const uint8_t *th = thumbs.get(bvFoeDex);
       if (th) drawThumb(th, foeX - GAL_CELL / 2, foeG - GAL_CELL, 2, foeSil);
@@ -950,7 +950,7 @@ void drawBattlers() {
   if (!meHide && !meGone) {
     if (pmd.loaded) {
       if (!pmd.has(meAct)) meAct = PMD_IDLE;
-      drawPmdAct(meAct, meX, meG, now, true, meSil, 3);
+      drawPmdAct(meAct, meX, meG, now, true, meSil, 4);
     } else {
       const uint8_t *th = thumbs.get(bvMeDex);
       if (th) drawThumb(th, meX - GAL_CELL / 2, meG - GAL_CELL, 3, meSil);
