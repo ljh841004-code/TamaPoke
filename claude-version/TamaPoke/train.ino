@@ -59,6 +59,9 @@ uint32_t spdRtSum = 0;     // suma de reflejos (ms) de los aciertos (ko11.14: po
 #define SPD_MAXN 5      // ko11.14: balones por ronda (3 -> 5)
 int16_t spdBx[SPD_MAXN], spdBy[SPD_MAXN];
 uint8_t spdN = 3, spdNext = 0, spdFail = 0;  // spdFail: 1 orden equivocado, 2 tiempo
+uint16_t spdBase = 0;  // ko11.17: los numeros siguen de ronda en ronda (1-3, 4-7, 8-12...)
+#define SPD_RANDOM_FROM 7   // desde esta ronda (0 = la 1a) el primer numero es al azar
+#define SPD_RANDOM_MAX 60   // ... entre 1 y 60
 uint32_t spdTapT[SPD_MAXN];  // ko11.16: cuando se toco cada balon (estallido)
 uint8_t spdRes[SPD_ROUNDS];  // ko11.16: 0 pendiente, 1 bien, 2 fallo (puntos de progreso)
 bool spdGood = false, spdNewHi = false;
@@ -491,6 +494,7 @@ void startSpeed() {
   perfReset();  // ko11.3
   spdOpen = true;
   spdRound = 0;
+  spdBase = 0;
   spdScore = 0;
   spdHits = 0;
   spdRtSum = 0;
@@ -551,6 +555,13 @@ void stepSpeed() {
     sfxPlay(spdNewHi ? SFX_MEDAL : SFX_PLAY);
     spdOverUntil = millis() + 3500;
   } else {
+    // ko11.17: hasta la mitad los numeros siguen contando (1-3, 4-7...); desde la
+    // ronda 8 (la de 5 balones) empiezan en un numero al azar (p. ej. 2-6, luego 37-41)
+    if (spdRound < SPD_RANDOM_FROM) spdBase += spdN;
+    else {
+      uint16_t prev = spdBase;
+      do spdBase = (uint16_t)random(0, SPD_RANDOM_MAX); while (spdBase == prev);
+    }
     spdNextRound();
   }
 }
@@ -625,14 +636,24 @@ void renderSpeed() {
       uiShade(x - half * 3 / 5, y + half - 7, half * 6 / 5, 8, 4, 4);  // sombra pegada al balon
       drawMapQ(SPR_ICON_PLAY, 16, x - half, y - half, s4, false);
       if (s4 >= 14) {
-        char nb[4];
-        snprintf(nb, sizeof(nb), "%d", i + 1);
-        gfx->fillCircle(x, y, 17, UI_WHITE);
-        gfx->drawCircle(x, y, 17, UI_INK);
-        gfx->drawCircle(x, y, 16, UI_INK);
-        setSize(3);
+        // ko11.17: numeros que siguen subiendo; solo el PRIMERO de la ronda parpadea
+        // (pista de por donde empezar), el resto hay que seguirlo de cabeza
+        char nb[6];
+        snprintf(nb, sizeof(nb), "%u", (unsigned)(spdBase + i + 1));
+        bool hint = i == 0 && spdNext == 0 && ((now / 220) % 2 == 0);
+        int dr = strlen(nb) > 1 ? 20 : 17;
+        if (i == 0 && spdNext == 0) {  // aro que late alrededor del primero
+          int pr = half + 4 + (int)((now / 60) % 6);
+          gfx->drawCircle(x, y, pr, C565(0xf8, 0xc8, 0x30));
+          gfx->drawCircle(x, y, pr + 1, C565(0xf8, 0xc8, 0x30));
+        }
+        gfx->fillCircle(x, y, dr, hint ? C565(0xff, 0xd8, 0x40) : UI_WHITE);
+        gfx->drawCircle(x, y, dr, UI_INK);
+        gfx->drawCircle(x, y, dr - 1, UI_INK);
+        uint8_t ts = textW(nb, 3) <= dr * 2 - 6 ? 3 : 2;
+        setSize(ts);
         gfx->setTextColor(UI_INK);
-        setCur(x - textW(nb, 3) / 2, y - textH(3) / 2);
+        setCur(x - textW(nb, ts) / 2, y - textH(ts) / 2);
         printT(nb);
       }
     }

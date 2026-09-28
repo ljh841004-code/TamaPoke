@@ -239,10 +239,15 @@ static void scenes(bool ko, const char *sfx) {
   defScore = 34; defPerfectN = 14; defGoodN = 6; defMissN = DEF_LIVES; render(); tick(85); render(); shot("06_train_defense_result");
   closeAll(); startSpeed();
   for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
-  tick(300); speedPress(spdBx[0], spdBy[0]);
+  tick(300); render(); shot("07e_train_speed_hint");  // ko11.17: solo el 1o parpadea
+  speedPress(spdBx[0], spdBy[0]);
   tick(120); render(); shot("07_train_speed");
   // ko10.6: resultado con puntos por reflejos y la media
   for (int r = 0; r < SPD_ROUNDS; r++) {
+    if (r == 3) {  // ko11.17: la 2a tanda sigue contando (4-7 o asi) y parpadea el primero
+      for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
+      tick(300); render(); shot("07f_train_speed_round4");
+    }
     if (r == 7) {  // ko11.16: a media partida (puntos de progreso, aro de tiempo)
       for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
       tick(700); render(); shot("07d_train_speed_mid");
