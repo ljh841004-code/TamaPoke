@@ -1298,7 +1298,7 @@ TEST(train, partida_vieja_pasa_sus_records_a_historico) {
   {  // como una partida de antes de ko11.9.2 (sin la marca)
     Preferences pr;
     pr.begin("tamapoke", false);
-    pr.remove("rpp"); pr.remove("ad2"); pr.remove("asp"); pr.remove("agh"); pr.remove("avb");
+    pr.remove("rpp"); pr.remove("ad2"); pr.remove("ap2"); pr.remove("agh"); pr.remove("avb");
     pr.end();
   }
   Pet q;

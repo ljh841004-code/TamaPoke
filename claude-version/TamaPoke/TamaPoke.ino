@@ -175,9 +175,11 @@ bool gameNewHi = false;
 
 // saco de entrenamiento (entrena la fuerza)
 bool sackOpen = false;
-uint32_t sackUntil = 0, sackOverUntil = 0;
+uint32_t sackUntil = 0, sackOverUntil = 0, sackChargeT = 0, sackHitT = 0;
 uint16_t sackHits = 0;
-uint16_t sackBags = 0, sackBagHits = 0;  // ko10.7: sacos rotos y golpes al saco actual
+uint16_t sackBags = 0, sackBagHits = 0;  // ko10.7: sacos rotos y dano al saco actual
+uint16_t sackCrits = 0;                  // ko11.14: golpes criticos
+uint8_t sackLastDmg = 0, sackLastKind = 0;  // 1 critico, 2 fuerte, 3 normal, 4 al aire
 float sackShake = 0;
 uint8_t sackGain = 0;
 bool sackNewHi = false;
@@ -1522,37 +1524,9 @@ void uiShadeSpan(uint16_t *p, int n, uint32_t k) {
   for (int i = 0; i < n; i++) p[i] = uiPack((uiSpread(p[i]) * k) >> 4);
 }
 
-// mezcla n pixeles hacia el color "to": (c * k + to * (16 - k)) / 16
-void uiMixSpan(uint16_t *p, int n, uint32_t k, uint16_t to) {
-  uint32_t t = uiSpread(to) * (16 - k);
-  for (int i = 0; i < n; i++) p[i] = uiPack((uiSpread(p[i]) * k + t) >> 4);
-}
-
-// ko11.13: fundido al cambiar de pantalla. uiFlush() sustituye a gfx->flush():
-// si la pantalla es otra (screenSig), los primeros ~250 ms la nueva aparece
-// desde el color de fondo (10/16 -> 0). En los juegos rapidos no se hace (coste)
-bool gUiFade = false;  // ko11.13.1: apagado (al usuario no le gusto); el render de PC lo prueba
-static uint16_t uiLastSig = 0xFFFF;
-static uint32_t uiFadeT0 = 0;
-#define UI_FADE_MS 260
-void uiFlush() {
-  uint16_t sig = screenSig();
-  uint32_t now = millis();
-  if (sig != uiLastSig) {
-    if (gUiFade && uiLastSig != 0xFFFF && !fastGameNow()) uiFadeT0 = now ? now : 1;
-    uiLastSig = sig;
-  }
-  if (uiFadeT0) {
-    uint32_t dt = now - uiFadeT0;
-    if (dt >= UI_FADE_MS || fastGameNow()) uiFadeT0 = 0;
-    else {
-      uint16_t *fb = gfx->getFramebuffer();
-      uint32_t k = 6 + dt * 10 / UI_FADE_MS;  // 6..15 de 16 de la pantalla nueva
-      if (fb) uiMixSpan(fb, LCD_WIDTH * LCD_HEIGHT, k, gNight ? C565(0x10, 0x14, 0x24) : UI_BG_DAY);
-    }
-  }
-  gfx->flush();
-}
+// ko11.13.1: gfx->flush() de siempre (el fundido de cambio de pantalla se quito:
+// al usuario no le gusto). Se deja el nombre para no tocar las 40 llamadas
+void uiFlush() { gfx->flush(); }
 
 // ko11.13: fondo de las pantallas de menu: crema con degradado suave (antes liso)
 // Los 3 canales bajan a la vez en pasos de 565 (R-1, G-2, B-1: sin tinte rosa o
@@ -2755,15 +2729,24 @@ void stepGame() {
 
 // ---------- saco de entrenamiento (entrena la fuerza) ----------
 
-// ko10.7: aguante. Cada saco tiene aguante (golpes) y un plazo; romperlo trae el
-// siguiente, mas duro y con menos tiempo. Si se acaba el plazo, fin. Antes eran
-// 10 s de aporreo y el record lo marcaba solo la velocidad del dedo.
-//   saco i (0..): 6 + i golpes en 4 s - 60 ms * i (minimo 2 s)
-//   -> 1,5 golpes/s al principio, ~5 en el saco 10, ~7 en el 15, ~9 en el 20
-uint16_t sackBagHp(uint16_t i) { return 6 + (i > 60 ? 60 : i); }
+// ko11.14: CARGA Y GOLPE. Un medidor de fuerza sube y baja sin parar; tocar
+// golpea con la fuerza de ese momento y el medidor vuelve a 0. Arriba del todo
+// (>= 90) = critico x5; >= 70 fuerte x3; >= 40 x2; >= 20 x1; menos = al aire.
+// Aporrear ya no sirve (el medidor no llega a subir). Cada saco aguanta mas,
+// da menos tiempo y el medidor va mas rapido
+//   saco i: 10 + 2i de dano en 6 s - 120 ms * i (min 3,5 s); ciclo 1,5 s - 50 ms * i (min 0,7 s)
+uint16_t sackBagHp(uint16_t i) { return 10 + 2 * (i > 40 ? 40 : i); }
 uint32_t sackBagMs(uint16_t i) {
-  int32_t ms = 4000 - 60 * (int32_t)i;
-  return ms < 2000 ? 2000 : (uint32_t)ms;
+  int32_t ms = 6000 - 120 * (int32_t)i;
+  return ms < 3500 ? 3500 : (uint32_t)ms;
+}
+uint32_t sackCycleMs() {
+  int32_t p = 1500 - 50 * (int32_t)sackBags;
+  return p < 700 ? 700 : (uint32_t)p;
+}
+int sackPower(uint32_t now) {  // 0..100, sube y baja (triangulo)
+  uint32_t P = sackCycleMs(), ph = (now - sackChargeT) % P;
+  return (int)(ph < P / 2 ? ph * 200 / P : (P - ph) * 200 / P);
 }
 
 void startSack() {
@@ -2771,22 +2754,35 @@ void startSack() {
   if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
   sackOpen = true;
   sackBags = sackBagHits = 0;
-  sackUntil = millis() + sackBagMs(0) + 700;  // un respiro para empezar
+  sackUntil = millis() + sackBagMs(0) + 900;  // un respiro para empezar
+  sackChargeT = millis() + 900;
   sackOverUntil = 0;
-  sackHits = 0;
+  sackHits = sackCrits = 0;
+  sackHitT = 0;
   sackShake = 0;
   sackNewHi = false;
 }
 
 void sackTap() {
-  if (sackOverUntil || !timeLeft(sackUntil)) return;  // ya termino
-  sackHits++;
-  sackShake = 16;  // sacude el saco
-  if (++sackBagHits >= sackBagHp(sackBags)) {  // roto: el siguiente
+  uint32_t now = millis();
+  if (sackOverUntil || !timeLeft(sackUntil) || (int32_t)(now - sackChargeT) < 0) return;
+  int pw = sackPower(now);
+  uint8_t dmg = pw >= 90 ? 5 : pw >= 70 ? 3 : pw >= 40 ? 2 : pw >= 20 ? 1 : 0;
+  sackLastKind = pw >= 90 ? 1 : pw >= 70 ? 2 : dmg ? 3 : 4;
+  sackLastDmg = dmg;
+  sackHitT = now;
+  sackChargeT = now;  // el medidor vuelve a 0
+  if (!dmg) { sfxPlay(SFX_DENY); return; }
+  sackHits += dmg;
+  if (dmg == 5) sackCrits++;
+  sackShake = dmg == 5 ? 30 : 8 + dmg * 3;
+  sfxPlay(dmg == 5 ? SFX_MEDAL : SFX_PLAY);
+  sackBagHits += dmg;
+  if (sackBagHits >= sackBagHp(sackBags)) {  // roto: el siguiente
     sackBags++;
     sackBagHits = 0;
-    sackShake = 30;
-    sackUntil = millis() + sackBagMs(sackBags);
+    sackShake = 34;
+    sackUntil = now + sackBagMs(sackBags);
     sfxPlay(SFX_TAP);
   }
 }
@@ -2807,7 +2803,7 @@ void renderSack() {
     char sub[32];
     snprintf(b, sizeof(b), XT(X_SACK_BAGS_FMT), sackBags);
     snprintf(g, sizeof(g), T(S_STR_GAIN_FMT), sackGain);
-    snprintf(sub, sizeof(sub), XT(X_SACK_HITS_FMT), sackHits);
+    snprintf(sub, sizeof(sub), XT(X_SACK_HITS_FMT), sackCrits, sackHits);  // ko11.14
     drawTrainResult(b, g, UI_BAR_BAD, sackNewHi && sackBags > 0, pet.strHi, sub);
     return;
   }
@@ -2847,7 +2843,40 @@ void renderSack() {
   if (left > total) left = total;  // el respiro del principio
   int fw = (int)((uint32_t)bw * left / total);
   uiGauge(CX - bw / 2, 340, bw, 12, fw * 1000 / bw, UI_BAR_OK, UI_TRACK);
-  if (sackBags == 0) drawFit(T(S_HIT_FAST), 366, 320, ink, 2);
+  // ko11.14: medidor de fuerza a la derecha del saco (rojo arriba = critico)
+  {
+    const int gx = CX + 78, gy = 92, gw = 30, gh = 150;
+    int pw = (int32_t)(now - sackChargeT) < 0 ? 0 : sackPower(now);
+    uiShade(gx - 3, gy - 3, gw + 6, gh + 6, 10, 3);
+    gfx->fillRoundRect(gx, gy, gw, gh, 8, UI_TRACK);
+    gfx->fillRoundRect(gx, gy, gw, gh * 10 / 100, 6, lerp565(UI_TRACK, UI_BAR_BAD, 6, 16));   // zona critica
+    gfx->fillRect(gx, gy + gh * 30 / 100, gw, 2, lerp565(UI_TRACK, UI_INK, 6, 16));            // marca 70
+    int fh = gh * pw / 100;
+    uint16_t fc = pw >= 90 ? UI_BAR_BAD : pw >= 70 ? C565(0xf0, 0x80, 0x30) : pw >= 40 ? UI_BAR_WARN : C565(0x90, 0xa8, 0xc0);
+    if (fh > 4) uiGradRRect(gx + 3, gy + gh - fh, gw - 6, fh, 6, lerp565(fc, UI_WHITE, 5, 16), fc);
+    gfx->drawRoundRect(gx, gy, gw, gh, 8, ink);
+    if (pw >= 90) gfx->drawRoundRect(gx - 3, gy - 3, gw + 6, gh + 6, 10, UI_BAR_BAD);  // brilla
+  }
+  // ko11.14: juicio del ultimo golpe a la izquierda del saco (y el dano)
+  if (sackHitT && now - sackHitT < 600) {
+    uint32_t t = now - sackHitT;
+    XId id = sackLastKind == 1 ? X_ATK_CRIT : sackLastKind == 2 ? X_ATK_STRONG : sackLastKind == 3 ? X_ATK_OK : X_ATK_WHIFF;
+    uint16_t jc = sackLastKind == 1 ? UI_BAR_BAD : sackLastKind == 2 ? C565(0xd0, 0x60, 0x10) : sackLastKind == 3 ? ink : C565(0x70, 0x78, 0x88);
+    uint8_t jz = sackLastKind == 1 ? 3 : 2;
+    const char *jt = XT(id);
+    setSize(jz);
+    gfx->setTextColor(jc);
+    setCur(CX - 56 - textW(jt, jz), 150 - (int)(t / 25));
+    printT(jt);
+    if (sackLastDmg) {
+      char dm[8];
+      snprintf(dm, sizeof(dm), "-%u", sackLastDmg);
+      setSize(2);
+      setCur(CX - 56 - textW(dm, 2), 186 - (int)(t / 25));
+      printT(dm);
+    }
+  }
+  if (sackBags == 0 && sackHits == 0) drawFit(XT(X_SACK_HINT), 366, 340, ink, 2);
 
   uiFlush();
 }

@@ -55,7 +55,10 @@ uint8_t spdRound = 0, spdPhase = SP_WAIT, spdSide = 0, spdGain = 0;
 uint16_t spdScore = 0;
 uint32_t spdUntil = 0, spdOverUntil = 0, spdShowAt = 0;
 uint8_t spdHits = 0;       // ko10.6: aciertos (entrenan la VEL); spdScore = puntos
-uint32_t spdRtSum = 0;     // suma de reflejos (ms) de los aciertos
+uint32_t spdRtSum = 0;     // suma de reflejos (ms) de los aciertos (ko11.14: por balon)
+#define SPD_MAXN 5      // ko11.14: balones por ronda (3 -> 5)
+int16_t spdBx[SPD_MAXN], spdBy[SPD_MAXN];
+uint8_t spdN = 3, spdNext = 0, spdFail = 0;  // spdFail: 1 orden equivocado, 2 tiempo
 bool spdGood = false, spdNewHi = false;
 
 extern bool vbOpen;  // ko11.9 (volley.ino)
@@ -422,19 +425,43 @@ void renderDefense() {
 }
 
 // ---------- velocidad ----------
+// ko11.14: EN ORDEN. Salen 3-5 pokeballs numeradas a la vez; hay que tocarlas
+// 1, 2, 3... lo antes posible. Orden equivocado o sin tiempo = ronda fallada.
+// Puntos por la media de cada balon (100 - ms/10, minimo 10)
 
-static uint32_t spdWindow() {  // cuanto dura visible la pokeball en esta ronda
-  int w = 1100 - spdRound * 40;
-  return w < 520 ? 520 : w;
+static uint8_t spdCount() { return spdRound < 5 ? 3 : spdRound < 10 ? 4 : 5; }
+
+static uint32_t spdLimit() {  // tiempo de la ronda
+  int per = 1000 - spdRound * 25;
+  if (per < 600) per = 600;
+  return (uint32_t)per * spdN;
+}
+
+static void spdPlace() {
+  spdN = spdCount();
+  for (int i = 0; i < spdN; i++) {
+    int x = CX, y = 200;
+    for (int t = 0; t < 60; t++) {
+      x = 96 + random(275);
+      y = 124 + random(190);
+      bool ok = true;
+      for (int j = 0; j < i && ok; j++) {
+        int dx = x - spdBx[j], dy = y - spdBy[j];
+        if (dx * dx + dy * dy < 100 * 100) ok = false;
+      }
+      if (ok) break;
+    }
+    spdBx[i] = (int16_t)x;
+    spdBy[i] = (int16_t)y;
+  }
 }
 
 static void spdNextRound() {
   spdPhase = SP_WAIT;
-  spdUntil = millis() + 500 + random(800);
-  // ko8: 8 posiciones como las horas de un reloj (12, 1:30, 3...), al azar y
-  // sin repetir la anterior: antes solo izquierda/derecha y se adivinaba
-  uint8_t prev = spdSide;
-  do spdSide = random(SPD_POS); while (spdSide == prev);
+  spdUntil = millis() + 600 + random(500);
+  spdNext = 0;
+  spdFail = 0;
+  spdPlace();
 }
 
 void startSpeed() {
@@ -447,18 +474,8 @@ void startSpeed() {
   spdOverUntil = 0;
   spdNewHi = false;
   spdNextRound();
-  spdUntil += 700;  // un respiro para leer la ayuda
+  spdUntil += 900;  // un respiro para leer la ayuda
 }
-
-// ko8: anillo de 8 posiciones alrededor del bicho (0 = arriba, sentido horario)
-#define SPD_RING_X 233
-#define SPD_RING_Y 240
-#define SPD_RING_R 160
-#define SPD_PET_G 300   // el bicho, en el centro del anillo
-static const int8_t SPD_DIR[SPD_POS][2] = { { 0, -10 }, { 7, -7 }, { 10, 0 }, { 7, 7 },
-                                            { 0, 10 }, { -7, 7 }, { -10, 0 }, { -7, -7 } };
-static int spdBallX() { return SPD_RING_X + SPD_DIR[spdSide % SPD_POS][0] * SPD_RING_R / 10; }
-static int spdBallY() { return SPD_RING_Y + SPD_DIR[spdSide % SPD_POS][1] * SPD_RING_R / 10; }
 
 // ko10.6: puntos por reflejos: 100 - ms/10 (0,25 s = 75), minimo 10
 uint16_t spdPoints(uint32_t rt) {
@@ -468,22 +485,29 @@ uint16_t spdPoints(uint32_t rt) {
 static void spdResolve(bool good) {
   spdGood = good;
   if (good) {
-    uint32_t rt = millis() - spdShowAt;
+    uint32_t per = (millis() - spdShowAt) / spdN;  // media por balon
     spdHits++;
-    spdRtSum += rt;
-    spdScore += spdPoints(rt);
-    sfxPlay(SFX_PLAY);
+    spdRtSum += per;
+    spdScore += spdPoints(per);
+    sfxPlay(SFX_MEDAL);
   }
   else sfxPlay(SFX_DENY);
   spdPhase = SP_FEED;
-  spdUntil = millis() + 450;
+  spdUntil = millis() + 550;
 }
 
 void speedPress(int16_t x, int16_t y) {
-  if (spdOverUntil || spdPhase == SP_FEED) return;
-  if (spdPhase == SP_WAIT) { spdResolve(false); return; }  // se adelanto
-  int dx = x - spdBallX(), dy = y - spdBallY();
-  spdResolve(dx * dx + dy * dy <= 80 * 80);
+  if (spdOverUntil || spdPhase != SP_SHOW) return;  // antes de salir no penaliza
+  int best = -1, bd = 56 * 56;
+  for (int i = spdNext; i < spdN; i++) {
+    int dx = x - spdBx[i], dy = y - spdBy[i], d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = i; }
+  }
+  if (best < 0) return;  // toque en vacio: no cuenta
+  if (best != spdNext) { spdFail = 1; spdResolve(false); return; }
+  spdNext++;
+  if (spdNext >= spdN) spdResolve(true);
+  else sfxPlay(SFX_TAP);
 }
 
 void stepSpeed() {
@@ -491,8 +515,9 @@ void stepSpeed() {
   if (spdPhase == SP_WAIT) {
     spdPhase = SP_SHOW;
     spdShowAt = millis();
-    spdUntil = spdShowAt + spdWindow();
+    spdUntil = spdShowAt + spdLimit();
   } else if (spdPhase == SP_SHOW) {
+    spdFail = 2;
     spdResolve(false);  // no llego a tiempo
   } else if (++spdRound >= SPD_ROUNDS) {
     spdNewHi = spdScore > pet.speHi;
@@ -519,53 +544,51 @@ void renderSpeed() {
   }
   stepSpeed();
   if (spdOverUntil) return;
+  uint32_t now = millis();
   drawGameScene();
   bool night = sceneHour() < 6 || sceneHour() >= 20;
   uint16_t ink = night ? UI_INK_NIGHT : UI_INK;
   char b[16];
-  // ko8: marcador en el centro del anillo (arriba sale una pokeball)
   snprintf(b, sizeof(b), "%u/%u", spdRound + 1, SPD_ROUNDS);
-  drawFit(b, 128, 200, ink, 3);
+  drawFit(b, 24, 200, ink, 3);
   snprintf(b, sizeof(b), "%u", spdScore);
-  drawFit(b, 160, 200, UI_BAR_OK, 2);
-  // el bicho mira hacia donde salio la pokeball
-  int bx = spdBallX(), by = spdBallY();
-  uint8_t act = PMD_IDLE;
-  if (spdPhase == SP_SHOW && bx != SPD_RING_X) act = bx > SPD_RING_X ? PMD_WALKR : PMD_WALKL;
-  // plataforma flotante (como en las batallas) para el bicho del centro
-  uint8_t bio = DEX_TBL[pet.speciesId].biome;
-  uint16_t soil = BIOME_SOIL[bio < 6 ? bio : 0];
-  gfx->fillEllipse(CX, SPD_PET_G + 4, 70, 14, lerp565(soil, C565(0x10, 0x18, 0x20), 4, 16));
-  gfx->fillEllipse(CX, SPD_PET_G, 70, 12, soil);
-  if (pmd.loaded) {
-    if (!pmd.has(act)) act = PMD_IDLE;
-    drawPmdAct(act, CX, SPD_PET_G, millis(), true, false, 3);
+  drawFit(b, 60, 200, C565(0x1a, 0x86, 0x34), 2);
+  if (spdPhase == SP_SHOW) {  // tiempo que queda
+    drawTimeBar(timeLeft(spdUntil), spdLimit(), 88);
   }
-  // huecos del anillo: se ve donde PUEDE salir
-  for (int i = 0; i < SPD_POS; i++)
-    gfx->drawCircle(SPD_RING_X + SPD_DIR[i][0] * SPD_RING_R / 10, SPD_RING_Y + SPD_DIR[i][1] * SPD_RING_R / 10,
-                    10, lerp565(ink, UI_BG_DAY, 10, 16));
-  if (spdPhase == SP_SHOW) {
-    gfx->fillCircle(bx, by, 44, lerp565(UI_WHITE, UI_BAR_WARN, 5, 16));  // halo
-    drawMap(SPR_ICON_PLAY, 16, bx - 32, by - 32, 4, false);
-    // la ventana que queda, como una barra que se vacia
-    uint32_t left = timeLeft(spdUntil), win = spdWindow();
-    int w = (int)(80 * left / win);
-    int ty = spdSide == 4 ? by - 56 : by + 48;  // abajo del todo: la barra va encima
-    gfx->fillRoundRect(bx - 40, ty, 80, 6, 3, UI_TRACK);
-    if (w > 1) gfx->fillRoundRect(bx - 40, ty, w, 6, 3, UI_BAR_WARN);
-  } else if (spdPhase == SP_FEED) {
-    // el resultado sale donde estaba la pokeball
-    const char *fb = XT(spdGood ? X_NICE : X_MISS);
-    gfx->setTextColor(spdGood ? UI_BAR_OK : UI_BAR_BAD);
-    setSize(2);
-    int fx = bx - textW(fb, 2) / 2;
-    if (fx < 40) fx = 40;
-    if (fx + textW(fb, 2) > 426) fx = 426 - textW(fb, 2);
-    setCur(fx, by - 8);
-    printT(fb);
-  } else if (spdRound == 0) {
-    drawFit(XT(X_TR_SPE_HINT), 186, 220, ink, 2);
+  // el bicho abajo, mirando
+  if (pmd.loaded) {
+    uint8_t act = spdPhase == SP_FEED && !spdGood && pmd.has(PMD_HURT) ? PMD_HURT : PMD_IDLE;
+    drawPmdActM(pmd, act, CX, 420, now, true, false, 3, 96);
+  }
+  if (spdPhase == SP_SHOW || spdPhase == SP_FEED) {
+    for (int i = spdN - 1; i >= 0; i--) {
+      int x = spdBx[i], y = spdBy[i];
+      if (i < spdNext) {  // ya tocado: aro verde
+        gfx->drawCircle(x, y, 22, C565(0x4c, 0xc8, 0x5c));
+        gfx->drawCircle(x, y, 21, C565(0x4c, 0xc8, 0x5c));
+        continue;
+      }
+      if (spdPhase == SP_SHOW && i == spdNext) {  // el que toca ahora
+        gfx->fillCircle(x, y, 36, lerp565(UI_WHITE, UI_BAR_WARN, 5, 16));
+      }
+      drawMap(SPR_ICON_PLAY, 16, x - 24, y - 24, 3, false);
+      char nb[4];
+      snprintf(nb, sizeof(nb), "%d", i + 1);
+      int nx = x + 20, ny = y - 20;
+      gfx->fillCircle(nx, ny, 13, UI_WHITE);
+      gfx->drawCircle(nx, ny, 13, ink);
+      setSize(2);
+      gfx->setTextColor(UI_INK);
+      setCur(nx - textW(nb, 2) / 2, ny - 9);
+      printT(nb);
+    }
+  }
+  if (spdPhase == SP_FEED) {
+    const char *fb = XT(spdGood ? X_NICE : spdFail == 1 ? X_SPD_WRONG : X_MISS);
+    drawFit(fb, 330, 320, spdGood ? C565(0x1a, 0x86, 0x34) : UI_BAR_BAD, 3);
+  } else if (spdRound == 0 && spdPhase == SP_WAIT) {
+    drawFit(XT(X_TR_SPE_HINT), 200, 320, ink, 2);
   }
   uiFlush();
 }

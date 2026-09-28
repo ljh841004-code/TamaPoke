@@ -981,7 +981,7 @@ void Pet::save() {
   prefs.putUShort("tmedal", totalMedals);
   prefs.putUShort("mstone", lastMilestone);
   prefs.putUShort("ghi", gameHi);
-  prefs.putUShort("sbh", strHi);  // ko10.7: clave nueva (sacos rotos); el record viejo (golpes) no vale
+  prefs.putUShort("sb2", strHi);  // ko11.14: carga y golpe, records desde 0  // ko10.7: clave nueva (sacos rotos); el record viejo (golpes) no vale
   prefs.putString("nick", nick);
   prefs.putUShort("wwin", wildWins);
   prefs.putUShort("lwin", linkWins);
@@ -992,13 +992,13 @@ void Pet::save() {
   prefs.putUShort("dh2", defHi);  // ko11.14: defensa por timing, records nuevos desde 0
   prefs.putUShort("vbs", vbStreak);  // ko11.9
   prefs.putUShort("vbb", vbBest);
-  prefs.putUShort("vhp", speHi);  // ko10.6: clave nueva (puntos); el record viejo (aciertos) no vale
+  prefs.putUShort("vp2", speHi);  // ko11.14: en orden, records desde 0  // ko10.6: clave nueva (puntos); el record viejo (aciertos) no vale
   // ko11.9.2: historicos (del jugador) y marca de "records por bicho"
   keepMax(allStrHi, strHi); keepMax(allDefHi, defHi); keepMax(allSpeHi, speHi);
   keepMax(allGameHi, gameHi); keepMax(allVbBest, vbBest);
-  prefs.putUShort("ash", allStrHi);
+  prefs.putUShort("as2", allStrHi);
   prefs.putUShort("ad2", allDefHi);
-  prefs.putUShort("asp", allSpeHi);
+  prefs.putUShort("ap2", allSpeHi);
   prefs.putUShort("agh", allGameHi);
   prefs.putUShort("avb", allVbBest);
   prefs.putUChar("rpp", 1);
@@ -1089,7 +1089,7 @@ void Pet::load(bool *migrated) {
   totalMedals = prefs.getUShort("tmedal", 0);
   lastMilestone = prefs.getUShort("mstone", 0);
   gameHi = prefs.getUShort("ghi", 0);
-  strHi = prefs.getUShort("sbh", 0);
+  strHi = prefs.getUShort("sb2", 0);
   prefs.getString("nick", nick, sizeof(nick));
   wildWins = prefs.getUShort("wwin", 0);
   linkWins = prefs.getUShort("lwin", 0);
@@ -1100,10 +1100,10 @@ void Pet::load(bool *migrated) {
   defHi = prefs.getUShort("dh2", 0);  // ko11.14 (la clave "dhi" era del juego viejo)
   vbStreak = prefs.getUShort("vbs", 0);  // ko11.9
   vbBest = prefs.getUShort("vbb", 0);
-  speHi = prefs.getUShort("vhp", 0);
-  allStrHi = prefs.getUShort("ash", 0);  // ko11.9.2
+  speHi = prefs.getUShort("vp2", 0);
+  allStrHi = prefs.getUShort("as2", 0);  // ko11.9.2
   allDefHi = prefs.getUShort("ad2", 0);
-  allSpeHi = prefs.getUShort("asp", 0);
+  allSpeHi = prefs.getUShort("ap2", 0);
   allGameHi = prefs.getUShort("agh", 0);
   allVbBest = prefs.getUShort("avb", 0);
   evolvedHere = prefs.getBool("evh", false);

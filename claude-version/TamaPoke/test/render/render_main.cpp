@@ -33,7 +33,6 @@ static void scenes(bool ko, const char *sfx) {
   applyLangFont();
   if (ko) printf("  (ascenso unifont: %d)\n", gFontAscent);
   closeAll();
-  gUiFade = false;  // ko11.13: capturas sin fundido de cambio de pantalla
   // principal
   gMockEpoch = 1790343900;  // 13:45
   pet.lastSeenEpoch = gMockEpoch;
@@ -43,12 +42,6 @@ static void scenes(bool ko, const char *sfx) {
   pet.lastSeenEpoch = gMockEpoch;
   render(); shot("02_main_night");
   gMockEpoch = 1790343900; pet.lastSeenEpoch = gMockEpoch;
-  // ko11.13: fundido al abrir el menu de entrenamiento (principio y mitad)
-  gUiFade = true; render();
-  openTrainMenu(); render(); shot("90_fade_start");
-  tick(130); render(); shot("90_fade_mid");
-  tick(200); render(); shot("90_fade_end");
-  closeAll(); render(); gUiFade = false;
   // ko10.8: comportamientos de la pantalla principal
   {  // ko11.7: aviso de premio de la pokedex
     char t[80];
@@ -128,9 +121,10 @@ static void scenes(bool ko, const char *sfx) {
   render(); shot("27_keyboard_ko");
   kbCommit(); kbKo = false; render(); shot("28_keyboard_abc");
   kbOpen = false;
-  closeAll(); startSack(); tick(300);
-  for (int i = 0; i < 40; i++) { sackTap(); tick(60); }  // ko10.7: unos cuantos sacos rotos
-  render(); shot("25_sack");
+  // ko11.14: carga y golpe: unos criticos (tocar en el pico del medidor)
+  closeAll(); startSack(); tick(1000);
+  for (int i = 0; i < 9; i++) { tick(sackCycleMs() / 2); sackTap(); }
+  tick(sackCycleMs() * 2 / 5); render(); sackHitT = gMockMillis - 120; render(); shot("25_sack");
   for (int i = 0; i < 80; i++) { tick(85); render(); }   // se acaba el plazo
   perfFrames = 120; perfRenderSum = 120 * 58; perfRenderMax = 71; perfStallMax = 12;  // ko11.3: linea de medida
   render(); shot("25b_sack_result");
@@ -211,11 +205,12 @@ static void scenes(bool ko, const char *sfx) {
   defScore = 34; defPerfectN = 14; defGoodN = 6; defMissN = DEF_LIVES; render(); tick(85); render(); shot("06_train_defense_result");
   closeAll(); startSpeed();
   for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
+  tick(300); speedPress(spdBx[0], spdBy[0]);
   tick(200); render(); shot("07_train_speed");
   // ko10.6: resultado con puntos por reflejos y la media
   for (int r = 0; r < SPD_ROUNDS; r++) {
     for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
-    tick(240 + r * 7); speedPress(spdBallX(), spdBallY());
+    for (int k = 0; k < spdN; k++) { tick(300 + r * 5); speedPress(spdBx[k], spdBy[k]); }
     for (int i = 0; i < 60 && spdPhase == SP_FEED && !spdOverUntil; i++) { tick(20); render(); }
   }
   tick(20); render(); shot("07b_train_speed_result");
