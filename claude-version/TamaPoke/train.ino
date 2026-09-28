@@ -64,10 +64,16 @@ void openTrainMenu() {
 // ko11.9.3: al acabar (o abandonar) un entrenamiento se vuelve al menu de
 // entrenamiento, no a la pantalla principal. El dedo que cerro el resultado no
 // debe pulsar nada del menu al levantarse.
+// ko11.11: tras volver, 2 s en los que tocar fuera de las filas NO cierra el
+// menu (en la pelota se sigue tocando sin mirar y se salia a la pantalla principal)
+static uint32_t trainBackUntil = 0;
+static bool trainOutsideClose() { return !timeLeft(trainBackUntil); }
+
 void backToTrainMenu() {
   openTrainMenu();
   swallowGesture = true;
-  navGuardUntil = millis() + 300;
+  navGuardUntil = millis() + 600;
+  trainBackUntil = millis() + 2000;
 }
 
 // ---------- menu ----------
@@ -150,16 +156,16 @@ void renderTrainMenu() {
 bool trainMenuSwipe(int dir) {
   if (!trainMenuOpen) return false;
   int p = (int)trainMenuPage + (dir > 0 ? -1 : 1);  // izquierda avanza (como la ficha)
-  if (p < 0 || p > 1) trainMenuOpen = false;
+  if (p < 0 || p > 1) { if (trainOutsideClose()) trainMenuOpen = false; }
   else { trainMenuPage = (uint8_t)p; trainMsgUntil = 0; sfxPlay(SFX_TAP); }
   return true;
 }
 
 static void battlePageTap(int16_t x, int16_t y) {
-  if (x < TRM_X || x >= TRM_X + TRM_W) { trainMenuOpen = false; return; }
+  if (x < TRM_X || x >= TRM_X + TRM_W) { if (trainOutsideClose()) trainMenuOpen = false; return; }
   int row = (y >= TRB_Y1 && y < TRB_Y1 + TRB_H) ? 0 : (y >= TRB_Y2 && y < TRB_Y2 + TRB_H) ? 1 : -1;
   if (row < 0) {
-    if (y < TRB_Y1 || y > 380) trainMenuOpen = false;
+    if ((y < TRB_Y1 || y > 380) && trainOutsideClose()) trainMenuOpen = false;
     return;
   }
   bool right = x >= TRB_X2;
@@ -183,11 +189,11 @@ void trainMenuTap(int16_t x, int16_t y) {
   // ko10.8: flechas
   if (navHit(NAV_L, x, y) && trainMenuPage == 1) { trainMenuPage = 0; trainMsgUntil = 0; sfxPlay(SFX_TAP); return; }
   if (navHit(NAV_R, x, y) && trainMenuPage == 0) { trainMenuPage = 1; trainMsgUntil = 0; sfxPlay(SFX_TAP); return; }
-  if (navHit(NAV_DOWN, x, y)) { trainMenuOpen = false; sfxPlay(SFX_TAP); return; }
+  if (navHit(NAV_DOWN, x, y)) { if (trainOutsideClose()) { trainMenuOpen = false; sfxPlay(SFX_TAP); } return; }
   if (trainMenuPage == 1) { battlePageTap(x, y); return; }
-  if (x < TRM_X || x >= TRM_X + TRM_W || y < TRM_Y) { trainMenuOpen = false; return; }
+  if (x < TRM_X || x >= TRM_X + TRM_W || y < TRM_Y) { if (trainOutsideClose()) trainMenuOpen = false; return; }
   int i = (y - TRM_Y) / (TRM_H + TRM_GAP);
-  if (i >= TRM_N) { trainMenuOpen = false; return; }
+  if (i >= TRM_N) { if (trainOutsideClose()) trainMenuOpen = false; return; }
   if ((y - TRM_Y) % (TRM_H + TRM_GAP) >= TRM_H) return;  // entre dos filas
   if (pet.sleeping || pet.isEgg() || pet.ceremony) {
     trainMsg = XT(X_CANT_NOW); trainMsgUntil = millis() + 2500; sfxPlay(SFX_DENY); return;

@@ -1,6 +1,6 @@
 {
   "name": "TamaPoke KO",
-  "version": "1.17-ko11.10",
+  "version": "1.17-ko11.11",
   "new_install_prompt_erase": true,
   "builds": [
     {
