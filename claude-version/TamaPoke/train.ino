@@ -27,15 +27,24 @@ const char *trainMsg = nullptr;
 
 // ---------- defensa: pokeballs que caen ----------
 #define DEF_LIVES 3     // ko10.6: fallos permitidos (antes 20 s fijos)
-#define DEF_BALLS 4
-#define DEF_GROUND 360
+// ko11.14: un solo balon que baja por un carril; hay que tocar cuando pasa por
+// la franja: centro verde = PERFECTO (2), amarillo = BIEN (1), antes o despues = fallo
+#define DEF_Y0 104        // arriba del carril (donde espera el balon)
+#define DEF_ZONE_Y 262    // centro de la franja
+#define DEF_PERFECT 10    // +-px del centro: perfecto
+#define DEF_GOOD 28       // +-px: bien
+#define DEF_RAIL_W 56
 bool defOpen = false;
 uint32_t defStart = 0, defOverUntil = 0, defLastStep = 0, defNextSpawn = 0;
 uint16_t defScore = 0, defMissN = 0;
 uint8_t defGain = 0;
 bool defNewHi = false;
-struct { float x, y; bool on; } defBall[DEF_BALLS];
-struct { int16_t x, y; uint32_t t; bool good; } defFx[DEF_BALLS];
+uint32_t defDropT = 0;        // 0 = el balon espera arriba (hasta defNextSpawn)
+float defV = 170;             // px/s de la caida actual
+uint16_t defHits = 0, defPerfectN = 0, defGoodN = 0, defCombo = 0;
+uint8_t defJudge = 0;         // 1 perfecto, 2 bien, 3 pronto, 4 tarde
+uint32_t defJudgeT = 0;
+int16_t defJudgeY = 0;
 
 // ---------- velocidad: reflejos izquierda/derecha ----------
 #define SPD_ROUNDS 15
@@ -263,69 +272,86 @@ void drawTimeBar(uint32_t left, uint32_t total, int y) {
 }
 
 // ---------- defensa ----------
+// ko11.14: TIMING. Un balon baja por el carril hacia el Pokemon; se toca en
+// cualquier sitio cuando pasa por la franja. Cada acierto lo hace un poco mas
+// rapido (y cada caida varia +-12 % y espera distinto arriba: sin ritmo fijo)
+
+static float defBallY(uint32_t now) {
+  if (!defDropT) return DEF_Y0;
+  return DEF_Y0 + defV * (float)(now - defDropT) / 1000.0f;
+}
+
+static void defNextBall(uint32_t now, uint32_t wait) {
+  defDropT = 0;
+  defNextSpawn = now + wait;
+  float v = 170.0f + 16.0f * defHits;
+  if (v > 640) v = 640;
+  defV = v * (0.88f + random(25) / 100.0f);
+}
 
 void startDefense() {
   perfReset();  // ko11.3
   defOpen = true;
   defStart = defLastStep = millis();
-  defNextSpawn = defStart + 600;
   defOverUntil = 0;
   defScore = defMissN = 0;
+  defHits = defPerfectN = defGoodN = defCombo = 0;
   defNewHi = false;
-  for (auto &b : defBall) b.on = false;
-  for (auto &f : defFx) f.t = 0;
+  defJudge = 0; defJudgeT = 0;
+  defNextBall(defStart, 900);
 }
 
-static void defFxAdd(int x, int y, bool good) {
-  int k = 0;
-  for (int i = 1; i < DEF_BALLS; i++) if (defFx[i].t < defFx[k].t) k = i;  // el mas viejo
-  defFx[k].x = x; defFx[k].y = y; defFx[k].t = millis(); defFx[k].good = good;
+static void defSetJudge(uint8_t j, int y) {
+  defJudge = j; defJudgeT = millis(); defJudgeY = (int16_t)y;
 }
 
 void stepDefense() {
   uint32_t now = millis();
-  float el = (now - defStart) / 1000.0f;       // segundos transcurridos
-  float dt = (now - defLastStep) / 1000.0f;
-  if (dt > 0.3f) dt = 0.3f;
   defLastStep = now;
-  float vy = 110 + el * 7;                     // px/s: cada vez caen mas deprisa
-  for (auto &b : defBall) {
-    if (!b.on) continue;
-    b.y += vy * dt;
-    if (b.y > DEF_GROUND) { b.on = false; defMissN++; defFxAdd((int)b.x, DEF_GROUND, false); }
+  if (!defDropT) {
+    if ((int32_t)(now - defNextSpawn) >= 0) defDropT = now;
+    return;
   }
-  if ((int32_t)(now - defNextSpawn) >= 0) {
-    for (auto &b : defBall)
-      if (!b.on) { b.on = true; b.x = 120 + random(227); b.y = 64; break; }
-    int gap = 1000 - (int)(el * 26);
-    defNextSpawn = now + (gap < 300 ? 300 : gap);  // ko10.6: sigue apretando
+  if (defBallY(now) > DEF_ZONE_Y + DEF_GOOD) {  // se paso: tarde
+    defMissN++;
+    defCombo = 0;
+    defSetJudge(4, DEF_ZONE_Y + DEF_GOOD);
+    sfxPlay(SFX_DENY);
+    defNextBall(now, 700 + random(400));
   }
 }
 
 void defensePress(int16_t x, int16_t y) {
-  if (defOverUntil) return;
-  int best = -1;
-  float bd = 52 * 52;  // radio tactil generoso
-  for (int i = 0; i < DEF_BALLS; i++) {
-    if (!defBall[i].on) continue;
-    float dx = defBall[i].x - x, dy = defBall[i].y - y, d = dx * dx + dy * dy;
-    if (d < bd) { bd = d; best = i; }
+  (void)x; (void)y;  // ko11.14: vale tocar en cualquier sitio
+  if (defOverUntil || !defDropT) return;
+  uint32_t now = millis();
+  float by = defBallY(now);
+  float d = fabsf(by - DEF_ZONE_Y);
+  if (d <= DEF_PERFECT) {
+    defScore += 2; defPerfectN++; defHits++; defCombo++;
+    defSetJudge(1, (int)by);
+    sfxPlay(SFX_MEDAL);
+  } else if (d <= DEF_GOOD) {
+    defScore += 1; defGoodN++; defHits++; defCombo = 0;
+    defSetJudge(2, (int)by);
+    sfxPlay(SFX_PLAY);
+  } else {  // antes de la franja: pronto
+    defMissN++; defCombo = 0;
+    defSetJudge(3, (int)by);
+    sfxPlay(SFX_DENY);
   }
-  if (best < 0) return;
-  defBall[best].on = false;
-  defScore++;
-  defFxAdd((int)defBall[best].x, (int)defBall[best].y, true);
-  sfxPlay(SFX_PLAY);
+  defNextBall(now, 450 + random(500));
 }
 
 void renderDefense() {
   uint32_t now = millis();
   if (defOverUntil) {
     if (!timeLeft(defOverUntil)) { defOpen = false; backToTrainMenu(); return; }
-    char s[24], g[20];
+    char s[24], g[20], sub[40];
     snprintf(s, sizeof(s), XT(X_BLOCKED_FMT), defScore);
     snprintf(g, sizeof(g), XT(X_DEF_GAIN_FMT), defGain);
-    drawTrainResult(s, g, 0x4C98, defNewHi && defScore > 0, pet.defHi, nullptr);
+    snprintf(sub, sizeof(sub), XT(X_DEF_SUB_FMT), defPerfectN, defGoodN);
+    drawTrainResult(s, g, 0x4C98, defNewHi && defScore > 0, pet.defHi, sub);
     return;
   }
   if (defMissN >= DEF_LIVES) {  // ko10.6: 3 fallos y se acabo: aplicar entrenamiento
@@ -346,17 +372,52 @@ void renderDefense() {
     if (i < DEF_LIVES - (int)defMissN) gfx->fillCircle(CX - 28 + i * 28, 70, 7, UI_BAR_BAD);
     else gfx->drawCircle(CX - 28 + i * 28, 70, 7, UI_TRACK);
   }
-  drawTrainPet(CX, PMD_IDLE);
-  for (auto &f : defFx) {  // anillo verde al atrapar, rojo al caer
-    uint32_t t = now - f.t;
-    if (!f.t || t > 300) continue;
-    int r = 20 + (int)(t / 8);
-    gfx->drawCircle(f.x, f.y, r, f.good ? UI_BAR_OK : UI_BAR_BAD);
-    gfx->drawCircle(f.x, f.y, r - 2, f.good ? UI_BAR_OK : UI_BAR_BAD);
+  // carril (medidor): pista hundida, franja amarilla (bien) con centro verde (perfecto)
+  const int rx = CX - DEF_RAIL_W / 2, rt = DEF_Y0 - 30, rb = DEF_ZONE_Y + DEF_GOOD + 20;
+  uiShade(rx, rt, DEF_RAIL_W, rb - rt, DEF_RAIL_W / 2, 4);
+  gfx->drawRoundRect(rx, rt, DEF_RAIL_W, rb - rt, DEF_RAIL_W / 2, C565(0xf0, 0xf0, 0xf0));
+  uint16_t goodC = C565(0xf4, 0xc4, 0x3c), perfC = C565(0x4c, 0xc8, 0x5c);
+  gfx->fillRoundRect(rx - 10, DEF_ZONE_Y - DEF_GOOD, DEF_RAIL_W + 20, 2 * DEF_GOOD, 8, goodC);
+  gfx->fillRoundRect(rx - 10, DEF_ZONE_Y - DEF_PERFECT, DEF_RAIL_W + 20, 2 * DEF_PERFECT, 6, perfC);
+  gfx->drawRoundRect(rx - 10, DEF_ZONE_Y - DEF_GOOD, DEF_RAIL_W + 20, 2 * DEF_GOOD, 8, ink);
+  gfx->drawFastHLine(rx - 16, DEF_ZONE_Y, DEF_RAIL_W + 32, UI_WHITE);
+  if (pmd.loaded) {  // x3,5 como en el voleibol
+    uint8_t act = defJudge == 4 && now - defJudgeT < 500 ? PMD_HURT : PMD_IDLE;
+    if (!pmd.has(act)) act = PMD_IDLE;
+    drawPmdActM(pmd, act, CX, 394, now, true, false, 4, 124);
   }
-  for (auto &ball : defBall)
-    if (ball.on) drawMap(SPR_ICON_PLAY, 16, (int)ball.x - 24, (int)ball.y - 24, 3, false);
-  if (now - defStart < 2500) drawFit(XT(X_TR_DEF_HINT), 180, 320, ink, 2);
+  // balon (esperando arriba: tiembla un poco)
+  if (!defOverUntil) {
+    int by = (int)defBallY(now);
+    int bx = CX + (defDropT ? 0 : (int)(3 * sinf(now * 0.03f)));
+    if (by <= rb) drawMap(SPR_ICON_PLAY, 16, bx - 24, by - 24, 3, false);
+  }
+  // juicio: aro + texto que sube
+  if (defJudge && now - defJudgeT < 650) {
+    uint32_t t = now - defJudgeT;
+    uint16_t c = defJudge == 1 ? perfC : defJudge == 2 ? goodC : UI_BAR_BAD;
+    int r = 26 + (int)(t / 10);
+    gfx->drawCircle(CX, defJudgeY, r, c);
+    gfx->drawCircle(CX, defJudgeY, r - 2, c);
+    XId id = defJudge == 1 ? X_DEF_PERFECT : defJudge == 2 ? X_DEF_GOOD : defJudge == 3 ? X_DEF_EARLY : X_DEF_LATE;
+    // a la derecha del carril, subiendo un poco
+    uint8_t sz = defJudge == 1 ? 3 : 2;
+    const char *jt = XT(id);
+    setSize(sz);
+    if (textW(jt, sz) > LCD_WIDTH - (rx + DEF_RAIL_W + 18) - 30) { sz = 2; setSize(sz); }
+    gfx->setTextColor(defJudge == 1 ? C565(0x1a, 0x86, 0x34) : defJudge == 2 ? C565(0xb8, 0x7a, 0x00) : UI_BAR_BAD);  // texto mas oscuro que el aro
+    setCur(rx + DEF_RAIL_W + 18, DEF_ZONE_Y - 60 - (int)(t / 25));
+    printT(jt);
+  }
+  if (defCombo >= 2) {  // a la izquierda del carril
+    char cb[20];
+    snprintf(cb, sizeof(cb), XT(X_DEF_COMBO_FMT), defCombo);
+    setSize(2);
+    gfx->setTextColor(C565(0x1a, 0x86, 0x34));
+    setCur(rx - 18 - textW(cb, 2), DEF_ZONE_Y - 12);
+    printT(cb);
+  }
+  if (now - defStart < 2500) drawFit(XT(X_TR_DEF_HINT), 188, 320, ink, 2);
   uiFlush();
 }
 

@@ -198,12 +198,17 @@ static void scenes(bool ko, const char *sfx) {
     pet.speciesId = keepSp;
     pmd.load((uint8_t)keepSp, pet.shiny);
   }
+  // ko11.14: defensa por timing: el balon bajando hacia la franja, un PERFECTO con combo
   closeAll(); startDefense();
-  for (int i = 0; i < 70; i++) { tick(85); render(); defMissN = 0; }  // que no se acabe
-  defensePress((int16_t)defBall[0].x, (int16_t)defBall[0].y);
-  defMissN = 1;  // ko10.6: vidas en lugar de barra de tiempo
-  tick(85); render(); shot("05_train_defense");
-  defScore = 34; defMissN = DEF_LIVES; render(); tick(85); render(); shot("06_train_defense_result");
+  tick(3000); render();
+  defHits = 6; defScore = 11; defCombo = 3; defPerfectN = 5; defGoodN = 1; defMissN = 1;
+  defV = 260; defDropT = gMockMillis - (uint32_t)((DEF_ZONE_Y - 70 - DEF_Y0) * 1000 / defV);
+  render(); shot("05_train_defense");
+  tick((uint32_t)(70 * 1000 / defV)); defensePress(CX, 300);
+  tick(120); render(); shot("05b_train_defense_perfect");
+  defDropT = gMockMillis - (uint32_t)((DEF_ZONE_Y - 50 - DEF_Y0) * 1000 / defV); defensePress(CX, 300);
+  tick(120); render(); shot("05c_train_defense_early");
+  defScore = 34; defPerfectN = 14; defGoodN = 6; defMissN = DEF_LIVES; render(); tick(85); render(); shot("06_train_defense_result");
   closeAll(); startSpeed();
   for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
   tick(200); render(); shot("07_train_speed");

@@ -989,7 +989,7 @@ void Pet::save() {
   prefs.putUShort("trd", trades);
   prefs.putUChar("balls", balls);
   prefs.putUChar("potn", potions);
-  prefs.putUShort("dhi", defHi);
+  prefs.putUShort("dh2", defHi);  // ko11.14: defensa por timing, records nuevos desde 0
   prefs.putUShort("vbs", vbStreak);  // ko11.9
   prefs.putUShort("vbb", vbBest);
   prefs.putUShort("vhp", speHi);  // ko10.6: clave nueva (puntos); el record viejo (aciertos) no vale
@@ -997,7 +997,7 @@ void Pet::save() {
   keepMax(allStrHi, strHi); keepMax(allDefHi, defHi); keepMax(allSpeHi, speHi);
   keepMax(allGameHi, gameHi); keepMax(allVbBest, vbBest);
   prefs.putUShort("ash", allStrHi);
-  prefs.putUShort("adh", allDefHi);
+  prefs.putUShort("ad2", allDefHi);
   prefs.putUShort("asp", allSpeHi);
   prefs.putUShort("agh", allGameHi);
   prefs.putUShort("avb", allVbBest);
@@ -1097,12 +1097,12 @@ void Pet::load(bool *migrated) {
   trades = prefs.getUShort("trd", 0);
   balls = prefs.getUChar("balls", 5);   // partidas anteriores a ko4: kit inicial
   potions = prefs.getUChar("potn", 2);
-  defHi = prefs.getUShort("dhi", 0);
+  defHi = prefs.getUShort("dh2", 0);  // ko11.14 (la clave "dhi" era del juego viejo)
   vbStreak = prefs.getUShort("vbs", 0);  // ko11.9
   vbBest = prefs.getUShort("vbb", 0);
   speHi = prefs.getUShort("vhp", 0);
   allStrHi = prefs.getUShort("ash", 0);  // ko11.9.2
-  allDefHi = prefs.getUShort("adh", 0);
+  allDefHi = prefs.getUShort("ad2", 0);
   allSpeHi = prefs.getUShort("asp", 0);
   allGameHi = prefs.getUShort("agh", 0);
   allVbBest = prefs.getUShort("avb", 0);
