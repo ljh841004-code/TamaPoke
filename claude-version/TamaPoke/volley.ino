@@ -45,10 +45,10 @@ void startVolley() {
   vb.p[0].dig = (uint8_t)(60 + vbClampf(pet.defStat(), 0, 200) / 10.0f);  // 60..80 %
   vb.autoMove0 = true;
   const DexEntry &e = DEX_TBL[vbFoeDex];
-  vb.p[1].speed = 160 + vbClampf(e.bSpe, 0, 150) * 0.3f + lvl * 10;
+  vb.p[1].speed = 170 + vbClampf(e.bSpe, 0, 150) * 0.3f + lvl * 10;  // ko11.9.3: +10
   vb.p[1].spikePow = 460 + vbClampf(e.bAtk, 0, 150) * 0.5f + lvl * 15;
   vb.p[1].hitR = 30 + vbClampf(e.bDef, 0, 150) / 50.0f;
-  vb.p[1].dig = (uint8_t)(20 + lvl * 8 + vbClampf(e.bDef, 0, 150) / 15.0f);  // 20..70 %
+  vb.p[1].dig = (uint8_t)(30 + lvl * 8 + vbClampf(e.bDef, 0, 150) / 15.0f);  // 30..80 % (ko11.9.3: +10)
   vbOpen = true;
   vbLast = millis();
   vbIntroUntil = vbLast + 1600;
@@ -63,7 +63,7 @@ void vbPress(int16_t x, int16_t y) {
   crumb(0x010A);
   lastInteract = millis();
   if (vb.state == VB_OVER) {
-    if (millis() - vbOverAt > VBC_RESULT_MIN_MS) vbOpen = false;
+    if (millis() - vbOverAt > VBC_RESULT_MIN_MS) { vbOpen = false; backToTrainMenu(); }  // ko11.9.3
     return;
   }
   if (timeLeft(vbIntroUntil)) { vbIntroUntil = 0; return; }  // saltar la presentacion

@@ -148,8 +148,8 @@ struct VolleyGame {
     VbPlayer &me = p[s];
     float head = bodyY(s) - me.hitR;
     bool mine = b.x > VB_NET_X || (state == VB_PLAY && b.vx > 0);
-    if (t >= aiNext) {  // reflejos: cada 380 ms (nivel 0) ... 100 ms (nivel 5)
-      aiNext = t + 380 - aiLevel * 56;
+    if (t >= aiNext) {  // reflejos: cada 320 ms (nivel 0) ... 90 ms (nivel 5). ko11.9.3: algo mas vivo
+      aiNext = t + 320 - aiLevel * 46;
       float tx = homeX(s);
       if (state == VB_PLAY && mine) {
         float lx = predictX(head);
@@ -168,7 +168,7 @@ struct VolleyGame {
     // en el aire y cerca: remate a veces
     if (airborne(s) && !me.jumped && fabsf(dx) < 70 && fabsf(dy) < 80) {
       me.jumped = true;
-      if (rng.below(100) < 5 + aiLevel * 9) spike(s);
+      if (rng.below(100) < 12 + aiLevel * 9) spike(s);
     }
   }
 

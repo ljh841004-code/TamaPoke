@@ -1105,6 +1105,7 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
     fastT0 = 0;
     sackOpen = false;
     trainingQuit();
+    backToTrainMenu();  // ko11.9.3
     sfxPlay(SFX_DENY);
     wasPressed = pressed;
     return;
@@ -1169,6 +1170,7 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
         abs(tXl - tX0) < 40 && abs(tYl - tY0) < 40) {
       holdFired = true;
       gameOpen = false;
+      backToTrainMenu();  // ko11.9.3
       sfxPlay(SFX_DENY);
     }
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
@@ -2533,7 +2535,7 @@ void renderSack() {
 
   // pantalla de resultado
   if (sackOverUntil) {
-    if (!timeLeft(sackOverUntil)) { sackOpen = false; return; }
+    if (!timeLeft(sackOverUntil)) { sackOpen = false; backToTrainMenu(); return; }
     char b[24];
     char g[18];
     char sub[32];
@@ -2617,6 +2619,7 @@ void renderGame() {
     drawGameScene();
     if (!timeLeft(gameOverUntil)) {
       gameOpen = false;
+      backToTrainMenu();  // ko11.9.3
       return;
     }
     char buf[22];

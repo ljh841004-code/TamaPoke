@@ -180,6 +180,9 @@ static void scenes(bool ko, const char *sfx) {
     for (int i = 0; i < 60 && spdPhase == SP_FEED && !spdOverUntil; i++) { tick(20); render(); }
   }
   tick(20); render(); shot("07b_train_speed_result");
+  // ko11.9.3: al acabar el resultado se vuelve al menu de entrenamiento
+  tick(6000); render(); render(); shot("07c_after_result_menu");
+  printf("  tras el resultado: menu=%d spd=%d\n", trainMenuOpen ? 1 : 0, spdOpen ? 1 : 0);
   // batalla salvaje
   closeAll(); pet.energy = 80; startWild();
   bPhase = BP_MENU; txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);

@@ -61,6 +61,15 @@ void openTrainMenu() {
   trainMsgUntil = 0;
 }
 
+// ko11.9.3: al acabar (o abandonar) un entrenamiento se vuelve al menu de
+// entrenamiento, no a la pantalla principal. El dedo que cerro el resultado no
+// debe pulsar nada del menu al levantarse.
+void backToTrainMenu() {
+  openTrainMenu();
+  swallowGesture = true;
+  navGuardUntil = millis() + 300;
+}
+
 // ---------- menu ----------
 // ko9.1: dos paginas (deslizar a los lados): 0 entrenamiento, 1 batallas
 // (yasaeng y tongsin, los mismos que en la ficha > Batalla, que siguen alli)
@@ -304,7 +313,7 @@ void defensePress(int16_t x, int16_t y) {
 void renderDefense() {
   uint32_t now = millis();
   if (defOverUntil) {
-    if (!timeLeft(defOverUntil)) { defOpen = false; return; }
+    if (!timeLeft(defOverUntil)) { defOpen = false; backToTrainMenu(); return; }
     char s[24], g[20];
     snprintf(s, sizeof(s), XT(X_BLOCKED_FMT), defScore);
     snprintf(g, sizeof(g), XT(X_DEF_GAIN_FMT), defGain);
@@ -428,7 +437,7 @@ void stepSpeed() {
 
 void renderSpeed() {
   if (spdOverUntil) {
-    if (!timeLeft(spdOverUntil)) { spdOpen = false; return; }
+    if (!timeLeft(spdOverUntil)) { spdOpen = false; backToTrainMenu(); return; }
     char s[24], g[20];
     snprintf(s, sizeof(s), XT(X_SPE_PTS_FMT), spdScore);
     snprintf(g, sizeof(g), XT(X_SPE_GAIN_FMT), spdGain);
