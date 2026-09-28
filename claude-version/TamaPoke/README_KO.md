@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko11.11)
+# TamaPoke KO (v1.17-ko11.12)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko11.12: UI 키트(uiShade 프레임버퍼 어둡게, uiShadow, uiGradRRect, uiButton, uiPanel, uiGauge, uiLerp 8비트 회색 보정) 38곳+게이지 9곳, 토스트 반투명, 선택 창 뒤 베일; 배구 VB_MON_MAXS 4·FITH 124, VB_BALL_R 20·그림 44px(drawMapQ); wildMatchPower 레벨 상한 내 레벨+WILD_LVL_OVER(3), 남는 차이 능력치 x0.6~2. PC 테스트 239개
 - ✅ ko11.11: PET_MAXS 6·PET_FITH 176(smoothBlitQ 1/4배율), 시계 38x64·2px 테두리(하늘색 기반), 헤더 위로, drawRidge 2겹·drawGroundTex(LCG 30개 원근)·나무/산/화산/선인장 음영, backToTrainMenu 뒤 2초 바깥 탭 닫기 막음(navGuard 600ms). PC 테스트 238개
 - ✅ ko11.10: smoothBlit(EPX x2/x4, PSRAM 작업 버퍼, drawPmdActM·drawThumb·drawMap·drawPetSD), 하늘·땅 2px 그라데이션(땅 원근), 해 halo, 발밑 그림자. PC 테스트 238개
 - ✅ ko11.9.4: 배구 메뉴 현재 연승(X_VB_NOW_FMT), 강스파이크(VB_POWER_PCT 25·속도 ×1.22·받기 -20, drawMoveFx 공 따라가기, X_VB_POWER_FMT). PC 테스트 238개
