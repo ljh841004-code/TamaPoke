@@ -367,15 +367,18 @@ static void drawBattleArtChip() {
   drawBtn(BART_X, BART_Y, BART_W, BART_H, prg ? C565(0x6a, 0x4c, 0xf0) : UI_WHITE, prg ? UI_WHITE : UI_INK,
           XT(prg ? X_BART_PRG : X_BART_PMD));
 }
-static bool battleArtTap(int16_t x, int16_t y) {
-  if (!inRect(x, y, BART_X, BART_Y - 6, BART_W, BART_H + 10)) return false;
+static void battleArtToggle() {
   gBattleArt = battleArt() ? 0 : 1;
   Preferences p;
   p.begin("tamapoke", false);
   p.putUChar("bart", gBattleArt);
   p.end();
-  prgLoadFor(bvMeDex, prgFoeDex, prgFoeShiny);
   sfxPlay(SFX_TAP);
+}
+static bool battleArtTap(int16_t x, int16_t y) {
+  if (!inRect(x, y, BART_X, BART_Y - 6, BART_W, BART_H + 10)) return false;
+  battleArtToggle();
+  prgLoadFor(bvMeDex, prgFoeDex, prgFoeShiny);  // se ve al momento
   return true;
 }
 int16_t foePmdDex = 0;       // que especie tiene cargada foePmd
@@ -1382,6 +1385,9 @@ void startWild() { startWildIn(petRegion()); }
 #define RG_ARROW_Y 222
 #define RG_DOTS_Y 356
 #define RG_BACK_Y 372
+#define RG_ART_X 92     // ko11.16.1: [그림: PMD/포케로그] [뒤로]
+#define RG_BACK_X 238
+#define RG_ART_W 136
 uint8_t regionPage = 0;
 uint32_t regionMsgUntil = 0;
 // ko10.4: abierta si hay medallas suficientes; la region de mi Pokemon, siempre
@@ -1445,7 +1451,11 @@ void renderRegionPick() {
       else gfx->drawCircle(x, RG_DOTS_Y, 4, UI_INK);
     }
   }
-  drawBtn(CX - 80, RG_BACK_Y, 160, 44, UI_TRACK, UI_INK, T(S_BACK));
+  // ko11.16.1: el estilo de los sprites de combate tambien aqui (antes de empezar)
+  bool prg = battleArt();
+  drawBtn(RG_ART_X, RG_BACK_Y, RG_ART_W, 44, prg ? C565(0x6a, 0x4c, 0xf0) : UI_WHITE, prg ? UI_WHITE : UI_INK,
+          XT(prg ? X_BART_PRG : X_BART_PMD));
+  drawBtn(RG_BACK_X, RG_BACK_Y, RG_ART_W, 44, UI_TRACK, UI_INK, T(S_BACK));
   uiFlush();
 }
 
@@ -1463,7 +1473,8 @@ bool regionSwipe(int dir) {
 }
 
 void regionTap(int16_t x, int16_t y) {
-  if (inRect(x, y, CX - 80, RG_BACK_Y, 160, 44)) { sfxPlay(SFX_TAP); xScreen = XS_NONE; return; }
+  if (inRect(x, y, RG_BACK_X, RG_BACK_Y, RG_ART_W, 44)) { sfxPlay(SFX_TAP); xScreen = XS_NONE; return; }
+  if (inRect(x, y, RG_ART_X, RG_BACK_Y, RG_ART_W, 44)) { battleArtToggle(); return; }  // ko11.16.1
   if (y >= RG_ARROW_Y - 40 && y < RG_ARROW_Y + 40) {  // flechas (zona amplia)
     if (x < RG_X - 4) { regionTurn(regionPage - 1); return; }
     if (x >= RG_X + 2 * RG_W + RG_GAPX + 4) { regionTurn(regionPage + 1); return; }
