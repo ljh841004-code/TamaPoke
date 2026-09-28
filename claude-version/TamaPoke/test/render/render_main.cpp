@@ -435,9 +435,22 @@ static void scenes(bool ko, const char *sfx) {
   // ko11.6: copia de la partida en la SD
   openBackup(); render(); shot("18c_backup");
   bakSel = 1; render(); shot("18d_backup_confirm"); bakSel = -1;
-  // ko11.9.2: ultimo reinicio inesperado guardado
-  crashCount = 1; crashReason = 4; crashWhere = 0x0103; crashEpoch = gMockEpoch;
-  render(); shot("18f_backup_crash"); crashCount = 0;
+  // ko11.9.2: ultimo reinicio inesperado guardado: boton + ventana
+  crashCount = 3; crashReason = 4; crashWhere = 0x0103; crashEpoch = gMockEpoch;
+  render(); shot("18f_backup_crash");
+  backupTap(BAK_CR_X + 20, BAK_CR_Y + 10); render(); shot("18g_backup_crash_view");
+  {  // el texto mas largo de la placa (en el PC resetName dice "other")
+    char l[96];
+    snprintf(l, sizeof(l), XT(X_CRASH_WHY_FMT), "BROWNOUT (power)");
+    printf("  crash why %d px (size 2)\n", textW(l, 2));
+    snprintf(l, sizeof(l), XT(X_CRASH_AT_FMT), "train menu", 6u, 10u);
+    printf("  crash at %d px (size 2)\n", textW(l, 2));
+    snprintf(l, sizeof(l), XT(X_CRASH_LAST_FMT), "2026.09.28 13:45");
+    printf("  crash last %d px (size 2)\n", textW(l, 2));
+    snprintf(l, sizeof(l), XT(X_CRASH_BTN_FMT), 99u);
+    printf("  crash btn %d px (size 2)\n", textW(l, 2));
+  }
+  backupTap(300, 340); crashCount = 0;
   bakInfo(bakSlots); bakAsk = true; bakAskSlot = 1; render(); shot("18e_backup_boot_ask"); bakAsk = false;
   closeAll(); openReset(); render(); shot("23_reset");
   closeAll(); openUpdate(); render(); shot("19_update");

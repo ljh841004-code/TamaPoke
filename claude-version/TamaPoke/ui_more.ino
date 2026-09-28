@@ -1204,7 +1204,8 @@ void fameTap(int16_t x, int16_t y) {
 // ======================================================================
 
 BakSlot bakSlots[2];
-int8_t bakSel = -1;          // ranura elegida para restaurar (confirmacion)
+int8_t bakSel = -1;
+bool bakCrashView = false;  // ko11.9.2: ventana del registro de reinicios          // ranura elegida para restaurar (confirmacion)
 int8_t bakMsg = -1;          // XId del ultimo aviso (-1 nada)
 uint32_t bakMsgUntil = 0;
 bool bakAsk = false;         // pregunta al arrancar
@@ -1290,8 +1291,42 @@ void openBackup() {
   bakInfo(bakSlots);
   bakSel = -1;
   bakMsg = -1;
+  bakCrashView = false;
   xScreen = XS_BAK;
   sfxPlay(SFX_TAP);
+}
+
+// ko11.9.2: registro del ultimo reinicio inesperado (ventana aparte: no cabe en una linea)
+#define BAK_CR_X 118
+#define BAK_CR_Y 384
+#define BAK_CR_W 230
+#define BAK_CR_H 34
+static void drawCrashView() {
+  gfx->fillRoundRect(40, 84, 386, 300, 22, UI_WHITE);
+  gfx->drawRoundRect(40, 84, 386, 300, 22, UI_INK);
+  drawFit(XT(X_CRASH_TITLE), 100, 300, UI_BAR_BAD, 3);
+  char l[64], when[24] = "-";
+  if (crashEpoch > 1000000000UL) {
+    int y;
+    uint8_t mo, d;
+    wxDate(crashEpoch, &y, &mo, &d, nullptr);
+    snprintf(when, sizeof(when), "%d.%02u.%02u %02u:%02u", y, mo, d, (unsigned)(crashEpoch / 3600 % 24),
+             (unsigned)(crashEpoch / 60 % 60));
+  }
+  snprintf(l, sizeof(l), XT(X_CRASH_LAST_FMT), when);
+  drawFit(l, 146, 340, UI_INK, 2);
+  snprintf(l, sizeof(l), XT(X_CRASH_WHY_FMT), crashReasonName());
+  drawFit(l, 176, 340, UI_INK, 2);
+  XId why = crashReason == 9 ? X_CRASH_POWER : crashReason == 4 ? X_CRASH_PANIC : X_CRASH_WDT;
+  drawFit(XT(why), 206, 340, 0x8410, 1);
+  snprintf(l, sizeof(l), XT(X_CRASH_AT_FMT), crashWhereName(), (unsigned)(crashWhere >> 8),
+           (unsigned)(crashWhere & 0xFF));
+  drawFit(l, 230, 340, UI_INK, 2);
+  snprintf(l, sizeof(l), XT(X_CRASH_CNT_FMT), (unsigned)crashCount);
+  drawFit(l, 260, 340, UI_INK, 2);
+  drawFit(XT(X_CRASH_SD), 290, 340, 0x8410, 1);
+  drawBtn(78, 320, 150, 44, UI_TRACK, UI_INK, XT(X_CRASH_CLEAR));
+  drawBtn(238, 320, 150, 44, UI_BAR_OK, UI_WHITE, XT(X_CRASH_CLOSE));
 }
 
 static void drawBakConfirm(const char *title, int8_t slot, XId yes, XId no, bool warn = true) {
@@ -1348,21 +1383,14 @@ void renderBackup() {
   drawFit(XT(X_BAK_AUTO), 362, 320, 0x8410, 1);
   if (bakMsg >= 0 && timeLeft(bakMsgUntil))
     drawFit(XT((XId)bakMsg), 390, 300, bakMsg == X_BAK_DONE ? UI_BAR_OK : UI_BAR_BAD, 2);
-  if (crashCount && !(bakMsg >= 0 && timeLeft(bakMsgUntil))) {  // ko11.9.2: ultimo reinicio inesperado
-    char when[24] = "", l[80];
-    if (crashEpoch > 1000000000UL) {
-      int y;
-      uint8_t mo, d;
-      wxDate(crashEpoch, &y, &mo, &d, nullptr);
-      snprintf(when, sizeof(when), "%02u.%02u %02u:%02u", mo, d, (unsigned)(crashEpoch / 3600 % 24),
-               (unsigned)(crashEpoch / 60 % 60));
-    }
-    snprintf(l, sizeof(l), XT(X_CRASH_FMT), when, crashReasonName(), crashWhereName(),
-             (unsigned)(crashWhere >> 8), (unsigned)(crashWhere & 0xFF), (unsigned)crashCount);
-    drawFit(l, 392, 300, UI_BAR_BAD, 1);
+  if (crashCount && !(bakMsg >= 0 && timeLeft(bakMsgUntil))) {  // ko11.9.2: boton del registro de reinicios
+    char l[40];
+    snprintf(l, sizeof(l), XT(X_CRASH_BTN_FMT), (unsigned)crashCount);
+    drawBtn(BAK_CR_X, BAK_CR_Y, BAK_CR_W, BAK_CR_H, C565(0xfc, 0xe4, 0xe4), UI_BAR_BAD, l);
   }
   drawBackArrow();  // ko11.6.1
   if (bakSel >= 0) drawBakConfirm(XT(X_BAK_CONFIRM), bakSel, X_BAK_RESTORE, X_BAK_CANCEL);
+  if (bakCrashView) drawCrashView();
   gfx->flush();
 }
 
@@ -1378,12 +1406,22 @@ static void bakRestoreAndRestart(int8_t slot) {
 }
 
 void backupTap(int16_t x, int16_t y) {
+  if (bakCrashView) {  // ko11.9.2
+    if (inRect(x, y, 78, 320, 150, 44)) { crashClear(); bakCrashView = false; sfxPlay(SFX_TAP); }
+    else if (inRect(x, y, 238, 320, 150, 44)) { bakCrashView = false; sfxPlay(SFX_TAP); }
+    return;
+  }
   if (bakSel >= 0) {  // confirmacion
     if (inRect(x, y, 78, 288, 150, 44)) { int8_t s = bakSel; bakSel = -1; bakRestoreAndRestart(s); }
     else if (inRect(x, y, 238, 288, 150, 44)) { bakSel = -1; sfxPlay(SFX_TAP); }
     return;
   }
   if (navHit(NAV_L, x, y)) { xScreen = XS_NET; sfxPlay(SFX_TAP); return; }  // ko11.6.1: vuelve a la red
+  if (crashCount && inRect(x, y, BAK_CR_X, BAK_CR_Y, BAK_CR_W, BAK_CR_H)) {  // ko11.9.2
+    bakCrashView = true;
+    sfxPlay(SFX_TAP);
+    return;
+  }
   if (inRect(x, y, 113, BAK_NOW_Y, 240, 44)) {
     bool ok = bakDoBackup(true);  // ko11.6.1: marcada como manual
     if (sdReady) bakSetMsg(ok ? X_BAK_DONE : X_BAK_FAIL);

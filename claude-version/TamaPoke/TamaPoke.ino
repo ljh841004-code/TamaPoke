@@ -327,6 +327,11 @@ static void crashLogBoot(uint32_t epoch) {
     bakCrashLog(l);
   }
 }
+void crashClear() {
+  Preferences p;
+  if (p.begin("tpdiag", false)) { p.clear(); p.end(); }
+  crashReason = 0; crashWhere = 0; crashEpoch = 0; crashCount = 0;
+}
 const char *crashWhereName() { return crumbName((uint8_t)(crashWhere >> 8)); }
 const char *crashReasonName() { return resetName(crashReason); }
 static const char *crumbName(uint8_t scr) {
