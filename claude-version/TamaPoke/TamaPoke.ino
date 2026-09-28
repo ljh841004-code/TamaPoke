@@ -1573,8 +1573,58 @@ void drawSky(int hor, int h, bool night, uint8_t wx, uint32_t now, bool astros) 
 }
 
 static void drawPine(int x, int hor, int hgt, uint16_t c) {
-  gfx->fillTriangle(x, hor - hgt * 46 / 60, x - 16, hor, x + 16, hor, c);
-  gfx->fillTriangle(x, hor - hgt, x - 12, hor - hgt * 28 / 60, x + 12, hor - hgt * 28 / 60, c);
+  // ko11.11: tronco, mitad derecha en sombra y un filo de luz a la izquierda
+  uint16_t sh = lerp565(c, C565(0x08, 0x10, 0x10), 5, 16);
+  uint16_t hi = lerp565(c, C565(0xff, 0xff, 0xe0), 3, 16);
+  gfx->fillRect(x - 2, hor - 6, 5, 8, lerp565(c, C565(0x50, 0x34, 0x20), 8, 16));
+  int y1 = hor - hgt * 46 / 60, y2 = hor - hgt, y3 = hor - hgt * 28 / 60;
+  gfx->fillTriangle(x, y1, x - 16, hor, x + 16, hor, c);
+  gfx->fillTriangle(x, y1, x, hor, x + 16, hor, sh);
+  gfx->fillTriangle(x, y2, x - 12, y3, x + 12, y3, c);
+  gfx->fillTriangle(x, y2, x, y3, x + 12, y3, sh);
+  gfx->drawLine(x - 1, y2 + 3, x - 9, y3 - 1, hi);
+  gfx->drawLine(x - 1, y1 + 3, x - 13, hor - 2, hi);
+}
+
+// ko11.11: cordillera lejana (2 px por columna) para dar profundidad al horizonte
+static void drawRidge(int hor, int base, int amp, float freq, float ph, uint16_t c) {
+  for (int x = 0; x < 466; x += 2) {
+    float s = 0.6f * sinf(x * freq + ph) + 0.4f * sinf(x * freq * 2.3f + ph * 1.7f);
+    int y = hor - base - (int)(amp * s);
+    if (y < hor) gfx->fillRect(x, y, 2, hor - y, c);
+  }
+}
+
+// ko11.11: textura del suelo: matas, ondas de arena, destellos de nieve o
+// piedritas, con perspectiva (mas pequenas al fondo). Fija (LCG con semilla)
+static void drawGroundTex(uint8_t biome, int hor, int bottom, uint16_t soil, bool night) {
+  int kind = (biome == 0 || biome == 2 || biome == 6 || biome == 11 || biome == 13) ? 0
+           : (biome == 1 || biome == 9) ? 1 : biome == 5 ? 2 : 3;
+  uint16_t dk = lerp565(soil, C565(0x10, 0x18, 0x10), night ? 6 : 5, 16);
+  uint16_t lt = lerp565(soil, night ? C565(0x60, 0x70, 0x90) : C565(0xff, 0xff, 0xf0), night ? 3 : 5, 16);
+  int depth = bottom - hor - 4;
+  if (depth > 90) depth = 90;
+  if (depth < 8) return;
+  uint32_t r = 0x2545F491u + biome * 7919u;
+  for (int i = 0; i < 30; i++) {
+    r = r * 1103515245u + 12345u; int x = (r >> 8) % 466;
+    r = r * 1103515245u + 12345u; int dy = (r >> 8) % depth;
+    int y = hor + 4 + dy;
+    int sz = 1 + dy * 4 / depth;  // 1..5
+    if (kind == 0) {
+      for (int b = -1; b <= 1; b++)
+        gfx->drawLine(x + b * sz, y, x + b * (sz + 1), y - 2 - sz * 2 + (b ? 1 : 0), dk);
+    } else if (kind == 1) {
+      gfx->drawFastHLine(x, y, 6 + sz * 4, dk);
+      gfx->drawFastHLine(x + 2, y + 1, 4 + sz * 3, lt);
+    } else if (kind == 2) {
+      if (i % 3 == 0) { gfx->drawFastHLine(x - sz, y, 2 * sz + 1, lt); gfx->drawFastVLine(x, y - sz, 2 * sz + 1, lt); }
+      else gfx->fillRect(x, y, 1 + sz / 2, 1 + sz / 2, lt);
+    } else {
+      gfx->fillEllipse(x, y, 1 + sz, 1 + sz / 2, dk);
+      gfx->drawFastHLine(x - sz / 2, y - sz / 2, 1 + sz / 2, lt);
+    }
+  }
 }
 
 static void drawBareTree(int x, int base, uint16_t c) {
@@ -1594,7 +1644,12 @@ void drawBiome(uint8_t biome, int hor, int bottom, uint32_t now, bool night, uin
   soil = nightDim(soil, night);
   uint16_t dk = lerp565(soil, C565(0x10, 0x18, 0x20), night ? 11 : 7, 16);
 
-  // ---- al fondo, detras del suelo
+  // ---- al fondo, detras del suelo. ko11.11: dos cordilleras brumosas
+  if (biome != 13) {
+    float ph = biome * 1.37f;
+    drawRidge(hor, 26, 12, 0.011f, ph, lerp565(gSkyBot, soil, night ? 4 : 5, 16));
+    drawRidge(hor, 10, 8, 0.019f, ph + 2.1f, lerp565(gSkyBot, soil, night ? 8 : 10, 16));
+  }
   if (biome == 1) {  // playa: franja de mar con olas
     uint16_t sea = night ? C565(0x1c, 0x34, 0x52) : C565(0x4f, 0x96, 0xc4);
     gfx->fillRect(0, hor - 26, 466, 26, sea);
@@ -1607,6 +1662,7 @@ void drawBiome(uint8_t biome, int hor, int bottom, uint32_t now, bool night, uin
   } else if (biome == 3) {  // volcan: cono con lava y humo
     uint16_t cone = nightDim(C565(0x5a, 0x3a, 0x34), night);
     gfx->fillTriangle(330, hor - 84, 220, hor, 440, hor, cone);
+    gfx->fillTriangle(330, hor - 84, 360, hor, 440, hor, lerp565(cone, C565(0x10, 0x08, 0x08), 5, 16));
     gfx->fillRect(316, hor - 84, 28, 6, C565(0xff, 0x6a, 0x2a));
     gfx->fillTriangle(322, hor - 78, 338, hor - 78, 330, hor - 54, C565(0xff, 0x9b, 0x3a));
     uint16_t smoke = night ? C565(0x3a, 0x3e, 0x48) : C565(0x9a, 0x94, 0x94);
@@ -1617,6 +1673,9 @@ void drawBiome(uint8_t biome, int hor, int bottom, uint32_t now, bool night, uin
   } else if (biome == 4) {  // montana: cumbres (nevadas en invierno)
     gfx->fillTriangle(140, hor - 50, 60, hor, 220, hor, dk);
     gfx->fillTriangle(330, hor - 38, 250, hor, 410, hor, dk);
+    uint16_t dks = lerp565(dk, C565(0x08, 0x0c, 0x14), 5, 16);  // ko11.11: ladera en sombra
+    gfx->fillTriangle(140, hor - 50, 170, hor, 220, hor, dks);
+    gfx->fillTriangle(330, hor - 38, 354, hor, 410, hor, dks);
     if (season == SEASON_WINTER) {
       uint16_t cap = nightDim(C565(0xf2, 0xf6, 0xfa), night);
       gfx->fillTriangle(140, hor - 50, 124, hor - 40, 156, hor - 40, cap);
@@ -1722,10 +1781,7 @@ void drawBiome(uint8_t biome, int hor, int bottom, uint32_t now, bool night, uin
     for (int y = 0; y < gh; y += 2)
       gfx->fillRect(0, hor + y, 466, (y + 2 > gh) ? gh - y : 2, lerp565(far, nearC, y, gh > 1 ? gh : 1));
   }
-  if (biome != 13 && biome != 15) {
-    uint16_t hill = lerp565(soil, night ? C565(0x0c, 0x12, 0x24) : C565(0xff, 0xff, 0xff), 3, 16);
-    gfx->fillRoundRect(-60, hor - 14, 586, 60, 30, hill);
-  }
+  drawGroundTex(biome, hor, bottom, soil, night);  // ko11.11 (antes: banda clara plana)
   if (biome == 13) {  // valle: laguna donde cae la cascada
     uint16_t lake = night ? C565(0x2a, 0x44, 0x6a) : C565(0x6a, 0xb4, 0xdc);
     gfx->fillEllipse(233, hor + 8, 90, 12, lake);
@@ -1771,6 +1827,8 @@ void drawBiome(uint8_t biome, int hor, int bottom, uint32_t now, bool night, uin
       gfx->fillRect(x - 20, hor - 12, 16, 6, cac);
       gfx->fillRoundRect(x + 12, hor - 32, 8, 16, 4, cac);
       gfx->fillRect(x + 4, hor - 20, 16, 6, cac);
+      gfx->fillRect(x - 3, hor - 36, 2, 44, lerp565(cac, C565(0xe0, 0xff, 0xc0), 5, 16));  // brillo
+      gfx->fillRect(x + 3, hor - 36, 2, 46, lerp565(cac, C565(0x10, 0x20, 0x10), 5, 16));  // sombra
     }
   } else if (biome == 10) {  // ruinas: orbes psiquicos flotando
     uint16_t orb = nightDim(C565(0xf0, 0x90, 0xd0), night);
@@ -1785,6 +1843,10 @@ void drawBiome(uint8_t biome, int hor, int bottom, uint32_t now, bool night, uin
     gfx->fillCircle(69, hor - 56, 26, leaf);
     gfx->fillCircle(50, hor - 42, 18, leaf);
     gfx->fillCircle(90, hor - 42, 18, leaf);
+    uint16_t lsh = lerp565(leaf, C565(0x08, 0x20, 0x10), 5, 16);  // ko11.11: copa con volumen
+    gfx->fillCircle(96, hor - 38, 11, lsh);
+    gfx->fillCircle(80, hor - 50, 12, lsh);
+    gfx->fillCircle(60, hor - 64, 9, lerp565(leaf, C565(0xd8, 0xff, 0xb0), 4, 16));
     static const uint16_t FL[3] = { C565(0xf0, 0x50, 0x60), C565(0xff, 0xd8, 0x40), C565(0xf4, 0x90, 0xd0) };
     for (int k = 0; k < 9; k++) {
       int fx = 130 + k * 34, fy = hor + 8 + (k % 3) * 8;
