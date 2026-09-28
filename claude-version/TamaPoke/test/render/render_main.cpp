@@ -93,6 +93,12 @@ static void scenes(bool ko, const char *sfx) {
   pet.exp = expForLevel(17) + 400;  // fork KO (ko7): barra de EXP
   cardPage = 3;
   render(); shot("03b_card_progress");
+  {  // ko11.17: Pikachu en la pantalla principal (retoque de color)
+    int16_t sp = pet.speciesId; uint32_t ex = pet.exp;
+    pet.speciesId = 25; pet.exp = expForLevel(20); ensureMon(); cardOpen = false;
+    render(); shot("01k_main_pikachu");
+    pet.speciesId = sp; pet.exp = ex; ensureMon(); cardOpen = true;
+  }
   {  // ko11.7: evolucion por amistad (Pichu con poco vinculo)
     int16_t sp = pet.speciesId; uint32_t ex = pet.exp; uint8_t bd = pet.bond;
     pet.speciesId = 172; pet.exp = expForLevel(30); pet.bond = 42; ensureMon();

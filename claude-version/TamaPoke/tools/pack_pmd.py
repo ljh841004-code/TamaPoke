@@ -108,6 +108,36 @@ def load_animdata(folder):
     return anims
 
 
+# ko11.17: retoques de color por especie (solo la version normal). Pikachu en PMD
+# es amarillo neon (255,247,0) con contorno negro puro: se ve duro en la AMOLED.
+# Amarillo calido mas suave, mofletes rosados y contorno marron muy oscuro
+RECOLOR = {
+    25: {
+        (255, 247, 0): (255, 222, 72),
+        (223, 183, 0): (240, 186, 48),
+        (167, 111, 0): (184, 118, 36),
+        (191, 119, 39): (196, 124, 52),
+        (215, 63, 0): (240, 88, 96),
+        (255, 135, 95): (255, 160, 170),
+        (0, 0, 0): (44, 30, 26),
+    },
+}
+
+
+def recolor(im, dexnum, shiny):
+    table = None if shiny or os.environ.get('PMD_RECOLOR') == '0' else RECOLOR.get(dexnum)
+    if not table:
+        return im
+    px = im.load()
+    for y in range(im.size[1]):
+        for x in range(im.size[0]):
+            r, g, b, a = px[x, y]
+            n = table.get((r, g, b))
+            if n and a:
+                px[x, y] = n + (a,)
+    return im
+
+
 def pack(dexnum, shiny=False):
     sub = '/0000/0001' if shiny else ''
     folder = os.path.join(CACHE, f'{dexnum:04d}{"s" if shiny else ""}')
@@ -125,7 +155,7 @@ def pack(dexnum, shiny=False):
         png = os.path.join(folder, f'{srcname}-Anim.png')
         if not fetch(f'{base}/{srcname}-Anim.png', png):
             continue
-        im = Image.open(png).convert('RGBA')
+        im = recolor(Image.open(png).convert('RGBA'), dexnum, shiny)
         rows = im.size[1] // fh
         r = row if rows > row else 0
         nf = min(len(durs), im.size[0] // fw, 24)
