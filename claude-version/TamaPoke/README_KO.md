@@ -153,7 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
-- ✅ ko11.14: 공격 carga y golpe(sackPower 삼각파, 90/70/40/20 → 5/3/2/1/0, 샌드백 10+2i·6초-0.12i·주기 1.5초-0.05i), 방어 timing(레일 1볼, ±10 퍼펙트 2·±28 좋아 1, 170→640px/s ±12%), 속도 en orden(3~5볼, 볼당 평균 점수), 기록 키 sb2/as2·dh2/ad2·vp2/ap2, 놓아주기 사탕 토스트+만능 사탕 30%/10%, uiFlush=flush(페이드 제거). PC 테스트 239개
+- ✅ ko11.14: 공격 carga y golpe(sackPower 삼각파, 90/70/40/20 → 5/3/2/1/0, 샌드백 10+2i·6초-0.12i·주기 1.5초-0.05i), 방어 timing(레일 1볼, ±10 퍼펙트 2·±28 좋아 1, 170→640px/s ±12%), 속도 en orden(3~5볼, 볼당 평균 점수), 기록 키 sb2/as2·dh2/ad2·vp2/ap2, 놓아주기(BOXF_CAUGHT만) 사탕 토스트+만능 사탕 30%/10%, uiFlush=flush(페이드 제거). PC 테스트 239개
 - ✅ ko11.13: uiFlush(gfx->flush 대체, screenSig 변화 시 260ms 페이드, fastGameNow 제외, gUiFade로 PC 렌더 끔), uiShadeSpan/uiMixSpan(565 3채널 묶음 곱셈 1번), uiScreenBg(R-1/G-2/B-1 동시 단계 + 4줄 디더링), perfRenderSum 평균. PC 테스트 239개
 - ✅ ko11.12: UI 키트(uiShade 프레임버퍼 어둡게, uiShadow, uiGradRRect, uiButton, uiPanel, uiGauge, uiLerp 8비트 회색 보정) 38곳+게이지 9곳, 토스트 반투명, 선택 창 뒤 베일; 배구 VB_MON_MAXS 4·FITH 124, VB_BALL_R 20·그림 44px(drawMapQ); wildMatchPower 레벨 상한 내 레벨+WILD_LVL_OVER(3), 남는 차이 능력치 x0.6~2. PC 테스트 239개
 - ✅ ko11.11: PET_MAXS 6·PET_FITH 176(smoothBlitQ 1/4배율), 시계 38x64·2px 테두리(하늘색 기반), 헤더 위로, drawRidge 2겹·drawGroundTex(LCG 30개 원근)·나무/산/화산/선인장 음영, backToTrainMenu 뒤 2초 바깥 탭 닫기 막음(navGuard 600ms). PC 테스트 238개
