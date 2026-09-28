@@ -719,11 +719,11 @@ static int16_t formForLevel(int16_t dex, uint16_t lv, BRng &rng) {
   return dex;
 }
 
-static int bestLevelFor(int16_t dex, uint32_t target, int anchor) {
+static int bestLevelFor(int16_t dex, uint32_t target, int lo, int hi) {
   const DexEntry &e = DEX_TBL[dex];
-  int best = anchor;
+  int best = hi;
   uint32_t bestDiff = 0xFFFFFFFFu;
-  for (int lv = anchor - 6; lv <= anchor + 10; lv++) {
+  for (int lv = lo; lv <= hi; lv++) {
     if (lv < 2 || lv > LEVEL_MAX) continue;
     uint32_t p = (uint32_t)battleHp(e.bHp, (uint16_t)lv) + wildStat(e.bAtk, 100, (uint16_t)lv) +
                  wildStat(e.bDef, 100, (uint16_t)lv) + wildStat(e.bSpe, 100, (uint16_t)lv);
@@ -739,9 +739,15 @@ void wildMatchPower(Battler &foe, const Battler &me, BRng &rng) {
   int16_t dex = foe.dex;
   int best = anchor;
   // ko11: nivel de tu talla y luego la forma de ese nivel; si la forma cambia,
-  // se vuelve a ajustar el nivel (siempre dentro de -6..+10 del original)
+  // se vuelve a ajustar el nivel (siempre dentro de -6..+10 del original).
+  // ko11.12: y nunca mas de 3 niveles por encima del tuyo (un Pichu Lv9 muy
+  // entrenado veia salvajes Lv17-20); lo que falte de fuerza va a las stats
+  int hi = anchor + 10;
+  if (hi > (int)me.lvl + WILD_LVL_OVER) hi = (int)me.lvl + WILD_LVL_OVER;
+  int lo = anchor - 6;
+  if (lo > hi) lo = hi;
   for (int pass = 0; pass < 3; pass++) {
-    best = bestLevelFor(dex, target, anchor);
+    best = bestLevelFor(dex, target, lo, hi);
     int16_t nd = formForLevel(dex, (uint16_t)best, rng);
     if (nd == dex) break;
     dex = nd;
@@ -750,4 +756,18 @@ void wildMatchPower(Battler &foe, const Battler &me, BRng &rng) {
   uint8_t gA = 90 + rng.below(21), gD = 90 + rng.below(21), gS = 90 + rng.below(21);
   foe = makeBattler(dex, (uint16_t)best, wildStat(e.bAtk, gA, (uint16_t)best),
                     wildStat(e.bDef, gD, (uint16_t)best), wildStat(e.bSpe, gS, (uint16_t)best));
+  // ko11.12: con el nivel topado, las stats se escalan hasta tu talla (x0,6..x2)
+  uint32_t p = battlerPower(foe);
+  if (p && target) {
+    uint32_t f = target * 100 / p;
+    if (f > 200) f = 200;
+    if (f < 60) f = 60;
+    if (f > 104 || f < 96) {
+      auto sc = [f](uint16_t v) -> uint16_t { uint32_t r = (uint32_t)v * f / 100; return r < 1 ? 1 : (r > 60000 ? 60000 : (uint16_t)r); };
+      foe.maxHp = foe.hp = sc(foe.maxHp);
+      foe.atk = sc(foe.atk);
+      foe.def = sc(foe.def);
+      foe.spe = sc(foe.spe);
+    }
+  }
 }

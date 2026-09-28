@@ -600,6 +600,24 @@ TEST(wild, salvaje_de_tu_talla) {
   }
 }
 
+// ko11.12: un Pichu Lv9 muy entrenado: salvajes como mucho Lv12, pero igual de fuertes
+TEST(wild, nivel_topado_y_fuerza_en_stats) {
+  Battler me = makeBattler(172, 9, 90, 80, 110);
+  uint32_t mp = battlerPower(me);
+  int ok = 0, total = 0;
+  for (uint32_t s = 1; s < 400; s++) {
+    BRng r(s);
+    Battler f = makeWildIn((uint8_t)(s % REGION_COUNT), 9, 13, WX_CLEAR, SEASON_AUTUMN, r, nullptr);
+    wildMatchPower(f, me, r);
+    CHECK(f.lvl <= 9 + WILD_LVL_OVER);
+    CHECK(f.hp == f.maxHp && f.atk >= 1 && f.def >= 1 && f.spe >= 1);
+    uint32_t fp = battlerPower(f);
+    total++;
+    if (fp >= mp * 80 / 100 && fp <= mp * 115 / 100) ok++;
+  }
+  CHECK_MSG(ok * 100 / total >= 85, "la fuerza sigue siendo de tu talla");
+}
+
 // ko11.7: eventos del dia
 TEST(event, dias_y_luna) {
   // 2026-09-28 lunes 10:00 (hora local) -> agua
