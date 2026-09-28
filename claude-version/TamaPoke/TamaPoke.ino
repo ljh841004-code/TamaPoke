@@ -1525,8 +1525,8 @@ void drawSky(int hor, int h, bool night, uint8_t wx, uint32_t now, bool astros) 
   uint16_t top, bot;
   skyColors(h, night, wx, top, bot);
   gSkyTop = top; gSkyBot = bot;
-  for (int y = 0; y < hor; y += 8)
-    gfx->fillRect(0, y, 466, (y + 8 > hor) ? hor - y : 8, lerp565(top, bot, y, hor));
+  for (int y = 0; y < hor; y += 2)  // ko11.10: degradado fino (antes franjas de 8 px)
+    gfx->fillRect(0, y, 466, (y + 2 > hor) ? hor - y : 2, lerp565(top, bot, y, hor));
   if (wx == WX_RAIN || wx == WX_SNOW) {  // nubarrones, sin sol ni luna
     uint16_t c1 = night ? C565(0x2c, 0x30, 0x3a) : (wx == WX_RAIN ? C565(0x5c, 0x64, 0x70) : C565(0xc4, 0xcc, 0xd6));
     drawClouds(now / 2 + 9000, lerp565(c1, top, 6, 16));
@@ -1558,7 +1558,11 @@ void drawSky(int hor, int h, bool night, uint8_t wx, uint32_t now, bool astros) 
       gfx->fillCircle(360, 84, 34, C565(0xff, 0xf0, 0xa0));
       gfx->fillCircle(360, 84, 30, C565(0xff, 0xd6, 0x4a));
     } else {
-      gfx->fillCircle(360, 84, 26, h < 8 ? C565(0xff, 0xd9, 0x8a) : C565(0xff, 0xe7, 0x9f));
+      uint16_t sun = h < 8 ? C565(0xff, 0xd9, 0x8a) : C565(0xff, 0xe7, 0x9f);
+      uint16_t sky = lerp565(top, bot, 84, hor);
+      for (int k = 3; k >= 1; k--)  // ko11.10: halo que se funde con el cielo
+        gfx->fillCircle(360, 84, 26 + k * 9, lerp565(sky, sun, 4 - k, 7));
+      gfx->fillCircle(360, 84, 26, sun);
       drawClouds(now, C565(0xff, 0xff, 0xff));
     }
   } else {
@@ -1708,8 +1712,14 @@ void drawBiome(uint8_t biome, int hor, int bottom, uint32_t now, bool night, uin
     gfx->fillRect(300, hor - 38, 80, 6, beam);
   }
 
-  // ---- suelo
-  gfx->fillRect(0, hor, 466, bottom - hor, soil);
+  // ---- suelo. ko11.10: degradado (mas claro y brumoso al fondo, mas oscuro delante)
+  {
+    uint16_t far = lerp565(soil, night ? C565(0x30, 0x38, 0x50) : C565(0xe8, 0xf0, 0xff), 3, 16);
+    uint16_t nearC = lerp565(soil, C565(0x10, 0x18, 0x10), night ? 2 : 3, 16);
+    int gh = bottom - hor;
+    for (int y = 0; y < gh; y += 2)
+      gfx->fillRect(0, hor + y, 466, (y + 2 > gh) ? gh - y : 2, lerp565(far, nearC, y, gh > 1 ? gh : 1));
+  }
   if (biome != 13 && biome != 15) {
     uint16_t hill = lerp565(soil, night ? C565(0x0c, 0x12, 0x24) : C565(0xff, 0xff, 0xff), 3, 16);
     gfx->fillRoundRect(-60, hor - 14, 586, 60, 30, hill);
@@ -2616,8 +2626,8 @@ void drawGameScene() {
   else if (hh < 18){ top = C565(0x8f, 0xc8, 0xea); bot = C565(0xdc, 0xee, 0xe6); }
   else             { top = C565(0xc7, 0x5a, 0x4a); bot = C565(0xf0, 0xae, 0x64); }
   int hor = 376;
-  for (int y = 0; y < hor; y += 8)
-    gfx->fillRect(0, y, 466, 8, lerp565(top, bot, y, hor));
+  for (int y = 0; y < hor; y += 2)  // ko11.10
+    gfx->fillRect(0, y, 466, 2, lerp565(top, bot, y, hor));
   if (night)
     for (auto &st : STARS) gfx->fillRect(st[0], st[1], 4, 4, UI_WHITE);
   uint8_t bio = pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome;
@@ -3496,20 +3506,76 @@ void keyboardTap(int16_t x, int16_t y) {
 #define GAL_CELL 80
 
 // dibuja una miniatura centrada en su celda; sil=true la pinta en tinta
+// ---------- ko11.10: dibujo liso de las imagenes de pixeles ----------
+// Los sprites (PMD, miniaturas, iconos) se amplian primero con EPX/Scale2x (una
+// vez para x2-x3, dos para x4 o mas) y luego se pintan por tramos: las diagonales
+// y curvas salen lisas en vez de a escalones de 5 px. Sin memoria extra por bicho:
+// dos buffers de trabajo en PSRAM.
+#define SM_MAX 96  // lado maximo de la imagen de origen
+static uint8_t *gSmA = nullptr, *gSmB = nullptr;
+bool gSmoothGfx = true;
+static void smEpx2(const uint8_t *src, int w, int h, uint8_t *dst) {
+  int W = w * 2;
+  for (int y = 0; y < h; y++) {
+    const uint8_t *row = src + y * w;
+    for (int x = 0; x < w; x++) {
+      uint8_t P = row[x];
+      uint8_t A = y > 0 ? row[x - w] : P, D = y < h - 1 ? row[x + w] : P;
+      uint8_t C = x > 0 ? row[x - 1] : P, B = x < w - 1 ? row[x + 1] : P;
+      uint8_t e1 = P, e2 = P, e3 = P, e4 = P;
+      if (C == A && C != D && A != B) e1 = A;
+      if (A == B && A != C && B != D) e2 = B;
+      if (D == C && D != B && C != A) e3 = C;
+      if (B == D && B != A && D != C) e4 = D;
+      uint8_t *o = dst + (y * 2) * W + x * 2;
+      o[0] = e1; o[1] = e2; o[W] = e3; o[W + 1] = e4;
+    }
+  }
+}
+// src: w*h indices de paleta (0xFF = transparente); pinta en (x0,y0) a escala s
+void smoothBlit(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, int y0, int s, bool sil) {
+  if (w <= 0 || h <= 0 || s <= 0) return;
+  if (gSmoothGfx && s >= 2 && w <= SM_MAX && h <= SM_MAX && !gSmA) {
+    gSmA = (uint8_t *)ps_malloc(SM_MAX * SM_MAX * 4);
+    gSmB = (uint8_t *)ps_malloc(SM_MAX * SM_MAX * 16);
+  }
+  if (!gSmoothGfx || s < 2 || w > SM_MAX || h > SM_MAX || !gSmA || !gSmB) {  // como siempre
+    for (int r = 0; r < h; r++)
+      for (int c = 0; c < w; c++) {
+        uint8_t v = src[r * w + c];
+        if (v != 0xFF) gfx->fillRect(x0 + c * s, y0 + r * s, s, s, sil ? INK_K : pal[v]);
+      }
+    return;
+  }
+  int k = s >= 4 ? 4 : 2, W = w * 2, H = h * 2;
+  smEpx2(src, w, h, gSmA);
+  const uint8_t *img = gSmA;
+  if (k == 4) { smEpx2(gSmA, W, H, gSmB); img = gSmB; W *= 2; H *= 2; }
+  for (int r = 0; r < H; r++) {
+    int ya = y0 + r * s / k, yb = y0 + (r + 1) * s / k;
+    if (yb <= ya) continue;
+    const uint8_t *row = img + r * W;
+    for (int c = 0; c < W;) {
+      uint8_t v = row[c];
+      if (v == 0xFF) { c++; continue; }
+      int c2 = c + 1;
+      while (c2 < W && row[c2] == v) c2++;
+      int xa = x0 + c * s / k, xb = x0 + c2 * s / k;
+      if (xb > xa) gfx->fillRect(xa, ya, xb - xa, yb - ya, sil ? INK_K : pal[v]);
+      c = c2;
+    }
+  }
+}
+
 void drawThumb(const uint8_t *b, int x, int y, int s, bool sil) {
   uint8_t w = b[0], h = b[1], n = b[2];
   const uint8_t *pal = b + 3;
   const uint8_t *d = pal + n * 2;
   int ox = x + (GAL_CELL - w * s) / 2;
   int oy = y + (GAL_CELL - h * s) / 2;
-  for (int r = 0; r < h; r++) {
-    for (int c = 0; c < w; c++) {
-      uint8_t idx = d[r * w + c];
-      if (idx == 0xFF) continue;
-      uint16_t col = sil ? INK_K : (uint16_t)(pal[idx * 2] | (pal[idx * 2 + 1] << 8));
-      gfx->fillRect(ox + c * s, oy + r * s, s, s, col);
-    }
-  }
+  static uint16_t tp[256];  // ko11.10: paleta a 565 para el dibujo liso
+  for (int i = 0; i < n; i++) tp[i] = (uint16_t)(pal[i * 2] | (pal[i * 2 + 1] << 8));
+  smoothBlit(d, w, h, tp, ox, oy, s, sil);
 }
 
 // fork KO (ko4): descubierto = criado, visto en batalla o capturado
@@ -4073,14 +4139,7 @@ void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
   // anclar por los pies (a.base), no por el alto del lienzo: asi las acciones
   // con padding distinto (Hurt, Eat...) quedan todas a la misma altura de suelo
   int x0 = cx - a.w * s / 2, y0 = groundY - (a.base ? a.base : a.h) * s;
-  for (int r = 0; r < a.h; r++) {
-    const uint8_t *row = fr + r * a.w;
-    for (int c = 0; c < a.w; c++) {
-      uint8_t idx = row[c];
-      if (idx == 0xFF) continue;
-      gfx->fillRect(x0 + c * s, y0 + r * s, s, s, sil ? INK_K : m.pal[idx]);
-    }
-  }
+  smoothBlit(fr, a.w, a.h, m.pal, x0, y0, s, sil);  // ko11.10: liso
 }
 void drawPmdAct(uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS) {
   drawPmdActM(pmd, actId, cx, groundY, t, loop, sil, maxS, 170);
@@ -4348,6 +4407,13 @@ void drawPetPMD() {
     if (!pmd.has(act)) act = PMD_IDLE;
   }
 
+  {  // ko11.10: sombra suave bajo los pies (dos elipses: borde claro, centro oscuro)
+    uint8_t bio = DEX_TBL[pet.speciesId].biome;
+    uint16_t soil = BIOME_SOIL[bio < BIOME_N ? bio : 0];
+    if (gNight) soil = lerp565(soil, C565(0x16, 0x1c, 0x30), 9, 16);
+    gfx->fillEllipse((int)beh.x, PET_GROUND - 2, 60, 10, lerp565(soil, C565(0, 0, 0), 3, 16));
+    gfx->fillEllipse((int)beh.x, PET_GROUND - 2, 44, 7, lerp565(soil, C565(0, 0, 0), 6, 16));
+  }
   drawPmdAct(act, (int)beh.x, PET_GROUND, (beh.mode == 3 && petFxT != 0xFFFFFFFFu) ? petFxT : now - beh.t0,
              loop || act == PMD_IDLE, false, 5);
   {  // ko11.9.2: pulsacion larga para soltarlo: el circulo se llena en 3 s
@@ -4387,14 +4453,7 @@ void drawPetSD() {
   uint16_t fm = mon.frameMs ? mon.frameMs : 100;
   uint16_t fi = pet.sleeping ? 0 : (millis() / fm) % mon.frames;
   const uint8_t *fr = mon.data + (uint32_t)fi * mon.w * mon.h;
-  for (int r = 0; r < mon.h; r++) {
-    const uint8_t *row = fr + r * mon.w;
-    for (int c = 0; c < mon.w; c++) {
-      uint8_t idx = row[c];
-      if (idx == 0xFF) continue;
-      gfx->fillRect(x + c * s, y + r * s, s, s, sil ? INK_K : mon.pal[idx]);
-    }
-  }
+  smoothBlit(fr, mon.w, mon.h, mon.pal, x, y, s, sil);  // ko11.10
 
   // emotes en vez de expresiones (los sprites importados no tienen anclas)
   if (pet.showHeart()) drawMap(SPR_HEART, 32, x + w - 30, y - 50, 2, false);
@@ -4533,11 +4592,16 @@ const char *statusMsg() {
 
 // dibuja un mapa de n x n pixeles escalado; silhouette=true lo pinta en tinta
 void drawMap(const char *const *map, int n, int x, int y, int s, bool silhouette) {
-  for (int r = 0; r < n; r++) {
+  // ko11.10: a indices (el propio caracter) y dibujo liso
+  static uint8_t mb[32 * 32];
+  static uint16_t mp[256];
+  if (n > 32) n = 32;
+  for (int r = 0; r < n; r++)
     for (int c = 0; c < n; c++) {
-      char ch = map[r][c];
-      if (ch == '.') continue;
-      gfx->fillRect(x + c * s, y + r * s, s, s, silhouette ? INK_K : spriteColor(ch));
+      uint8_t ch = (uint8_t)map[r][c];
+      if (ch == '.' || ch == 0xFF) { mb[r * n + c] = 0xFF; continue; }
+      mb[r * n + c] = ch;
+      mp[ch] = spriteColor((char)ch);
     }
-  }
+  smoothBlit(mb, n, n, mp, x, y, s, silhouette);
 }
