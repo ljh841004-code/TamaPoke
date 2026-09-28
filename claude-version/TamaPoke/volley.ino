@@ -190,8 +190,7 @@ void renderVolley() {
   vbDrawScore(ink);
 
   if (intro) {  // presentacion: VS
-    gfx->fillRoundRect(63, 150, 340, 96, 16, UI_WHITE);
-    gfx->drawRoundRect(63, 150, 340, 96, 16, UI_INK);
+    uiPanel(63, 150, 340, 96, 16, UI_WHITE, UI_INK);
     char vs[64];
     snprintf(vs, sizeof(vs), "%s  VS  %s", dexName(pet.speciesId), dexName(vbFoeDex));
     drawFit(vs, 160, 320, UI_INK, 2);
@@ -217,8 +216,7 @@ void renderVolley() {
 
   if (vb.state == VB_OVER) {  // resultado
     bool won = vb.winner == 0;
-    gfx->fillRoundRect(58, 110, 350, 250, 20, UI_WHITE);
-    gfx->drawRoundRect(58, 110, 350, 250, 20, UI_INK);
+    uiPanel(58, 110, 350, 250, 20, UI_WHITE, UI_INK);
     drawFit(XT(won ? X_VB_WIN : X_VB_LOSE), 124, 320, won ? UI_BAR_OK : UI_INK, 4);
     char sc[16];
     snprintf(sc, sizeof(sc), "%u : %u", vb.score[0], vb.score[1]);

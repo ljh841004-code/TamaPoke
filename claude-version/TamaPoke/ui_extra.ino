@@ -47,15 +47,14 @@ void drawFit(const char *s, int y, int maxW, uint16_t col, uint8_t size) {
 
 // boton redondeado con texto centrado (auto-encoge)
 void drawBtn(int x, int y, int w, int h, uint16_t bg, uint16_t fg, const char *s) {
-  gfx->fillRoundRect(x, y, w, h, 12, bg);
-  gfx->drawRoundRect(x, y, w, h, 12, UI_INK);
+  uiButton(x, y, w, h, 12, bg, UI_INK);
   uint8_t sz = 2;
   setSize(sz);
   if (textW(s, sz) > w - 10) { sz = 1; setSize(1); }
   gfx->setTextColor(fg);
   int tw = textW(s, sz);
   int th = textH(sz);
-  setCur(x + (w - tw) / 2, y + (h - th) / 2);
+  setCur(x + (w - tw) / 2, y + (h - 3 - th) / 2);  // ko11.12: centrado en la cara
   printT(s);
 }
 
@@ -145,8 +144,7 @@ void drawWifiQr(int cx, int cy, int box) {
   int m = box / cells;             // pixeles por modulo (entero: bordes nitidos)
   int side = m * cells;
   int x0 = cx - side / 2, y0 = cy - side / 2;
-  gfx->fillRoundRect(x0 - 4, y0 - 4, side + 8, side + 8, 10, UI_WHITE);
-  gfx->drawRoundRect(x0 - 4, y0 - 4, side + 8, side + 8, 10, UI_INK);
+  uiButton(x0 - 4, y0 - 4, side + 8, side + 8, 10, UI_WHITE, UI_INK);
   int ox = x0 + 3 * m, oy = y0 + 3 * m;
   for (int y = 0; y < gQrSize; y++)
     for (int x = 0; x < gQrSize; x++)
@@ -155,8 +153,7 @@ void drawWifiQr(int cx, int cy, int box) {
 
 // fila "etiqueta   VALOR" en una caja blanca (valor grande)
 void portalRow(int y, const char *label, const char *value, uint16_t col) {
-  gfx->fillRoundRect(78, y, 310, 34, 10, UI_WHITE);
-  gfx->drawRoundRect(78, y, 310, 34, 10, UI_TRACK);
+  uiButton(78, y, 310, 34, 10, UI_WHITE, UI_TRACK);
   gfx->setTextColor(UI_INK);
   setSize(2);
   setCur(92, y + 9);
@@ -456,8 +453,7 @@ static uint16_t nameInkFor(int16_t dex) { return dex > 151 ? UI_GEN2_INK : UI_IN
 
 void drawHpBox(int x, int y, int w, const char *name, uint16_t lvl, float hp, uint16_t maxHp, bool showNum,
                uint16_t nameInk) {
-  gfx->fillRoundRect(x, y, w, showNum ? 58 : 46, 10, UI_WHITE);
-  gfx->drawRoundRect(x, y, w, showNum ? 58 : 46, 10, UI_INK);
+  uiPanel(x, y, w, showNum ? 58 : 46, 10, UI_WHITE, UI_INK);  // ko11.12
   char lv[12];
   snprintf(lv, sizeof(lv), "Lv%u", lvl);
   setSize(1);
@@ -478,9 +474,7 @@ void drawHpBox(int x, int y, int w, const char *name, uint16_t lvl, float hp, ui
   if (f < 0) f = 0;
   if (f > 1) f = 1;
   uint16_t col = f > 0.5f ? UI_BAR_OK : f > 0.2f ? UI_BAR_WARN : UI_BAR_BAD;
-  gfx->fillRoundRect(bx, by, bw, 10, 3, UI_TRACK);
-  int fw = (int)((bw - 2) * f);
-  if (fw > 1) gfx->fillRoundRect(bx + 1, by + 1, fw, 8, 3, col);
+  uiGauge(bx, by, bw, 11, (int)(f * 1000), col, UI_TRACK);  // ko11.12
   if (showNum) {
     char hs[16];
     snprintf(hs, sizeof(hs), "%u/%u", (unsigned)(hp + 0.5f), maxHp);
@@ -970,8 +964,7 @@ void drawBattlers() {
 }
 
 void drawBattleMsg() {
-  gfx->fillRoundRect(40, 266, 386, 56, 12, UI_WHITE);
-  gfx->drawRoundRect(40, 266, 386, 56, 12, UI_INK);
+  uiButton(40, 266, 386, 56, 12, UI_WHITE, UI_INK);
   if (bvL2[0]) {
     drawFit(bvL1, 273, 370, UI_INK, 2);
     drawFit(bvL2, 296, 370, UI_BAR_BAD, 2);
@@ -1040,8 +1033,7 @@ void renderBattleView() {
   }
 
   if (bPhase == BP_JOIN) {  // ko11.8: quiere venir
-    gfx->fillRoundRect(40, 266, 386, 56, 12, UI_WHITE);
-    gfx->drawRoundRect(40, 266, 386, 56, 12, UI_INK);
+    uiButton(40, 266, 386, 56, 12, UI_WHITE, UI_INK);
     char q[64];
     txFmt(q, sizeof(q), X_JOIN_Q, dexName(bFoe.dex));
     drawFit(q, 272, 370, UI_INK, 2);
@@ -1051,8 +1043,7 @@ void renderBattleView() {
     drawBtn(BDUP_CANDY_X, BN_Y, BDUP_W, BN_H, UI_TRACK, UI_INK, XT(X_JOIN_LEAVE));
     if (full) drawFit(XT(X_BOX_FULL), BN_Y + BN_H + 8, 300, UI_BAR_BAD, 1);
   } else if (bPhase == BP_DUP) {  // ko10.4: repetido
-    gfx->fillRoundRect(40, 266, 386, 56, 12, UI_WHITE);
-    gfx->drawRoundRect(40, 266, 386, 56, 12, UI_INK);
+    uiButton(40, 266, 386, 56, 12, UI_WHITE, UI_INK);
     char q[64];
     txFmt(q, sizeof(q), X_DUP_Q, dexName(bFoe.dex));
     drawFit(q, 272, 370, UI_INK, 2);
@@ -1069,8 +1060,7 @@ void renderBattleView() {
     drawBtn(BDUP_CANDY_X, BN_Y, BDUP_W, BN_H, C565(0xf0, 0x7a, 0xa8), UI_WHITE, cb);
     if (full) drawFit(XT(X_BOX_FULL), BN_Y + BN_H + 8, 300, UI_BAR_BAD, 1);
   } else if (bPhase == BP_NEXT) {
-    gfx->fillRoundRect(40, 266, 386, 56, 12, UI_WHITE);
-    gfx->drawRoundRect(40, 266, 386, 56, 12, UI_INK);
+    uiButton(40, 266, 386, 56, 12, UI_WHITE, UI_INK);
     if (bNote[0]) {  // ko10.4: caramelos recien ganados
       drawFit(XT(X_NEXT_Q), 270, 370, UI_INK, 2);
       drawFit(bNote, 298, 370, C565(0xc8, 0x3c, 0x78), 1);
@@ -1081,8 +1071,7 @@ void renderBattleView() {
     drawBtn(237, BN_Y, 146, BN_H, UI_TRACK, UI_INK, XT(X_NEXT_EXIT));
   } else if (bPhase == BP_RESULT) {
     bool good = bWon || bCaught;
-    gfx->fillRoundRect(60, 270, 346, 128, 16, good ? UI_BAR_WARN : UI_WHITE);
-    gfx->drawRoundRect(60, 270, 346, 128, 16, UI_INK);
+    uiPanel(60, 270, 346, 128, 16, good ? UI_BAR_WARN : UI_WHITE, UI_INK);
     const char *big = bFled ? XT(X_FLED) : bCaught ? XT(X_GOTCHA) : bWon ? XT(X_WIN) : XT(X_LOSE);
     drawFit(big, 280, 320, UI_INK, bFled ? 2 : 4);
     int ly = 322;
@@ -1432,8 +1421,7 @@ void renderGyms() {
     int y = GY_Y + k * (GY_H + GY_GAP);
     bool got = pet.badges & (1 << i), open = got || i <= next;
     uint16_t bg = got ? UI_WHITE : open ? C565(0xff, 0xf0, 0xc8) : UI_TRACK;
-    gfx->fillRoundRect(GY_X, y, GY_W, GY_H, 12, bg);
-    gfx->drawRoundRect(GY_X, y, GY_W, GY_H, 12, UI_INK);
+    uiButton(GY_X, y, GY_W, GY_H, 12, bg, UI_INK);
     drawBadge(GY_X + 26, y + GY_H / 2, 13, i, got);
     const GymDef &g = GYMS[i];
     char l1[48];
@@ -1951,8 +1939,7 @@ void drawWildAlert() {
   uint32_t now = millis();
   int p = (int)(4 * sinf(now * 0.008f));
   int x = FAR_BTN_X + 40 - p, y = FAR_BTN_Y - p, w = FAR_BTN_W - 80 + 2 * p, h = FAR_BTN_H + 2 * p;
-  gfx->fillRoundRect(x, y, w, h, 16, C565(0x2e, 0x7d, 0x32));
-  gfx->drawRoundRect(x, y, w, h, 16, UI_WHITE);
+  uiButton(x, y, w, h, 16, C565(0x2e, 0x7d, 0x32), UI_WHITE);
   drawFit(XT(X_WILD_ALERT), y + h / 2 - 8, w - 16, UI_WHITE, 2);
 }
 
@@ -2318,6 +2305,9 @@ void drawToast() {
   setSize(2);
   int w = textW(toastBuf, 2) + 28;
   if (w > 380) w = 380;
-  gfx->fillRoundRect(CX - w / 2, 262, w, 36, 12, UI_INK);
+  // ko11.12: pildora oscura semitransparente con sombra y filo claro
+  uiShade(CX - w / 2 - 1, 265, w + 2, 38, 18, 3);
+  uiShade(CX - w / 2, 262, w, 36, 18, 12);
+  gfx->drawRoundRect(CX - w / 2, 262, w, 36, 18, C565(0x90, 0x98, 0xa8));
   drawFit(toastBuf, 272, w - 12, UI_WHITE, 2);
 }

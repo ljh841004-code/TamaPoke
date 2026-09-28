@@ -1459,6 +1459,118 @@ uint16_t lerp565(uint16_t a, uint16_t b, int i, int n) {
                     (((ag + (bg - ag) * i / n) << 5)) | (ab + (bb - ab) * i / n));
 }
 
+// ======================================================================
+// ko11.12: piezas comunes de la interfaz (botones, ventanas, barras, avisos).
+// Sombras suaves y velos semitransparentes leyendo el framebuffer; relleno con
+// degradado vertical, brillo arriba y "labio" oscuro abajo (relieve).
+// ======================================================================
+
+// mezcla a -> b (i de n) en 8 bits por canal: los grises quedan neutros (lerp565
+// redondea cada canal distinto y el blanco->gris salia rosado)
+uint16_t uiLerp(uint16_t a, uint16_t b, int i, int n) {
+  if (n <= 0) return a;
+  int ar = (a >> 8) & 0xF8, ag = (a >> 3) & 0xFC, ab = (a << 3) & 0xF8;
+  int br = (b >> 8) & 0xF8, bg = (b >> 3) & 0xFC, bb = (b << 3) & 0xF8;
+  ar |= ar >> 5; ag |= ag >> 6; ab |= ab >> 5;
+  br |= br >> 5; bg |= bg >> 6; bb |= bb >> 5;
+  int r = ar + ((br - ar) * i + (i && n ? n / 2 : 0) * ((br > ar) - (br < ar))) / n;
+  int g = ag + ((bg - ag) * i + (i && n ? n / 2 : 0) * ((bg > ag) - (bg < ag))) / n;
+  int bl = ab + ((bb - ab) * i + (i && n ? n / 2 : 0) * ((bb > ab) - (bb < ab))) / n;
+  if (abs(r - g) < 10 && abs(g - bl) < 10 && abs(r - bl) < 10) {  // gris: verde = 2x rojo en 565
+    int r5 = r >> 3;
+    return (uint16_t)((r5 << 11) | (((r5 << 1) | (r5 >> 4)) << 5) | (bl >> 3));
+  }
+  return C565(r, g, bl);
+}
+
+// media anchura recortada de la fila yy (0..h-1) de un rectangulo redondeado
+static int uiRowInset(int yy, int h, int r) {
+  int dy = yy < r ? r - yy : (yy >= h - r ? yy - (h - r - 1) : 0);
+  if (dy <= 0) return 0;
+  int dx2 = r * r - dy * dy;
+  int dx = 0;
+  while ((dx + 1) * (dx + 1) <= dx2) dx++;
+  return r - dx;
+}
+
+// oscurece (a de 16) el area de un rectangulo redondeado: sombras y velos
+void uiShade(int x, int y, int w, int h, int r, uint8_t a) {
+  uint16_t *fb = gfx->getFramebuffer();
+  if (!fb || w <= 0 || h <= 0) return;
+  if (r * 2 > h) r = h / 2;
+  if (r * 2 > w) r = w / 2;
+  int k = 16 - a;
+  for (int yy = 0; yy < h; yy++) {
+    int py = y + yy;
+    if (py < 0 || py >= LCD_HEIGHT) continue;
+    int in = uiRowInset(yy, h, r);
+    int x0 = x + in, x1 = x + w - in;
+    if (x0 < 0) x0 = 0;
+    if (x1 > LCD_WIDTH) x1 = LCD_WIDTH;
+    uint16_t *p = fb + py * LCD_WIDTH;
+    for (int px = x0; px < x1; px++) {
+      uint16_t c = p[px];
+      p[px] = (uint16_t)(((((c >> 11) & 31) * k / 16) << 11) | ((((c >> 5) & 63) * k / 16) << 5) | ((c & 31) * k / 16));
+    }
+  }
+}
+
+// sombra difusa bajo una pieza (dos capas, desplazada hacia abajo)
+void uiShadow(int x, int y, int w, int h, int r) {
+  uiShade(x - 1, y + 3, w + 2, h + 3, r + 1, 2);
+  uiShade(x + 1, y + 2, w - 2, h + 1, r, 2);
+}
+
+// relleno redondeado con degradado vertical top -> bot (filas de 2 px)
+void uiGradRRect(int x, int y, int w, int h, int r, uint16_t top, uint16_t bot) {
+  if (w <= 0 || h <= 0) return;
+  if (r * 2 > h) r = h / 2;
+  if (r * 2 > w) r = w / 2;
+  for (int yy = 0; yy < h; yy += 2) {
+    int n = (yy + 2 > h) ? h - yy : 2;
+    uint16_t c = uiLerp(top, bot, yy, h > 1 ? h - 1 : 1);
+    for (int j = 0; j < n; j++) {
+      int in = uiRowInset(yy + j, h, r);
+      gfx->drawFastHLine(x + in, y + yy + j, w - 2 * in, c);
+    }
+  }
+}
+
+// boton con relieve: sombra, degradado, brillo arriba, labio oscuro, borde
+void uiButton(int x, int y, int w, int h, int r, uint16_t bg, uint16_t edge) {
+  uiShadow(x, y, w, h, r);
+  uint16_t lip = uiLerp(bg, UI_INK, 5, 16);
+  gfx->fillRoundRect(x, y, w, h, r, lip);                          // labio (abajo)
+  uiGradRRect(x, y, w, h - 3, r, uiLerp(bg, UI_WHITE, 6, 16), bg);  // cara
+  int in = r > 4 ? r - 2 : 2;
+  gfx->drawFastHLine(x + in, y + 2, w - 2 * in, uiLerp(bg, UI_WHITE, 11, 16));  // brillo
+  gfx->drawRoundRect(x, y, w, h, r, edge);
+}
+
+// ventana/panel: sombra, fondo casi blanco con degradado suave, borde
+void uiPanel(int x, int y, int w, int h, int r, uint16_t bg, uint16_t edge) {
+  uiShadow(x, y, w, h, r);
+  uiGradRRect(x, y, w, h, r, bg, uiLerp(bg, C565(0xc0, 0xc0, 0xc0), 4, 16));
+  gfx->drawRoundRect(x, y, w, h, r, edge);
+  int in = r > 4 ? r - 2 : 2;
+  gfx->drawFastHLine(x + in, y + 1, w - 2 * in, UI_WHITE);
+}
+
+// barra de progreso: pista hundida + relleno con volumen (f de 0 a 1000)
+void uiGauge(int x, int y, int w, int h, int f1000, uint16_t col, uint16_t track) {
+  if (f1000 < 0) f1000 = 0;
+  if (f1000 > 1000) f1000 = 1000;
+  int r = h / 2;
+  gfx->fillRoundRect(x, y, w, h, r, track);
+  gfx->drawFastHLine(x + r, y, w - 2 * r, uiLerp(track, UI_INK, 4, 16));  // hundida
+  gfx->drawFastHLine(x + r, y + 1, w - 2 * r, uiLerp(track, UI_INK, 2, 16));
+  int fw = (w - 2) * f1000 / 1000;
+  if (fw < 1) return;
+  if (fw < h - 2) fw = h - 2;
+  uiGradRRect(x + 1, y + 1, fw, h - 2, (h - 2) / 2, uiLerp(col, UI_WHITE, 5, 16), uiLerp(col, UI_INK, 3, 16));
+  if (fw > h) gfx->drawFastHLine(x + 1 + r, y + 2, fw - 2 * r, uiLerp(col, UI_WHITE, 10, 16));  // brillo
+}
+
 // hora del dia 0-23 (de la hora real cacheada cada 30s; 13 si no hay reloj)
 int sceneHour() {
   uint32_t e = pet.lastSeenEpoch;
@@ -2034,8 +2146,7 @@ void renderStarterSelect() {
     int16_t d = STARTER_DEX[i];
     const DexEntry &de = DEX_TBL[d];
     int ry = STARTER_ROW_Y + i * (STARTER_ROW_H + STARTER_ROW_GAP);
-    gfx->fillRoundRect(70, ry, 326, STARTER_ROW_H, 14, lerp565(de.accent, UI_WHITE, 6, 8));
-    gfx->drawRoundRect(70, ry, 326, STARTER_ROW_H, 14, de.accent);
+    uiButton(70, ry, 326, STARTER_ROW_H, 14, lerp565(de.accent, UI_WHITE, 6, 8), de.accent);
     const uint8_t *th = thumbs.get(d);     // miniatura del inicial (si la SD esta lista)
     if (th) drawThumb(th, 76, ry - 5, 3, false);
     gfx->setTextColor(UI_INK);
@@ -2429,8 +2540,7 @@ void render() {
     if (!timeLeft(feedMenuUntil)) {
       feedMenuUntil = 0;
     } else {
-      gfx->fillRoundRect(101, 288, 264, 64, 14, UI_WHITE);
-      gfx->drawRoundRect(101, 288, 264, 64, 14, inkColor());
+      uiButton(101, 288, 264, 64, 14, UI_WHITE, inkColor());
       drawMap(SPR_ICON_FOOD, 16, 110, 296, 3, false);
       drawMap(SPR_ICON_BERRY_B, 16, 176, 296, 3, false);
       drawMap(SPR_ICON_BERRY_G, 16, 242, 296, 3, false);
@@ -2445,8 +2555,7 @@ void render() {
     if (!timeLeft(confirmUntil)) {
       confirmUntil = 0;
     } else {
-      gfx->fillRoundRect(94, 168, 278, 152, 16, UI_WHITE);
-      gfx->drawRoundRect(94, 168, 278, 152, 16, UI_INK);
+      uiPanel(94, 168, 278, 152, 16, UI_WHITE, UI_INK);
       // 48 y no 28: el buffer se dimensiono cuando toda cadena era de un byte
       // por caracter. Con una fila UTF-8, "%s 놓아줄까요?" mas el nombre pasa
       // de 28 y snprintf corta a mitad de una secuencia de 3 bytes, que la
@@ -2458,11 +2567,11 @@ void render() {
       setCur(centerX(q, 2), 196);
       printT(q);
       if (pet.isShortStay()) drawFit(XT(X_RELEASE_SHORT), 228, 250, 0x8410, 1);  // ko11.9.2
-      gfx->fillRoundRect(118, 252, 100, 52, 12, UI_BAR_OK);
+      uiButton(118, 252, 100, 52, 12, UI_BAR_OK, lerp565(UI_BAR_OK, UI_INK, 8, 16));
       gfx->setTextColor(UI_WHITE);
       setCur(118 + (100 - textW(T(S_YES), 2)) / 2, 270);
       printT(T(S_YES));
-      gfx->fillRoundRect(248, 252, 100, 52, 12, UI_BAR_BAD);
+      uiButton(248, 252, 100, 52, 12, UI_BAR_BAD, lerp565(UI_BAR_BAD, UI_INK, 8, 16));
       setCur(248 + (100 - textW(T(S_NO), 2)) / 2, 270);
       printT(T(S_NO));
     }
@@ -2679,13 +2788,11 @@ void renderSack() {
   printT(buf);
   uint16_t hp = sackBagHp(sackBags);
   int bw = 280, hw = (int)((uint32_t)bw * (hp - sackBagHits) / hp);
-  gfx->fillRoundRect(CX - bw / 2, 312, bw, 16, 5, UI_TRACK);
-  if (hw > 2) gfx->fillRoundRect(CX - bw / 2, 312, hw, 16, 5, UI_BAR_BAD);
+  uiGauge(CX - bw / 2, 312, bw, 16, hw * 1000 / bw, UI_BAR_BAD, UI_TRACK);  // ko11.12
   uint32_t left = timeLeft(sackUntil), total = sackBagMs(sackBags);
   if (left > total) left = total;  // el respiro del principio
   int fw = (int)((uint32_t)bw * left / total);
-  gfx->fillRoundRect(CX - bw / 2, 340, bw, 12, 5, UI_TRACK);
-  if (fw > 2) gfx->fillRoundRect(CX - bw / 2, 340, fw, 12, 5, UI_BAR_OK);
+  uiGauge(CX - bw / 2, 340, bw, 12, fw * 1000 / bw, UI_BAR_OK, UI_TRACK);
   if (sackBags == 0) drawFit(T(S_HIT_FAST), 366, 320, ink, 2);
 
   gfx->flush();
@@ -2846,8 +2953,7 @@ void drawCardStat(int y, const char *label, uint16_t val, uint16_t maxBar, uint1
   int bw = 310 - bx;   // la barra siempre acaba en 310, dejando aire hasta el numero
   int fw = (int)val * bw / maxBar;
   if (fw > bw) fw = bw;
-  gfx->fillRoundRect(bx, y + 2, bw, 11, 3, UI_TRACK);
-  if (fw > 2) gfx->fillRoundRect(bx, y + 2, fw, 11, 3, color);
+  uiGauge(bx, y + 2, bw, 11, bw > 0 ? fw * 1000 / bw : 0, color, UI_TRACK);  // ko11.12
 }
 
 // ---------- ajuste de hora en pantalla (deslizar abajo) ----------
@@ -2885,8 +2991,7 @@ void applyClock() {
 void drawBackArrow() { drawNav(NAV_L, UI_INK); }
 
 void drawClockBtn(int x, int y, const char *l) {
-  gfx->fillRoundRect(x, y, 58, 58, 12, UI_WHITE);
-  gfx->drawRoundRect(x, y, 58, 58, 12, UI_INK);
+  uiButton(x, y, 58, 58, 12, UI_WHITE, UI_INK);
   gfx->setTextColor(UI_INK);
   setSize(4);
   setCur(x + 17, y + 15);
@@ -2947,16 +3052,14 @@ void renderClock() {
   // interruptor de sonido (izquierda de la fila de idioma)
   bool snd = audioEnabled();
   const char *sl = snd ? T(S_SND_ON) : T(S_SND_OFF);
-  gfx->fillRoundRect(34, LANG_PILL_Y, 96, LANG_PILL_H, 8, snd ? UI_BAR_OK : UI_WHITE);
-  gfx->drawRoundRect(34, LANG_PILL_Y, 96, LANG_PILL_H, 8, UI_INK);
+  uiButton(34, LANG_PILL_Y, 96, LANG_PILL_H, 8, snd ? UI_BAR_OK : UI_WHITE, UI_INK);
   gfx->setTextColor(snd ? UI_BG_DAY : UI_INK);
   setSize(2);
   setCur(34 + (96 - textW(sl, 2)) / 2, LANG_PILL_Y + 8);
   printT(sl);
 
   // selector de idioma: una pildora que cicla los 6 idiomas al tocar
-  gfx->fillRoundRect(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, 8, UI_WHITE);
-  gfx->drawRoundRect(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, 8, UI_INK);
+  uiButton(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, 8, UI_WHITE, UI_INK);
   char lp[10];
   snprintf(lp, sizeof(lp), "%s >", LANG_CODES[gLang]);
   gfx->setTextColor(UI_INK);
@@ -2973,7 +3076,7 @@ void renderClock() {
   setCur(WIFI_PILL_X + (WIFI_PILL_W - textW("WiFi", 2)) / 2, LANG_PILL_Y + 8);
   printT("WiFi");
 
-  gfx->fillRoundRect(133, CLK_OK_Y, 200, 48, 14, UI_BAR_OK);
+  uiButton(133, CLK_OK_Y, 200, 48, 14, UI_BAR_OK, lerp565(UI_BAR_OK, UI_INK, 8, 16));
   gfx->setTextColor(UI_BG_DAY);
   setSize(3);
   setCur(CX - 18, CLK_OK_Y + 12);
@@ -3080,8 +3183,7 @@ void drawCelebration() {
     l2 = buf;
   }
   if (!l1) return;
-  gfx->fillRoundRect(73, 150, 320, 96, 16, UI_BAR_WARN);
-  gfx->drawRoundRect(73, 150, 320, 96, 16, UI_INK);
+  uiPanel(73, 150, 320, 96, 16, UI_BAR_WARN, UI_INK);
   gfx->setTextColor(UI_INK);
   setSize(3);
   setCur(centerX(l1, 3), 176);
@@ -3157,9 +3259,7 @@ void renderCardProfile() {
     snprintf(num, sizeof(num), "%u", pet.bond);
     setCur(362, y);
     printT(num);
-    gfx->fillRoundRect(bx, y + 8, bw, 14, 5, UI_TRACK);
-    int fw = (int)pet.bond * bw / 100;
-    if (fw > 2) gfx->fillRoundRect(bx, y + 8, fw, 14, 5, C565(0xd4, 0x52, 0x7e));
+    uiGauge(bx, y + 8, bw, 14, (pet.bond > 100 ? 100 : pet.bond) * 10, C565(0xd4, 0x52, 0x7e), UI_TRACK);
   }
 
   uint8_t fav = pet.favFood();
@@ -3254,9 +3354,8 @@ void renderCardProgress() {
   uint32_t lo = expForLevel(L), hi = expForLevel(L + 1);
   uint32_t into = pet.exp > lo ? pet.exp - lo : 0, span = hi > lo ? hi - lo : 1;
   int bx = 93, bw = 280, by = 158, bh = 22;
-  gfx->fillRoundRect(bx, by, bw, bh, 6, UI_TRACK);
-  int fw = L >= LEVEL_MAX ? bw - 4 : (int)((uint64_t)(bw - 4) * into / span);
-  if (fw > 0) gfx->fillRoundRect(bx + 2, by + 2, fw, bh - 4, 5, UI_EXP);
+  int f1000 = L >= LEVEL_MAX ? 1000 : (int)((uint64_t)1000 * into / span);
+  uiGauge(bx, by, bw, bh, f1000, UI_EXP, UI_TRACK);  // ko11.12
   char nx[40];
   if (L >= LEVEL_MAX) snprintf(nx, sizeof(nx), "%s", XT(X_MAX_LVL));
   else snprintf(nx, sizeof(nx), XT(X_EXP_NEXT_FMT), (unsigned long)(span - into));
@@ -3479,8 +3578,7 @@ void renderKeyboard() {
   // lo escrito
   char t[64];
   kbText(t, sizeof(t), false);
-  gfx->fillRoundRect(83, 68, 300, 46, 10, UI_WHITE);
-  gfx->drawRoundRect(83, 68, 300, 46, 10, UI_INK);
+  uiButton(83, 68, 300, 46, 10, UI_WHITE, UI_INK);
   gfx->setTextColor(UI_INK);
   setSize(3);
   int tw = textW(t, 3);
@@ -3967,17 +4065,17 @@ void drawChoiceDialog() {
     q = T(S_FAR_Q); o1 = T(S_FAR_GO); o2 = T(S_FAR_STAY);
     c1 = UI_BAR_WARN; t1 = UI_INK; c2 = UI_BAR_OK; t2 = UI_WHITE;
   }
-  gfx->fillRoundRect(73, 156, 320, 188, 16, UI_WHITE);
-  gfx->drawRoundRect(73, 156, 320, 188, 16, UI_INK);
+  uiShade(0, 0, LCD_WIDTH, LCD_HEIGHT, 0, 5);  // ko11.12: velo detras del dialogo
+  uiPanel(73, 156, 320, 188, 16, UI_WHITE, UI_INK);
   gfx->setTextColor(UI_INK);
   setSize(2);
   setCur(centerX(q, 2), 176);
   printT(q);
-  gfx->fillRoundRect(93, 206, 280, 52, 12, c1);     // boton accion
+  uiButton(93, 206, 280, 52, 12, c1, lerp565(c1, UI_INK, 8, 16));  // boton accion
   gfx->setTextColor(t1);
   setCur(centerX(o1, 2), 224);
   printT(o1);
-  gfx->fillRoundRect(93, 268, 280, 52, 12, c2);     // boton mantener/quedaros
+  uiButton(93, 268, 280, 52, 12, c2, lerp565(c2, UI_INK, 8, 16));  // boton mantener/quedaros
   gfx->setTextColor(t2);
   setCur(centerX(o2, 2), 286);
   printT(o2);
@@ -3988,8 +4086,7 @@ void drawEvolveButton() {
   uint32_t now = millis();
   int p = (int)(5 * sinf(now * 0.006f));  // late: -5..5
   int x = EVO_BTN_X - p, y = EVO_BTN_Y - p, w = EVO_BTN_W + 2 * p, h = EVO_BTN_H + 2 * p;
-  gfx->fillRoundRect(x, y, w, h, 18, UI_BAR_BAD);
-  gfx->drawRoundRect(x, y, w, h, 18, UI_WHITE);
+  uiButton(x, y, w, h, 18, UI_BAR_BAD, UI_WHITE);
   gfx->drawRoundRect(x + 2, y + 2, w - 4, h - 4, 16, UI_WHITE);
   gfx->setTextColor(UI_WHITE);
   setSize(3);
@@ -4003,8 +4100,7 @@ void drawFarewellButton() {
   uint32_t now = millis();
   int p = (int)(4 * sinf(now * 0.005f));
   int x = FAR_BTN_X - p, y = FAR_BTN_Y - p, w = FAR_BTN_W + 2 * p, h = FAR_BTN_H + 2 * p;
-  gfx->fillRoundRect(x, y, w, h, 16, UI_BAR_WARN);
-  gfx->drawRoundRect(x, y, w, h, 16, UI_INK);
+  uiButton(x, y, w, h, 16, UI_BAR_WARN, UI_INK);
   char buf[64];
   const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
   snprintf(buf, sizeof(buf), T(S_FAREWELL_BTN), nm);
@@ -4020,8 +4116,7 @@ void drawRunawayButton() {
   uint32_t now = millis();
   int p = (int)(3 * sinf(now * 0.003f));
   int x = FAR_BTN_X - p, y = FAR_BTN_Y - p, w = FAR_BTN_W + 2 * p, h = FAR_BTN_H + 2 * p;
-  gfx->fillRoundRect(x, y, w, h, 16, C565(0x3a, 0x44, 0x5a));
-  gfx->drawRoundRect(x, y, w, h, 16, C565(0x70, 0x80, 0x98));
+  uiButton(x, y, w, h, 16, C565(0x3a, 0x44, 0x5a), C565(0x70, 0x80, 0x98));
   char buf[64];
   const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
   snprintf(buf, sizeof(buf), T(S_RUNAWAY_BTN), nm);
@@ -4383,8 +4478,7 @@ void drawPetBubble(int px) {
   if (bx + w > 420) bx = px - 40 - w;  // no cabe a la derecha: a la izquierda
   if (bx < 46) bx = 46;
   bool right = bx > px;
-  gfx->fillRoundRect(bx, by, w, h, 14, UI_WHITE);
-  gfx->drawRoundRect(bx, by, w, h, 14, UI_INK);
+  uiButton(bx, by, w, h, 14, UI_WHITE, UI_INK);
   int tx = right ? bx + 10 : bx + w - 10;  // colita hacia la cabeza
   gfx->fillCircle(tx, by + h + 6, 5, UI_WHITE);
   gfx->drawCircle(tx, by + h + 6, 5, UI_INK);
@@ -4606,9 +4700,7 @@ void drawBar(int x, int y, const char *label, uint8_t val) {
   if (bw > 100) bw = 100;   // con etiquetas latinas sale 100, como estaba
   int bx = x + gap, bh = 16;
   uint16_t fill = (val >= 50) ? UI_BAR_OK : (val >= 25) ? UI_BAR_WARN : UI_BAR_BAD;
-  gfx->fillRoundRect(bx, y, bw, bh, 4, UI_TRACK);
-  int fw = (bw - 4) * val / 100;
-  if (fw > 0) gfx->fillRoundRect(bx + 2, y + 2, fw, bh - 4, 3, fill);
+  uiGauge(bx, y, bw, bh, (val > 100 ? 100 : val) * 10, fill, UI_TRACK);  // ko11.12
   // fork KO (ko4): el valor (0-100) dentro de la barra, en negro
   char num[4];
   snprintf(num, sizeof(num), "%u", val > 100 ? 100 : val);
@@ -4621,7 +4713,9 @@ void drawBar(int x, int y, const char *label, uint8_t val) {
 void drawNav(uint8_t k, uint16_t ink) {
   int x = k == NAV_L ? NAV_LX : k == NAV_R ? NAV_RX : CX;
   int y = (k == NAV_L || k == NAV_R) ? NAV_Y : NAV_BY;
-  gfx->fillCircle(x, y, NAV_R_, UI_WHITE);
+  // ko11.12: con sombra y relieve
+  uiShade(x - NAV_R_, y - NAV_R_ + 3, 2 * NAV_R_ + 1, 2 * NAV_R_ + 1, NAV_R_, 3);
+  uiGradRRect(x - NAV_R_, y - NAV_R_, 2 * NAV_R_ + 1, 2 * NAV_R_ + 1, NAV_R_, UI_WHITE, C565(0xdc, 0xdc, 0xdc));
   gfx->drawCircle(x, y, NAV_R_, ink);
   const int a = 7;
   if (k == NAV_L) gfx->fillTriangle(x - a + 1, y, x + a - 2, y - a, x + a - 2, y + a, ink);
@@ -4644,8 +4738,8 @@ void drawButtons() {
   for (int i = 0; i < 4; i++) {
     bool off = pet.sleeping && i != 2;  // durmiendo solo funciona LUZ
     int bx = buttons[i].cx - BTN_HALF, by = buttons[i].cy - BTN_HALF;
-    if (!pet.sleeping) gfx->fillRoundRect(bx, by, 2 * BTN_HALF, 2 * BTN_HALF, 12, UI_WHITE);
-    gfx->drawRoundRect(bx, by, 2 * BTN_HALF, 2 * BTN_HALF, 12, inkColor());
+    if (!pet.sleeping) uiButton(bx, by, 2 * BTN_HALF, 2 * BTN_HALF, 12, UI_WHITE, inkColor());  // ko11.12
+    else gfx->drawRoundRect(bx, by, 2 * BTN_HALF, 2 * BTN_HALF, 12, inkColor());
     if (!off) drawMap(buttons[i].icon, 16, buttons[i].cx - 16, buttons[i].cy - 16, 2, false);
   }
 }

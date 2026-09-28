@@ -109,8 +109,7 @@ static void expCollect() {
 }
 
 static void drawExpResult() {
-  gfx->fillRoundRect(48, 110, 370, 240, 22, UI_WHITE);
-  gfx->drawRoundRect(48, 110, 370, 240, 22, UI_INK);
+  uiPanel(48, 110, 370, 240, 22, UI_WHITE, UI_INK);
   char l[64];
   snprintf(l, sizeof(l), XT(X_EXP_RESULT_FMT), dexName(expResDex));
   drawFit(l, 132, 330, UI_INK, 2);
@@ -217,8 +216,7 @@ void renderBoxDetail() {
             XT(away ? X_EXP_BUSY : X_EXP_BTN));
     drawBtn(293, 300, 100, 48, UI_TRACK, UI_INK, XT(X_CLOSE));
     if (expPick) {  // elegir horas
-      gfx->fillRoundRect(58, 120, 350, 200, 20, UI_WHITE);
-      gfx->drawRoundRect(58, 120, 350, 200, 20, UI_INK);
+      uiPanel(58, 120, 350, 200, 20, UI_WHITE, UI_INK);
       drawFit(XT(X_EXP_Q), 146, 320, UI_INK, 2);
       char hm[40];
       snprintf(hm, sizeof(hm), XT(X_EXP_HOME_FMT), XT((XId)(X_REG_0 + DEX_TBL[m.dex].biome)));
@@ -269,8 +267,7 @@ void renderBox() {
       C565(0xff, 0xf2, 0xd0), C565(0xee, 0xe4, 0xff), C565(0xdc, 0xf6, 0xf2),
     };
     uint16_t rowBg = same > 1 ? DUP_BG[m.dex % 6] : UI_WHITE;
-    gfx->fillRoundRect(73, y, 320, BOX_ROW_H, 10, rowBg);
-    gfx->drawRoundRect(73, y, 320, BOX_ROW_H, 10, UI_INK);
+    uiButton(73, y, 320, BOX_ROW_H, 10, rowBg, UI_INK);
     drawThumbAt(m.dex, 104, y + BOX_ROW_H / 2, 1, false);
     if (same > 1) {
       char xn[8];
@@ -434,8 +431,7 @@ void renderNextPick() {
     const BoxMon &m = box.at(boxView(k));
     bool ok = nextPickable(m);
     int y = NP_ROW_Y + r * (NP_ROW_H + NP_ROW_GAP);
-    gfx->fillRoundRect(73, y, 320, NP_ROW_H, 10, ok ? UI_WHITE : UI_TRACK);
-    gfx->drawRoundRect(73, y, 320, NP_ROW_H, 10, UI_INK);
+    uiButton(73, y, 320, NP_ROW_H, 10, ok ? UI_WHITE : UI_TRACK, UI_INK);
     drawThumbAt(m.dex, 102, y + NP_ROW_H / 2, 1, !ok);
     char l[48];
     snprintf(l, sizeof(l), "%s%s Lv.%u", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex), m.lvl);
@@ -538,9 +534,7 @@ void renderSound() {
     printT(pc);
     drawBtn(84, y + 24, 44, 36, UI_WHITE, UI_INK, "-");
     drawBtn(338, y + 24, 44, 36, UI_WHITE, UI_INK, "+");
-    gfx->fillRoundRect(VOL_BAR_X, y + 34, VOL_BAR_W, 16, 6, UI_TRACK);
-    int fw = (VOL_BAR_W - 4) * v / 100;
-    if (fw > 0) gfx->fillRoundRect(VOL_BAR_X + 2, y + 36, fw, 12, 5, on ? UI_BAR_OK : 0x8410);
+    uiGauge(VOL_BAR_X, y + 34, VOL_BAR_W, 16, v * 10, on ? UI_BAR_OK : 0x8410, UI_TRACK);  // ko11.12
   }
   // ko11.8: elegir que fondos suenan (la duracion de cada uno esta en esa pantalla)
   drawBtn(113, VOL_BGM_Y, 240, 34, UI_WHITE, UI_INK, XT(X_BGM_PICK_BTN));
@@ -645,8 +639,7 @@ void renderBgmPick() {
     printT(sub);
     // [>] escuchar
     int px = 352, py = y + 4;
-    gfx->fillRoundRect(px, py, 44, 36, 10, now == (int8_t)i ? UI_BAR_OK : UI_WHITE);
-    gfx->drawRoundRect(px, py, 44, 36, 10, UI_INK);
+    uiButton(px, py, 44, 36, 10, now == (int8_t)i ? UI_BAR_OK : UI_WHITE, UI_INK);
     uint16_t tc = now == (int8_t)i ? UI_WHITE : UI_INK;
     gfx->fillTriangle(px + 16, py + 9, px + 16, py + 27, px + 31, py + 18, tc);
   }
@@ -936,8 +929,7 @@ void renderCandyBag() {
     uint8_t f = bagFam[k];
     int y = BAG_ROW_Y + r * (BAG_ROW_H + BAG_GAP);
     bool isMine = f == mine;
-    gfx->fillRoundRect(BAG_ROW_X, y, BAG_ROW_W, BAG_ROW_H, 12, isMine ? C565(0xf0, 0x7a, 0xa8) : UI_WHITE);
-    gfx->drawRoundRect(BAG_ROW_X, y, BAG_ROW_W, BAG_ROW_H, 12, UI_INK);
+    uiButton(BAG_ROW_X, y, BAG_ROW_W, BAG_ROW_H, 12, isMine ? C565(0xf0, 0x7a, 0xa8) : UI_WHITE, UI_INK);
     const uint8_t *th = thumbs.get(f);
     if (th) drawThumb(th, BAG_ROW_X + 8, y - 14, 1, false);
     snprintf(b, sizeof(b), XT(X_BAG_ROW_FMT), dexName(f), pet.candy[f]);
@@ -963,8 +955,7 @@ void renderCandyBag() {
   if (bagSel >= 0) {
     int x, y, w, h;
     bagPopupRect(x, y, w, h);
-    gfx->fillRoundRect(x, y, w, h, 16, UI_WHITE);
-    gfx->drawRoundRect(x, y, w, h, 16, UI_INK);
+    uiButton(x, y, w, h, 16, UI_WHITE, UI_INK);
     gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, 15, UI_INK);
     if (bagSel == 0) {
       snprintf(b, sizeof(b), XT(X_BAG_RARE_FMT), pet.rareCandy);
@@ -1167,8 +1158,7 @@ void renderFame() {
     if (idx >= n) break;
     const BoxMon &m = fame.at((uint8_t)(n - 1 - idx));  // el mas reciente primero
     int x = FM_X + (k % FM_COLS) * FM_CELL, y = FM_Y + (k / FM_COLS) * FM_CELL;
-    gfx->fillRoundRect(x + 4, y + 4, FM_CELL - 8, FM_CELL - 8, 14, (m.flags & BOXF_SHINY) ? C565(0xff, 0xf0, 0xc0) : UI_WHITE);
-    gfx->drawRoundRect(x + 4, y + 4, FM_CELL - 8, FM_CELL - 8, 14, C565(0xb0, 0x80, 0x10));
+    uiButton(x + 4, y + 4, FM_CELL - 8, FM_CELL - 8, 14, (m.flags & BOXF_SHINY) ? C565(0xff, 0xf0, 0xc0) : UI_WHITE, C565(0xb0, 0x80, 0x10));
     const uint8_t *th = thumbs.get(m.dex);
     if (th) drawThumb(th, x + 8, y + 14, 2, false);
     drawCrownBig(x + FM_CELL / 2, y + 22, 26);
@@ -1306,8 +1296,7 @@ void openBackup() {
 #define BAK_CR_W 230
 #define BAK_CR_H 34
 static void drawCrashView() {
-  gfx->fillRoundRect(40, 84, 386, 300, 22, UI_WHITE);
-  gfx->drawRoundRect(40, 84, 386, 300, 22, UI_INK);
+  uiPanel(40, 84, 386, 300, 22, UI_WHITE, UI_INK);
   drawFit(XT(X_CRASH_TITLE), 100, 300, UI_BAR_BAD, 3);
   char l[64], when[24] = "-";
   if (crashEpoch > 1000000000UL) {
@@ -1342,8 +1331,7 @@ static void drawCrashView() {
 }
 
 static void drawBakConfirm(const char *title, int8_t slot, XId yes, XId no, bool warn = true) {
-  gfx->fillRoundRect(48, 120, 370, 226, 22, UI_WHITE);
-  gfx->drawRoundRect(48, 120, 370, 226, 22, UI_INK);
+  uiPanel(48, 120, 370, 226, 22, UI_WHITE, UI_INK);
   drawFit(title, 150, 330, UI_INK, 2);
   if (slot >= 0 && bakSlots[slot].ok) {
     char l1[32], l2[48];
@@ -1367,8 +1355,7 @@ void renderBackup() {
     // ko11.6.1: manual = amarillo claro, automatica = azul claro, con su etiqueta
     bool manual = ok && (bakSlots[i].h.flags & BAKF_MANUAL);
     uint16_t bg = !ok ? UI_TRACK : manual ? C565(0xff, 0xf0, 0xc0) : C565(0xd8, 0xea, 0xff);
-    gfx->fillRoundRect(73, y, 320, BAK_ROW_H, 14, bg);
-    gfx->drawRoundRect(73, y, 320, BAK_ROW_H, 14, i == nw ? UI_BAR_OK : UI_INK);
+    uiButton(73, y, 320, BAK_ROW_H, 14, bg, i == nw ? UI_BAR_OK : UI_INK);
     if (ok) {  // etiqueta a la izquierda
       uint16_t tc = manual ? C565(0xc0, 0x80, 0x10) : C565(0x30, 0x70, 0xc0);
       gfx->fillRoundRect(84, y + 8, 50, 24, 8, tc);

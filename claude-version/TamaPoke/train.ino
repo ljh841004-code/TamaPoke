@@ -102,8 +102,7 @@ static void renderTrainPage() {
   uint16_t all[TRM_N] = { pet.allStrHi, pet.allDefHi, pet.allSpeHi, pet.allGameHi, pet.allVbBest };
   for (int i = 0; i < TRM_N; i++) {
     int y = TRM_Y + i * (TRM_H + TRM_GAP);
-    gfx->fillRoundRect(TRM_X, y, TRM_W, TRM_H, 12, UI_WHITE);
-    gfx->drawRoundRect(TRM_X, y, TRM_W, TRM_H, 12, UI_INK);
+    uiButton(TRM_X, y, TRM_W, TRM_H, 12, UI_WHITE, UI_INK);
     gfx->fillRoundRect(TRM_X + 8, y + 8, 8, TRM_H - 16, 4, COL[i]);  // color del tipo de juego
     gfx->setTextColor(UI_INK);
     setSize(2);
@@ -259,8 +258,7 @@ void drawTrainPet(int x, uint8_t act) {
 
 void drawTimeBar(uint32_t left, uint32_t total, int y) {
   int bw = 280, fw = (int)((uint64_t)bw * left / total);
-  gfx->fillRoundRect(CX - bw / 2, y, bw, 14, 5, UI_TRACK);
-  if (fw > 2) gfx->fillRoundRect(CX - bw / 2, y, fw, 14, 5, UI_BAR_OK);
+  uiGauge(CX - bw / 2, y, bw, 14, fw * 1000 / bw, UI_BAR_OK, UI_TRACK);  // ko11.12
 }
 
 // ---------- defensa ----------
