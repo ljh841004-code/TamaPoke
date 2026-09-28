@@ -83,6 +83,8 @@ static void renderTrainPage() {
   static const XId LABEL[TRM_N] = { X_TR_ATK, X_TR_DEF, X_TR_SPE, X_TR_PLAY, X_TR_VOLLEY };
   const uint16_t COL[TRM_N] = { UI_BAR_BAD, 0x4C98, UI_BAR_WARN, UI_BAR_OK, C565(0xf0, 0xc0, 0x20) };
   uint16_t best[TRM_N] = { pet.strHi, pet.defHi, pet.speHi, pet.gameHi, pet.vbBest };
+  // ko11.9.2: el record es de este bicho; al lado, el de siempre
+  uint16_t all[TRM_N] = { pet.allStrHi, pet.allDefHi, pet.allSpeHi, pet.allGameHi, pet.allVbBest };
   for (int i = 0; i < TRM_N; i++) {
     int y = TRM_Y + i * (TRM_H + TRM_GAP);
     gfx->fillRoundRect(TRM_X, y, TRM_W, TRM_H, 12, UI_WHITE);
@@ -92,8 +94,9 @@ static void renderTrainPage() {
     setSize(2);
     setCur(TRM_X + 26, y + 4);
     printT(XT(LABEL[i]));
-    char b[24];
-    snprintf(b, sizeof(b), XT(i == 4 ? X_VB_BEST_FMT : X_BEST_FMT), best[i]);  // ko11.9: voleibol = racha
+    char b[48];
+    uint16_t a = all[i] > best[i] ? all[i] : best[i];
+    snprintf(b, sizeof(b), XT(i == 4 ? X_VB_BEST_ALL_FMT : X_BEST_ALL_FMT), best[i], a);  // ko11.9: voleibol = racha
     setSize(1);
     setCur(TRM_X + 26, y + 28);
     printT(b);
@@ -199,7 +202,7 @@ void drawTrainResult(const char *score, const char *gain, uint16_t gainCol, bool
   drawFit(score, 150, 360, ink, 4);
   drawFit(gain, 214, 320, gainCol, 3);
   if (newHi) {
-    drawFit(T(S_NEW_RECORD), 262, 320, UI_BAR_WARN, 2);
+    drawFit(pet.lastAllTime ? XT(X_ALL_RECORD) : T(S_NEW_RECORD), 262, 320, UI_BAR_WARN, 2);
   } else {
     char r[24];
     snprintf(r, sizeof(r), T(S_RECORD_FMT), hi);

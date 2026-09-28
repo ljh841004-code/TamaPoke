@@ -166,6 +166,11 @@ public:
   uint16_t speHi = 0;      // record del entrenamiento de velocidad (ko10.6: puntos, hasta 1500)
   uint16_t vbStreak = 0;   // ko11.9: voleibol: victorias seguidas
   uint16_t vbBest = 0;     // ko11.9: mejor racha de voleibol
+  // ko11.9.2: los records de arriba son del bicho que se cria (empiezan de cero con
+  // cada uno); los de siempre (del jugador) quedan aqui y se ensenan como "historico"
+  uint16_t allStrHi = 0, allDefHi = 0, allSpeHi = 0, allGameHi = 0, allVbBest = 0;
+  bool lastAllTime = false;  // la ultima sesion batio el record historico
+  void resetTrainRecords();  // nuevo bicho: records a cero (los historicos se quedan)
 
   void begin();                 // carga estado de NVS (o crea el primer huevo)
   void update(uint32_t nowMs);  // llamar en cada loop()
@@ -371,6 +376,6 @@ private:
   void hatch();
   void registerSpecies(int16_t dex);
   void save();
-  void load();
+  void load(bool *migrated = nullptr);
   static uint8_t clamp100(int v) { return v < 0 ? 0 : (v > 100 ? 100 : v); }
 };

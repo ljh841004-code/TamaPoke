@@ -14,7 +14,9 @@ void Pet::begin() {
     prefs.putBool("init", true);
     newEgg();
   } else {
-    load();
+    bool mig = false;
+    load(&mig);
+    if (mig) save();  // ko11.9.2: records pasados a historicos: guardarlo ya
   }
   lastTick = millis();
 }
@@ -471,6 +473,7 @@ void Pet::hatch() {
   geneDef = 90 + random(21);
   geneSpe = 90 + random(21);
   trAtk = trDef = trSpe = 0;
+  resetTrainRecords();  // ko11.9.2
   berryKnown = false;
   bond = 0;          // vinculo, medallas y nombre son del individuo
   bondToday = 0;
@@ -536,6 +539,15 @@ uint32_t Pet::careMinutesLeft() const {
 // ko10.7: entrenar siempre da algo: 5% de lo que pide el nivel en EXP; batir el
 // record da 20% y un caramelo de su familia. Cuesta energia (12), asi que no se
 // puede abusar: con la energia llena salen unas 8 sesiones.
+// ko11.9.2: los historicos siempre >= los del bicho actual
+static inline void keepMax(uint16_t &all, uint16_t cur) { if (cur > all) all = cur; }
+void Pet::resetTrainRecords() {
+  keepMax(allStrHi, strHi); keepMax(allDefHi, defHi); keepMax(allSpeHi, speHi);
+  keepMax(allGameHi, gameHi); keepMax(allVbBest, vbBest);
+  strHi = defHi = speHi = gameHi = 0;
+  vbStreak = vbBest = 0;  // el voleibol vuelve a empezar contra rivales faciles
+}
+
 void Pet::trainBonus(bool scored, bool record) {
   lastTrainExp = 0;
   lastTrainCandy = 0;
@@ -736,6 +748,7 @@ bool Pet::playResult(uint8_t score) {
   int burn = (int)weight - score * 2;
   weight = burn > 0 ? burn : 0;
   bool record = score > gameHi;
+  lastAllTime = record && score > allGameHi;
   if (record) {
     gameHi = score;
     joy = clamp100(joy + 10 + (score > 15 ? 30 : score * 2));
@@ -754,6 +767,7 @@ bool Pet::playResult(uint8_t score) {
 uint8_t Pet::trainStrength(uint16_t hits, uint16_t bags) {
   if (ceremony != CER_NONE || isEgg()) return 0;
   trainBonus(bags > 0, bags > strHi);
+  lastAllTime = bags > strHi && bags > allStrHi;
   uint8_t gain = hits / 4;          // ~4 golpes = 1 punto de entrenamiento
   if (gain > 18) gain = 18;         // tope por sesion: la FUE se forja a fuego lento
   if (hits > 0 && gain < TRAIN_MIN_GAIN) gain = TRAIN_MIN_GAIN;  // ko11.7: jugar siempre da algo
@@ -794,9 +808,11 @@ uint8_t Pet::volleyResult(bool won, uint8_t myPoints) {
   if (won) {
     if (vbStreak < 65535) vbStreak++;
     record = vbStreak > vbBest;
+    lastAllTime = vbStreak > allVbBest;
     if (record) vbBest = vbStreak;
   } else {
     vbStreak = 0;
+    lastAllTime = false;
   }
   trainBonus(won, record);
   if (won && !record) {  // ganar siempre da un caramelo (el record ya lo da trainBonus)
@@ -816,6 +832,7 @@ uint8_t Pet::volleyResult(bool won, uint8_t myPoints) {
 uint8_t Pet::trainDefense(uint16_t blocked) {
   if (ceremony != CER_NONE || isEgg()) return 0;
   trainBonus(blocked > 0, blocked > defHi);
+  lastAllTime = blocked > defHi && blocked > allDefHi;
   uint8_t gain = trainGain(trDef, blocked ? (blocked / 2 ? blocked / 2 : 1) : 0);  // ~2 paradas = 1 punto (ko11.7: min 3)
   energy = dropTo(energy, 12, 5);
   fullness = dropTo(fullness, 5, 5);
@@ -833,6 +850,7 @@ uint8_t Pet::trainDefense(uint16_t blocked) {
 uint8_t Pet::trainSpeed(uint16_t hits, uint16_t points) {
   if (ceremony != CER_NONE || isEgg()) return 0;
   trainBonus(points > 0, points > speHi);
+  lastAllTime = points > speHi && points > allSpeHi;
   uint8_t gain = trainGain(trSpe, hits);  // 1 acierto = 1 punto (15 rondas)
   energy = dropTo(energy, 12, 5);
   fullness = dropTo(fullness, 5, 5);
@@ -966,9 +984,18 @@ void Pet::save() {
   prefs.putUShort("vbs", vbStreak);  // ko11.9
   prefs.putUShort("vbb", vbBest);
   prefs.putUShort("vhp", speHi);  // ko10.6: clave nueva (puntos); el record viejo (aciertos) no vale
+  // ko11.9.2: historicos (del jugador) y marca de "records por bicho"
+  keepMax(allStrHi, strHi); keepMax(allDefHi, defHi); keepMax(allSpeHi, speHi);
+  keepMax(allGameHi, gameHi); keepMax(allVbBest, vbBest);
+  prefs.putUShort("ash", allStrHi);
+  prefs.putUShort("adh", allDefHi);
+  prefs.putUShort("asp", allSpeHi);
+  prefs.putUShort("agh", allGameHi);
+  prefs.putUShort("avb", allVbBest);
+  prefs.putUChar("rpp", 1);
 }
 
-void Pet::load() {
+void Pet::load(bool *migrated) {
   fullness = prefs.getUChar("full", 80);
   joy = prefs.getUChar("joy", 80);
   energy = prefs.getUChar("ene", 80);
@@ -1064,6 +1091,17 @@ void Pet::load() {
   vbStreak = prefs.getUShort("vbs", 0);  // ko11.9
   vbBest = prefs.getUShort("vbb", 0);
   speHi = prefs.getUShort("vhp", 0);
+  allStrHi = prefs.getUShort("ash", 0);  // ko11.9.2
+  allDefHi = prefs.getUShort("adh", 0);
+  allSpeHi = prefs.getUShort("asp", 0);
+  allGameHi = prefs.getUShort("agh", 0);
+  allVbBest = prefs.getUShort("avb", 0);
+  if (!prefs.getUChar("rpp", 0)) {
+    // partida de antes de ko11.9.2: los records eran de siempre. Pasan a historicos
+    // y el bicho actual empieza los suyos de cero (asi puede ganar el premio de record)
+    resetTrainRecords();
+    if (migrated) *migrated = true;
+  }
   // ko11.5: nada fuera de rango entra en juego aunque la NVS venga danada
   // (una placa se quedo reiniciando en bucle al arrancar y solo volvio
   // borrando la partida entera: mejor corregir el valor que perderlo todo)
@@ -1197,6 +1235,7 @@ void Pet::adoptMon(int16_t dex, uint16_t lvl, bool isShiny, uint8_t gA, uint8_t 
   geneDef = clampGene(gD);
   geneSpe = clampGene(gS);
   trAtk = trDef = trSpe = 0;
+  resetTrainRecords();  // ko11.9.2
   fullness = 80; joy = 80; energy = 80; hygiene = 100;
   poops = 0; weight = 0;
   careMistakes = 0; mistakeCooldown = 0;

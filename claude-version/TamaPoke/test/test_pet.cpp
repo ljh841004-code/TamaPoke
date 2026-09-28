@@ -1249,3 +1249,67 @@ TEST(PetTrain, minimo_tres_por_sesion) {
   p.trAtk = 99;
   CHECK_EQ(p.trainStrength(2, 0), (uint8_t)1);   // tope 100
 }
+
+// ko11.9.2: los records de entrenamiento son de cada bicho; los de siempre quedan
+// como historico (se ensenan al lado) y el voleibol vuelve a empezar facil
+TEST(train, records_por_bicho_e_historico) {
+  Pet p;
+  makePet(p, 4);
+  p.trainDefense(12);
+  p.energy = 100;
+  p.trainStrength(30, 5);
+  p.vbStreak = 4; p.vbBest = 4;
+  p.saveNow();
+  CHECK_EQ(p.allDefHi, (uint16_t)12);
+  p.adoptMon(7, 5, false, 100, 100, 100);  // otro bicho
+  CHECK_EQ(p.defHi, (uint16_t)0);
+  CHECK_EQ(p.strHi, (uint16_t)0);
+  CHECK_EQ(p.vbStreak, (uint16_t)0);
+  CHECK_EQ(p.vbBest, (uint16_t)0);
+  CHECK_EQ(p.allDefHi, (uint16_t)12);
+  CHECK_EQ(p.allStrHi, (uint16_t)5);
+  CHECK_EQ(p.allVbBest, (uint16_t)4);
+  // el nuevo bate su propio record (premio grande) sin batir el historico
+  uint16_t c0 = p.candyOf(p.speciesId);
+  p.energy = 100;
+  p.trainDefense(6);
+  CHECK_EQ(p.lastTrainCandy, (uint8_t)1);
+  CHECK_EQ(p.candyOf(p.speciesId), (uint16_t)(c0 + 1));
+  CHECK(!p.lastAllTime);
+  p.energy = 100;
+  p.trainDefense(20);
+  CHECK(p.lastAllTime);
+  p.saveNow();
+  CHECK_EQ(p.allDefHi, (uint16_t)20);
+  // se guarda y se carga
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.defHi, (uint16_t)20);
+  CHECK_EQ(q.allStrHi, (uint16_t)5);
+  CHECK_EQ(q.strHi, (uint16_t)0);
+}
+
+TEST(train, partida_vieja_pasa_sus_records_a_historico) {
+  Pet p;
+  makePet(p, 4);
+  p.defHi = 30; p.speHi = 900; p.gameHi = 14; p.vbBest = 3; p.vbStreak = 2;
+  p.saveNow();
+  {  // como una partida de antes de ko11.9.2 (sin la marca)
+    Preferences pr;
+    pr.begin("tamapoke", false);
+    pr.remove("rpp"); pr.remove("adh"); pr.remove("asp"); pr.remove("agh"); pr.remove("avb");
+    pr.end();
+  }
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.defHi, (uint16_t)0);
+  CHECK_EQ(q.allDefHi, (uint16_t)30);
+  CHECK_EQ(q.allSpeHi, (uint16_t)900);
+  CHECK_EQ(q.allGameHi, (uint16_t)14);
+  CHECK_EQ(q.allVbBest, (uint16_t)3);
+  CHECK_EQ(q.vbStreak, (uint16_t)0);
+  Pet r;  // ya migrada: no vuelve a tocar nada
+  r.begin();
+  CHECK_EQ(r.allDefHi, (uint16_t)30);
+  CHECK_EQ(r.defHi, (uint16_t)0);
+}

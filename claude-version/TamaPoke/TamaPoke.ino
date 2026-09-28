@@ -2575,9 +2575,10 @@ void renderGame() {
     printT(buf);
     setSize(2);
     if (gameNewHi) {
+      const char *nr = pet.lastAllTime ? XT(X_ALL_RECORD) : T(S_NEW_RECORD);  // ko11.9.2
       gfx->setTextColor(UI_BAR_WARN);
-      setCur(centerX(T(S_NEW_RECORD), 2), 214);
-      printT(T(S_NEW_RECORD));
+      setCur(centerX(nr, 2), 214);
+      printT(nr);
     } else {
       char rec[20];
       snprintf(rec, sizeof(rec), T(S_RECORD_FMT), pet.gameHi);

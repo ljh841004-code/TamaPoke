@@ -215,7 +215,7 @@ void renderVolley() {
     char l[64];
     snprintf(l, sizeof(l), XT(X_VB_STREAK_FMT), (unsigned)pet.vbStreak, (unsigned)pet.vbBest);
     drawFit(l, 222, 330, UI_INK, 2);
-    if (vbRecord) drawFit(T(S_NEW_RECORD), 250, 320, UI_BAR_WARN, 2);
+    if (vbRecord) drawFit(pet.lastAllTime ? XT(X_ALL_RECORD) : T(S_NEW_RECORD), 250, 320, UI_BAR_WARN, 2);
     snprintf(l, sizeof(l), XT(X_VB_SPEED_FMT), (unsigned)vbGain);
     drawFit(l, 278, 320, UI_BAR_WARN, 2);
     if (pet.lastTrainExp || pet.lastTrainCandy) {  // como en los entrenamientos

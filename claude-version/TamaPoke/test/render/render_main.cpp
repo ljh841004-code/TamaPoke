@@ -121,6 +121,7 @@ static void scenes(bool ko, const char *sfx) {
   closeAll();
   // entrenamiento
   closeAll(); openTrainMenu();
+  pet.allStrHi = 12; pet.allDefHi = 31; pet.allSpeHi = 1180; pet.allGameHi = 22; pet.allVbBest = 4;  // ko11.9.2
   render(); shot("04_train_menu");
   trainMenuPage = 1; render(); shot("04b_train_menu_battle"); trainMenuPage = 0;
   // ko11.9: voleibol, el que se esta criando (Ivysaur) contra uno al azar (Psyduck)
