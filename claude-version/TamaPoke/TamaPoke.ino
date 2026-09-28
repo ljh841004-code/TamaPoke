@@ -1537,6 +1537,93 @@ void drawToast();
 // principal: al soltar en la caja el "caramelo +1" no se veia)
 void uiFlush() { drawToast(); gfx->flush(); }
 
+// ======================================================================
+// ko11.16: orbes de tipo. Esfera de cristal del color del tipo (degradado hacia
+// arriba-izquierda y brillo). Ataque = llamas del color del tipo que se mecen
+// alrededor; defensa = halo que late y destellos que giran. r = radio en px
+// ======================================================================
+static const uint16_t ORB_COL[16] = {
+  C565(0xc8, 0xc0, 0xa8), C565(0xff, 0x6a, 0x2a), C565(0x3a, 0x8c, 0xff), C565(0x4c, 0xc8, 0x5c),
+  C565(0xff, 0xd2, 0x3a), C565(0x7a, 0xe0, 0xf0), C565(0xd0, 0x4a, 0x3a), C565(0xa0, 0x5a, 0xd0),
+  C565(0xd8, 0xb0, 0x60), C565(0xff, 0x6a, 0xa8), C565(0x9a, 0xc8, 0x30), C565(0xb8, 0xa0, 0x60),
+  C565(0x70, 0x60, 0xb0), C565(0x6a, 0x4c, 0xf0), C565(0x60, 0x48, 0x38), C565(0xa8, 0xb0, 0xc8),
+};
+uint16_t orbColor(uint8_t type) { return ORB_COL[type & 15]; }
+
+void drawOrb(int cx, int cy, int r, uint16_t o, uint32_t t) {
+  if (!orbValid(o)) {  // hueco vacio: circulo punteado
+    for (int k = 0; k < 16; k++) {
+      float a = k * 0.3927f;
+      gfx->fillCircle(cx + (int)(cosf(a) * r), cy + (int)(sinf(a) * r), r > 14 ? 2 : 1, C565(0x90, 0x90, 0x98));
+    }
+    return;
+  }
+  uint16_t c = orbColor(orbType(o));
+  uint16_t light = uiLerp(c, UI_WHITE, 9, 16), dark = uiLerp(c, UI_INK, 7, 16);
+  if (!orbDef(o)) {
+    // ataque: arde como una llama del color de su tipo. Lenguas que suben desde la
+    // mitad de arriba (fuera: el color del tipo; dentro: amarillo claro), que
+    // parpadean y se mecen, y chispas que suben y se apagan
+    uint16_t mid = uiLerp(c, C565(0xff, 0xe0, 0x40), 8, 16), core = uiLerp(c, C565(0xff, 0xfc, 0xe0), 13, 16);
+    const int n = 7;
+    for (int layer = 0; layer < 3; layer++) {
+      float sc = layer == 0 ? 1.0f : layer == 1 ? 0.68f : 0.4f;
+      uint16_t col = layer == 0 ? c : layer == 1 ? mid : core;
+      for (int k = (layer == 2 ? 2 : 0); k < (layer == 2 ? n - 2 : n); k++) {
+        float sd = (k - (n - 1) / 2.0f) / ((n - 1) / 2.0f);            // -1 .. 1
+        float a = sd * 1.15f;                                          // donde nace (desde arriba)
+        float fl = 0.5f + 0.5f * sinf(t * 0.013f + k * 2.1f + layer);  // parpadeo
+        float L = r * (1.05f - 0.45f * fabsf(sd)) * (0.7f + 0.45f * fl) * (0.55f + 0.45f * sc);
+        float da = a * 0.5f + sinf(t * 0.006f + k * 1.3f) * 0.12f;    // se inclina hacia arriba
+        int bx = cx + (int)(sinf(a) * r * 0.72f), by = cy - (int)(cosf(a) * r * 0.72f);
+        int tx = bx + (int)(sinf(da) * (L + r * 0.3f)), ty = by - (int)(cosf(da) * (L + r * 0.3f));
+        int w = (int)(r * 0.36f * sc) + 1;
+        float px = cosf(da), py = sinf(da);
+        gfx->fillTriangle(bx + (int)(px * w), by + (int)(py * w), bx - (int)(px * w), by - (int)(py * w), tx, ty, col);
+        gfx->fillCircle(bx, by, w, col);
+      }
+    }
+    for (int k = 0; k < 4; k++) {  // chispas
+      float ph = fmodf(t * 0.0011f + k * 0.25f, 1.0f);
+      int ex = cx + (int)(sinf(k * 2.3f + t * 0.004f) * r * 0.7f);
+      int ey = cy - r - (int)(ph * r * 1.5f);
+      int er = (int)((1.0f - ph) * r * 0.12f) + 1;
+      gfx->fillCircle(ex, ey, er, uiLerp(mid, c, (int)(ph * 16), 16));
+    }
+  } else {
+    // defensa: halo que late + 4 destellos que giran
+    float pl = 0.5f + 0.5f * sinf(t * 0.006f);
+    int hr = r + 3 + (int)(pl * r * 0.35f);
+    gfx->fillCircle(cx, cy, hr, uiLerp(c, UI_WHITE, 11 + (int)(pl * 3), 16));
+    gfx->fillCircle(cx, cy, r + 2, uiLerp(c, UI_WHITE, 7, 16));
+    for (int k = 0; k < 4; k++) {
+      float a = t * 0.002f + k * 1.5708f;
+      int sx = cx + (int)(cosf(a) * (r + 6 + r / 3)), sy = cy + (int)(sinf(a) * (r + 6 + r / 3));
+      int l = 2 + r / 8 + (int)(pl * 2);
+      gfx->drawFastHLine(sx - l, sy, 2 * l + 1, UI_WHITE);
+      gfx->drawFastVLine(sx, sy - l, 2 * l + 1, UI_WHITE);
+    }
+  }
+  // esfera: de oscuro (abajo-derecha) a claro (arriba-izquierda)
+  gfx->fillCircle(cx, cy, r, dark);
+  for (int k = 1; k <= 5; k++) {
+    int rr = r - k * r / 7;
+    gfx->fillCircle(cx - k * r / 16, cy - k * r / 16, rr, uiLerp(dark, light, k * 3, 16));
+  }
+  gfx->fillCircle(cx, cy, r * 3 / 5, uiLerp(c, light, 6, 16));
+  // brillo de cristal
+  gfx->fillEllipse(cx - r * 2 / 5, cy - r * 2 / 5, r / 3 + 1, r / 5 + 1, uiLerp(light, UI_WHITE, 12, 16));
+  if (r >= 12) gfx->fillCircle(cx + r / 3, cy + r / 2, r / 8 + 1, uiLerp(c, UI_WHITE, 10, 16));
+  gfx->drawCircle(cx, cy, r, uiLerp(dark, UI_INK, 6, 16));
+}
+
+// ko11.16: el hueco (engaste) del orbe junto al Pokemon: aro oscuro con filo dorado
+void drawOrbSlot(int cx, int cy, int r, uint16_t o, uint32_t t) {
+  gfx->fillCircle(cx, cy + 1, r + 4, C565(0x3a, 0x34, 0x40));
+  gfx->drawCircle(cx, cy + 1, r + 4, C565(0xe8, 0xb0, 0x20));
+  drawOrb(cx, cy, r, o, t);
+}
+
 // ko11.13: fondo de las pantallas de menu: crema con degradado suave (antes liso)
 // Los 3 canales bajan a la vez en pasos de 565 (R-1, G-2, B-1: sin tinte rosa o
 // verde entre franjas) y las filas se tramaan (patron de 4) para que no se vean
@@ -4738,6 +4825,7 @@ void drawPetPMD() {
   }
   drawPmdActM(pmd, act, (int)beh.x, PET_GROUND, (beh.mode == 3 && petFxT != 0xFFFFFFFFu) ? petFxT : now - beh.t0,
               loop || act == PMD_IDLE, false, PET_MAXS, PET_FITH);
+  if (orbValid(pet.orb)) drawOrbSlot((int)beh.x + 60, PET_GROUND - 18, 12, pet.orb, now);  // ko11.16: su orbe, abajo a la derecha
   {  // ko11.9.2: pulsacion larga para soltarlo: el circulo se llena en 3 s
     float hp = petHoldProgress();
     if (hp > 0) {

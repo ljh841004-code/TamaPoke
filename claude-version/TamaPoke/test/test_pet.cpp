@@ -1343,3 +1343,55 @@ TEST(release, recien_nacido_no_cuenta_como_criado) {
   p.evolvedHere = true;
   CHECK(!p.isShortStay());
 }
+
+// ko11.16: orbes de tipo
+TEST(orb, reglas_de_orbes) {
+  Pet p;
+  makePet(p, 4);  // Charmander (fuego)
+  uint32_t c0 = p.candy[DEX_FAM[4]];
+  CHECK_EQ((int)p.gainOrb(orbMake(PT_FIRE, false, 12)), 1);  // nuevo -> bolsa
+  CHECK_EQ((int)p.orbN, 1);
+  CHECK_EQ((int)p.gainOrb(orbMake(PT_FIRE, false, 20)), 2);  // igual pero mejor: sustituye
+  CHECK_EQ((int)p.orbN, 1);
+  CHECK_EQ((int)orbPct(p.orbBag[0]), 20);
+  CHECK_EQ(p.candy[DEX_FAM[4]], c0 + 1);                     // el viejo -> 1 caramelo
+  CHECK_EQ((int)p.gainOrb(orbMake(PT_FIRE, false, 15)), 3);  // peor: el nuevo -> caramelo
+  CHECK_EQ(p.candy[DEX_FAM[4]], c0 + 2);
+  CHECK_EQ((int)p.gainOrb(orbMake(PT_FIRE, true, 11)), 1);   // defensa: es otro orbe
+  CHECK_EQ((int)p.gainOrb(orbMake(PT_WATER, false, 25)), 1);
+  CHECK_EQ((int)p.orbN, 3);
+  CHECK(!p.equipOrb(2));                                      // agua: no es su tipo
+  CHECK(p.equipOrb(0));                                       // fuego ataque 20
+  CHECK_EQ((int)p.orbAtkPct(), 20);
+  CHECK_EQ((int)p.orbDefPct(), 0);
+  CHECK_EQ((int)p.orbN, 2);
+  CHECK(p.equipOrb(0));                                       // cambia a fuego defensa: el otro vuelve
+  CHECK_EQ((int)p.orbDefPct(), 11);
+  CHECK_EQ((int)p.orbAtkPct(), 0);
+  CHECK_EQ((int)p.orbN, 2);
+  // mejor de uno equipado: se mejora el equipado
+  CHECK_EQ((int)p.gainOrb(orbMake(PT_FIRE, true, 24)), 2);
+  CHECK_EQ((int)p.orbDefPct(), 24);
+  // guardar y cargar
+  p.saveNow();
+  Pet q;
+  q.begin();
+  CHECK_EQ((int)q.orbDefPct(), 24);
+  CHECK_EQ((int)q.orbN, 2);
+}
+
+TEST(orb, al_evolucionar_a_otro_tipo_se_vuelve_caramelos) {
+  Pet p;
+  makePet(p, 133);  // Eevee (normal)
+  p.gainOrb(orbMake(PT_NORMAL, false, 18));
+  CHECK(p.equipOrb(0));
+  p.exp = expForLevel(40);
+  uint32_t rare0 = p.rareCandy;
+  for (int i = 0; i < 20 && p.speciesId == 133; i++) { if (p.canEvolveNow()) p.evolve(); else break; }
+  if (p.speciesId != 133 && DEX_TBL[p.speciesId].ptype != PT_NORMAL) {
+    CHECK(!orbValid(p.orb));
+    CHECK(p.orbEvoNote == 1 || p.orbEvoNote == 2);
+    if (p.orbEvoNote == 1) CHECK(p.candy[DEX_FAM[p.speciesId]] >= ORB_EVO_CANDY);
+    else CHECK_EQ(p.rareCandy, rare0 + 1);
+  }
+}

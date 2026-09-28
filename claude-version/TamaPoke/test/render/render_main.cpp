@@ -38,6 +38,25 @@ static void scenes(bool ko, const char *sfx) {
   pet.lastSeenEpoch = gMockEpoch;
   render(); snprintf(n, sizeof(n), "01_main%s", sfx); shot(n);
   if (!ko) return;
+  {  // ko11.16: orbe equipado en el hueco de abajo a la derecha (ataque = llamas, defensa = brillo)
+    uint8_t pt = DEX_TBL[pet.speciesId].ptype;
+    pet.orb = orbMake(pt, false, 18); render(); shot("01o_main_orb_atk");
+    tick(140); render(); shot("01o_main_orb_atk2");
+    pet.orb = orbMake(pt, true, 22); render(); shot("01p_main_orb_def");
+    pet.orb = 0;
+    // escaparate: 16 tipos, ataque arriba y defensa abajo, en varios instantes (animacion)
+    for (int f = 0; f < 12; f++) {
+      uiScreenBg();
+      for (int t = 0; t < 16; t++) {
+        int col = t % 4, row = t / 4;
+        int cx = CX + (col * 2 - 3) * 52, cy = 70 + row * 100;
+        drawOrb(cx - 0, cy + 10, 18, orbMake(t, (row + col) & 1, 20), gMockMillis + t * 137);
+        setSize(1); gfx->setTextColor(UI_INK); setCur(cx - textW(typeName(t), 1) / 2, cy + 42); printT(typeName(t));
+      }
+      char fn[32]; snprintf(fn, sizeof(fn), "90_orbs_%02d", f); shot(fn);
+      tick(60);
+    }
+  }
   gMockEpoch = 1790343900 + 8 * 3600 + 17 * 60;  // 22:02: noche
   pet.lastSeenEpoch = gMockEpoch;
   render(); shot("02_main_night");
@@ -238,6 +257,7 @@ static void scenes(bool ko, const char *sfx) {
   bvMeFainted = bvFoeFainted = false;
   box.add(bFoe.dex, 5, false, true, 0); box.add(bFoe.dex, 7, false, true, 0); bvOwned = 2; bvOwnedT = gMockMillis;
   render(); shot("08b_battle_owned"); bvOwned = 0;
+  pet.orb = orbMake(DEX_TBL[pet.speciesId].ptype, false, 18); render(); shot("08o_battle_orb"); pet.orb = 0;  // ko11.16
   // ko11.9.1: rival de la 2a generacion (Totodile) con el nombre en dorado
   if (ko) {
     Battler keepFoe = bFoe;
@@ -478,6 +498,20 @@ static void scenes(bool ko, const char *sfx) {
   pet.markFamRaised(6);
   render(); shot("11a_box_tabs");
   boxHall = true; render(); shot("11b_box_hall"); boxHall = false;
+  {  // ko11.16: bolsa de orbes (tercera pestana)
+    toastUntil = 0; boxOrb = true; render(); shot("11o_orb_bag_empty");
+    uint8_t pt = DEX_TBL[pet.speciesId].ptype;
+    pet.orb = orbMake(pt, false, 18);
+    const uint8_t T[] = { pt, PT_WATER, PT_GRASS, PT_ELECTRIC, PT_PSYCHIC, PT_DRAGON, PT_ICE, PT_GHOST, PT_ROCK, PT_DARK };
+    for (int i = 0; i < 10; i++) pet.gainOrb(orbMake(T[i], i == 0 ? true : (i & 1), (uint8_t)(10 + (i * 7) % 16)));
+    render(); shot("11o_orb_bag");
+    tick(120); render(); shot("11o_orb_bag2");
+    for (int f = 0; f < 14; f++) { char fn[32]; snprintf(fn, sizeof(fn), "91_orbbag_%02d", f); tick(60); render(); shot(fn); }
+    orbSel = 0; render(); shot("11p_orb_detail_worn");
+    orbSel = 1; render(); shot("11q_orb_detail_fits");
+    orbSel = 3; render(); shot("11r_orb_detail_nofit");
+    orbSel = -1; boxOrb = false;
+  }
   xScreen = XS_NEXTPICK; nextPage = 0; render(); shot("11c_next_pick");
   xScreen = XS_BOX;
   // pokedex

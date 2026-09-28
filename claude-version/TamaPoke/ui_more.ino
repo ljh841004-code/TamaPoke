@@ -12,14 +12,23 @@
 #define BOX_NAV_Y 352
 // ko11.8: pestanas un poco mas abajo y estrechas (antes y=34, 150 de ancho: en la
 // pantalla redonda se cortaban las esquinas)
-#define BOX_TAB_Y 44      // ko10.5: pestanas [caja] [corona]
+// ko11.16: tres pestanas [caja] [corona] [orbe], algo mas abajo (y=48: la pantalla
+// redonda deja 92..374 de ancho arriba)
+#define BOX_TAB_Y 48      // ko10.5: pestanas [caja] [corona]
 #define BOX_TAB_H 38
-#define BOX_TAB_W 132
-#define BOX_TAB_X1 97
-#define BOX_TAB_X2 237
+#define BOX_TAB_W 114
+#define BOX_TAB_X1 92
+#define BOX_TAB_X2 210
+#define BOX_TAB_X3 328    // ko11.16: bolsa de orbes (solo el icono)
+#define BOX_TAB_W3 46
 uint8_t boxPage = 0;
 int16_t boxSel = -1;          // indice en la caja con la ficha abierta, -1 = lista
 bool boxHall = false;         // ko10.5: pestana del salon de la fama (corona)
+bool boxOrb = false;          // ko11.16: pestana de la bolsa de orbes
+int8_t orbSel = -1;           // orbe con la ventana abierta (indice de la vista), -1 = ninguno
+uint8_t orbPage = 0;
+static const char *orbMsg = nullptr;
+static uint32_t orbMsgUntil = 0;
 static Box &cb() { return boxHall ? hall : box; }
 
 // ko10.4: la lista se ve ordenada por numero de pokedex (los repetidos quedan
@@ -94,6 +103,11 @@ static void expCollect() {
   expGotBalls = pet.balls - b0;
   expGotPotions = pet.potions - p0;
   if (expRes.rare && pet.rareCandy < 999) pet.rareCandy++;
+  // ko11.16: a veces trae un orbe de su tipo (2 h 10 %, 4 h 20 %, 8 h 35 %)
+  {
+    uint8_t h = pet.exped.hours, pc = h >= 8 ? 35 : h >= 4 ? 20 : 10;
+    if ((uint32_t)random(100) < pc) orbDrop(DEX_TBL[m.dex].ptype);
+  }
   expNewDex = 0;
   if (expRes.newMon && !box.full()) {  // un Pokemon de su region se viene con el
     Battler w = makeWildIn(DEX_TBL[m.dex].biome, m.lvl, (uint8_t)sceneHour(), 0, 0, rng, nullptr);
@@ -130,6 +144,11 @@ static void drawExpResult() {
 
 // en loop(): aviso en la pantalla principal cuando vuelve (una vez)
 void expLoop() {
+  // ko11.16: tras la animacion de evolucion, el aviso del orbe que se volvio caramelos
+  if (pet.orbEvoNote && !pet.evolving() && !extraOpen() && !screenOff) {
+    showToast(XT(pet.orbEvoNote == 2 ? X_ORB_EVO_RARE : X_ORB_EVO_CANDY));
+    pet.orbEvoNote = 0;
+  }
   static int16_t told = 0;
   if (!pet.exped.on) { told = 0; return; }
   if (told == pet.exped.dex) return;
@@ -154,6 +173,9 @@ static uint8_t boxPages() { return cb().count() ? (cb().count() + BOX_ROWS - 1) 
 void openBox() {
   cardOpen = false;
   boxHall = false;
+  boxOrb = false;
+  orbSel = -1;
+  orbPage = 0;
   boxPage = 0;
   boxSel = -1;
   boxConfirmUntil = 0;
@@ -233,7 +255,19 @@ void renderBoxDetail() {
   uiFlush();
 }
 
+void renderOrbBag();
+static void drawBoxTabs(const char *t1, const char *t2) {
+  bool box1 = !boxHall && !boxOrb;
+  drawBtn(BOX_TAB_X1, BOX_TAB_Y, BOX_TAB_W, BOX_TAB_H, box1 ? UI_BAR_WARN : UI_TRACK, UI_INK, t1);
+  drawBtn(BOX_TAB_X2, BOX_TAB_Y, BOX_TAB_W, BOX_TAB_H, boxHall ? C565(0xe8, 0xb0, 0x20) : UI_TRACK, UI_INK, t2);
+  drawCrown(BOX_TAB_X2 + 10, BOX_TAB_Y + 12, boxHall ? UI_WHITE : C565(0xe8, 0xb0, 0x20));
+  uiButton(BOX_TAB_X3, BOX_TAB_Y, BOX_TAB_W3, BOX_TAB_H, 12, boxOrb ? C565(0x6a, 0x4c, 0xf0) : UI_TRACK, UI_INK);
+  drawOrb(BOX_TAB_X3 + BOX_TAB_W3 / 2, BOX_TAB_Y + BOX_TAB_H / 2 - 1, 9,
+          orbValid(pet.orb) ? pet.orb : orbMake(PT_PSYCHIC, true, 10), millis());
+}
+
 void renderBox() {
+  if (boxOrb) { renderOrbBag(); return; }
   if (boxSel >= 0 && boxSel < cb().count()) { renderBoxDetail(); return; }
   boxSel = -1;
   uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
@@ -241,9 +275,7 @@ void renderBox() {
   char t1[24], t2[24];
   snprintf(t1, sizeof(t1), XT(X_BOX_TITLE_FMT), box.count(), BOX_MAX);
   snprintf(t2, sizeof(t2), XT(X_HALL_TAB_FMT), hall.count());
-  drawBtn(BOX_TAB_X1, BOX_TAB_Y, BOX_TAB_W, BOX_TAB_H, boxHall ? UI_TRACK : UI_BAR_WARN, UI_INK, t1);
-  drawBtn(BOX_TAB_X2, BOX_TAB_Y, BOX_TAB_W, BOX_TAB_H, boxHall ? C565(0xe8, 0xb0, 0x20) : UI_TRACK, UI_INK, t2);
-  drawCrown(BOX_TAB_X2 + 12, BOX_TAB_Y + 12, boxHall ? UI_WHITE : C565(0xe8, 0xb0, 0x20));
+  drawBoxTabs(t1, t2);
   if (boxHall && !hall.count()) {
     drawFit(XT(X_HALL_EMPTY), 190, 330, UI_INK, 2);
   } else if (!boxHall && !box.count()) {
@@ -314,13 +346,26 @@ void renderBox() {
 }
 
 void boxSwipe() {  // deslizar: cierra la ficha, o la caja si estaba en la lista
+  if (boxOrb && orbSel >= 0) { orbSel = -1; return; }
   expPick = false;
   expResOpen = false;
   if (boxSel >= 0) boxSel = -1;
   else xScreen = XS_NONE;
 }
 
+static void boxTabTap(int16_t x) {
+  if (x >= BOX_TAB_X1 && x < BOX_TAB_X1 + BOX_TAB_W && (boxHall || boxOrb)) { boxHall = false; boxOrb = false; }
+  else if (x >= BOX_TAB_X2 && x < BOX_TAB_X2 + BOX_TAB_W && !boxHall) { boxHall = true; boxOrb = false; }
+  else if (x >= BOX_TAB_X3 && x < BOX_TAB_X3 + BOX_TAB_W3 && !boxOrb) { boxOrb = true; boxHall = false; orbSel = -1; orbPage = 0; }
+  else return;
+  boxPage = 0;
+  boxSel = -1;
+  sfxPlay(SFX_TAP);
+}
+
+void orbBagTap(int16_t x, int16_t y);
 void boxTap(int16_t x, int16_t y) {
+  if (boxOrb) { orbBagTap(x, y); return; }
   if (boxSel >= 0) {  // ficha: soltar (dos toques) o cerrar
     if (!expPick && navHit(NAV_L, x, y)) { boxSel = -1; boxConfirmUntil = 0; sfxPlay(SFX_TAP); return; }  // ko11.8
     // ko9.1: tocar al Pokemon repite su grito
@@ -379,11 +424,7 @@ void boxTap(int16_t x, int16_t y) {
   }
   if (navHit(NAV_L, x, y)) { xScreen = XS_NONE; sfxPlay(SFX_TAP); return; }  // ko11.8: <- salir
   // ko10.5: pestanas caja / salon de la fama
-  if (y >= BOX_TAB_Y && y < BOX_TAB_Y + BOX_TAB_H) {
-    if (x >= BOX_TAB_X1 && x < BOX_TAB_X1 + BOX_TAB_W && boxHall) { boxHall = false; boxPage = 0; sfxPlay(SFX_TAP); }
-    else if (x >= BOX_TAB_X2 && x < BOX_TAB_X2 + BOX_TAB_W && !boxHall) { boxHall = true; boxPage = 0; sfxPlay(SFX_TAP); }
-    return;
-  }
+  if (y >= BOX_TAB_Y && y < BOX_TAB_Y + BOX_TAB_H) { boxTabTap(x); return; }
   if (y < BOX_TAB_Y - 10 || y >= 392) { xScreen = XS_NONE; return; }  // arriba / abajo: salir (como antes)
   if (y >= BOX_NAV_Y && y < BOX_NAV_Y + 36) {
     if (x < CX && boxPage > 0) boxPage--;
@@ -398,6 +439,154 @@ void boxTap(int16_t x, int16_t y) {
   Box &bx = cb();
   boxSortView(bx);
   if (k < bx.count()) { boxSel = boxView(k); expPick = false; audioCry(bx.at((uint8_t)boxSel).dex); }  // ko9.1: su grito
+}
+
+// ======================================================================
+// ko11.16: bolsa de orbes (tercera pestana de la caja). Rejilla de orbes grandes y
+// animados (el equipado, el primero, con aro dorado); al tocar uno: ventana con el
+// orbe en grande, su nombre y % y [장착]/[빼기] [닫기]
+// ======================================================================
+#define ORB_COLS 4
+#define ORB_ROWS 3
+#define ORB_PER_PAGE (ORB_COLS * ORB_ROWS)
+#define ORB_CELL_W 78
+#define ORB_CELL_H 94
+#define ORB_GRID_Y 130   // centro de la primera fila
+#define ORB_R 19
+
+static void textAtX(const char *s, int cx, int y, uint16_t c, uint8_t sz) {
+  setSize(sz);
+  gfx->setTextColor(c);
+  setCur(cx - textW(s, sz) / 2, y);
+  printT(s);
+}
+static uint8_t orbViewN() { return (orbValid(pet.orb) ? 1 : 0) + pet.orbN; }
+// k-esimo de la vista: el equipado primero (worn = true), luego la bolsa
+static uint16_t orbViewAt(int k, bool &worn) {
+  worn = false;
+  if (orbValid(pet.orb)) {
+    if (k == 0) { worn = true; return pet.orb; }
+    k--;
+  }
+  return (k >= 0 && k < pet.orbN) ? pet.orbBag[k] : 0;
+}
+static uint8_t orbPages() { return orbViewN() ? (uint8_t)((orbViewN() + ORB_PER_PAGE - 1) / ORB_PER_PAGE) : 1; }
+static void orbCell(int i, int &cx, int &cy) {
+  cx = CX + (int)((i % ORB_COLS) * 2 - (ORB_COLS - 1)) * ORB_CELL_W / 2;
+  cy = ORB_GRID_Y + (i / ORB_COLS) * ORB_CELL_H;
+}
+static void orbPopupRect(int &x, int &y, int &w, int &h) { x = 58; y = 88; w = 350; h = 294; }
+static void orbSay(const char *m, bool good) {
+  orbMsg = m;
+  orbMsgUntil = millis() + 1800;
+  sfxPlay(good ? SFX_HEART : SFX_DENY);
+}
+
+void renderOrbBag() {
+  uiScreenBg();
+  char t1[24], t2[24], b[64];
+  snprintf(t1, sizeof(t1), XT(X_BOX_TITLE_FMT), box.count(), BOX_MAX);
+  snprintf(t2, sizeof(t2), XT(X_HALL_TAB_FMT), hall.count());
+  drawBoxTabs(t1, t2);
+  uint32_t now = millis();
+  uint8_t n = orbViewN();
+  if (orbPage >= orbPages()) orbPage = orbPages() - 1;
+  if (!n) {
+    drawOrb(CX, 190, 34, 0, now);
+    drawFit(XT(X_ORB_EMPTY), 250, 300, UI_INK, 2);
+    drawFit(XT(X_ORB_HINT), 282, 330, 0x8410, 1);
+  }
+  for (int i = 0; i < ORB_PER_PAGE; i++) {
+    int k = orbPage * ORB_PER_PAGE + i;
+    if (k >= n) break;
+    bool worn;
+    uint16_t o = orbViewAt(k, worn);
+    int cx, cy;
+    orbCell(i, cx, cy);
+    bool fits = pet.orbFits(o);
+    // pedestal: sombra ovalada bajo el orbe; el equipado, con aro dorado
+    gfx->fillEllipse(cx, cy + ORB_R + 6, ORB_R, 5, uiLerp(UI_BG_DAY, UI_INK, 3, 16));
+    if (worn) {
+      gfx->drawCircle(cx, cy, ORB_R + 5, C565(0xe8, 0xb0, 0x20));
+      gfx->drawCircle(cx, cy, ORB_R + 6, C565(0xe8, 0xb0, 0x20));
+    }
+    drawOrb(cx, cy, ORB_R, o, now + k * 137);  // cada uno a su ritmo
+    snprintf(b, sizeof(b), "+%u%%", orbPct(o));
+    textAtX(b, cx, cy + ORB_R + 12, worn ? C565(0xb0, 0x80, 0x10) : fits ? C565(0x2e, 0x7d, 0x32) : 0x8410, 1);
+  }
+  if (orbMsg && timeLeft(orbMsgUntil) && orbSel < 0) drawFit(orbMsg, 374, 320, UI_BAR_OK, 2);
+  else if (n) {
+    char c[24];
+    snprintf(c, sizeof(c), XT(X_ORB_COUNT_FMT), n);
+    if (orbPages() > 1) { strncat(c, "  ", sizeof(c) - strlen(c) - 1); snprintf(b, sizeof(b), XT(X_ORB_PAGE_FMT), orbPage + 1, orbPages()); strncat(c, b, sizeof(c) - strlen(c) - 1); }
+    drawFit(c, 380, 200, UI_INK, 1);
+  }
+  drawNav(NAV_L, UI_INK);  // pagina anterior, o salir en la primera
+  if (orbPage + 1 < orbPages()) drawNav(NAV_R, UI_INK);
+  // ventana del orbe elegido
+  if (orbSel >= 0 && orbSel < n) {
+    bool worn;
+    uint16_t o = orbViewAt(orbSel, worn);
+    int x, y, w, h;
+    orbPopupRect(x, y, w, h);
+    uiPanel(x, y, w, h, 20, UI_WHITE, UI_INK);
+    // fondo del orbe: un halo tenue de su color
+    gfx->fillCircle(CX, y + 90, 60, uiLerp(orbColor(orbType(o)), UI_WHITE, 13, 16));
+    drawOrb(CX, y + 96, 40, o, now);
+    orbName(o, b, sizeof(b));
+    drawFit(b, y + 146, w - 30, uiLerp(orbColor(orbType(o)), UI_INK, 8, 16), 2);
+    snprintf(b, sizeof(b), XT(orbDef(o) ? X_ORB_DEFP_FMT : X_ORB_ATKP_FMT), orbPct(o));
+    drawFit(b, y + 174, w - 30, UI_INK, 2);
+    int by = y + h - 58;
+    if (worn) {
+      drawBtn(x + 20, by, (w - 50) / 2, 42, C565(0xe8, 0xb0, 0x20), UI_WHITE, XT(X_ORB_UNEQUIP));
+    } else if (pet.orbFits(o)) {
+      drawBtn(x + 20, by, (w - 50) / 2, 42, C565(0x6a, 0x4c, 0xf0), UI_WHITE, XT(X_ORB_EQUIP));
+    } else {
+      snprintf(b, sizeof(b), XT(X_ORB_NOFIT_FMT), typeName(orbType(o)));
+      drawFit(b, y + 208, w - 30, 0x8410, 1);
+      drawBtn(x + 20, by, (w - 50) / 2, 42, UI_TRACK, 0x8410, XT(X_ORB_EQUIP));
+    }
+    if (worn) drawFit(XT(X_ORB_WORN), y + 208, w - 30, C565(0xb0, 0x80, 0x10), 1);
+    drawBtn(x + 30 + (w - 50) / 2, by, (w - 50) / 2, 42, UI_TRACK, UI_INK, XT(X_CLOSE));
+    if (orbMsg && timeLeft(orbMsgUntil)) drawFit(orbMsg, y + h + 8, 320, UI_BAR_OK, 1);
+  }
+  uiFlush();
+}
+
+void orbBagTap(int16_t x, int16_t y) {
+  uint8_t n = orbViewN();
+  if (orbSel >= 0) {  // ventana abierta
+    int px, py, pw, ph;
+    orbPopupRect(px, py, pw, ph);
+    int by = py + ph - 58, bw = (pw - 50) / 2;
+    if (!inRect(x, y, px, py, pw, ph) || inRect(x, y, px + 30 + bw, by, bw, 42)) { orbSel = -1; sfxPlay(SFX_TAP); return; }
+    if (!inRect(x, y, px + 20, by, bw, 42) || orbSel >= n) return;
+    bool worn;
+    uint16_t o = orbViewAt(orbSel, worn);
+    if (worn) { pet.unequipOrb(); orbSel = -1; orbSay(XT(X_ORB_UNEQUIP), true); return; }
+    if (!pet.orbFits(o)) { sfxPlay(SFX_DENY); return; }
+    uint8_t bagIdx = (uint8_t)(orbSel - (orbValid(pet.orb) ? 1 : 0));
+    if (pet.equipOrb(bagIdx)) { orbSel = -1; orbPage = 0; orbSay(XT(X_ORB_WORN), true); }
+    else sfxPlay(SFX_DENY);
+    return;
+  }
+  if (navHit(NAV_L, x, y)) {
+    if (orbPage > 0) orbPage--;
+    else xScreen = XS_NONE;
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  if (navHit(NAV_R, x, y)) { if (orbPage + 1 < orbPages()) orbPage++; sfxPlay(SFX_TAP); return; }
+  if (y >= BOX_TAB_Y && y < BOX_TAB_Y + BOX_TAB_H) { boxTabTap(x); return; }
+  if (y < BOX_TAB_Y - 10 || y >= 392) { xScreen = XS_NONE; return; }
+  for (int i = 0; i < ORB_PER_PAGE; i++) {
+    int k = orbPage * ORB_PER_PAGE + i;
+    if (k >= n) break;
+    int cx, cy;
+    orbCell(i, cx, cy);
+    if (abs(x - cx) < ORB_CELL_W / 2 && abs(y - cy) < ORB_CELL_H / 2) { orbSel = (int8_t)k; sfxPlay(SFX_TAP); return; }
+  }
 }
 
 // ======================================================================

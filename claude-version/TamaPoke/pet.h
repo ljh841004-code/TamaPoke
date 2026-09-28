@@ -67,6 +67,23 @@ struct __attribute__((packed)) TradePet {
 // ko10.4: usos de los caramelos (de la familia del Pokemon que crias)
 enum : uint8_t { CU_EXP = 0, CU_GAUGE, CU_GENES, CU_SHINY, CU_EVO, CU_COUNT };
 static const uint8_t CANDY_COST[CU_COUNT] = { 3, 1, 5, 10, 5 };
+// ko11.16: orbes de tipo. uint16: bit15 valido, bit14 defensa (si no, ataque),
+// bits 8-11 tipo (PT_*), bits 0-7 porcentaje. 0 = nada
+#define ORB_BAG_MAX 32        // uno por tipo y clase como mucho (16 x 2)
+#define ORB_MIN_PCT 10
+#define ORB_MAX_PCT 25
+#define ORB_EVO_CANDY 3       // al evolucionar a otro tipo: el orbe -> 3 caramelos
+#define ORB_EVO_RARE_PCT 10   //   ... o (10 %) 1 caramelo raro
+#define ORB_WILD_PCT 8        // salvaje ganado o capturado: orbe de su tipo
+#define ORB_GYM_PCT 50        // revancha de gimnasio con premio del dia
+static inline uint16_t orbMake(uint8_t type, bool def, uint8_t pct) {
+  return (uint16_t)(0x8000 | (def ? 0x4000 : 0) | ((type & 15) << 8) | pct);
+}
+static inline bool orbValid(uint16_t o) { return (o & 0x8000) != 0; }
+static inline uint8_t orbType(uint16_t o) { return (uint8_t)((o >> 8) & 15); }
+static inline bool orbDef(uint16_t o) { return (o & 0x4000) != 0; }
+static inline uint8_t orbPct(uint16_t o) { return (uint8_t)(o & 0xFF); }
+static inline bool orbSame(uint16_t a, uint16_t b) { return orbValid(a) && orbValid(b) && ((a ^ b) & 0x4F00) == 0; }
 #define SHARDS_PER_RARE 10  // ko11.15.1: 10 trozos = 1 caramelo raro (= 5 de tu familia)
 #define CANDY_TRADE_RATE 3   // ko10.11: 3 de otra familia = 1 de la que crias
 #define RARE_CANDY_VALUE 5   // ko10.11: 1 caramelo universal = 5 de la que crias
@@ -139,7 +156,20 @@ public:
   // ko10.11: caramelo universal (sale a veces en los salvajes) y cambios
   uint16_t rareCandy = 0;
   uint16_t rareShards = 0;  // ko11.15.1: trozos de caramelo raro (SHARDS_PER_RARE = 1 raro)
+  // ko11.16: orbe equipado (solo el de su tipo) y bolsa de orbes
+  uint16_t orb = 0;
+  uint16_t orbBag[ORB_BAG_MAX] = { 0 };
+  uint8_t orbN = 0;
+  uint8_t orbEvoNote = 0;   // 1 = al evolucionar el orbe se volvio caramelos, 2 = caramelo raro (aviso)
   bool candyTrade(int16_t famDex, uint16_t times);
+  // ko11.16: orbes. gainOrb: 1 nuevo a la bolsa, 2 mejoro uno igual (el viejo -> 1
+  // caramelo), 3 no mejoraba (el nuevo -> 1 caramelo), 0 no se pudo
+  uint8_t gainOrb(uint16_t o);
+  bool equipOrb(uint8_t bagIdx);   // solo si es de su tipo; el equipado vuelve a la bolsa
+  void unequipOrb();
+  bool orbFits(uint16_t o) const;  // del tipo del Pokemon que crias
+  uint8_t orbAtkPct() const { return orbValid(orb) && !orbDef(orb) && orbFits(orb) ? orbPct(orb) : 0; }
+  uint8_t orbDefPct() const { return orbValid(orb) && orbDef(orb) && orbFits(orb) ? orbPct(orb) : 0; }
   uint16_t candyToShards();  // ko11.15.1: los de OTRAS familias -> trozos (1:1); devuelve cuantos  // 3 de otra familia -> 1 de la actual (x times)
   bool useRareCandy();                              // 1 universal -> RARE_CANDY_VALUE de la actual
   // racha de cuidado diario (del jugador: persiste entre crianzas)

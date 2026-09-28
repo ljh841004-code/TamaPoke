@@ -21,7 +21,60 @@ void Pet::begin() {
   lastTick = millis();
 }
 
+// ---- ko11.16: orbes de tipo ----
+bool Pet::orbFits(uint16_t o) const {
+  return orbValid(o) && !isEgg() && speciesId >= 1 && orbType(o) == DEX_TBL[speciesId].ptype;
+}
+
+static void orbBagPush(Pet &p, uint16_t o) {
+  if (!orbValid(o)) return;
+  if (p.orbN < ORB_BAG_MAX) p.orbBag[p.orbN++] = o;
+}
+
+uint8_t Pet::gainOrb(uint16_t o) {
+  if (!orbValid(o)) return 0;
+  int16_t candyDex = isEgg() ? -1 : speciesId;
+  // uno igual (tipo y clase) equipado o en la bolsa: se queda el mejor
+  uint16_t *old = orbSame(orb, o) ? &orb : nullptr;
+  for (uint8_t i = 0; i < orbN && !old; i++)
+    if (orbSame(orbBag[i], o)) old = &orbBag[i];
+  uint8_t res;
+  if (old) {
+    if (orbPct(o) > orbPct(*old)) { *old = o; res = 2; }
+    else res = 3;
+    if (candyDex > 0) addCandy(candyDex, 1);
+  } else if (orbN < ORB_BAG_MAX) {
+    orbBag[orbN++] = o;
+    res = 1;
+  } else {
+    if (candyDex > 0) addCandy(candyDex, 1);
+    res = 3;
+  }
+  save();
+  return res;
+}
+
+bool Pet::equipOrb(uint8_t i) {
+  if (i >= orbN || !orbFits(orbBag[i])) return false;
+  uint16_t o = orbBag[i];
+  for (uint8_t k = i; k + 1 < orbN; k++) orbBag[k] = orbBag[k + 1];
+  orbN--;
+  if (orbValid(orb)) orbBagPush(*this, orb);
+  orb = o;
+  save();
+  return true;
+}
+
+void Pet::unequipOrb() {
+  if (!orbValid(orb)) return;
+  orbBagPush(*this, orb);
+  orb = 0;
+  save();
+}
+
 void Pet::newEgg() {
+  // ko11.16: el orbe del que se va vuelve a la bolsa
+  if (orbValid(orb)) { orbBagPush(*this, orb); orb = 0; }
   ceremony = CER_NONE;
   neglectTicks = 0;
   weight = 0;
@@ -614,6 +667,13 @@ void Pet::evolve() {
   else if (n > 1) next = opts[random(n)];
   speciesId = next;
   evolvedHere = true;  // ko11.9.2
+  // ko11.16: si cambia de tipo, el orbe ya no le sirve: 3 caramelos (o, a veces, 1 raro)
+  orbEvoNote = 0;
+  if (orbValid(orb) && !orbFits(orb)) {
+    orb = 0;
+    if ((int)random(100) < ORB_EVO_RARE_PCT) { if (rareCandy < 999) rareCandy++; orbEvoNote = 2; }
+    else { addCandy(speciesId, ORB_EVO_CANDY); orbEvoNote = 1; }
+  }
   registerSpecies(speciesId);
   sfxPlay(SFX_EVOLVE);
   evolveUntil = millis() + EVOLVE_ANIM_MS;
@@ -984,6 +1044,10 @@ void Pet::save() {
   prefs.putUChar("dxrw", dexRewards);
   prefs.putUShort("rcandy", rareCandy);
   prefs.putUShort("rshd", rareShards);  // ko11.15.1
+  prefs.putUShort("orb", orb);           // ko11.16
+  prefs.putUChar("orbn", orbN);
+  if (orbN) prefs.putBytes("orbs", orbBag, orbN * sizeof(uint16_t));
+  else prefs.remove("orbs");
   prefs.putUInt("age", ageMinutes);
   prefs.putUInt("exp", exp);
   prefs.putShort("dexn", speciesId);
@@ -1071,6 +1135,10 @@ void Pet::load(bool *migrated) {
   dexRewards = prefs.getUChar("dxrw", 0);
   rareCandy = prefs.getUShort("rcandy", 0);
   rareShards = prefs.getUShort("rshd", 0);
+  orb = prefs.getUShort("orb", 0);  // ko11.16
+  orbN = prefs.getUChar("orbn", 0);
+  if (orbN > ORB_BAG_MAX) orbN = 0;
+  if (orbN && prefs.getBytes("orbs", orbBag, orbN * sizeof(uint16_t)) != orbN * sizeof(uint16_t)) orbN = 0;
   ageMinutes = prefs.getUInt("age", 0);
   // fork KO (ko7): guardados de antes (nivel = horas, hasta Lv338+) empiezan
   // en Lv1 con la misma especie

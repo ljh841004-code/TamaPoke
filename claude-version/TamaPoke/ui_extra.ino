@@ -18,13 +18,30 @@ enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_
 uint8_t xScreen = XS_NONE;
 
 // aviso breve en la pantalla principal
-char toastBuf[64] = "";
+char toastBuf[96] = "";
 uint32_t toastUntil = 0;
 
 void showToast(const char *s) {
   strncpy(toastBuf, s, sizeof(toastBuf) - 1);
   toastBuf[sizeof(toastBuf) - 1] = 0;
   toastUntil = millis() + 2600;
+}
+
+// ko11.16: "<tipo> 공격구슬" / "<tipo> 방어구슬"
+void orbName(uint16_t o, char *out, size_t n) {
+  snprintf(out, n, XT(orbDef(o) ? X_ORB_DEF_FMT : X_ORB_ATK_FMT), typeName(orbType(o)));
+}
+
+// ko11.16: un orbe del tipo dado (ataque o defensa y % al azar) a la bolsa, con aviso
+uint8_t orbDrop(uint8_t type) {
+  uint16_t o = orbMake(type, random(2) != 0, (uint8_t)(ORB_MIN_PCT + random(ORB_MAX_PCT - ORB_MIN_PCT + 1)));
+  uint8_t r = pet.gainOrb(o);
+  if (!r) return 0;
+  char nm[40], t[96];
+  orbName(o, nm, sizeof(nm));
+  snprintf(t, sizeof(t), XT(r == 1 ? X_ORB_GOT_FMT : r == 2 ? X_ORB_UP_FMT : X_ORB_CANDY_FMT), nm, orbPct(o));
+  showToast(t);
+  return r;
 }
 
 bool extraOpen() { return xScreen != XS_NONE; }
@@ -309,6 +326,13 @@ bool bCaught = false;      // la batalla acabo en captura
 int8_t bBoxMsg = -1;       // XId del aviso de la caja en el resultado (-1 = nada)
 #define BOX_JOIN_PCT 20    // ko5: % de salvajes vencidos que se unen a la caja
 PmdMon foePmd;
+// ko11.16: el orbe equipado sube ataque o defensa (solo si es de su tipo)
+void applyOrb(Battler &b) {
+  uint8_t a = pet.orbAtkPct(), d = pet.orbDefPct();
+  if (a) b.atk = (uint16_t)((uint32_t)b.atk * (100 + a) / 100);
+  if (d) b.def = (uint16_t)((uint32_t)b.def * (100 + d) / 100);
+}
+
 // ko11.16: sprites de combate al estilo de los juegos (rNNN.bin de la SD): el rival de
 // frente y el tuyo de espaldas. Si no estan, se usan los PMD de siempre
 PmdMon prgFoe, prgMe;
@@ -968,6 +992,8 @@ void drawBattlers() {
       if (th) drawThumb(th, foeX - GAL_CELL / 2, foeG - GAL_CELL, 2, foeSil);
     }
   }
+  if (!meHide && !meGone && orbValid(pet.orb) && bvMeDex == pet.speciesId && xScreen != XS_LINK)
+    drawOrbSlot(meX + 64, meG - 12, 11, pet.orb, now);  // ko11.16: su orbe, abajo a la derecha (detras del sprite)
   if (!meHide && !meGone && prgMe.loaded && prgMe.has(PMD_IDLE_UR)) {  // ko11.16: de espaldas
     drawPrgBattler(prgMe, PMD_IDLE_UR, meX, meG, now, meSil, 12, 176);
   } else if (!meHide && !meGone) {
@@ -1215,6 +1241,7 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
   for (uint8_t i = 0; i < n; i++) bTeam[i] = team[i];
   bRng = BRng(esp_random());
   bMe = makeBattler(pet.speciesId, pet.level(), pet.atkStat(), pet.defStat(), pet.speStat());
+  applyOrb(bMe);  // ko11.16
   bFoe = bTeam[0];
   bvSetup(bMe, bFoe, nullptr, false);
   bGroup = WG_COMMON;
@@ -1269,6 +1296,7 @@ void startWildIn(uint8_t region) {
   bExpDex = bFoe.dex;  // ko11: la EXP no se infla por subirle el nivel
   bExpLvl = bFoe.lvl;
   wildMatchPower(bFoe, bMe, bRng);  // ko10.11: de tu talla (90-105 % de tu fuerza)
+  applyOrb(bMe);  // ko11.16: DESPUES de igualar: el orbe si se nota contra el salvaje
   bool shiny = bRng.below(ev.kind == DEV_SHINY ? 32 : 64) == 0;  // ko11.7: fin de semana x2
   bvSetup(bMe, bFoe, nullptr, shiny);
   // ko10.11: cuantos de esta especie hay ya en la caja (se ensena unos segundos)
@@ -1826,6 +1854,9 @@ void finishBattle(bool won, bool fled, bool caught) {
       bNote[sizeof(bNote) - 1] = 0;
       pet.saveNow();
     }
+    // ko11.16: a veces un orbe del tipo del rival (con aviso)
+    if (bKind == BK_WILD && !bLink && (won || caught) && (uint32_t)random(100) < ORB_WILD_PCT)
+      orbDrop(DEX_TBL[bFoe.dex].ptype);
     if (won && bKind == BK_GYM && !(pet.badges & (1 << bGym))) {  // ko10.4: medalla nueva
       pet.badges |= (uint8_t)(1 << bGym);
       char nb[4];
@@ -1840,6 +1871,7 @@ void finishBattle(bool won, bool fled, bool caught) {
         pet.giveItems(1, 1);
         pet.addCandy(pet.speciesId, 2);
         strncpy(bNote, XT(X_REMATCH_REWARD), sizeof(bNote) - 1);
+        if ((uint32_t)random(100) < ORB_GYM_PCT) orbDrop(DEX_TBL[bFoe.dex].ptype);  // ko11.16
       } else {
         snprintf(bNote, sizeof(bNote), XT(X_REMATCH_NOREWARD_FMT), pet.gymWins[bGym]);
       }

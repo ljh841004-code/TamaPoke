@@ -431,7 +431,8 @@ void renderDefense() {
 // 1, 2, 3... lo antes posible. Orden equivocado o sin tiempo = ronda fallada.
 // Puntos por la media de cada balon (100 - ms/10, minimo 10)
 
-static uint8_t spdCount() { return spdRound < 5 ? 3 : spdRound < 10 ? 4 : 5; }
+// ko11.16: 3 balones las rondas 1-3, 4 las 4-7 y 5 desde la 8 (antes 5 / 10)
+static uint8_t spdCount() { return spdRound < 3 ? 3 : spdRound < 7 ? 4 : 5; }
 
 static uint32_t spdLimit() {  // tiempo de la ronda
   int per = 1000 - spdRound * 25;
@@ -439,22 +440,22 @@ static uint32_t spdLimit() {  // tiempo de la ronda
   return (uint32_t)per * spdN;
 }
 
+// ko11.16: antes al azar con 60 intentos: si no encontraba hueco se quedaba con el
+// ultimo y dos balones podian montarse (tocabas el bueno y contaba el otro = fallo).
+// Ahora cada balon va a una casilla distinta de una rejilla 3x3 (107 x 86 px; el balon mide 64) con
+// un poco de temblor: nunca se tocan
 static void spdPlace() {
   spdN = spdCount();
+  uint8_t cell[9];
+  for (int i = 0; i < 9; i++) cell[i] = (uint8_t)i;
+  for (int i = 8; i > 0; i--) {
+    int j = random(i + 1);
+    uint8_t t = cell[i]; cell[i] = cell[j]; cell[j] = t;
+  }
   for (int i = 0; i < spdN; i++) {
-    int x = CX, y = 200;
-    for (int t = 0; t < 60; t++) {
-      x = 96 + random(275);
-      y = 124 + random(190);
-      bool ok = true;
-      for (int j = 0; j < i && ok; j++) {
-        int dx = x - spdBx[j], dy = y - spdBy[j];
-        if (dx * dx + dy * dy < 100 * 100) ok = false;
-      }
-      if (ok) break;
-    }
-    spdBx[i] = (int16_t)x;
-    spdBy[i] = (int16_t)y;
+    int c = cell[i] % 3, r = cell[i] / 3;
+    spdBx[i] = (int16_t)(CX + (c - 1) * 107 + (int)random(-10, 11));
+    spdBy[i] = (int16_t)(136 + r * 86 + (int)random(-5, 6));
   }
 }
 
