@@ -656,6 +656,31 @@ void ensureMon() {
   }
 }
 
+// ko11.16.2: sin sprite o sin SD (la tarjeta no contesto al arrancar, o dejo de
+// leerse): antes habia que sacarla y meterla. Ahora se vuelve a montar sola: cada
+// 10 s las 6 primeras veces y luego cada minuto. Solo en la pantalla principal
+// (montar puede tardar unos segundos) y nunca en modo seguro
+void sdWatch() {
+  static uint32_t next = 0;
+  static uint8_t tries = 0;
+  bool noSprite = pet.speciesId >= 1 && pet.speciesId <= DEX_COUNT && !pmd.loaded && !mon.loaded;
+  if (safeMode || (sdReady && !noSprite)) { tries = 0; return; }
+  if (extraOpen() || cardOpen || galleryOpen || clockOpen || trainMenuOpen || fastGameNow()) return;
+  if (next && (int32_t)(millis() - next) < 0) return;
+  next = millis() + (tries < 6 ? 10000 : 60000);
+  if (tries < 255) tries++;
+  Serial.printf("SD: sin sprite/SD, volviendo a montar (intento %u)\n", tries);
+  // montada pero sin poder leer: la musica puede tener un fichero abierto en la SD
+  bool paused = sdReady && audioPauseForUpload();
+  if (sdReady && !paused) { audioResumeAfterUpload(); return; }
+  bool ok = sdRemount();
+  if (paused) audioResumeAfterUpload();
+  if (ok) {
+    audioLoadMusic();  // la musica tambien estaba sin SD
+    tries = 0;
+  }
+}
+
 // ko9: aviso sonoro UNA vez cuando hace caca o cuando una barra (comida,
 // animo, energia, limpieza) baja a 30 o menos. Solo con el sonido activado,
 // despierto y con la pantalla encendida: dormido o con la pantalla apagada
@@ -725,6 +750,7 @@ void loop() {
   extraLoop(now);  // fork KO: red, tongsin, batallas (ui_extra.ino)
   bakAutoLoop(now);  // ko11.6: copia de la partida en la SD
   expLoop();         // ko11.7: aviso de vuelta de la expedicion
+  sdWatch();         // ko11.16.2: SD que no se monto: reintentar sola
   dexRewardLoop(now);  // ko11.7: premios de la pokedex
   ensureMon();
   static int16_t crySpecies = -1;  // grito al nacer/evolucionar/cambiar (/mons/cryNNN.wav)

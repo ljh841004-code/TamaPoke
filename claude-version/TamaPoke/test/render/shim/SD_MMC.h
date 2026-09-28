@@ -1,9 +1,11 @@
 #pragma once
+#define BOARD_MAX_SDMMC_FREQ 40000
+#define SDMMC_FREQ_DEFAULT 20000
 #include "FS.h"
 extern const char *gSdRoot;
 struct SDMMCFS {
   void setPins(int, int, int) {}
-  bool begin(const char *, bool, bool) { return true; }
+  bool begin(const char *, bool, bool, int = 0) { return true; }
   void end() {}
   uint64_t cardSize() { return 1ULL << 30; }
   uint64_t totalBytes() { return 1ULL << 30; }

@@ -160,30 +160,49 @@ const uint8_t *SdThumbs::get(int16_t dex) const {
   return data + off;
 }
 
-static bool sdMount() {
+static bool sdMount(int khz) {
   SD_MMC.setPins(SDMMC_CLK, SDMMC_CMD, SDMMC_DATA);
-  sdReady = SD_MMC.begin("/sdcard", true /* modo 1-bit */, false /* preserve existing card if mounting fails */);
+  sdReady = SD_MMC.begin("/sdcard", true /* modo 1-bit */, false /* preserve existing card if mounting fails */,
+                         khz);
   if (sdReady) {
-    Serial.printf("SD montada: %llu MB\n", SD_MMC.cardSize() / (1024ULL * 1024ULL));
+    Serial.printf("SD montada (%d kHz): %llu MB\n", khz, SD_MMC.cardSize() / (1024ULL * 1024ULL));
     SD_MMC.mkdir("/mons");
   } else {
-    Serial.println("SD no detectada (el juego usa los sprites de flash)");
+    Serial.printf("SD no detectada a %d kHz\n", khz);
   }
   return sdReady;
+}
+
+// ko11.16.2: a veces la tarjeta no contesta al arrancar (contacto, o se quedo a
+// medias tras un reinicio sin cortar la corriente de la SD) y el juego seguia
+// sin sprites hasta sacarla y meterla. Ahora: mas intentos y mas pausados, y los
+// ultimos a menos velocidad (40 -> 20 -> 10 MHz), que aguantan peor contacto
+static bool sdTryMount() {
+  static const int KHZ[6] = { BOARD_MAX_SDMMC_FREQ, BOARD_MAX_SDMMC_FREQ, SDMMC_FREQ_DEFAULT, SDMMC_FREQ_DEFAULT, 10000, 10000 };
+  for (int i = 0; i < 6; i++) {
+    if (sdMount(KHZ[i])) return true;
+    SD_MMC.end();
+    delay(150 + 150 * i);
+  }
+  return false;
 }
 
 bool sdBegin() {
   sdMutex = xSemaphoreCreateMutex();
   if (!sdMutex) return false;
-  // ko11.9.2: tras reiniciar solo (p. ej. al acabar la actualizacion desde la SD)
-  // la tarjeta a veces no contesta al primer intento y el juego arrancaba sin
-  // sprites hasta apagar y encender. Unos reintentos cortos lo evitan.
-  for (int i = 0; i < 4; i++) {
-    if (sdMount()) return true;
-    SD_MMC.end();
-    delay(250);
-  }
-  return false;
+  return sdTryMount();
+}
+
+// ko11.16.2: volver a montar en marcha (si falto al arrancar o dejo de leerse)
+bool sdRemount() {
+  if (!sdMutex) return false;
+  SdCardLock lock;
+  if (!lock) return false;
+  if (sdReady) SD_MMC.end();
+  sdReady = false;
+  bool ok = sdTryMount();
+  if (ok) sdDirty = true;  // recargar sprite y miniaturas
+  return ok;
 }
 
 
