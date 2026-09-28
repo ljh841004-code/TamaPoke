@@ -21,7 +21,7 @@ static void tick(uint32_t ms) { gMockMillis += ms; }
 
 static void closeAll() {
   cardOpen = trainMenuOpen = galleryOpen = clockOpen = false;
-  defOpen = spdOpen = sackOpen = gameOpen = false;
+  defOpen = spdOpen = sackOpen = gameOpen = vbOpen = false;
   xScreen = XS_NONE;
   toastUntil = 0;
   feedMenuUntil = 0;
@@ -123,6 +123,42 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); openTrainMenu();
   render(); shot("04_train_menu");
   trainMenuPage = 1; render(); shot("04b_train_menu_battle"); trainMenuPage = 0;
+  // ko11.9: voleibol, el que se esta criando (Ivysaur) contra uno al azar (Psyduck)
+  if (ko) {
+    int16_t keepSp = pet.speciesId;
+    pet.speciesId = 2;
+    pmd.load(2, false);
+    closeAll(); randomSeed(11); startVolley();
+    vbFoeDex = 54; loadFoe(54, false);
+    tick(300); render(); shot("70_volley_vs");
+    tick(1500); render(); shot("71_volley_first_serve");
+    // el lado 0 lo juega un "jugador" sencillo hasta ver un remate, un punto y el final
+    bool gotSpike = false, gotPoint = false;
+    uint32_t nextThink = 0;
+    for (int i = 0; i < 20000 && vb.state != VB_OVER; i++) {
+      if (gMockMillis >= nextThink) {
+        nextThink = gMockMillis + 180;
+        float tx = VolleyGame::homeX(0);
+        if (vb.state == VB_PLAY && (vb.b.x < VB_NET_X || vb.b.vx < 0)) {
+          float lx = vb.predictX(vb.bodyY(0) - vb.p[0].hitR);
+          if (lx < VB_NET_X) tx = lx - 12;
+        }
+        vb.moveTo(0, tx);
+      }
+      if (vb.state == VB_PLAY && !vb.airborne(0) && vb.b.vy > 0 && fabsf(vb.b.x - vb.p[0].x) < 40 &&
+          vb.bodyY(0) - vb.b.y > 80 && vb.bodyY(0) - vb.b.y < 180) vb.jump(0);
+      if (vb.airborne(0)) vb.spike(0);
+      tick(20); render();
+      if (!gotSpike && vb.state == VB_PLAY && vb.b.spiked && vb.b.spikeSide == 0 && vb.t - vb.p[0].spikeT > 60) {
+        shot("72_volley_spike"); gotSpike = true;
+      }
+      if (!gotPoint && vb.state == VB_POINT && vb.stateT > 200) { shot("73_volley_point"); gotPoint = true; }
+    }
+    tick(VBC_RESULT_MIN_MS + 100); render(); shot("74_volley_result");
+    closeAll();
+    pet.speciesId = keepSp;
+    pmd.load((uint8_t)keepSp, pet.shiny);
+  }
   closeAll(); startDefense();
   for (int i = 0; i < 70; i++) { tick(85); render(); defMissN = 0; }  // que no se acabe
   defensePress((int16_t)defBall[0].x, (int16_t)defBall[0].y);

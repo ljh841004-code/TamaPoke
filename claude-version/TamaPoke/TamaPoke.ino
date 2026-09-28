@@ -116,6 +116,14 @@ void renderBakAsk();
 void bakAskTap(int16_t x, int16_t y);
 void bakAutoLoop(uint32_t now);
 bool inBattleScreen();    // ko11.8 (ui_extra.ino)
+extern bool vbOpen;       // ko11.9 (volley.ino): voleibol
+extern bool trainMenuOpen;     // train.ino
+extern uint8_t trainMenuPage;
+void startVolley();
+void renderVolley();
+void vbPress(int16_t x, int16_t y);
+void vbHold(int16_t x, int16_t y);
+void vbRelease();
 void openBgmPick();       // ko11.8: elegir los fondos normales
 void renderBgmPick();
 void bgmPickTap(int16_t x, int16_t y);
@@ -577,6 +585,14 @@ void perfReset() { perfRenderMax = perfStallMax = 0; perfFrames = 0; }
 void loop() {
   uint32_t now = millis();
   uint32_t loopT0 = now, renderMs = 0;
+  // ko11.8: en combate no hace caca. ko11.8.1: se decide ANTES del tick (antes iba
+  // despues y el primer minuto aun podia caer) y dura 2 min tras salir del combate
+  // o de su menu (pagina de batallas), para no encontrarla nada mas volver
+  {
+    static uint32_t battleSeen = 0;
+    if (inBattleScreen() || (trainMenuOpen && trainMenuPage == 1)) battleSeen = now ? now : 1;
+    pet.holdPoop = battleSeen && now - battleSeen < 120000UL;
+  }
   pet.update(now);
 
   // el amplificador sigue al estado de sueno (la llamada sale sola si no cambia).
@@ -601,7 +617,6 @@ void loop() {
   handleSerial();
   extraLoop(now);  // fork KO: red, tongsin, batallas (ui_extra.ino)
   bakAutoLoop(now);  // ko11.6: copia de la partida en la SD
-  pet.holdPoop = inBattleScreen();  // ko11.8: en combate (salvaje, gimnasio, liga, tongsin) no hace caca
   expLoop();         // ko11.7: aviso de vuelta de la expedicion
   dexRewardLoop(now);  // ko11.7: premios de la pokedex
   ensureMon();
@@ -973,7 +988,8 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
   bool fastGame = sackOpen || trainingFast();
   if (fastGame && pressed && !wasPressed) { fastT0 = millis(); fastX0 = x; fastY0 = y; }
   if (fastGame && pressed && fastT0 && millis() - fastT0 > TRAIN_QUIT_MS &&
-      abs(x - fastX0) < 40 && abs(y - fastY0) < 40) {
+      abs(x - fastX0) < 40 && abs(y - fastY0) < 40 &&
+      (!vbOpen || fastY0 < 104)) {  // ko11.9: en el voleibol se mantiene el dedo para moverse: solo el marcador
     fastT0 = 0;
     sackOpen = false;
     trainingQuit();
@@ -989,6 +1005,14 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
       lastInteract = millis();
       sackTap();
     }
+    wasPressed = pressed;
+    return;
+  }
+  // ko11.9: voleibol: apoyar (saltar/remate o empezar a moverse), mantener (moverse), soltar
+  if (vbOpen) {
+    if (pressed && !wasPressed) vbPress(x, y);
+    else if (pressed) vbHold(x, y);
+    else if (wasPressed) vbRelease();
     wasPressed = pressed;
     return;
   }

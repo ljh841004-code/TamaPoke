@@ -164,6 +164,8 @@ public:
   uint32_t lastTrainExp = 0;
   uint8_t lastTrainCandy = 0;
   uint16_t speHi = 0;      // record del entrenamiento de velocidad (ko10.6: puntos, hasta 1500)
+  uint16_t vbStreak = 0;   // ko11.9: voleibol: victorias seguidas
+  uint16_t vbBest = 0;     // ko11.9: mejor racha de voleibol
 
   void begin();                 // carga estado de NVS (o crea el primer huevo)
   void update(uint32_t nowMs);  // llamar en cada loop()
@@ -209,7 +211,8 @@ public:
                     int16_t foeDex = 0, uint16_t foeLvl = 0);
   // fork KO (ko7): suma EXP; devuelve cuantos niveles subio (suena al subir)
   uint16_t addExp(uint32_t x);
-  void trainBonus(bool scored, bool record);  // ko10.7: EXP (+ caramelo si es record)
+  void trainBonus(bool scored, bool record);
+  uint8_t volleyResult(bool won, uint8_t myPoints);  // ko11.9: premio del voleibol (sube la VEL); record en vbBest  // ko10.7: EXP (+ caramelo si es record)
   // lo que dio la ultima batalla (pantalla de resultado)
   uint32_t lastExpGain = 0;
   uint16_t lastLvlUp = 0;

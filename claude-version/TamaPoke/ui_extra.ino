@@ -28,7 +28,12 @@ void showToast(const char *s) {
 }
 
 bool extraOpen() { return xScreen != XS_NONE; }
-bool inBattleScreen() { return xScreen == XS_WILD || xScreen == XS_LINK; }  // ko11.8
+// ko11.8: combate. ko11.8.1: tambien lo de alrededor (elegir region, gimnasios, reto,
+// tongsin): el minuto que caia ahi hacia caca y al volver "habia cagado en la batalla"
+bool inBattleScreen() {
+  return xScreen == XS_WILD || xScreen == XS_LINK || xScreen == XS_REGION || xScreen == XS_GYM ||
+         xScreen == XS_DAILY || xScreen == XS_LINKMENU;
+}
 
 // texto centrado que se encoge a tamano 1 si no cabe en maxW
 void drawFit(const char *s, int y, int maxW, uint16_t col, uint8_t size) {

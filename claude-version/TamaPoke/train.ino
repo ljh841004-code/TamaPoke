@@ -21,8 +21,9 @@ const char *trainMsg = nullptr;
 #define TRM_X 73
 #define TRM_W 320
 #define TRM_Y 90
-#define TRM_H 54
-#define TRM_GAP 8
+#define TRM_H 46  // ko11.9: 5 filas (antes 54/8 con 4)
+#define TRM_GAP 6
+#define TRM_N 5
 
 // ---------- defensa: pokeballs que caen ----------
 #define DEF_LIVES 3     // ko10.6: fallos permitidos (antes 20 s fijos)
@@ -48,7 +49,8 @@ uint8_t spdHits = 0;       // ko10.6: aciertos (entrenan la VEL); spdScore = pun
 uint32_t spdRtSum = 0;     // suma de reflejos (ms) de los aciertos
 bool spdGood = false, spdNewHi = false;
 
-bool trainingFast() { return defOpen || spdOpen; }  // toques al apoyar el dedo
+extern bool vbOpen;  // ko11.9 (volley.ino)
+bool trainingFast() { return defOpen || spdOpen || vbOpen; }  // toques al apoyar el dedo
 bool trainingOpen() { return trainMenuOpen || trainingFast(); }
 
 void openTrainMenu() {
@@ -71,33 +73,33 @@ void openTrainMenu() {
 static void drawTrainMenuDots() {
   for (int i = 0; i < 2; i++) {
     int x = CX - 13 + i * 26;
-    if (i == trainMenuPage) gfx->fillCircle(x, 370, 5, UI_INK);
-    else gfx->drawCircle(x, 370, 4, UI_INK);
+    if (i == trainMenuPage) gfx->fillCircle(x, 382, 5, UI_INK);
+    else gfx->drawCircle(x, 382, 4, UI_INK);
   }
 }
 
 static void renderTrainPage() {
   drawFit(XT(X_TRAIN_TITLE), 44, 300, UI_INK, 3);
-  static const XId LABEL[4] = { X_TR_ATK, X_TR_DEF, X_TR_SPE, X_TR_PLAY };
-  const uint16_t COL[4] = { UI_BAR_BAD, 0x4C98, UI_BAR_WARN, UI_BAR_OK };
-  uint16_t best[4] = { pet.strHi, pet.defHi, pet.speHi, pet.gameHi };
-  for (int i = 0; i < 4; i++) {
+  static const XId LABEL[TRM_N] = { X_TR_ATK, X_TR_DEF, X_TR_SPE, X_TR_PLAY, X_TR_VOLLEY };
+  const uint16_t COL[TRM_N] = { UI_BAR_BAD, 0x4C98, UI_BAR_WARN, UI_BAR_OK, C565(0xf0, 0xc0, 0x20) };
+  uint16_t best[TRM_N] = { pet.strHi, pet.defHi, pet.speHi, pet.gameHi, pet.vbBest };
+  for (int i = 0; i < TRM_N; i++) {
     int y = TRM_Y + i * (TRM_H + TRM_GAP);
     gfx->fillRoundRect(TRM_X, y, TRM_W, TRM_H, 12, UI_WHITE);
     gfx->drawRoundRect(TRM_X, y, TRM_W, TRM_H, 12, UI_INK);
-    gfx->fillRoundRect(TRM_X + 8, y + 10, 8, TRM_H - 20, 4, COL[i]);  // color del tipo de juego
+    gfx->fillRoundRect(TRM_X + 8, y + 8, 8, TRM_H - 16, 4, COL[i]);  // color del tipo de juego
     gfx->setTextColor(UI_INK);
     setSize(2);
-    setCur(TRM_X + 26, y + 8);
+    setCur(TRM_X + 26, y + 4);
     printT(XT(LABEL[i]));
     char b[24];
-    snprintf(b, sizeof(b), XT(X_BEST_FMT), best[i]);
+    snprintf(b, sizeof(b), XT(i == 4 ? X_VB_BEST_FMT : X_BEST_FMT), best[i]);  // ko11.9: voleibol = racha
     setSize(1);
-    setCur(TRM_X + 26, y + 34);
+    setCur(TRM_X + 26, y + 28);
     printT(b);
   }
   if (!(timeLeft(trainMsgUntil) && trainMsg))
-    drawFit(XT(X_TRAIN_QUIT_HINT), 340, 260, C565(0x60, 0x68, 0x70), 1);
+    drawFit(XT(X_TRAIN_QUIT_HINT), 352, 260, C565(0x60, 0x68, 0x70), 1);
 }
 
 static void renderBattlePage() {
@@ -120,9 +122,9 @@ void renderTrainMenu() {
   gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
   if (trainMenuPage == 0) renderTrainPage();
   else renderBattlePage();
-  if (timeLeft(trainMsgUntil) && trainMsg) drawFit(trainMsg, 336, 320, UI_BAR_BAD, 2);
+  if (timeLeft(trainMsgUntil) && trainMsg) drawFit(trainMsg, 350, 320, UI_BAR_BAD, 2);
   drawTrainMenuDots();
-  drawFit(T(S_BACK), 390, 220, UI_INK, 2);
+  drawFit(T(S_BACK), 396, 220, UI_INK, 2);
   if (trainMenuPage > 0) drawNav(NAV_L, UI_INK);  // ko10.8
   else drawNav(NAV_R, UI_INK);
   drawNav(NAV_DOWN, UI_INK);
@@ -170,12 +172,12 @@ void trainMenuTap(int16_t x, int16_t y) {
   if (trainMenuPage == 1) { battlePageTap(x, y); return; }
   if (x < TRM_X || x >= TRM_X + TRM_W || y < TRM_Y) { trainMenuOpen = false; return; }
   int i = (y - TRM_Y) / (TRM_H + TRM_GAP);
-  if (i > 3) { trainMenuOpen = false; return; }
+  if (i >= TRM_N) { trainMenuOpen = false; return; }
   if ((y - TRM_Y) % (TRM_H + TRM_GAP) >= TRM_H) return;  // entre dos filas
   if (pet.sleeping || pet.isEgg() || pet.ceremony) {
     trainMsg = XT(X_CANT_NOW); trainMsgUntil = millis() + 2500; sfxPlay(SFX_DENY); return;
   }
-  if (i < 3 && pet.energy < 10) {  // la pelota es juego: se puede aunque este cansado
+  if (i != 3 && pet.energy < 10) {  // la pelota es juego: se puede aunque este cansado
     trainMsg = XT(X_TOO_TIRED); trainMsgUntil = millis() + 2500; sfxPlay(SFX_DENY); return;
   }
   sfxPlay(SFX_TAP);
@@ -183,6 +185,7 @@ void trainMenuTap(int16_t x, int16_t y) {
   if (i == 0) startSack();
   else if (i == 1) startDefense();
   else if (i == 2) startSpeed();
+  else if (i == 4) startVolley();  // ko11.9
   else startGame();
 }
 
@@ -492,6 +495,7 @@ bool trainingRender() {
   if (trainMenuOpen) { renderTrainMenu(); return true; }
   if (defOpen) { renderDefense(); return true; }
   if (spdOpen) { renderSpeed(); return true; }
+  if (vbOpen) { renderVolley(); return true; }  // ko11.9
   return false;
 }
 
@@ -507,7 +511,7 @@ void trainingPress(int16_t x, int16_t y) {  // al apoyar el dedo (juegos rapidos
 }
 
 // ko9.1: abandonar sin premio (mantener el dedo 2 s, ver handleTouch)
-void trainingQuit() { defOpen = spdOpen = false; }
+void trainingQuit() { defOpen = spdOpen = vbOpen = false; }
 
 bool trainingSwipe() {
   if (trainMenuOpen) { trainMenuOpen = false; return true; }

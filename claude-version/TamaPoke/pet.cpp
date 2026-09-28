@@ -786,6 +786,33 @@ static uint8_t trainGain(uint8_t &tr, uint16_t raw) {
   return tr - antes;
 }
 
+// ko11.9: voleibol. Ganar = racha +1 (record -> premio grande + caramelo), EXP y
+// caramelo; perder corta la racha. Los puntos hechos entrenan la VEL (minimo 3).
+uint8_t Pet::volleyResult(bool won, uint8_t myPoints) {
+  if (ceremony != CER_NONE || isEgg()) return 0;
+  bool record = false;
+  if (won) {
+    if (vbStreak < 65535) vbStreak++;
+    record = vbStreak > vbBest;
+    if (record) vbBest = vbStreak;
+  } else {
+    vbStreak = 0;
+  }
+  trainBonus(won, record);
+  if (won && !record) {  // ganar siempre da un caramelo (el record ya lo da trainBonus)
+    addCandy(speciesId, 1);
+    lastTrainCandy = 1;
+  }
+  uint8_t gain = trainGain(trSpe, (uint16_t)myPoints * 2);
+  energy = dropTo(energy, 12, 5);
+  fullness = dropTo(fullness, 5, 5);
+  joy = clamp100(joy + (won ? 10 : 4));
+  if (won) { heartUntil = millis() + HEART_MS; addBond(2); }
+  registerCare();
+  save();
+  return gain;
+}
+
 uint8_t Pet::trainDefense(uint16_t blocked) {
   if (ceremony != CER_NONE || isEgg()) return 0;
   trainBonus(blocked > 0, blocked > defHi);
@@ -936,6 +963,8 @@ void Pet::save() {
   prefs.putUChar("balls", balls);
   prefs.putUChar("potn", potions);
   prefs.putUShort("dhi", defHi);
+  prefs.putUShort("vbs", vbStreak);  // ko11.9
+  prefs.putUShort("vbb", vbBest);
   prefs.putUShort("vhp", speHi);  // ko10.6: clave nueva (puntos); el record viejo (aciertos) no vale
 }
 
@@ -1032,6 +1061,8 @@ void Pet::load() {
   balls = prefs.getUChar("balls", 5);   // partidas anteriores a ko4: kit inicial
   potions = prefs.getUChar("potn", 2);
   defHi = prefs.getUShort("dhi", 0);
+  vbStreak = prefs.getUShort("vbs", 0);  // ko11.9
+  vbBest = prefs.getUShort("vbb", 0);
   speHi = prefs.getUShort("vhp", 0);
   // ko11.5: nada fuera de rango entra en juego aunque la NVS venga danada
   // (una placa se quedo reiniciando en bucle al arrancar y solo volvio
