@@ -235,6 +235,6 @@ void renderVolley() {
     if (now - vbOverAt > VBC_RESULT_MIN_MS) drawFit(XT(X_VB_TAP_CLOSE), 332, 300, 0x8410, 1);
   }
   crumb(0x0107);
-  gfx->flush();
+  uiFlush();
   crumb(0x0108);
 }

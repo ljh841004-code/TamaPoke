@@ -192,7 +192,7 @@ static void boxDate(uint32_t e, char *out, size_t n) {
 
 void renderBoxDetail() {
   const BoxMon &m = cb().at(boxSel);
-  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
+  uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   char head[48];
   snprintf(head, sizeof(head), "%s%s", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex));
   drawFit(head, 44, 300, DEX_TBL[m.dex].accent, 3);
@@ -230,13 +230,13 @@ void renderBoxDetail() {
     }
   }
   if (!expPick) drawNav(NAV_L, UI_INK);  // ko11.8: <- volver a la lista
-  gfx->flush();
+  uiFlush();
 }
 
 void renderBox() {
   if (boxSel >= 0 && boxSel < cb().count()) { renderBoxDetail(); return; }
   boxSel = -1;
-  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
+  uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   // ko10.5: dos pestanas: la caja y el salon de la fama (corona)
   char t1[24], t2[24];
   snprintf(t1, sizeof(t1), XT(X_BOX_TITLE_FMT), box.count(), BOX_MAX);
@@ -310,7 +310,7 @@ void renderBox() {
   }
   drawNav(NAV_L, UI_INK);  // ko11.8: salir con la flecha (antes solo tocando abajo)
   if (expResOpen) drawExpResult();
-  gfx->flush();
+  uiFlush();
 }
 
 void boxSwipe() {  // deslizar: cierra la ficha, o la caja si estaba en la lista
@@ -420,7 +420,7 @@ static bool nextPickable(const BoxMon &m) { return pet.allFamsRaised() || !pet.i
 static uint8_t nextPages() { return box.count() ? (box.count() + NP_ROWS - 1) / NP_ROWS : 1; }
 
 void renderNextPick() {
-  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
+  uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   drawFit(XT(X_NEXT_TITLE), 34, 320, UI_INK, 2);
   drawBtn(93, NP_EGG_Y, 280, 48, UI_BAR_WARN, UI_INK, XT(X_NEXT_EGG));
   boxSortView(box);
@@ -455,7 +455,7 @@ void renderNextPick() {
     drawFit(pg, NP_NAV_Y + 8, 100, UI_INK, 2);
   }
   drawFit(XT(X_NEXT_HINT), 392, 300, 0x8410, 1);
-  gfx->flush();
+  uiFlush();
 }
 
 void nextPickTap(int16_t x, int16_t y) {
@@ -515,7 +515,7 @@ void openSound() {
 }
 
 void renderSound() {
-  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
+  uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   drawFit(XT(X_SOUND_TITLE), 40, 300, UI_INK, 3);
   bool on = audioEnabled();
   drawBtn(133, 78, 200, 40, on ? UI_BAR_OK : UI_TRACK, on ? UI_WHITE : UI_INK,
@@ -539,7 +539,7 @@ void renderSound() {
   // ko11.8: elegir que fondos suenan (la duracion de cada uno esta en esa pantalla)
   drawBtn(113, VOL_BGM_Y, 240, 34, UI_WHITE, UI_INK, XT(X_BGM_PICK_BTN));
   drawBtn(143, VOL_DONE_Y, 180, 40, UI_BAR_OK, UI_WHITE, XT(X_VOL_DONE));
-  gfx->flush();
+  uiFlush();
 }
 
 static void soundPreview(int ch) {
@@ -603,7 +603,7 @@ void openBgmPick() {
 }
 
 void renderBgmPick() {
-  gfx->fillScreen(UI_BG_DAY);
+  uiScreenBg();
   drawFit(XT(X_BGM_PICK_TITLE), 38, 300, UI_INK, 3);
   drawFit(XT(X_BGM_PICK_HINT), 76, 320, 0x8410, 1);
   uint8_t list[BGM_MAX];
@@ -660,7 +660,7 @@ void renderBgmPick() {
     drawFit(hint, my, 320, 0x8410, 1);
   }
   drawBtn(143, VOL_DONE_Y, 180, 40, UI_BAR_OK, UI_WHITE, XT(X_VOL_DONE));
-  gfx->flush();
+  uiFlush();
 }
 
 void bgmPickTap(int16_t x, int16_t y) {
@@ -713,7 +713,7 @@ void openUpdate() {
 }
 
 static void updScreenBase() {
-  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
+  gfx->fillScreen(UI_BG_DAY);  // ko11.13: liso, que no frene la escritura  // ko11.6.1: sin pasar por negro (parpadeo)
   drawFit(XT(X_UPD_TITLE), 48, 300, UI_INK, 3);
 }
 
@@ -730,7 +730,7 @@ static void updProgress(uint32_t done, uint32_t total) {
   char pc[8];
   snprintf(pc, sizeof(pc), "%u%%", (unsigned)((uint64_t)done * 100 / (total ? total : 1)));
   drawFit(pc, 254, 200, UI_INK, 2);
-  gfx->flush();
+  gfx->flush();  // ko11.13: sin fundido mientras escribe
 }
 
 void renderUpdate() {
@@ -761,7 +761,7 @@ void renderUpdate() {
     drawFit(XT(X_UPD_HINT), 206, 380, UI_INK, 1);
     drawBtn(133, 330, 200, 48, UI_TRACK, UI_INK, T(S_BACK));
   }
-  gfx->flush();
+  uiFlush();
 }
 
 void updateTap(int16_t x, int16_t y) {
@@ -821,11 +821,11 @@ void doResetGame() {
 }
 
 void renderReset() {
-  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
+  uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   drawFit(XT(X_RESET_TITLE), 40, 300, UI_INK, 3);
   if (rstDone) {
     drawFit(XT(X_RESET_DONE), 220, 320, UI_INK, 3);
-    gfx->flush();
+    uiFlush();
     return;
   }
   drawFit(XT(X_RESET_L1), 96, 340, UI_INK, 2);
@@ -849,7 +849,7 @@ void renderReset() {
   drawFit(XT(X_RESET_HOLD), RST_BTN_Y - 12, 2 * RST_BTN_R - 10, UI_WHITE, 2);
   if (rstHint) drawFit(XT(X_RESET_HINT), 196, 340, UI_INK, 2);
   drawBtn(163, 372, 140, 40, UI_WHITE, UI_INK, XT(X_UPD_CANCEL));
-  gfx->flush();
+  uiFlush();
 }
 
 void resetTap(int16_t x, int16_t y) {
@@ -985,7 +985,7 @@ void renderCandyBag() {
     drawBtn(x + 20, y + 144, w - 40, 36, UI_TRACK, UI_INK, XT(X_BAG_CLOSE));
     if (bagMsg && timeLeft(bagMsgUntil)) drawFit(bagMsg, y - 30, 300, UI_BAR_OK, 2);
   }
-  gfx->flush();
+  uiFlush();
 }
 
 static void bagSay(const char *m, bool good) {
@@ -1148,7 +1148,7 @@ static void fameDetail() {
 
 void renderFame() {
   screenBase();
-  if (fameSel >= 0 && fameSel < fame.count()) { fameDetail(); gfx->flush(); return; }
+  if (fameSel >= 0 && fameSel < fame.count()) { fameDetail(); uiFlush(); return; }
   char t[40];
   snprintf(t, sizeof(t), XT(X_FAME_BTN_FMT), fame.count());
   drawFit(t, 36, 320, C565(0xb0, 0x80, 0x10), 3);
@@ -1170,7 +1170,7 @@ void renderFame() {
   if (famePage > 0) drawNav(NAV_L, UI_INK);
   if (famePage + 1 < famePages()) drawNav(NAV_R, UI_INK);
   drawNav(NAV_DOWN, UI_INK);
-  gfx->flush();
+  uiFlush();
 }
 
 void fameTap(int16_t x, int16_t y) {
@@ -1390,13 +1390,13 @@ void renderBackup() {
   drawBackArrow();  // ko11.6.1
   if (bakSel >= 0) drawBakConfirm(XT(X_BAK_CONFIRM), bakSel, X_BAK_RESTORE, X_BAK_CANCEL);
   if (bakCrashView) drawCrashView();
-  gfx->flush();
+  uiFlush();
 }
 
 static void bakRestoreAndRestart(int8_t slot) {
   screenBase();
   drawFit(XT(X_BAK_RESTORING), 220, 360, UI_INK, 2);
-  gfx->flush();
+  uiFlush();
   if (bakRestore((uint8_t)slot)) {
     delay(800);
     ESP.restart();
@@ -1438,7 +1438,7 @@ void backupTap(int16_t x, int16_t y) {
 void renderBakAsk() {
   screenBase();
   drawBakConfirm(XT(X_BAK_ASK_TITLE), bakAskSlot, X_BAK_RESTORE, X_RESET_BTN, false);
-  gfx->flush();
+  uiFlush();
 }
 
 void bakAskTap(int16_t x, int16_t y) {

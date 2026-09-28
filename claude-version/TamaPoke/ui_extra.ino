@@ -67,7 +67,7 @@ bool inRect(int16_t x, int16_t y, int rx, int ry, int rw, int rh) {
 // "parpadeaba" sin parar. La pantalla es redonda: las esquinas no se ven, asi
 // que se pinta todo del color de fondo (la escena principal ya lo hacia asi)
 void screenBase() {
-  gfx->fillScreen(UI_BG_DAY);
+  uiScreenBg();
 }
 
 // ======================================================================
@@ -180,7 +180,7 @@ void renderNet() {
     portalRow(324, XT(X_QR_PASS), NET_AP_PASS_UI, UI_INK);
     portalRow(364, XT(X_QR_ADDR), "192.168.4.1", UI_INK);
     drawBtn(158, 408, 150, 34, UI_TRACK, UI_INK, T(S_BACK));
-    gfx->flush();
+    uiFlush();
     return;
   }
 
@@ -251,7 +251,7 @@ void renderNet() {
   drawBtn(NET_UPD_X, NET_UPD_Y, NET_UPD_W, NET_UPD_H, 0xFB20, UI_WHITE, XT(X_UPD_BTN));
   drawBtn(NET_BAK_X, NET_UPD_Y, NET_BAK_W, NET_UPD_H, 0x6B4D, UI_WHITE, XT(X_BAK_BTN));  // ko11.6
   drawBackArrow();  // ko11.6.1: flecha izquierda = volver (antes "tocar arriba", con el aviso abajo junto a [SD])
-  gfx->flush();
+  uiFlush();
 }
 
 void netTap(int16_t x, int16_t y) {
@@ -1109,7 +1109,7 @@ void renderBattleView() {
     drawBattleMsg();
     if (bPhase == BP_MENU) drawBattleMenu();
   }
-  gfx->flush();
+  uiFlush();
 }
 
 void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool foeShiny) {
@@ -1336,7 +1336,7 @@ void renderRegionPick() {
     }
   }
   drawBtn(CX - 80, RG_BACK_Y, 160, 44, UI_TRACK, UI_INK, T(S_BACK));
-  gfx->flush();
+  uiFlush();
 }
 
 static void regionTurn(int to) {
@@ -1509,7 +1509,7 @@ static void gymFooter() {
   drawBtn(CX - 80, GY_BACK_Y, 160, 40, UI_TRACK, UI_INK, T(S_BACK));
   if (gymPage > 0) drawNav(NAV_L, UI_INK);
   if (gymPage < GY_PAGES - 1) drawNav(NAV_R, UI_INK);
-  gfx->flush();
+  uiFlush();
 }
 
 #define LG_BTN_Y 118
@@ -1621,7 +1621,7 @@ void renderDaily() {
   }
   if (gymMsg && timeLeft(gymMsgUntil)) drawFit(gymMsg, 356, 300, UI_BAR_BAD, 1);
   drawBtn(CX - 80, GY_BACK_Y, 160, 40, UI_TRACK, UI_INK, T(S_BACK));
-  gfx->flush();
+  uiFlush();
 }
 
 void dailyTap(int16_t x, int16_t y) {
@@ -2008,7 +2008,7 @@ void renderLinkMenu() {
   snprintf(rec, sizeof(rec), XT(X_RECORD_FMT), pet.wildWins, pet.linkWins, pet.linkBattles, pet.trades);
   drawFit(rec, 306, 340, UI_INK, 2);
   drawFit(XT(X_TAP_CLOSE), 400, 300, UI_INK, 2);
-  gfx->flush();
+  uiFlush();
 }
 
 void linkMenuTap(int16_t x, int16_t y) {
@@ -2143,11 +2143,11 @@ void renderLinkEnd() {
 
 void renderLink() {
   if (linkBattleStarted) { renderBattleView(); return; }
-  if (linkEndAt) { renderLinkEnd(); gfx->flush(); return; }
+  if (linkEndAt) { renderLinkEnd(); uiFlush(); return; }
   if (linkState() == LS_SEARCH) renderLinkSearch(linkMode() == LINK_BATTLE ? XT(X_LINK_BATTLE) : XT(X_LINK_TRADE));
   else if (linkMode() == LINK_TRADE) renderLinkTrade();
   else renderLinkSearch(XT(X_LINK_BATTLE));
-  gfx->flush();
+  uiFlush();
 }
 
 void linkTap(int16_t x, int16_t y) {

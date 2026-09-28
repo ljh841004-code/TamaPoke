@@ -410,7 +410,7 @@ static void bootDrawStatus(const char *line1) {
     gfx->print(resetName(bootPrevReason));
     if (safeMode) { gfx->setCursor(40, 320); gfx->setTextColor(0xF800); gfx->print("SAFE MODE: no SD/WiFi/sound"); }
   }
-  gfx->flush();
+  uiFlush();
 }
 void bootStep(uint8_t s) {
   rbStep = s;
@@ -673,9 +673,9 @@ void careAlert() {
 // ko11.3: medida en los minijuegos rapidos (se ve pequena en el resultado):
 // el render mas lento y el paron mas largo del resto del loop
 uint16_t perfRenderMax = 0, perfStallMax = 0;
-uint32_t perfFrames = 0;
+uint32_t perfFrames = 0, perfRenderSum = 0;  // ko11.13: + media
 void drawPerfLine(int y, uint16_t ink);  // train.ino
-void perfReset() { perfRenderMax = perfStallMax = 0; perfFrames = 0; }
+void perfReset() { perfRenderMax = perfStallMax = 0; perfFrames = 0; perfRenderSum = 0; }
 
 void loop() {
   uint32_t now = millis();
@@ -796,7 +796,7 @@ void loop() {
   }
   if (fastGameNow()) {
     uint32_t stall = millis() - loopT0 - renderMs;
-    if (renderMs) { perfFrames++; if (renderMs > perfRenderMax) perfRenderMax = (uint16_t)renderMs; }
+    if (renderMs) { perfFrames++; perfRenderSum += renderMs; if (renderMs > perfRenderMax) perfRenderMax = (uint16_t)renderMs; }
     if (stall > perfStallMax) perfStallMax = (uint16_t)(stall > 65535 ? 65535 : stall);
   }
 }
@@ -1493,6 +1493,7 @@ static int uiRowInset(int yy, int h, int r) {
   return r - dx;
 }
 
+void uiShadeSpan(uint16_t *p, int n, uint32_t k);
 // oscurece (a de 16) el area de un rectangulo redondeado: sombras y velos
 void uiShade(int x, int y, int w, int h, int r, uint8_t a) {
   uint16_t *fb = gfx->getFramebuffer();
@@ -1507,11 +1508,64 @@ void uiShade(int x, int y, int w, int h, int r, uint8_t a) {
     int x0 = x + in, x1 = x + w - in;
     if (x0 < 0) x0 = 0;
     if (x1 > LCD_WIDTH) x1 = LCD_WIDTH;
-    uint16_t *p = fb + py * LCD_WIDTH;
-    for (int px = x0; px < x1; px++) {
-      uint16_t c = p[px];
-      p[px] = (uint16_t)(((((c >> 11) & 31) * k / 16) << 11) | ((((c >> 5) & 63) * k / 16) << 5) | ((c & 31) * k / 16));
+    uiShadeSpan(fb + py * LCD_WIDTH + x0, x1 - x0, (uint32_t)k);
+  }
+}
+
+// ko11.13: los 3 canales de un pixel 565 a la vez (G arriba, R y B abajo, con
+// hueco entre ellos): una sola multiplicacion por pixel en vez de tres divisiones
+static inline uint32_t uiSpread(uint16_t c) { return ((uint32_t)c | ((uint32_t)c << 16)) & 0x07E0F81Fu; }
+static inline uint16_t uiPack(uint32_t v) { v &= 0x07E0F81Fu; return (uint16_t)(v | (v >> 16)); }
+
+// oscurece n pixeles: c * k / 16
+void uiShadeSpan(uint16_t *p, int n, uint32_t k) {
+  for (int i = 0; i < n; i++) p[i] = uiPack((uiSpread(p[i]) * k) >> 4);
+}
+
+// mezcla n pixeles hacia el color "to": (c * k + to * (16 - k)) / 16
+void uiMixSpan(uint16_t *p, int n, uint32_t k, uint16_t to) {
+  uint32_t t = uiSpread(to) * (16 - k);
+  for (int i = 0; i < n; i++) p[i] = uiPack((uiSpread(p[i]) * k + t) >> 4);
+}
+
+// ko11.13: fundido al cambiar de pantalla. uiFlush() sustituye a gfx->flush():
+// si la pantalla es otra (screenSig), los primeros ~250 ms la nueva aparece
+// desde el color de fondo (10/16 -> 0). En los juegos rapidos no se hace (coste)
+bool gUiFade = true;  // el render de PC lo apaga (capturas sin fundido)
+static uint16_t uiLastSig = 0xFFFF;
+static uint32_t uiFadeT0 = 0;
+#define UI_FADE_MS 260
+void uiFlush() {
+  uint16_t sig = screenSig();
+  uint32_t now = millis();
+  if (sig != uiLastSig) {
+    if (gUiFade && uiLastSig != 0xFFFF && !fastGameNow()) uiFadeT0 = now ? now : 1;
+    uiLastSig = sig;
+  }
+  if (uiFadeT0) {
+    uint32_t dt = now - uiFadeT0;
+    if (dt >= UI_FADE_MS || fastGameNow()) uiFadeT0 = 0;
+    else {
+      uint16_t *fb = gfx->getFramebuffer();
+      uint32_t k = 6 + dt * 10 / UI_FADE_MS;  // 6..15 de 16 de la pantalla nueva
+      if (fb) uiMixSpan(fb, LCD_WIDTH * LCD_HEIGHT, k, gNight ? C565(0x10, 0x14, 0x24) : UI_BG_DAY);
     }
+  }
+  gfx->flush();
+}
+
+// ko11.13: fondo de las pantallas de menu: crema con degradado suave (antes liso)
+// Los 3 canales bajan a la vez en pasos de 565 (R-1, G-2, B-1: sin tinte rosa o
+// verde entre franjas) y las filas se tramaan (patron de 4) para que no se vean
+// bandas. Nivel +1 arriba, 0 = UI_BG_DAY (#f2efe1) a un tercio, -2 abajo
+void uiScreenBg() {
+  static const uint8_t DITH[4] = { 0, 8, 4, 12 };
+  for (int y = 0; y < LCD_HEIGHT; y++) {
+    int l16 = 16 - y * 48 / LCD_HEIGHT;  // nivel x16: +16 .. -32
+    int l = l16 >= 0 ? l16 / 16 : -((-l16 + 15) / 16);
+    if ((l16 - l * 16) > DITH[y & 3]) l++;
+    int r5 = 30 + l, g6 = 59 + 2 * l, b5 = 28 + l;
+    gfx->drawFastHLine(0, y, LCD_WIDTH, (uint16_t)((r5 << 11) | (g6 << 5) | b5));
   }
 }
 
@@ -2136,7 +2190,7 @@ void drawBigClock(bool night) {
 
 // primera partida: elige inicial entre Bulbasaur / Charmander / Squirtle
 void renderStarterSelect() {
-  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
+  uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   const char *t = T(S_CHOOSE_STARTER);
   gfx->setTextColor(UI_INK);
   setSize(2);
@@ -2154,7 +2208,7 @@ void renderStarterSelect() {
     setCur(178, ry + 24);
     printT(dexName(d));
   }
-  gfx->flush();
+  uiFlush();
 }
 
 // ---------- texto: tamano y cursor (preparado para fuentes CJK) ----------
@@ -2476,7 +2530,7 @@ void render() {
                                                       : T(S_GOODBYE);
     drawHeader(dexName(pet.speciesId), d.accent, msg);
     drawCeremony();
-    gfx->flush();
+    uiFlush();
     return;
   }
 
@@ -2584,7 +2638,7 @@ void render() {
   }
 
   drawToast();  // fork KO: avisos breves
-  gfx->flush();
+  uiFlush();
 }
 
 // ---------- minijuego: toques con la pokeball ----------
@@ -2764,7 +2818,7 @@ void renderSack() {
     sackGain = pet.trainStrength(sackHits, sackBags);
     sfxPlay(sackNewHi ? SFX_MEDAL : SFX_PLAY);
     sackOverUntil = now + 3500;
-    gfx->flush();
+    uiFlush();
     return;
   }
 
@@ -2795,7 +2849,7 @@ void renderSack() {
   uiGauge(CX - bw / 2, 340, bw, 12, fw * 1000 / bw, UI_BAR_OK, UI_TRACK);
   if (sackBags == 0) drawFit(T(S_HIT_FAST), 366, 320, ink, 2);
 
-  gfx->flush();
+  uiFlush();
 }
 
 // fondo del minijuego: hatibat del bicho (cielo por hora + suelo del bioma)
@@ -2855,7 +2909,7 @@ void renderGame() {
     const char *msg = gameNewHi ? XT(X_GAME_REWARD) : gameScore ? XT(X_GAME_SMALL) : XT(X_GAME_NO_REWARD);
     drawFit(msg, 250, 330, gameNewHi ? UI_BAR_OK : ink, 2);
     drawPerfLine(300, ink);  // ko11.3
-    gfx->flush();
+    uiFlush();
     return;
   }
 
@@ -2918,7 +2972,7 @@ void renderGame() {
   for (int i = 0; i < GAME_BALLS; i++)
     if (ballY[i] > -24) drawMap(SPR_ICON_PLAY, 16, (int)ballX[i] - 24, (int)ballY[i] - 24, 3, false);
 
-  gfx->flush();
+  uiFlush();
 }
 
 // ---------- ficha del bicho (deslizar vertical) ----------
@@ -3019,7 +3073,7 @@ void drawClockBtn(int x, int y, const char *l) {
 static const char *const LANG_CODES[LANG_COUNT] = { "ES", "EN", "FR", "DE", "IT", "PT", "JA", "KO" };
 
 void renderClock() {
-  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
+  uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   gfx->setTextColor(UI_INK);
   setSize(3);
   setCur(centerX(T(S_SET_TIME), 3), 30);  // ko10.4: sitio para la pildora de fecha
@@ -3097,7 +3151,7 @@ void renderClock() {
   // ko11.6.1: punto verde = tabla de particiones nueva (nvs2) instalada con los 3 ficheros
   if (bigPart()) gfx->fillCircle(centerX(ver, 1) + textW(ver, 1) + 10, CLK_VER_Y + 9, 5, UI_BAR_OK);
   drawBackArrow();  // ko11.6.1
-  gfx->flush();
+  uiFlush();
 }
 
 // ko11.6: el borde de arriba (vacio) tocado dos veces seguidas = salir. Asi no
@@ -3479,7 +3533,7 @@ static void cardCandyTap(int16_t x, int16_t y) {
 }
 
 void renderCard() {
-  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
+  uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   if (cardPage == 0) renderCardProfile();
   else if (cardPage == 1) renderCardStats();
   else if (cardPage == 2) renderCardMedals();
@@ -3499,7 +3553,7 @@ void renderCard() {
   if (cardPage > 0) drawNav(NAV_L, UI_INK);  // ko10.8
   if (cardPage < CARD_PAGES - 1) drawNav(NAV_R, UI_INK);
   drawNav(NAV_DOWN, UI_INK);
-  gfx->flush();
+  uiFlush();
 }
 
 // ---------- teclado para renombrar ----------
@@ -3573,7 +3627,7 @@ static void kbCleanName(char *s) {
 }
 
 void renderKeyboard() {
-  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
+  uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   drawFit(T(S_NAME), 36, 200, UI_INK, 2);
   // lo escrito
   char t[64];
@@ -3617,7 +3671,7 @@ void renderKeyboard() {
     drawBtn(184, KBB_Y - 16, 98, KBB_H, UI_TRACK, UI_INK, XT(X_KB_DEL));
     drawBtn(288, KBB_Y - 16, 100, KBB_H, UI_BAR_OK, UI_WHITE, "OK");
   }
-  gfx->flush();
+  uiFlush();
 }
 
 // borra el ultimo caracter confirmado (UTF-8: hasta 3 bytes)
@@ -3770,7 +3824,7 @@ uint16_t dexDiscoveredCount() {
 
 // ficha de la pokedex (fork KO, ko4): datos basicos + historial
 void renderDexDetail() {
-  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
+  uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   int16_t dx = galleryDetail;
   const DexEntry &d = DEX_TBL[dx];
   bool disc = dexDiscovered(dx);
@@ -3818,7 +3872,7 @@ void renderDexDetail() {
   }
   drawFit(T(S_DETAIL_BACK), 386, 260, UI_INK, 2);
   drawFit(XT(X_DEX_EXIT), 412, 220, UI_INK, 1);  // ko5
-  gfx->flush();
+  uiFlush();
 }
 
 void renderGallery() {
@@ -3830,7 +3884,7 @@ void renderGallery() {
   if (!galleryDirty) return;  // la rejilla es estatica
   galleryDirty = false;
 
-  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
+  uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   char head[24];
   snprintf(head, sizeof(head), T(S_POKEDEX_FMT), dexDiscoveredCount());
   gfx->setTextColor(UI_INK);
@@ -3883,7 +3937,7 @@ void renderGallery() {
   drawNav(NAV_L, UI_INK);  // ko10.8: en la primera pagina, la izquierda sale
   if (galleryPage < GAL_PAGES - 1) drawNav(NAV_R, UI_INK);
   drawNav(NAV_DOWN, UI_INK);
-  gfx->flush();
+  uiFlush();
 }
 
 void galleryTap(int16_t x, int16_t y) {

@@ -139,7 +139,7 @@ static void renderBattlePage() {
 }
 
 void renderTrainMenu() {
-  gfx->fillScreen(UI_BG_DAY);  // ko11.6.1: sin pasar por negro (parpadeo)
+  uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   if (trainMenuPage == 0) renderTrainPage();
   else renderBattlePage();
   if (timeLeft(trainMsgUntil) && trainMsg) drawFit(trainMsg, 350, 320, UI_BAR_BAD, 2);
@@ -148,7 +148,7 @@ void renderTrainMenu() {
   if (trainMenuPage > 0) drawNav(NAV_L, UI_INK);  // ko10.8
   else drawNav(NAV_R, UI_INK);
   drawNav(NAV_DOWN, UI_INK);
-  gfx->flush();
+  uiFlush();
 }
 
 // deslizar a los lados cambia de pagina; mas alla de los extremos, cierra
@@ -235,16 +235,17 @@ void drawTrainResult(const char *score, const char *gain, uint16_t gainCol, bool
   else if (pet.lastTrainCandy) snprintf(bn, sizeof(bn), "%s", XT(X_TRAIN_CANDY));
   if (bn[0]) drawFit(bn, 334, 340, UI_BAR_OK, 2);
   drawPerfLine(362, ink);  // ko11.3
-  gfx->flush();
+  uiFlush();
 }
 
 // ko11.3: medida del minijuego, pequena (para ver de donde vienen los tirones)
 extern uint16_t perfRenderMax, perfStallMax;
-extern uint32_t perfFrames;
+extern uint32_t perfFrames, perfRenderSum;
 void drawPerfLine(int y, uint16_t ink) {
   if (!perfFrames) return;
   char p[48];
-  snprintf(p, sizeof(p), XT(X_PERF_FMT), (unsigned)perfRenderMax, (unsigned)perfStallMax);
+  snprintf(p, sizeof(p), XT(X_PERF_FMT), (unsigned)(perfRenderSum / perfFrames), (unsigned)perfRenderMax,
+           (unsigned)perfStallMax);
   drawFit(p, y, 300, ink, 1);
 }
 
@@ -356,7 +357,7 @@ void renderDefense() {
   for (auto &ball : defBall)
     if (ball.on) drawMap(SPR_ICON_PLAY, 16, (int)ball.x - 24, (int)ball.y - 24, 3, false);
   if (now - defStart < 2500) drawFit(XT(X_TR_DEF_HINT), 180, 320, ink, 2);
-  gfx->flush();
+  uiFlush();
 }
 
 // ---------- velocidad ----------
@@ -505,7 +506,7 @@ void renderSpeed() {
   } else if (spdRound == 0) {
     drawFit(XT(X_TR_SPE_HINT), 186, 220, ink, 2);
   }
-  gfx->flush();
+  uiFlush();
 }
 
 // ---------- ganchos para TamaPoke.ino ----------

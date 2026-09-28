@@ -33,6 +33,7 @@ static void scenes(bool ko, const char *sfx) {
   applyLangFont();
   if (ko) printf("  (ascenso unifont: %d)\n", gFontAscent);
   closeAll();
+  gUiFade = false;  // ko11.13: capturas sin fundido de cambio de pantalla
   // principal
   gMockEpoch = 1790343900;  // 13:45
   pet.lastSeenEpoch = gMockEpoch;
@@ -42,6 +43,12 @@ static void scenes(bool ko, const char *sfx) {
   pet.lastSeenEpoch = gMockEpoch;
   render(); shot("02_main_night");
   gMockEpoch = 1790343900; pet.lastSeenEpoch = gMockEpoch;
+  // ko11.13: fundido al abrir el menu de entrenamiento (principio y mitad)
+  gUiFade = true; render();
+  openTrainMenu(); render(); shot("90_fade_start");
+  tick(130); render(); shot("90_fade_mid");
+  tick(200); render(); shot("90_fade_end");
+  closeAll(); render(); gUiFade = false;
   // ko10.8: comportamientos de la pantalla principal
   {  // ko11.7: aviso de premio de la pokedex
     char t[80];
@@ -125,7 +132,7 @@ static void scenes(bool ko, const char *sfx) {
   for (int i = 0; i < 40; i++) { sackTap(); tick(60); }  // ko10.7: unos cuantos sacos rotos
   render(); shot("25_sack");
   for (int i = 0; i < 80; i++) { tick(85); render(); }   // se acaba el plazo
-  perfFrames = 120; perfRenderMax = 71; perfStallMax = 12;  // ko11.3: linea de medida
+  perfFrames = 120; perfRenderSum = 120 * 58; perfRenderMax = 71; perfStallMax = 12;  // ko11.3: linea de medida
   render(); shot("25b_sack_result");
   perfReset();
   closeAll(); startGame(); tick(300); render(); shot("26_ball_game");
