@@ -175,7 +175,15 @@ static bool sdMount() {
 bool sdBegin() {
   sdMutex = xSemaphoreCreateMutex();
   if (!sdMutex) return false;
-  return sdMount();
+  // ko11.9.2: tras reiniciar solo (p. ej. al acabar la actualizacion desde la SD)
+  // la tarjeta a veces no contesta al primer intento y el juego arrancaba sin
+  // sprites hasta apagar y encender. Unos reintentos cortos lo evitan.
+  for (int i = 0; i < 4; i++) {
+    if (sdMount()) return true;
+    SD_MMC.end();
+    delay(250);
+  }
+  return false;
 }
 
 
