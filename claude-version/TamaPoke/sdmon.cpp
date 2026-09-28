@@ -11,17 +11,17 @@ bool sdReady = false;
 bool sdDirty = false;
 SdThumbs thumbs;
 
-bool PmdMon::load(uint8_t dexNum, bool shiny) {
+bool PmdMon::load(uint8_t dexNum, bool shiny, char kind) {
   unload();
   if (!sdReady) return false;
   SdCardLock lock;
   if (!lock) return false;
 
   char path[28];
-  snprintf(path, sizeof(path), "/mons/p%s%03u.bin", shiny ? "s" : "", dexNum);
+  snprintf(path, sizeof(path), "/mons/%c%s%03u.bin", kind, shiny ? "s" : "", dexNum);
   File f = SD_MMC.open(path, FILE_READ);
   if (!f && shiny) {  // sin shiny PMD: usa el normal
-    snprintf(path, sizeof(path), "/mons/p%03u.bin", dexNum);
+    snprintf(path, sizeof(path), "/mons/%c%03u.bin", kind, dexNum);
     f = SD_MMC.open(path, FILE_READ);
   }
   if (!f) return false;

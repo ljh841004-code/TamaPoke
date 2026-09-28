@@ -309,6 +309,9 @@ bool bCaught = false;      // la batalla acabo en captura
 int8_t bBoxMsg = -1;       // XId del aviso de la caja en el resultado (-1 = nada)
 #define BOX_JOIN_PCT 20    // ko5: % de salvajes vencidos que se unen a la caja
 PmdMon foePmd;
+// ko11.16: sprites de combate al estilo de los juegos (rNNN.bin de la SD): el rival de
+// frente y el tuyo de espaldas. Si no estan, se usan los PMD de siempre
+PmdMon prgFoe, prgMe;
 int16_t foePmdDex = 0;       // que especie tiene cargada foePmd
 bool foePmdShiny = false;
 
@@ -876,6 +879,18 @@ static uint8_t battleFacing(const PmdMon &m, uint8_t act, bool mine) {
   return m.has(d) ? d : act;
 }
 
+// ko11.16: sprite de combate estilo juego: escala fija en cuartos (s4) para que se
+// note el tamano de cada especie, con tope de alto (maxH px); anclado por los pies
+static void drawPrgBattler(PmdMon &m, uint8_t act, int cx, int groundY, uint32_t t, bool sil, int s4, int maxH) {
+  const PmdAct &a = m.acts[act];
+  if (!a.frames) return;
+  while (s4 > 6 && a.h * s4 > maxH * 4) s4--;
+  uint8_t fi = pmdFrameAt(a, t, true);
+  const uint8_t *fr = a.data + (uint32_t)fi * a.w * a.h;
+  int x0 = cx - a.w * s4 / 8, y0 = groundY - (a.base ? a.base : a.h) * s4 / 4;
+  smoothBlitQ(fr, a.w, a.h, m.pal, x0, y0, s4, sil);
+}
+
 // dibuja los dos Pokemon; anima al que actua segun el evento en curso
 void drawBattlers() {
   uint32_t now = millis();
@@ -941,7 +956,9 @@ void drawBattlers() {
       gfx->fillRect(sx - 1, sy - l, 3, 2 * l + 1, gold);
     }
   }
-  if (!foeHide && !foeGone) {
+  if (!foeHide && !foeGone && prgFoe.loaded && prgFoe.has(PMD_IDLE)) {  // ko11.16: estilo juego, de frente
+    drawPrgBattler(prgFoe, PMD_IDLE, foeX + 14, foeG, now, foeSil, 9, 132);  // mas lejos: algo mas pequeno
+  } else if (!foeHide && !foeGone) {
     if (foePmd.loaded) {
       if (!foePmd.has(foeAct)) foeAct = PMD_IDLE;
       foeAct = battleFacing(foePmd, foeAct, false);
@@ -951,7 +968,9 @@ void drawBattlers() {
       if (th) drawThumb(th, foeX - GAL_CELL / 2, foeG - GAL_CELL, 2, foeSil);
     }
   }
-  if (!meHide && !meGone) {
+  if (!meHide && !meGone && prgMe.loaded && prgMe.has(PMD_IDLE_UR)) {  // ko11.16: de espaldas
+    drawPrgBattler(prgMe, PMD_IDLE_UR, meX, meG, now, meSil, 12, 176);
+  } else if (!meHide && !meGone) {
     if (pmd.loaded) {
       if (!pmd.has(meAct)) meAct = PMD_IDLE;
       meAct = battleFacing(pmd, meAct, true);
@@ -1124,6 +1143,9 @@ void renderBattleView() {
 }
 
 void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool foeShiny) {
+  // ko11.16: sprites de combate (si la SD los tiene)
+  prgFoe.load((uint8_t)foe.dex, foeShiny, 'r');  // ~100 KB de la SD, una vez por combate
+  if (!prgMe.loaded || bvMeDex != me.dex) prgMe.load((uint8_t)me.dex, pet.shiny && me.dex == pet.speciesId, 'r');
   bvMeDex = me.dex; bvFoeDex = foe.dex;
   bvMeType = me.type; bvFoeType = foe.type;
   bvMeTier = moveTier(me.dex); bvFoeTier = moveTier(foe.dex);

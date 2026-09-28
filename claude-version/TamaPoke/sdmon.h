@@ -43,7 +43,8 @@ struct PmdMon {
   uint8_t *blob = nullptr;
   PmdAct acts[PMD_NACTS];
 
-  bool load(uint8_t dexNum, bool shiny = false);
+  // kind: 'p' = pNNN.bin (PMD, todas las acciones); 'r' = rNNN.bin (ko11.16: combate estilo juego)
+  bool load(uint8_t dexNum, bool shiny = false, char kind = 'p');
   void unload();
   bool has(uint8_t a) const { return loaded && a < PMD_NACTS && acts[a].frames > 0; }
 };
