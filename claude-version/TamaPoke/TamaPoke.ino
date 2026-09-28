@@ -42,7 +42,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko11.15"
+#define FW_VERSION "1.17-ko11.15.1"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -1420,6 +1420,7 @@ void onTap(int16_t x, int16_t y) {
       return;
     }
     if (navHit(NAV_TOP, x, y)) { openClock(); sfxPlay(SFX_TAP); return; }  // ko11.15.1
+    if (navHit(NAV_R, x, y)) { openBox(); sfxPlay(SFX_TAP); return; }       // ko11.15.1: caja
     if (!pet.isEgg() && navHit(NAV_UP, x, y)) { cardOpen = true; cardPage = 0; sfxPlay(SFX_TAP); return; }
   }
   for (int i = 0; i < 4; i++) {
@@ -2554,7 +2555,8 @@ void render() {
     drawButtons();
     if (mainNavAllowed()) {  // ko10.8
       drawNav(NAV_L, inkColor());
-      drawNav(NAV_TOP, inkColor());  // ko11.15.1: la hora pasa arriba (la derecha, libre de momento)
+      drawNav(NAV_TOP, inkColor());  // ko11.15.1: la hora pasa arriba
+      drawNav(NAV_R, inkColor());    // ko11.15.1: derecha = caja (izquierda = pokedex)
       if (!pet.isEgg()) drawNav(NAV_UP, inkColor());
     }
     drawCelebration();
