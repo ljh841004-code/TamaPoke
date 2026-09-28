@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko11.16)
+# TamaPoke KO (v1.17-ko11.16.1)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko11.16.1: drawPrgBattler 정수 배율(s4/4*4, 줄일 때 -4)·EPX 끔(gSmoothGfx 잠시 false), 상대 x3 최대 124px, pack_prg add_outline(PRG_OUTLINE, 바깥 1px (24,24,32), 안농 201-a), 지역 화면 RG_ART_X 버튼(battleArtToggle), X_BART 문구 귀여운/원작풍 그림. PC 테스트 242개
 - ✅ ko11.16: 구슬 orbMake(0x8000|def 0x4000|type<<8|pct), Pet orb/orbBag[32]/orbN(NVS orb·orbn·orbs), gainOrb(같은 종류 높은 %만, 나머지 사탕 1), equipOrb(ptype 일치), 진화 속성 변경 → 사탕 3/만능 10%(orbEvoNote 토스트), applyOrb(wildMatchPower 뒤), drawOrb(공격 불꽃 3겹+불똥, 방어 후광+반짝이)·drawOrbSlot, 보관함 탭 3(BOX_TAB_X3, 구슬 가방 4×3·상세), 드롭 야생 8%·재대전 50%·탐험 10/20/35%, 전투 그림 gBattleArt(NVS "bart", BART 칩, prgLoadFor), WILD_COMMON[지역][8], 속도 spdPlace 3×3 칸·spdCount 3/7. PC 테스트 242개
 - ✅ ko11.15.1: pwrPoll 0xFF/동시 눌림 무시, 사탕 조각(rareShards "rshd", 10=만능 1), NAV_TOP(시간)·NAV_R(보관함)·밤 화살표 어두운 원, 공격 foePmd 상대(sackPickFoe, typeEff), PMD_*_UR/_DL(id 16~21, pack_pmd 행 3·7) 전투 battleFacing. PC 테스트 239개
 - ✅ ko11.15: 공격 golpes+tecnica(1타 1피해·기+10, 기 100이면 SACK_BTN 버튼에 moveName, 12+i 피해+drawMoveFx, 샌드백 8+2i·5초-0.08i), 속도 번호 볼 가운데(볼 4배·숫자 3배, 다음 볼 표시 없음)·테두리 시간 링(fillArc)·진행 점 15개·등장 팝·터짐 효과, uiFlush가 drawToast(모든 화면). PC 테스트 239개
