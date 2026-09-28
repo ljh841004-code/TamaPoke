@@ -96,6 +96,13 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); openCandyBag(); render(); shot("03j_candy_bag");
   candyBagTap(BAG_ROW_X + 100, BAG_ROW_Y + 1 * (BAG_ROW_H + BAG_GAP) + 10); render(); shot("03k_candy_bag_trade");
   candyBagTap(0, 0); candyBagTap(BAG_ROW_X + 100, BAG_RARE_Y + 10); render(); shot("03l_candy_bag_rare");
+  {  // ko11.15.1: sobrantes de muchas familias -> trozos de caramelo raro
+    candyBagTap(0, 0);
+    for (int16_t f : { 16, 19, 41, 74, 92, 129, 133 }) pet.addCandy(f, (f % 3) + 1);
+    pet.rareShards = 4;
+    openCandyBag(); render(); shot("03n_candy_bag_leftovers");
+    candyBagTap(CX, BAG_SHARD_BTN_Y + 10); render(); shot("03o_candy_bag_shards");
+  }
   closeAll(); pet.rareCandy = 0; cardOpen = true; cardPage = 4; render(); shot("03m_card_candy_bagbtn"); closeAll();
   closeAll(); pet.berryKnown = true; feedMenuUntil = gMockMillis + 5000; render(); shot("01b_feed_menu");
   closeAll(); confirmUntil = gMockMillis + 5000; render(); shot("01c_confirm_release"); confirmUntil = 0;

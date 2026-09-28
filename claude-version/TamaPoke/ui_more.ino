@@ -892,6 +892,7 @@ uint16_t screenSig() {
 #define BAG_GAP 6
 #define BAG_ROWS 5
 #define BAG_RARE_Y 80
+#define BAG_SHARD_BTN_Y 364  // ko11.15.1
 static uint8_t bagFam[PET_DEX_MAX];
 static uint8_t bagN = 0, bagPage = 0;
 static int16_t bagSel = -1;        // -1 nada, 0 = universal, si no familia (dex base)
@@ -931,10 +932,26 @@ void renderCandyBag() {
   screenBase();
   drawFit(XT(X_BAG_TITLE), 36, 300, UI_INK, 3);
   char b[48];
-  snprintf(b, sizeof(b), XT(X_BAG_RARE_FMT), pet.rareCandy);
-  drawBtn(BAG_ROW_X, BAG_RARE_Y, BAG_ROW_W, BAG_ROW_H, pet.rareCandy ? C565(0xd8, 0xa8, 0x20) : UI_TRACK,
-          pet.rareCandy ? UI_WHITE : 0x8410, b);
+  // ko11.15.1: caramelo raro a la izquierda y los trozos (barra) a la derecha
+  {
+    uint16_t rc = pet.rareCandy ? C565(0xd8, 0xa8, 0x20) : UI_TRACK;
+    uint16_t tc = pet.rareCandy ? UI_WHITE : 0x8410;
+    uiButton(BAG_ROW_X, BAG_RARE_Y, BAG_ROW_W, BAG_ROW_H, 12, rc, UI_INK);
+    snprintf(b, sizeof(b), XT(X_BAG_RARE_FMT), pet.rareCandy);
+    setSize(2);
+    gfx->setTextColor(tc);
+    setCur(BAG_ROW_X + 14, BAG_RARE_Y + 9);
+    printT(b);
+    snprintf(b, sizeof(b), XT(X_BAG_SHARD_FMT), pet.rareShards, SHARDS_PER_RARE);
+    setSize(1);
+    setCur(BAG_ROW_X + BAG_ROW_W - 116, BAG_RARE_Y + 4);
+    printT(b);
+    uiGauge(BAG_ROW_X + BAG_ROW_W - 116, BAG_RARE_Y + 22, 104, 10, pet.rareShards * 1000 / SHARDS_PER_RARE,
+            C565(0xf8, 0xd8, 0x50), lerp565(rc, UI_WHITE, 8, 16));
+  }
   uint8_t mine = pet.isEgg() ? 0 : DEX_FAM[pet.speciesId];
+  bool leftovers = false;  // hay caramelos de otras familias
+  for (int k = 0; k < bagN; k++) if (bagFam[k] != mine) { leftovers = true; break; }
   if (!bagN) drawFit(XT(X_BAG_EMPTY), BAG_ROW_Y + 60, 300, 0x8410, 2);
   for (int r = 0; r < BAG_ROWS; r++) {
     int k = bagPage * BAG_ROWS + r;
@@ -956,10 +973,13 @@ void renderCandyBag() {
       printT(XT(X_BAG_MINE));
     }
   }
-  if (bagMsg && timeLeft(bagMsgUntil)) drawFit(bagMsg, 372, 300, UI_BAR_OK, 2);
+  // ko11.15.1: boton "sobrantes -> trozos"
+  if (leftovers && !pet.isEgg())
+    drawBtn(CX - 125, BAG_SHARD_BTN_Y, 250, 34, C565(0xd8, 0xa8, 0x20), UI_WHITE, XT(X_BAG_TO_SHARDS));
+  if (bagMsg && timeLeft(bagMsgUntil)) drawFit(bagMsg, 408, 300, UI_BAR_OK, 2);
   else if (bagPages() > 1) {
     snprintf(b, sizeof(b), XT(X_BAG_PAGE_FMT), bagPage + 1, bagPages());
-    drawFit(b, 372, 200, UI_INK, 1);
+    drawFit(b, 408, 200, UI_INK, 1);
   }
   if (bagPage > 0) drawNav(NAV_L, UI_INK);
   if (bagPage + 1 < bagPages()) drawNav(NAV_R, UI_INK);
@@ -1042,6 +1062,17 @@ void candyBagTap(int16_t x, int16_t y) {
   if (navHit(NAV_L, x, y)) { candyBagSwipe(1); return; }
   if (navHit(NAV_R, x, y)) { candyBagSwipe(-1); return; }
   if (inRect(x, y, BAG_ROW_X, BAG_RARE_Y, BAG_ROW_W, BAG_ROW_H)) { bagSel = 0; sfxPlay(SFX_TAP); return; }
+  if (inRect(x, y, CX - 125, BAG_SHARD_BTN_Y, 250, 34)) {  // ko11.15.1: sobrantes -> trozos
+    static char msg[40];
+    uint16_t n = pet.candyToShards();
+    if (n) {
+      snprintf(msg, sizeof(msg), XT(X_BAG_SHARDED_FMT), n);
+      bagBuild();
+      bagPage = 0;
+      bagSay(msg, true);
+    } else bagSay(XT(X_BAG_NO_LEFT), false);
+    return;
+  }
   if (x < BAG_ROW_X || x >= BAG_ROW_X + BAG_ROW_W || y < BAG_ROW_Y) return;
   int r = (y - BAG_ROW_Y) / (BAG_ROW_H + BAG_GAP);
   if (r >= BAG_ROWS || (y - BAG_ROW_Y) % (BAG_ROW_H + BAG_GAP) >= BAG_ROW_H) return;

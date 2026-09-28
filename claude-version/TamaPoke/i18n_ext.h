@@ -110,6 +110,7 @@ enum XId : uint16_t {  // ko10.6: pasaron de 255
   X_BEST_ALL_FMT, X_VB_BEST_ALL_FMT, X_ALL_RECORD, X_RELEASE_SHORT, X_VB_NOW_FMT, X_VB_POWER_FMT,  // ko11.9.2: records por bicho + historico
   X_DEF_PERFECT, X_DEF_GOOD, X_DEF_EARLY, X_DEF_LATE, X_DEF_COMBO_FMT, X_DEF_SUB_FMT,  // ko11.14: defensa por timing
   X_ATK_CRIT, X_ATK_STRONG, X_ATK_OK, X_ATK_WHIFF, X_SACK_HINT, X_SPD_WRONG,  // ko11.14: fuerza y velocidad
+  X_BAG_SHARD_FMT, X_BAG_TO_SHARDS, X_BAG_SHARDED_FMT, X_BAG_NO_LEFT,  // ko11.15.1: trozos de caramelo raro
   X_REG_0, X_REG_1, X_REG_2, X_REG_3, X_REG_4, X_REG_5, X_REG_6, X_REG_7,
   X_REG_8, X_REG_9, X_REG_10, X_REG_11, X_REG_12, X_REG_13, X_REG_14, X_REG_15,
   X_COUNT

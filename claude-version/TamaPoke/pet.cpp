@@ -687,6 +687,29 @@ void Pet::addCandy(int16_t dex, uint16_t n) {
 
 // cambiar un repetido por caramelos: 3, +2 si es shiny, +1 si es de nivel 30 o mas
 // ko10.11: cambiar caramelos de otra familia por los de la que crias (3 -> 1)
+// ko11.15.1: los caramelos sueltos de otras familias (1 o 2 de muchas, que nunca
+// llegaban a 3 para cambiar) se vuelven trozos; cada 10 trozos, un caramelo raro
+// (que vale para cualquier Pokemon que cries despues)
+uint16_t Pet::candyToShards() {
+  if (isEgg()) return 0;
+  uint8_t mine = DEX_FAM[speciesId];
+  uint32_t n = 0;
+  for (int f = 1; f <= DEX_COUNT; f++) {
+    if (f == mine || !candy[f]) continue;
+    n += candy[f];
+    candy[f] = 0;
+  }
+  if (!n) return 0;
+  uint32_t sh = (uint32_t)rareShards + n;
+  while (sh >= SHARDS_PER_RARE) {
+    sh -= SHARDS_PER_RARE;
+    if (rareCandy < 999) rareCandy++;
+  }
+  rareShards = (uint16_t)sh;
+  save();
+  return (uint16_t)(n > 65535 ? 65535 : n);
+}
+
 bool Pet::candyTrade(int16_t famDex, uint16_t times) {
   if (isEgg() || famDex < 1 || famDex > DEX_COUNT || !times) return false;
   uint8_t fam = DEX_FAM[famDex], mine = DEX_FAM[speciesId];
@@ -960,6 +983,7 @@ void Pet::save() {
   prefs.putBytes("exped", &exped, sizeof(exped));  // ko11.7
   prefs.putUChar("dxrw", dexRewards);
   prefs.putUShort("rcandy", rareCandy);
+  prefs.putUShort("rshd", rareShards);  // ko11.15.1
   prefs.putUInt("age", ageMinutes);
   prefs.putUInt("exp", exp);
   prefs.putShort("dexn", speciesId);
@@ -1046,6 +1070,7 @@ void Pet::load(bool *migrated) {
     memset(&exped, 0, sizeof(exped));  // ko11.7
   dexRewards = prefs.getUChar("dxrw", 0);
   rareCandy = prefs.getUShort("rcandy", 0);
+  rareShards = prefs.getUShort("rshd", 0);
   ageMinutes = prefs.getUInt("age", 0);
   // fork KO (ko7): guardados de antes (nivel = horas, hasta Lv338+) empiezan
   // en Lv1 con la misma especie

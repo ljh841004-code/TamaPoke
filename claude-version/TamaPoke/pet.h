@@ -67,6 +67,7 @@ struct __attribute__((packed)) TradePet {
 // ko10.4: usos de los caramelos (de la familia del Pokemon que crias)
 enum : uint8_t { CU_EXP = 0, CU_GAUGE, CU_GENES, CU_SHINY, CU_EVO, CU_COUNT };
 static const uint8_t CANDY_COST[CU_COUNT] = { 3, 1, 5, 10, 5 };
+#define SHARDS_PER_RARE 10  // ko11.15.1: 10 trozos = 1 caramelo raro (= 5 de tu familia)
 #define CANDY_TRADE_RATE 3   // ko10.11: 3 de otra familia = 1 de la que crias
 #define RARE_CANDY_VALUE 5   // ko10.11: 1 caramelo universal = 5 de la que crias
 #define RARE_CANDY_PCT 5     // ko10.11: % de que un salvaje ganado/capturado lo de
@@ -137,7 +138,9 @@ public:
   uint8_t dexRewards = 0;  // ko11.7: premios de la pokedex ya dados (bit i = DEXRW_AT[i])
   // ko10.11: caramelo universal (sale a veces en los salvajes) y cambios
   uint16_t rareCandy = 0;
-  bool candyTrade(int16_t famDex, uint16_t times);  // 3 de otra familia -> 1 de la actual (x times)
+  uint16_t rareShards = 0;  // ko11.15.1: trozos de caramelo raro (SHARDS_PER_RARE = 1 raro)
+  bool candyTrade(int16_t famDex, uint16_t times);
+  uint16_t candyToShards();  // ko11.15.1: los de OTRAS familias -> trozos (1:1); devuelve cuantos  // 3 de otra familia -> 1 de la actual (x times)
   bool useRareCandy();                              // 1 universal -> RARE_CANDY_VALUE de la actual
   // racha de cuidado diario (del jugador: persiste entre crianzas)
   uint16_t streak = 0, bestStreak = 0;

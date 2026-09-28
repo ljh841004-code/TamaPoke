@@ -213,11 +213,12 @@ Btn buttons[4] = {
 };
 // ko10.8: flechas en los bordes para navegar tocando (deslizar sigue valiendo).
 // Deslizar fallaba a veces y el gesto acababa como toque (p. ej. cerrando la ficha)
-enum : uint8_t { NAV_L = 0, NAV_R, NAV_UP, NAV_DOWN };
+enum : uint8_t { NAV_L = 0, NAV_R, NAV_UP, NAV_DOWN, NAV_TOP };  // ko11.15.1: NAV_TOP = arriba, apunta abajo
 #define NAV_LX 26
 #define NAV_RX 440
 #define NAV_Y 200
 #define NAV_BY 446
+#define NAV_TY 26   // ko11.15.1: flecha de arriba (hora/ajustes, como deslizar hacia abajo)
 #define NAV_R_ 15
 #define BTN_HALF 23  // boton de 46x46 (ko10.9; antes 52x52)
 // fork KO: botones de la pagina de combate de la ficha (ko4: rejilla 2x2)
@@ -1415,7 +1416,7 @@ void onTap(int16_t x, int16_t y) {
       sfxPlay(SFX_TAP);
       return;
     }
-    if (navHit(NAV_R, x, y)) { openClock(); sfxPlay(SFX_TAP); return; }
+    if (navHit(NAV_TOP, x, y)) { openClock(); sfxPlay(SFX_TAP); return; }  // ko11.15.1
     if (!pet.isEgg() && navHit(NAV_UP, x, y)) { cardOpen = true; cardPage = 0; sfxPlay(SFX_TAP); return; }
   }
   for (int i = 0; i < 4; i++) {
@@ -2550,7 +2551,7 @@ void render() {
     drawButtons();
     if (mainNavAllowed()) {  // ko10.8
       drawNav(NAV_L, inkColor());
-      drawNav(NAV_R, inkColor());
+      drawNav(NAV_TOP, inkColor());  // ko11.15.1: la hora pasa arriba (la derecha, libre de momento)
       if (!pet.isEgg()) drawNav(NAV_UP, inkColor());
     }
     drawCelebration();
@@ -4040,7 +4041,7 @@ void galleryTap(int16_t x, int16_t y) {
 void drawBattery() {
   int pc = batPercent();
   if (pc < 0) return;  // sin bateria conectada
-  int x = CX - 14, y = 12, w = 24, h = 11;
+  int x = CX + 22, y = 20, w = 24, h = 11;  // ko11.15.1: a la derecha de la flecha de arriba
   bool charging = batCharging();
   uint16_t col = charging ? UI_BAR_OK
                  : (pc >= 40) ? inkColor()
@@ -4806,10 +4807,12 @@ void drawBar(int x, int y, const char *label, uint8_t val) {
 
 void drawNav(uint8_t k, uint16_t ink) {
   int x = k == NAV_L ? NAV_LX : k == NAV_R ? NAV_RX : CX;
-  int y = (k == NAV_L || k == NAV_R) ? NAV_Y : NAV_BY;
+  int y = (k == NAV_L || k == NAV_R) ? NAV_Y : k == NAV_TOP ? NAV_TY : NAV_BY;
   // ko11.12: con sombra y relieve
   uiShade(x - NAV_R_, y - NAV_R_ + 3, 2 * NAV_R_ + 1, 2 * NAV_R_ + 1, NAV_R_, 3);
-  uiGradRRect(x - NAV_R_, y - NAV_R_, 2 * NAV_R_ + 1, 2 * NAV_R_ + 1, NAV_R_, UI_WHITE, C565(0xdc, 0xdc, 0xdc));
+  bool dark = ink == UI_INK_NIGHT;  // ko11.15.1: de noche la tinta es clara: circulo oscuro (antes blanco sobre blanco)
+  uiGradRRect(x - NAV_R_, y - NAV_R_, 2 * NAV_R_ + 1, 2 * NAV_R_ + 1, NAV_R_, dark ? C565(0x3a, 0x44, 0x66) : UI_WHITE,
+              dark ? C565(0x1c, 0x22, 0x3a) : C565(0xdc, 0xdc, 0xdc));
   gfx->drawCircle(x, y, NAV_R_, ink);
   const int a = 7;
   if (k == NAV_L) gfx->fillTriangle(x - a + 1, y, x + a - 2, y - a, x + a - 2, y + a, ink);
@@ -4820,6 +4823,7 @@ void drawNav(uint8_t k, uint16_t ink) {
 
 // zona tactil generosa (el dedo tapa la flecha)
 bool navHit(uint8_t k, int16_t x, int16_t y) {
+  if (k == NAV_TOP) return y < 60 && x > CX - 55 && x < CX + 55;
   if (k == NAV_L) return x < 62 && y > NAV_Y - 55 && y < NAV_Y + 55;
   if (k == NAV_R) return x > 404 && y > NAV_Y - 55 && y < NAV_Y + 55;
   return y > 424 && x > CX - 55 && x < CX + 55;  // ko10.9: frontera a medio camino boton/flecha
