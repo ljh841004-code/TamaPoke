@@ -662,3 +662,21 @@ TEST(expedition, premio_crece_con_las_horas) {
   BRng r(1);
   CHECK(expeditionReward(8, 50, r).candy > expeditionReward(2, 50, r).candy);
 }
+
+// ko11.16: los comunes van por region: en la playa ya no salen bichos de bosque
+// (antes Beedrill, Furret o Fearow podian salir en cualquier sitio)
+TEST(wild, comunes_de_la_playa_son_de_agua) {
+  int other = 0, n = 0;
+  for (int i = 0; i < 4000; i++) {
+    BRng r(7000 + i);
+    uint8_t g = 0;
+    Battler b = makeWildIn(1, 30, 13, WX_CLEAR, SEASON_AUTUMN, r, &g);
+    if (g != WG_COMMON) continue;
+    n++;
+    uint8_t t = DEX_TBL[b.dex].ptype;
+    if (t != PT_WATER && t != PT_ICE) other++;
+  }
+  CHECK(n > 300);
+  CHECK_EQ(other, 0);
+  for (int16_t d : { 15, 162, 22 }) CHECK_EQ(wildPermil(d, 1, 30, 13, WX_CLEAR, SEASON_AUTUMN), 0);
+}

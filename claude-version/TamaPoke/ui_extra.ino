@@ -336,6 +336,48 @@ void applyOrb(Battler &b) {
 // ko11.16: sprites de combate al estilo de los juegos (rNNN.bin de la SD): el rival de
 // frente y el tuyo de espaldas. Si no estan, se usan los PMD de siempre
 PmdMon prgFoe, prgMe;
+// ko11.16: estilo de los sprites de combate (se guarda): 0 = PMD (los de siempre),
+// 1 = PokeRogue (rNNN.bin de la SD; si falta el de un Pokemon, ese sale en PMD).
+// Se cambia con la pildora de arriba del combate. Fuera del combate, siempre PMD
+uint8_t gBattleArt = 255;
+static int16_t prgFoeDex = 0;
+static bool prgFoeShiny = false;
+uint8_t battleArt() {
+  if (gBattleArt == 255) {
+    Preferences p;
+    p.begin("tamapoke", true);
+    gBattleArt = p.getUChar("bart", 0) ? 1 : 0;
+    p.end();
+  }
+  return gBattleArt;
+}
+static void prgLoadFor(int16_t meDex, int16_t foeDex, bool foeShiny) {
+  prgFoeDex = foeDex;
+  prgFoeShiny = foeShiny;
+  if (!battleArt()) { prgFoe.unload(); prgMe.unload(); return; }  // PMD: ni se leen (menos SD y RAM)
+  prgFoe.load((uint8_t)foeDex, foeShiny, 'r');  // ~100 KB de la SD, una vez por combate
+  if (!prgMe.loaded || bvMeDex != meDex) prgMe.load((uint8_t)meDex, pet.shiny && meDex == pet.speciesId, 'r');
+}
+#define BART_X 163
+#define BART_Y 16
+#define BART_W 140
+#define BART_H 30
+static void drawBattleArtChip() {
+  bool prg = battleArt();
+  drawBtn(BART_X, BART_Y, BART_W, BART_H, prg ? C565(0x6a, 0x4c, 0xf0) : UI_WHITE, prg ? UI_WHITE : UI_INK,
+          XT(prg ? X_BART_PRG : X_BART_PMD));
+}
+static bool battleArtTap(int16_t x, int16_t y) {
+  if (!inRect(x, y, BART_X, BART_Y - 6, BART_W, BART_H + 10)) return false;
+  gBattleArt = battleArt() ? 0 : 1;
+  Preferences p;
+  p.begin("tamapoke", false);
+  p.putUChar("bart", gBattleArt);
+  p.end();
+  prgLoadFor(bvMeDex, prgFoeDex, prgFoeShiny);
+  sfxPlay(SFX_TAP);
+  return true;
+}
 int16_t foePmdDex = 0;       // que especie tiene cargada foePmd
 bool foePmdShiny = false;
 
@@ -1163,15 +1205,14 @@ void renderBattleView() {
     }
   } else {
     drawBattleMsg();
-    if (bPhase == BP_MENU) drawBattleMenu();
+    if (bPhase == BP_MENU) { drawBattleMenu(); if (xScreen == XS_WILD) drawBattleArtChip(); }  // ko11.16
   }
   uiFlush();
 }
 
 void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool foeShiny) {
   // ko11.16: sprites de combate (si la SD los tiene)
-  prgFoe.load((uint8_t)foe.dex, foeShiny, 'r');  // ~100 KB de la SD, una vez por combate
-  if (!prgMe.loaded || bvMeDex != me.dex) prgMe.load((uint8_t)me.dex, pet.shiny && me.dex == pet.speciesId, 'r');
+  prgLoadFor(me.dex, foe.dex, foeShiny);
   bvMeDex = me.dex; bvFoeDex = foe.dex;
   bvMeType = me.type; bvFoeType = foe.type;
   bvMeTier = moveTier(me.dex); bvFoeTier = moveTier(foe.dex);
@@ -1714,6 +1755,7 @@ void wildTap(int16_t x, int16_t y) {
   if (bPhase == BP_JOIN) { wildJoinTap(x, y); return; }  // ko11.8
   if (bPhase == BP_NEXT) { wildNextTap(x, y); return; }
   if (bPhase != BP_MENU) return;
+  if (battleArtTap(x, y)) return;  // ko11.16: PMD <-> PokeRogue
   int a = battleMenuHit(x, y);
   if (a < 0) return;
   // fork KO (ko4): los objetos se gastan al elegirlos; sin existencias no hay turno

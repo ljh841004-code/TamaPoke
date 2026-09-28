@@ -153,7 +153,29 @@ Battler makeWild(uint16_t petLvl, BRng &rng) {
 // 8 pantano 9 desierto 10 ruinas 11 jardin 12 cementerio 13 valle 14 ciudad 15 mina
 
 // 1. comunes de cualquier sitio
-static const int16_t WILD_COMMON[] = { 16, 19, 21, 161, 10, 13, 52, 84 };
+// ko11.16: los "comunes" (el ~30 % que no es de hora ni de region) van ahora por
+// region y con sentido: antes eran los mismos en todas partes (Pidgey, Rattata,
+// Spearow, Sentret, Caterpie, Weedle, Meowth, Doduo) y en la playa salian Beedrill,
+// Furret o Fearow. Formas base: con nivel alto evolucionan (wildBattler)
+#define WILD_COMMON_N 8
+static const int16_t WILD_COMMON[REGION_COUNT][WILD_COMMON_N] = {
+  { 16, 19, 161, 21, 29, 32, 84, 187 },    // 0 pradera
+  { 72, 98, 116, 90, 120, 54, 118, 170 },  // 1 playa
+  { 10, 13, 43, 46, 165, 167, 16, 48 },    // 2 bosque
+  { 37, 58, 74, 27, 66, 218, 21, 19 },     // 3 volcan
+  { 74, 66, 21, 27, 41, 56, 231, 16 },     // 4 montana
+  { 86, 220, 215, 225, 238, 41, 19, 16 },  // 5 nieve
+  { 81, 100, 179, 19, 88, 109, 41, 52 },   // 6 central electrica
+  { 66, 56, 19, 21, 52, 16, 161, 84 },     // 7 dojo
+  { 60, 194, 88, 109, 23, 118, 54, 43 },   // 8 pantano
+  { 27, 50, 23, 74, 104, 21, 19, 231 },    // 9 desierto
+  { 41, 74, 63, 96, 177, 19, 52, 92 },     // 10 ruinas
+  { 43, 69, 187, 191, 165, 16, 10, 48 },   // 11 jardin de flores
+  { 92, 41, 19, 104, 88, 96, 109, 52 },    // 12 cementerio (Murkrow y Hoothoot: solo de noche)
+  { 116, 21, 41, 129, 74, 84, 16, 118 },   // 13 valle del dragon
+  { 19, 52, 16, 88, 109, 81, 58, 209 },    // 14 ciudad
+  { 74, 41, 50, 27, 66, 81, 19, 52 },      // 15 mina
+};
 
 // regiones con pocos de su tipo: se completan con vecinos (peso x2)
 static const int16_t REGION_EXTRA[REGION_COUNT][4] = {
@@ -323,8 +345,7 @@ Battler makeWildIn(uint8_t region, uint16_t petLvl, uint8_t hour, uint8_t wx, ui
   }
   // 4. comunes
   if (group) *group = WG_COMMON;
-  const int nc = sizeof(WILD_COMMON) / sizeof(WILD_COMMON[0]);
-  return wildBattler(WILD_COMMON[rng.below(nc)], lv, rng);
+  return wildBattler(WILD_COMMON[region][rng.below(WILD_COMMON_N)], lv, rng);
 }
 
 uint16_t wildPermil(int16_t dex, uint8_t region, uint16_t petLvl, uint8_t hour, uint8_t wx,
@@ -350,8 +371,8 @@ uint16_t wildPermil(int16_t dex, uint8_t region, uint16_t petLvl, uint8_t hour, 
   if (tot) num += (uint64_t)rest * regPct * 1000 * regionWeight(dex, region) / tot;
   else regPct = 0;
   uint32_t comPct = 100 - timePct - regPct;
-  const int nc = sizeof(WILD_COMMON) / sizeof(WILD_COMMON[0]);
-  for (int i = 0; i < nc; i++) if (WILD_COMMON[i] == dex) num += (uint64_t)rest * comPct * 1000 / nc;
+  for (int i = 0; i < WILD_COMMON_N; i++)
+    if (WILD_COMMON[region][i] == dex) num += (uint64_t)rest * comPct * 1000 / WILD_COMMON_N;
   return (uint16_t)(num / (100 * 1000));
 }
 

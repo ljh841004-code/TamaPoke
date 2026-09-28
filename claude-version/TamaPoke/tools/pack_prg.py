@@ -106,7 +106,7 @@ def crop_common(frames):
 def pack(dexnum, shiny=False):
     acts = []
     for aid, sub in ((ACT_FRONT, ''), (ACT_BACK, 'back')):
-        fr = frames_of(sub, dexnum, shiny)
+        fr = frames_of(sub, dexnum, shiny) or frames_of(sub, f'{dexnum}-a', shiny)  # Unown: por forma (201-a)
         if not fr:
             continue
         fr, ms = pick(fr)

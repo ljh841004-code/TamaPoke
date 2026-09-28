@@ -253,6 +253,8 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); pet.energy = 80; startWild();
   bPhase = BP_MENU; txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
   render(); shot("08_battle_menu");
+  battleArtTap(BART_X + 10, BART_Y + 10); render(); shot("08q_battle_art_prg");  // ko11.16: PMD <-> PokeRogue
+  battleArtTap(BART_X + 10, BART_Y + 10);
   bvMeFainted = bvFoeFainted = true; render(); shot("08z_battle_empty");  // fondo sin Pokemon (comparar sprites)
   bvMeFainted = bvFoeFainted = false;
   box.add(bFoe.dex, 5, false, true, 0); box.add(bFoe.dex, 7, false, true, 0); bvOwned = 2; bvOwnedT = gMockMillis;

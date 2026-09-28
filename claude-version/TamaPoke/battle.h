@@ -73,7 +73,7 @@ Battler makeWild(uint16_t petLvl, BRng &rng);
 //   1. RARO:     solo si se cumple su condicion (region + hora + tiempo + estacion), ~0,5-1 %
 //   2. HORA:     los de esa region a esa hora (manana 6-10, dia 10-20, noche 20-6), 20 %
 //   3. REGION:   los de su tipo (comunes x3, raros x1), 50 %
-//   4. COMUN:    los de cualquier sitio (Pidgey, Rattata...), el resto
+//   4. COMUN:    comunes de esa region (ko11.16: antes los mismos en todas partes), el resto
 #define REGION_COUNT 16
 enum : uint8_t { WG_COMMON = 0, WG_REGION, WG_TIME, WG_RARE };
 enum : uint8_t { WS_MORNING = 1, WS_DAY = 2, WS_NIGHT = 4, WS_ANY = 7 };
