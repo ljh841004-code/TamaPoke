@@ -103,6 +103,31 @@ def crop_common(frames):
     return [f.crop(box) for f in frames]
 
 
+OUTLINE = os.environ.get('PRG_OUTLINE', '1') != '0'
+
+
+def add_outline(frames):
+    """ko11.16.1: borde oscuro de 1 px por FUERA de la silueta (como los PMD): en la
+    pantalla pequena los de PokeRogue (borde de color en el lado con luz) se veian
+    palidos. Se amplia el lienzo 1 px por lado"""
+    out = []
+    for f in frames:
+        w, h = f.size
+        g = Image.new('RGBA', (w + 2, h + 2), (0, 0, 0, 0))
+        g.paste(f, (1, 1))
+        a = g.getchannel('A').point(lambda v: 255 if v >= ALPHA_T else 0)
+        px, ap = g.load(), a.load()
+        for y in range(h + 2):
+            for x in range(w + 2):
+                if ap[x, y]:
+                    continue
+                if any(0 <= x + dx < w + 2 and 0 <= y + dy < h + 2 and ap[x + dx, y + dy]
+                       for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                    px[x, y] = (24, 24, 32, 255)
+        out.append(g)
+    return out
+
+
 def pack(dexnum, shiny=False):
     acts = []
     for aid, sub in ((ACT_FRONT, ''), (ACT_BACK, 'back')):
@@ -110,7 +135,10 @@ def pack(dexnum, shiny=False):
         if not fr:
             continue
         fr, ms = pick(fr)
-        acts.append((aid, crop_common(fr), ms))
+        fr = crop_common(fr)
+        if OUTLINE:
+            fr = add_outline(fr)
+        acts.append((aid, fr, ms))
     if not any(a[0] == ACT_FRONT for a in acts):
         raise RuntimeError('sin frente')
 

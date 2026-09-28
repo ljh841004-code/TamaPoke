@@ -950,11 +950,19 @@ static uint8_t battleFacing(const PmdMon &m, uint8_t act, bool mine) {
 static void drawPrgBattler(PmdMon &m, uint8_t act, int cx, int groundY, uint32_t t, bool sil, int s4, int maxH) {
   const PmdAct &a = m.acts[act];
   if (!a.frames) return;
-  while (s4 > 6 && a.h * s4 > maxH * 4) s4--;
+  // ko11.16.1: escala ENTERA (x3, x2, x1) y sin suavizado EPX: el EPX trata el
+  // transparente como un color y se comia el contorno negro de 1 px en curvas y
+  // diagonales (los de PokeRogue salian palidos y sin borde); con x2,25 ademas los
+  // pixeles salian de tamanos distintos. Asi se ven nitidos, como en el juego
+  s4 = s4 / 4 * 4;
+  while (s4 > 4 && a.h * s4 > maxH * 4) s4 -= 4;
   uint8_t fi = pmdFrameAt(a, t, true);
   const uint8_t *fr = a.data + (uint32_t)fi * a.w * a.h;
   int x0 = cx - a.w * s4 / 8, y0 = groundY - (a.base ? a.base : a.h) * s4 / 4;
+  bool sm = gSmoothGfx;
+  gSmoothGfx = false;
   smoothBlitQ(fr, a.w, a.h, m.pal, x0, y0, s4, sil);
+  gSmoothGfx = sm;
 }
 
 // dibuja los dos Pokemon; anima al que actua segun el evento en curso
@@ -1023,7 +1031,7 @@ void drawBattlers() {
     }
   }
   if (!foeHide && !foeGone && prgFoe.loaded && prgFoe.has(PMD_IDLE)) {  // ko11.16: estilo juego, de frente
-    drawPrgBattler(prgFoe, PMD_IDLE, foeX + 14, foeG, now, foeSil, 9, 132);  // mas lejos: algo mas pequeno
+    drawPrgBattler(prgFoe, PMD_IDLE, foeX + 14, foeG, now, foeSil, 12, 124);  // x3 (x2 si es grande)
   } else if (!foeHide && !foeGone) {
     if (foePmd.loaded) {
       if (!foePmd.has(foeAct)) foeAct = PMD_IDLE;
