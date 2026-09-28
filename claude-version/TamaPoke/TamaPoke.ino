@@ -178,8 +178,9 @@ bool sackOpen = false;
 uint32_t sackUntil = 0, sackOverUntil = 0, sackChargeT = 0, sackHitT = 0;
 uint16_t sackHits = 0;
 uint16_t sackBags = 0, sackBagHits = 0;  // ko10.7: sacos rotos y dano al saco actual
-uint16_t sackCrits = 0;                  // ko11.14: golpes criticos
-uint8_t sackLastDmg = 0, sackLastKind = 0;  // 1 critico, 2 fuerte, 3 normal, 4 al aire
+uint16_t sackCrits = 0;                  // ko11.15: tecnicas especiales usadas
+uint8_t sackLastDmg = 0, sackEnergy = 0;  // dano del ultimo golpe; energia 0..100
+uint32_t sackSpecialT = 0;               // cuando salio la tecnica (0 = no)
 float sackShake = 0;
 uint8_t sackGain = 0;
 bool sackNewHi = false;
@@ -1138,7 +1139,7 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
   if (sackOpen) {
     if (pressed && !wasPressed) {
       lastInteract = millis();
-      sackTap();
+      sackTap(x, y);  // ko11.15: el boton de la tecnica va abajo
     }
     wasPressed = pressed;
     return;
@@ -1526,7 +1527,10 @@ void uiShadeSpan(uint16_t *p, int n, uint32_t k) {
 
 // ko11.13.1: gfx->flush() de siempre (el fundido de cambio de pantalla se quito:
 // al usuario no le gusto). Se deja el nombre para no tocar las 40 llamadas
-void uiFlush() { gfx->flush(); }
+void drawToast();
+// ko11.15: el aviso breve (toast) se pinta en TODAS las pantallas (antes solo en la
+// principal: al soltar en la caja el "caramelo +1" no se veia)
+void uiFlush() { drawToast(); gfx->flush(); }
 
 // ko11.13: fondo de las pantallas de menu: crema con degradado suave (antes liso)
 // Los 3 canales bajan a la vez en pasos de 565 (R-1, G-2, B-1: sin tinte rosa o
@@ -2611,8 +2615,7 @@ void render() {
     else drawChoiceDialog();
   }
 
-  drawToast();  // fork KO: avisos breves
-  uiFlush();
+  uiFlush();  // (el toast lo pinta uiFlush)
 }
 
 // ---------- minijuego: toques con la pokeball ----------
@@ -2729,24 +2732,19 @@ void stepGame() {
 
 // ---------- saco de entrenamiento (entrena la fuerza) ----------
 
-// ko11.14: CARGA Y GOLPE. Un medidor de fuerza sube y baja sin parar; tocar
-// golpea con la fuerza de ese momento y el medidor vuelve a 0. Arriba del todo
-// (>= 90) = critico x5; >= 70 fuerte x3; >= 40 x2; >= 20 x1; menos = al aire.
-// Aporrear ya no sirve (el medidor no llega a subir). Cada saco aguanta mas,
-// da menos tiempo y el medidor va mas rapido
-//   saco i: 10 + 2i de dano en 6 s - 120 ms * i (min 3,5 s); ciclo 1,5 s - 50 ms * i (min 0,7 s)
-uint16_t sackBagHp(uint16_t i) { return 10 + 2 * (i > 40 ? 40 : i); }
+// ko11.15: GOLPES + TECNICA. Cada toque al saco quita 1 y carga 10 de energia;
+// con la energia llena brilla el boton de abajo: la tecnica de su tipo (con su
+// efecto) quita mucho de golpe. Cada saco aguanta mas y da menos tiempo
+//   saco i: 8 + 2i de dano en 5 s - 80 ms * i (min 2,6 s); tecnica 12 + i
+#define SACK_BTN_X (CX - 100)
+#define SACK_BTN_Y 372
+#define SACK_BTN_W 200
+#define SACK_BTN_H 48
+#define SACK_SPECIAL_MS 700
+uint16_t sackBagHp(uint16_t i) { return 8 + 2 * (i > 40 ? 40 : i); }
 uint32_t sackBagMs(uint16_t i) {
-  int32_t ms = 6000 - 120 * (int32_t)i;
-  return ms < 3500 ? 3500 : (uint32_t)ms;
-}
-uint32_t sackCycleMs() {
-  int32_t p = 1500 - 50 * (int32_t)sackBags;
-  return p < 700 ? 700 : (uint32_t)p;
-}
-int sackPower(uint32_t now) {  // 0..100, sube y baja (triangulo)
-  uint32_t P = sackCycleMs(), ph = (now - sackChargeT) % P;
-  return (int)(ph < P / 2 ? ph * 200 / P : (P - ph) * 200 / P);
+  int32_t ms = 5000 - 80 * (int32_t)i;
+  return ms < 2600 ? 2600 : (uint32_t)ms;
 }
 
 void startSack() {
@@ -2754,29 +2752,19 @@ void startSack() {
   if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
   sackOpen = true;
   sackBags = sackBagHits = 0;
-  sackUntil = millis() + sackBagMs(0) + 900;  // un respiro para empezar
-  sackChargeT = millis() + 900;
+  sackUntil = millis() + sackBagMs(0) + 700;  // un respiro para empezar
   sackOverUntil = 0;
   sackHits = sackCrits = 0;
-  sackHitT = 0;
+  sackEnergy = 0;
+  sackHitT = sackSpecialT = 0;
   sackShake = 0;
   sackNewHi = false;
 }
 
-void sackTap() {
-  uint32_t now = millis();
-  if (sackOverUntil || !timeLeft(sackUntil) || (int32_t)(now - sackChargeT) < 0) return;
-  int pw = sackPower(now);
-  uint8_t dmg = pw >= 90 ? 5 : pw >= 70 ? 3 : pw >= 40 ? 2 : pw >= 20 ? 1 : 0;
-  sackLastKind = pw >= 90 ? 1 : pw >= 70 ? 2 : dmg ? 3 : 4;
-  sackLastDmg = dmg;
-  sackHitT = now;
-  sackChargeT = now;  // el medidor vuelve a 0
-  if (!dmg) { sfxPlay(SFX_DENY); return; }
+static void sackDamage(uint16_t dmg, uint32_t now) {
   sackHits += dmg;
-  if (dmg == 5) sackCrits++;
-  sackShake = dmg == 5 ? 30 : 8 + dmg * 3;
-  sfxPlay(dmg == 5 ? SFX_MEDAL : SFX_PLAY);
+  sackLastDmg = (uint8_t)(dmg > 255 ? 255 : dmg);
+  sackHitT = now;
   sackBagHits += dmg;
   if (sackBagHits >= sackBagHp(sackBags)) {  // roto: el siguiente
     sackBags++;
@@ -2785,6 +2773,27 @@ void sackTap() {
     sackUntil = now + sackBagMs(sackBags);
     sfxPlay(SFX_TAP);
   }
+}
+
+void sackTap(int16_t x, int16_t y) {
+  uint32_t now = millis();
+  if (sackOverUntil || !timeLeft(sackUntil)) return;  // ya termino
+  if (sackSpecialT && now - sackSpecialT < SACK_SPECIAL_MS) return;  // la tecnica en curso
+  bool onBtn = x >= SACK_BTN_X && x < SACK_BTN_X + SACK_BTN_W && y >= SACK_BTN_Y - 8 && y < SACK_BTN_Y + SACK_BTN_H + 12;
+  if (onBtn && sackEnergy >= 100) {  // tecnica especial
+    sackEnergy = 0;
+    sackCrits++;
+    sackSpecialT = now;
+    sackShake = 40;
+    audioCry(pet.speciesId);
+    sfxPlay(SFX_MEDAL);
+    sackDamage(12 + (sackBags > 40 ? 40 : sackBags), now);
+    return;
+  }
+  if (onBtn) return;  // boton sin cargar: no cuenta
+  sackShake = 16;
+  if (sackEnergy < 100) sackEnergy = sackEnergy + 10 > 100 ? 100 : sackEnergy + 10;
+  sackDamage(1, now);
 }
 
 void drawGameScene();  // prototipo (definida mas abajo)
@@ -2843,40 +2852,42 @@ void renderSack() {
   if (left > total) left = total;  // el respiro del principio
   int fw = (int)((uint32_t)bw * left / total);
   uiGauge(CX - bw / 2, 340, bw, 12, fw * 1000 / bw, UI_BAR_OK, UI_TRACK);
-  // ko11.14: medidor de fuerza a la derecha del saco (rojo arriba = critico)
+  // ko11.15: dano del ultimo golpe a la izquierda del saco
+  if (sackHitT && now - sackHitT < 450 && sackLastDmg) {
+    uint32_t t = now - sackHitT;
+    char dm[8];
+    snprintf(dm, sizeof(dm), "-%u", sackLastDmg);
+    uint8_t dz = sackLastDmg >= 10 ? 3 : 2;
+    setSize(dz);
+    gfx->setTextColor(sackLastDmg >= 10 ? UI_BAR_BAD : ink);
+    setCur(CX - 56 - textW(dm, dz), 170 - (int)(t / 20));
+    printT(dm);
+  }
+  // barra de energia (derecha del saco) y boton de la tecnica
   {
-    const int gx = CX + 78, gy = 92, gw = 30, gh = 150;
-    int pw = (int32_t)(now - sackChargeT) < 0 ? 0 : sackPower(now);
+    const int gx = CX + 78, gy = 92, gw = 26, gh = 150;
+    uint16_t acc = DEX_TBL[pet.speciesId].accent;
     uiShade(gx - 3, gy - 3, gw + 6, gh + 6, 10, 3);
     gfx->fillRoundRect(gx, gy, gw, gh, 8, UI_TRACK);
-    gfx->fillRoundRect(gx, gy, gw, gh * 10 / 100, 6, lerp565(UI_TRACK, UI_BAR_BAD, 6, 16));   // zona critica
-    gfx->fillRect(gx, gy + gh * 30 / 100, gw, 2, lerp565(UI_TRACK, UI_INK, 6, 16));            // marca 70
-    int fh = gh * pw / 100;
-    uint16_t fc = pw >= 90 ? UI_BAR_BAD : pw >= 70 ? C565(0xf0, 0x80, 0x30) : pw >= 40 ? UI_BAR_WARN : C565(0x90, 0xa8, 0xc0);
-    if (fh > 4) uiGradRRect(gx + 3, gy + gh - fh, gw - 6, fh, 6, lerp565(fc, UI_WHITE, 5, 16), fc);
+    int fh = gh * sackEnergy / 100;
+    if (fh > 4) uiGradRRect(gx + 3, gy + gh - fh, gw - 6, fh, 6, lerp565(acc, UI_WHITE, 6, 16), acc);
     gfx->drawRoundRect(gx, gy, gw, gh, 8, ink);
-    if (pw >= 90) gfx->drawRoundRect(gx - 3, gy - 3, gw + 6, gh + 6, 10, UI_BAR_BAD);  // brilla
-  }
-  // ko11.14: juicio del ultimo golpe a la izquierda del saco (y el dano)
-  if (sackHitT && now - sackHitT < 600) {
-    uint32_t t = now - sackHitT;
-    XId id = sackLastKind == 1 ? X_ATK_CRIT : sackLastKind == 2 ? X_ATK_STRONG : sackLastKind == 3 ? X_ATK_OK : X_ATK_WHIFF;
-    uint16_t jc = sackLastKind == 1 ? UI_BAR_BAD : sackLastKind == 2 ? C565(0xd0, 0x60, 0x10) : sackLastKind == 3 ? ink : C565(0x70, 0x78, 0x88);
-    uint8_t jz = sackLastKind == 1 ? 3 : 2;
-    const char *jt = XT(id);
-    setSize(jz);
-    gfx->setTextColor(jc);
-    setCur(CX - 56 - textW(jt, jz), 150 - (int)(t / 25));
-    printT(jt);
-    if (sackLastDmg) {
-      char dm[8];
-      snprintf(dm, sizeof(dm), "-%u", sackLastDmg);
-      setSize(2);
-      setCur(CX - 56 - textW(dm, 2), 186 - (int)(t / 25));
-      printT(dm);
+    const char *mv = moveName(BA_TYPE, DEX_TBL[pet.speciesId].ptype, moveTier(pet.speciesId));
+    if (sackEnergy >= 100) {
+      int p = (int)(3 * sinf(now * 0.012f));  // late
+      uiButton(SACK_BTN_X - p, SACK_BTN_Y - p, SACK_BTN_W + 2 * p, SACK_BTN_H + 2 * p, 16, acc, UI_WHITE);
+      drawFit(mv, SACK_BTN_Y + 13, SACK_BTN_W - 16, UI_WHITE, 2);
+    } else if (sackBags == 0 && sackHits < 3) {
+      drawFit(XT(X_SACK_HINT), 376, 340, ink, 2);
+    }
+    // la tecnica: nombre arriba y su efecto de tipo sobre el saco
+    if (sackSpecialT && now - sackSpecialT < SACK_SPECIAL_MS) {
+      uint32_t t = now - sackSpecialT;
+      drawFit(mv, 30, 300, acc, 3);
+      drawMoveFx(DEX_TBL[pet.speciesId].ptype, CX, 420, CX, 160, 120 + t * 560 / SACK_SPECIAL_MS, true, 2,
+                 moveTier(pet.speciesId));
     }
   }
-  if (sackBags == 0 && sackHits == 0) drawFit(XT(X_SACK_HINT), 366, 340, ink, 2);
 
   uiFlush();
 }

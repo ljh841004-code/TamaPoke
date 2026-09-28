@@ -122,9 +122,11 @@ static void scenes(bool ko, const char *sfx) {
   kbCommit(); kbKo = false; render(); shot("28_keyboard_abc");
   kbOpen = false;
   // ko11.14: carga y golpe: unos criticos (tocar en el pico del medidor)
-  closeAll(); startSack(); tick(1000);
-  for (int i = 0; i < 9; i++) { tick(sackCycleMs() / 2); sackTap(); }
-  tick(sackCycleMs() * 2 / 5); render(); sackHitT = gMockMillis - 120; render(); shot("25_sack");
+  // ko11.15: golpes -> energia llena (boton de la tecnica) y la tecnica en curso
+  closeAll(); startSack(); tick(800);
+  for (int i = 0; i < 22; i++) { sackTap(CX, 150); tick(70); }
+  render(); shot("25_sack");
+  sackTap(CX, SACK_BTN_Y + 20); tick(260); render(); shot("25c_sack_move");
   for (int i = 0; i < 80; i++) { tick(85); render(); }   // se acaba el plazo
   perfFrames = 120; perfRenderSum = 120 * 58; perfRenderMax = 71; perfStallMax = 12;  // ko11.3: linea de medida
   render(); shot("25b_sack_result");
@@ -444,6 +446,12 @@ static void scenes(bool ko, const char *sfx) {
   box.add(16, 18, false, true, gMockEpoch);   // ko10.4: repetidos (x2 Pidgey)
   openBox(); render(); shot("10_box");
   boxSel = 1; render(); shot("11_box_detail");
+  {  // ko11.15: al soltar un capturado: aviso visible tambien en la caja
+    char t[72];
+    snprintf(t, sizeof(t), XT(X_EXP_CANDY_FMT), dexName(12), 1u);
+    strncat(t, "  ", sizeof(t) - strlen(t) - 1); strncat(t, XT(X_EXP_RARE), sizeof(t) - strlen(t) - 1);
+    showToast(t); boxSel = -1; render(); shot("11i_box_release_toast"); toastUntil = 0;
+  }
   // ko11.7: expedicion
   expPick = true; render(); shot("11e_exp_pick"); expPick = false;
   expSend(1, 4); boxSel = -1; render(); shot("11f_exp_away");

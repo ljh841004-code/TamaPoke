@@ -498,7 +498,7 @@ static void spdResolve(bool good) {
 
 void speedPress(int16_t x, int16_t y) {
   if (spdOverUntil || spdPhase != SP_SHOW) return;  // antes de salir no penaliza
-  int best = -1, bd = 56 * 56;
+  int best = -1, bd = 60 * 60;
   for (int i = spdNext; i < spdN; i++) {
     int dx = x - spdBx[i], dy = y - spdBy[i], d = dx * dx + dy * dy;
     if (d < bd) { bd = d; best = i; }
@@ -565,22 +565,20 @@ void renderSpeed() {
     for (int i = spdN - 1; i >= 0; i--) {
       int x = spdBx[i], y = spdBy[i];
       if (i < spdNext) {  // ya tocado: aro verde
-        gfx->drawCircle(x, y, 22, C565(0x4c, 0xc8, 0x5c));
-        gfx->drawCircle(x, y, 21, C565(0x4c, 0xc8, 0x5c));
+        gfx->drawCircle(x, y, 28, C565(0x4c, 0xc8, 0x5c));
+        gfx->drawCircle(x, y, 27, C565(0x4c, 0xc8, 0x5c));
         continue;
       }
-      if (spdPhase == SP_SHOW && i == spdNext) {  // el que toca ahora
-        gfx->fillCircle(x, y, 36, lerp565(UI_WHITE, UI_BAR_WARN, 5, 16));
-      }
-      drawMap(SPR_ICON_PLAY, 16, x - 24, y - 24, 3, false);
+      // ko11.15: sin marcar cual toca; el numero grande en el centro de la pokeball
+      drawMap(SPR_ICON_PLAY, 16, x - 32, y - 32, 4, false);
       char nb[4];
       snprintf(nb, sizeof(nb), "%d", i + 1);
-      int nx = x + 20, ny = y - 20;
-      gfx->fillCircle(nx, ny, 13, UI_WHITE);
-      gfx->drawCircle(nx, ny, 13, ink);
-      setSize(2);
+      gfx->fillCircle(x, y, 17, UI_WHITE);
+      gfx->drawCircle(x, y, 17, UI_INK);
+      gfx->drawCircle(x, y, 16, UI_INK);
+      setSize(3);
       gfx->setTextColor(UI_INK);
-      setCur(nx - textW(nb, 2) / 2, ny - 9);
+      setCur(x - textW(nb, 3) / 2, y - textH(3) / 2);
       printT(nb);
     }
   }
