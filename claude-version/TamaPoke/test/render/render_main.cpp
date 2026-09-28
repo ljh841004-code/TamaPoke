@@ -456,6 +456,7 @@ static void scenes(bool ko, const char *sfx) {
   bakSel = 1; render(); shot("18d_backup_confirm"); bakSel = -1;
   // ko11.9.2: ultimo reinicio inesperado guardado: boton + ventana
   crashCount = 3; crashReason = 4; crashWhere = 0x0103; crashEpoch = gMockEpoch;
+  crashPcN = 3; crashPc[0] = 0x4201a2b4; crashPc[1] = 0x42019f10; crashPc[2] = 0x4200e3c8;
   render(); shot("18f_backup_crash");
   backupTap(BAK_CR_X + 20, BAK_CR_Y + 10); render(); shot("18g_backup_crash_view");
   {  // el texto mas largo de la placa (en el PC resetName dice "other")

@@ -30,6 +30,7 @@
 #include "font_ko.h"    // fork KO (ko8): Noto Sans KR suavizada (hangul + ASCII), 16-60 px
 #include "weather.h"    // fork KO (ko10.1): estaciones y tiempo segun la fecha
 #include "box.h"        // fork KO (ko4): bogwanham y registro de la pokedex
+#include "panicrec.h"   // ko11.9.3: direccion del codigo en un panic
 #include "sdupdate.h"   // fork KO (ko5): actualizar desde /update.bin de la SD
 #include "savebak.h"    // ko11.6: copia de la partida en la SD
 #ifdef ESP_PLATFORM
@@ -303,17 +304,25 @@ void crumb(uint16_t w) { rbWhere = w; }
 int32_t crashReason = 0;
 uint32_t crashWhere = 0, crashEpoch = 0;
 uint16_t crashCount = 0;
+uint32_t crashPc[PANIC_PCS];  // ko11.9.3: direcciones del codigo (panic)
+uint8_t crashPcN = 0;
 static const char *crumbName(uint8_t scr);
 static const char *resetName(int r);
 static void crashLogBoot(uint32_t epoch) {
   Preferences p;
   if (!p.begin("tpdiag", false)) return;
+  uint32_t pcs[PANIC_PCS], exc = 0;
+  uint8_t npc = 0;
+  bool hasPc = panicTake(pcs, &npc, &exc);  // ko11.9.3 (siempre se lee: asi se borra)
   if (bootRunCrash) {
     p.putInt("cr", bootPrevReason);
     p.putUInt("cw", bootPrevWhere);
     p.putUInt("ct", epoch);
     p.putUShort("cn", (uint16_t)(p.getUShort("cn", 0) + 1));
+    if (hasPc) p.putBytes("pc", pcs, npc * 4);
+    else p.remove("pc");
   }
+  crashPcN = (uint8_t)(p.getBytes("pc", crashPc, sizeof(crashPc)) / 4);
   crashReason = p.getInt("cr", 0);
   crashWhere = p.getUInt("cw", 0);
   crashEpoch = p.getUInt("ct", 0);
@@ -325,12 +334,20 @@ static void crashLogBoot(uint32_t epoch) {
     snprintf(l, sizeof(l), "epoch %u  %s  at %s %u.%u  fw %s", (unsigned)epoch, resetName(bootPrevReason),
              crumbName(scr), (unsigned)scr, (unsigned)(bootPrevWhere & 0xFF), FW_VERSION);
     bakCrashLog(l);
+    if (hasPc) {  // ko11.9.3: backtrace (addr2line -e TamaPoke.ino.elf ...)
+      char b[96] = "  pc";
+      for (uint8_t i = 0; i < npc; i++) {
+        size_t k = strlen(b);
+        snprintf(b + k, sizeof(b) - k, " 0x%08x", (unsigned)pcs[i]);
+      }
+      bakCrashLog(b);
+    }
   }
 }
 void crashClear() {
   Preferences p;
   if (p.begin("tpdiag", false)) { p.clear(); p.end(); }
-  crashReason = 0; crashWhere = 0; crashEpoch = 0; crashCount = 0;
+  crashReason = 0; crashWhere = 0; crashEpoch = 0; crashCount = 0; crashPcN = 0;
 }
 const char *crashWhereName() { return crumbName((uint8_t)(crashWhere >> 8)); }
 const char *crashReasonName() { return resetName(crashReason); }
@@ -478,6 +495,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   // TP_VERSION_TAG + 6 = FW_VERSION; usarla aqui evita que el enlazador la quite
   bootDiagBegin();  // ko11.5
+  panicRecBegin();  // ko11.9.3: guardar donde fallo si hay un panic
   bootStep(BS_SERIAL);
   Serial.printf("TamaPoke fw v%s\n", TP_VERSION_TAG + sizeof(UPD_TAG) - 1);
   loadLang();  // idioma guardado (KO por defecto)

@@ -183,3 +183,5 @@ int bakNewest(const BakSlot s[2]) {
 bool bakBackupNow(int16_t, uint16_t, uint32_t, bool) { return true; }
 bool bakRestore(uint8_t) { return false; }
 bool bakCrashLog(const char *) { return false; }
+bool panicTake(uint32_t *, uint8_t *n, uint32_t *) { *n = 0; return false; }
+void panicRecBegin() {}

@@ -1328,9 +1328,17 @@ static void drawCrashView() {
   drawFit(l, 230, 340, UI_INK, 2);
   snprintf(l, sizeof(l), XT(X_CRASH_CNT_FMT), (unsigned)crashCount);
   drawFit(l, 260, 340, UI_INK, 2);
-  drawFit(XT(X_CRASH_SD), 290, 340, 0x8410, 1);
-  drawBtn(78, 320, 150, 44, UI_TRACK, UI_INK, XT(X_CRASH_CLEAR));
-  drawBtn(238, 320, 150, 44, UI_BAR_OK, UI_WHITE, XT(X_CRASH_CLOSE));
+  if (crashPcN) {  // ko11.9.3: donde fallo el codigo (para buscarlo con el .elf)
+    char pcl[48] = "PC";
+    for (uint8_t i = 0; i < crashPcN && i < 3; i++) {
+      size_t k = strlen(pcl);
+      snprintf(pcl + k, sizeof(pcl) - k, " %08x", (unsigned)crashPc[i]);
+    }
+    drawFit(pcl, 286, 340, UI_INK, 1);
+  }
+  drawFit(XT(X_CRASH_SD), 304, 340, 0x8410, 1);
+  drawBtn(78, 328, 150, 44, UI_TRACK, UI_INK, XT(X_CRASH_CLEAR));
+  drawBtn(238, 328, 150, 44, UI_BAR_OK, UI_WHITE, XT(X_CRASH_CLOSE));
 }
 
 static void drawBakConfirm(const char *title, int8_t slot, XId yes, XId no, bool warn = true) {
@@ -1411,8 +1419,8 @@ static void bakRestoreAndRestart(int8_t slot) {
 
 void backupTap(int16_t x, int16_t y) {
   if (bakCrashView) {  // ko11.9.2
-    if (inRect(x, y, 78, 320, 150, 44)) { crashClear(); bakCrashView = false; sfxPlay(SFX_TAP); }
-    else if (inRect(x, y, 238, 320, 150, 44)) { bakCrashView = false; sfxPlay(SFX_TAP); }
+    if (inRect(x, y, 78, 328, 150, 44)) { crashClear(); bakCrashView = false; sfxPlay(SFX_TAP); }
+    else if (inRect(x, y, 238, 328, 150, 44)) { bakCrashView = false; sfxPlay(SFX_TAP); }
     return;
   }
   if (bakSel >= 0) {  // confirmacion
