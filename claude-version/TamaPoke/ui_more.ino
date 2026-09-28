@@ -168,6 +168,28 @@ static void drawCrown(int x, int y, uint16_t c) {
   gfx->fillTriangle(x + 12, y + 8, x + 15, y, x + 18, y + 8, c);
 }
 
+// ko11.17: los criados hasta el final llevan una ESCARAPELA (lazo de premio), no
+// corona: la corona queda para los campeones de la liga (salon de la fama).
+// (cx, cy) = centro del medallon, r = su radio
+static void drawRibbon(int cx, int cy, int r, bool light = false) {
+  uint16_t blue = C565(0x3a, 0x7a, 0xe0), blueD = C565(0x22, 0x4c, 0x9a), gold = C565(0xf0, 0xc0, 0x30);
+  if (light) { blue = UI_WHITE; blueD = C565(0xd0, 0xd8, 0xe8); }
+  int tl = r + r / 2, tw = r * 2 / 3;
+  // dos cintas que cuelgan (con el corte en V)
+  gfx->fillTriangle(cx - tw, cy, cx - tw / 3, cy, cx - tw - r / 3, cy + tl, blueD);
+  gfx->fillTriangle(cx - tw / 3, cy, cx - tw - r / 3, cy + tl, cx - r / 4, cy + tl - r / 3, blueD);
+  gfx->fillTriangle(cx + tw, cy, cx + tw / 3, cy, cx + tw + r / 3, cy + tl, blue);
+  gfx->fillTriangle(cx + tw / 3, cy, cx + tw + r / 3, cy + tl, cx + r / 4, cy + tl - r / 3, blue);
+  // roseta: petalos alrededor + medallon dorado
+  for (int k = 0; k < 10; k++) {
+    float a = k * 0.6283f;
+    gfx->fillCircle(cx + (int)(cosf(a) * r * 0.8f), cy + (int)(sinf(a) * r * 0.8f), r / 3 + 1, blue);
+  }
+  gfx->fillCircle(cx, cy, r * 3 / 4, gold);
+  gfx->drawCircle(cx, cy, r * 3 / 4, C565(0xa0, 0x70, 0x10));
+  gfx->fillCircle(cx - r / 5, cy - r / 5, r / 5 + 1, C565(0xff, 0xec, 0xa0));
+}
+
 static uint8_t boxPages() { return cb().count() ? (cb().count() + BOX_ROWS - 1) / BOX_ROWS : 1; }
 
 void openBox() {
@@ -220,6 +242,7 @@ void renderBoxDetail() {
   snprintf(head, sizeof(head), "%s%s", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex));
   drawFit(head, 44, 300, DEX_TBL[m.dex].accent, 3);
   drawThumbAt(m.dex, CX, 136, 3, false);
+  if (m.flags & BOXF_RAISED) drawRibbon(CX + 78, 104, 14);  // ko11.17: lo criaste hasta el final
   char l[48];
   snprintf(l, sizeof(l), "No.%03d  Lv.%u  %s", m.dex, m.lvl, typeName(DEX_TBL[m.dex].ptype));
   drawFit(l, 204, 340, UI_INK, 2);
@@ -261,7 +284,7 @@ static void drawBoxTabs(const char *t1, const char *t2) {
   bool box1 = !boxHall && !boxOrb;
   drawBtn(BOX_TAB_X1, BOX_TAB_Y, BOX_TAB_W, BOX_TAB_H, box1 ? UI_BAR_WARN : UI_TRACK, UI_INK, t1);
   drawBtn(BOX_TAB_X2, BOX_TAB_Y, BOX_TAB_W, BOX_TAB_H, boxHall ? C565(0xe8, 0xb0, 0x20) : UI_TRACK, UI_INK, t2);
-  drawCrown(BOX_TAB_X2 + 10, BOX_TAB_Y + 12, boxHall ? UI_WHITE : C565(0xe8, 0xb0, 0x20));
+  drawRibbon(BOX_TAB_X2 + 20, BOX_TAB_Y + 15, 8, boxHall);  // ko11.17: escarapela
   uiButton(BOX_TAB_X3, BOX_TAB_Y, BOX_TAB_W3, BOX_TAB_H, 12, boxOrb ? C565(0x6a, 0x4c, 0xf0) : UI_TRACK, UI_INK);
   drawOrb(BOX_TAB_X3 + BOX_TAB_W3 / 2, BOX_TAB_Y + BOX_TAB_H / 2 - 1, 9,
           orbValid(pet.orb) ? pet.orb : orbMake(PT_PSYCHIC, true, 10), millis());
@@ -318,7 +341,7 @@ void renderBox() {
     setSize(1);
     setCur(134, y + 28);
     printT(l);
-    if (m.flags & BOXF_RAISED) drawCrown(354, y + 14, C565(0xe8, 0xb0, 0x20));  // ko10.5: criado
+    if (m.flags & BOXF_RAISED) drawRibbon(363, y + 17, 9);  // ko10.5: criado (ko11.17: escarapela)
     else if (m.flags & BOXF_CAUGHT) drawMap(SPR_ICON_PLAY, 16, 352, y + 7, 2, false);
   }
   // paginas
@@ -648,7 +671,7 @@ void renderNextPick() {
     setSize(1);
     setCur(130, y + 27);
     printT(l2);
-    if (m.flags & BOXF_RAISED) drawCrown(360, y + 14, C565(0xe8, 0xb0, 0x20));
+    if (m.flags & BOXF_RAISED) drawRibbon(369, y + 17, 9);
   }
   if (nextPages() > 1) {
     drawBtn(113, NP_NAV_Y, 60, 34, nextPage ? UI_WHITE : UI_TRACK, UI_INK, "<");
@@ -1341,6 +1364,23 @@ static void fameDetail() {
   drawFit(XT(X_FAME_TITLE), 30, 300, C565(0xb0, 0x80, 0x10), 2);
   const int ground = 250;
   int top = ground - 120;
+  // ko11.17: el campeon luce su tipo: halo del color del tipo que late, ondas que
+  // salen y su tecnica estallando detras (cada 2 s), con destellos delante
+  uint32_t now = millis();
+  uint8_t pt = DEX_TBL[m.dex].ptype;
+  uint16_t tc = orbColor(pt);
+  const int acx = CX, acy = ground - 72;
+  float pl = 0.5f + 0.5f * sinf(now * 0.004f);
+  gfx->fillCircle(acx, acy, 84 + (int)(pl * 6), uiLerp(tc, UI_BG_DAY, 12, 16));
+  gfx->fillCircle(acx, acy, 64, uiLerp(tc, UI_BG_DAY, 9, 16));
+  for (int k = 0; k < 3; k++) {  // ondas
+    int ph = (int)((now / 12 + k * 40) % 120);
+    uint16_t c = uiLerp(tc, UI_BG_DAY, 6 + ph / 12, 16);
+    gfx->drawCircle(acx, acy, 60 + ph / 2, c);
+    gfx->drawCircle(acx, acy, 61 + ph / 2, c);
+  }
+  uint32_t cyc = now % 2000;
+  if (cyc < 1000) drawMoveFx(pt, acx, acy, acx, acy, 350 + cyc * 650 / 1000, true, 2, moveTier(m.dex));
   if (galleryPmd.loaded && galleryPmd.acts[PMD_IDLE].frames) {
     // ko11.1: retrato grande y quieto (frame 0) para que la corona quede justo en la cabeza
     const PmdAct &ia = galleryPmd.acts[PMD_IDLE];
@@ -1361,6 +1401,14 @@ static void fameDetail() {
   }
   if (top < 96) top = 96;
   drawCrownBig(CX, top + 4, 64);
+  for (int k = 0; k < 6; k++) {  // destellos alrededor
+    float a = now * 0.0015f + k * 1.047f;
+    int sx = acx + (int)(cosf(a) * 100), sy = acy + (int)(sinf(a) * 70);
+    int l = 3 + (int)((now / 90 + k * 3) % 4);
+    gfx->drawFastHLine(sx - l, sy, 2 * l + 1, UI_WHITE);
+    gfx->drawFastVLine(sx, sy - l, 2 * l + 1, UI_WHITE);
+    gfx->drawFastHLine(sx - l / 2, sy, l + 1, uiLerp(tc, UI_WHITE, 8, 16));
+  }
   char b[64];
   snprintf(b, sizeof(b), "%s%s  Lv%u", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex), m.lvl);
   drawFit(b, 262, 340, UI_INK, 3);

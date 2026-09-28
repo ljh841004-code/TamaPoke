@@ -436,6 +436,8 @@ static void scenes(bool ko, const char *sfx) {
     render(); shot("59_league_fame");
     openFame(); render(); shot("59d_fame_grid");
     fameTap(FM_X + FM_CELL + 10, FM_Y + 10); render(); shot("59e_fame_detail");
+    tick(450); render(); shot("59f_fame_detail_fx");  // ko11.17: tecnica de su tipo
+    for (int f = 0; f < 20; f++) { char fn[32]; snprintf(fn, sizeof(fn), "92_fame_anim_%02d", f); tick(100); render(); shot(fn); }
     fameClose(); fameClose();
     leagueTap(GY_X + 40, LG_BTN_Y + 10); render(); shot("59b_league_intro");
     bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
@@ -510,7 +512,8 @@ static void scenes(bool ko, const char *sfx) {
   pet.markFamRaised(16);  // Pidgey ya criado: en gris
   pet.markFamRaised(6);
   render(); shot("11a_box_tabs");
-  boxHall = true; render(); shot("11b_box_hall"); boxHall = false;
+  toastUntil = 0; boxHall = true; render(); shot("11b_box_hall");
+  boxSel = 0; render(); shot("11d_hall_detail"); boxSel = -1; boxHall = false;  // ko11.17: escarapela
   {  // ko11.16: bolsa de orbes (tercera pestana)
     toastUntil = 0; boxOrb = true; render(); shot("11o_orb_bag_empty");
     uint8_t pt = DEX_TBL[pet.speciesId].ptype;
