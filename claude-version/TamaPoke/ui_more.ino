@@ -342,7 +342,19 @@ void boxTap(int16_t x, int16_t y) {
     }
     if (!boxHall && y >= 300 && y < 348 && x >= 73 && x < 173) {  // el salon no suelta
       if (timeLeft(boxConfirmUntil)) {
-        pet.addCandy(box.at((uint8_t)boxSel).dex, 1);  // ko10.4: soltar da 1 caramelo
+        // ko10.4: soltar da 1 caramelo de su familia. ko11.14: y a veces un caramelo
+        // raro (30 % si es raro o legendario, 10 % los demas); se avisa con un toast
+        int16_t rd = box.at((uint8_t)boxSel).dex;
+        pet.addCandy(rd, 1);
+        uint8_t rar = DEX_TBL[rd].rarity;
+        bool gotRare = (int)random(100) < ((rar == R_RARO || rar == R_LEGENDARIO) ? 30 : 10);
+        if (gotRare && pet.rareCandy < 999) pet.rareCandy++;
+        {
+          char t[72];
+          snprintf(t, sizeof(t), XT(X_EXP_CANDY_FMT), dexName(rd), 1u);
+          if (gotRare) { strncat(t, "  ", sizeof(t) - strlen(t) - 1); strncat(t, XT(X_EXP_RARE), sizeof(t) - strlen(t) - 1); }
+          showToast(t);
+        }
         pet.saveNow();
         box.release((uint8_t)boxSel);
         boxSel = -1;
