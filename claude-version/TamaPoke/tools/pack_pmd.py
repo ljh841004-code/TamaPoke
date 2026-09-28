@@ -125,7 +125,8 @@ RECOLOR = {
 
 
 def recolor(im, dexnum, shiny):
-    table = None if shiny or os.environ.get('PMD_RECOLOR') == '0' else RECOLOR.get(dexnum)
+    # apagado por defecto (el usuario se quedo con el original): PMD_RECOLOR=1 para usarlo
+    table = None if shiny or os.environ.get('PMD_RECOLOR') != '1' else RECOLOR.get(dexnum)
     if not table:
         return im
     px = im.load()
