@@ -15,7 +15,10 @@
 #define VB_LEFT 44        // paredes (la pantalla es redonda: un poco hacia dentro)
 #define VB_RIGHT 422
 #define VB_CEIL 106       // techo (debajo del marcador)
-#define VB_BALL_R 13
+#define VB_BALL_R 20      // ko11.12: 13 -> 20 (se veia muy pequena)
+#define VB_BALL_DRAW 44   // lado del dibujo de la pokeball (px, multiplo de 4)
+#define VB_MON_MAXS 4     // ko11.12: Pokemon hasta x3,5 (antes x2)
+#define VB_MON_FITH 124
 #define VB_BODY_UP 30     // centro del cuerpo sobre el suelo
 #define VB_WIN 5          // puntos para ganar
 #define VB_SERVE_MS 900

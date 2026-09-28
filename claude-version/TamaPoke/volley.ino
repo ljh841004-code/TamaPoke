@@ -100,7 +100,7 @@ static void vbDrawBall(int x, int y, uint32_t now) {
       gfx->fillCircle(tx, ty, VB_BALL_R - k * 2, c);
     }
   }
-  drawMap(SPR_ICON_PLAY, 16, x - 16, y - 16, 2, false);  // pokeball
+  drawMapQ(SPR_ICON_PLAY, 16, x - VB_BALL_DRAW / 2, y - VB_BALL_DRAW / 2, VB_BALL_DRAW / 4, false);  // pokeball (ko11.12: mas grande)
   if (vb.b.spiked && vb.b.power) {  // ko11.9.4: 강스파이크: el efecto de la tecnica de su tipo va con la pelota
     int16_t d = vb.b.spikeSide ? vbFoeDex : pet.speciesId;
     drawMoveFx(DEX_TBL[d].ptype, x, y, x, y, 350 + (now % 600), true, 2, moveTier(d));
@@ -121,9 +121,9 @@ static void vbDrawPlayer(int s, uint32_t now) {
   const VbPlayer &q = vb.p[s];
   int x = (int)q.x, g = VB_GROUND - (int)q.y;
   // sombra en el suelo (mas pequena cuanto mas alto)
-  int sw = 26 - (int)(q.y / 8);
-  if (sw < 10) sw = 10;
-  gfx->fillEllipse(x, VB_GROUND + 2, sw, 5, C565(0x40, 0x40, 0x40));
+  int sw = 36 - (int)(q.y / 7);  // ko11.12: sombra acorde al tamano
+  if (sw < 14) sw = 14;
+  gfx->fillEllipse(x, VB_GROUND + 2, sw, 6, C565(0x40, 0x40, 0x40));
   uint8_t act = PMD_IDLE;
   if (vb.t - q.spikeT < 350 && q.spikeT) act = PMD_ATTACK;
   else if (vb.airborne(s)) act = PMD_HOP;
@@ -131,7 +131,7 @@ static void vbDrawPlayer(int s, uint32_t now) {
   if (s == 0) {
     if (pmd.loaded) {
       if (!pmd.has(act)) act = pmd.has(PMD_HOP) && vb.airborne(0) ? PMD_HOP : PMD_IDLE;
-      drawPmdAct(act, x, g, now, true, false, 2);
+      drawPmdActM(pmd, act, x, g, now, true, false, VB_MON_MAXS, VB_MON_FITH);  // ko11.12: x3
     } else {
       const uint8_t *th = thumbs.get(pet.speciesId);
       if (th) drawThumb(th, x - GAL_CELL / 2, g - GAL_CELL, 2, false);
@@ -139,7 +139,7 @@ static void vbDrawPlayer(int s, uint32_t now) {
   } else {
     if (foePmd.loaded) {
       if (!foePmd.has(act)) act = PMD_IDLE;
-      drawPmdActM(foePmd, act, x, g, now, true, false, 2, 96);
+      drawPmdActM(foePmd, act, x, g, now, true, false, VB_MON_MAXS, VB_MON_FITH);
     } else {
       const uint8_t *th = thumbs.get(vbFoeDex);
       if (th) drawThumb(th, x - GAL_CELL / 2, g - GAL_CELL, 2, false);

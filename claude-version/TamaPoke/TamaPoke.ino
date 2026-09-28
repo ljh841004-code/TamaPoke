@@ -4769,6 +4769,11 @@ const char *statusMsg() {
 
 // dibuja un mapa de n x n pixeles escalado; silhouette=true lo pinta en tinta
 void drawMap(const char *const *map, int n, int x, int y, int s, bool silhouette) {
+  drawMapQ(map, n, x, y, s * 4, silhouette);
+}
+
+// ko11.12: escala en cuartos de pixel (s4 = 10 -> x2,5)
+void drawMapQ(const char *const *map, int n, int x, int y, int s4, bool silhouette) {
   // ko11.10: a indices (el propio caracter) y dibujo liso
   static uint8_t mb[32 * 32];
   static uint16_t mp[256];
@@ -4780,5 +4785,5 @@ void drawMap(const char *const *map, int n, int x, int y, int s, bool silhouette
       mb[r * n + c] = ch;
       mp[ch] = spriteColor((char)ch);
     }
-  smoothBlit(mb, n, n, mp, x, y, s, silhouette);
+  smoothBlitQ(mb, n, n, mp, x, y, s4, silhouette);
 }
