@@ -1531,7 +1531,7 @@ void uiMixSpan(uint16_t *p, int n, uint32_t k, uint16_t to) {
 // ko11.13: fundido al cambiar de pantalla. uiFlush() sustituye a gfx->flush():
 // si la pantalla es otra (screenSig), los primeros ~250 ms la nueva aparece
 // desde el color de fondo (10/16 -> 0). En los juegos rapidos no se hace (coste)
-bool gUiFade = true;  // el render de PC lo apaga (capturas sin fundido)
+bool gUiFade = false;  // ko11.13.1: apagado (al usuario no le gusto); el render de PC lo prueba
 static uint16_t uiLastSig = 0xFFFF;
 static uint32_t uiFadeT0 = 0;
 #define UI_FADE_MS 260
