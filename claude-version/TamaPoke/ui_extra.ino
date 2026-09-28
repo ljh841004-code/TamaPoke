@@ -450,7 +450,12 @@ void drawBattleBg() {
   gfx->fillRect(0, 262, 466, 204, UI_BG_DAY);  // panel inferior (mensajes/menu)
 }
 
-void drawHpBox(int x, int y, int w, const char *name, uint16_t lvl, float hp, uint16_t maxHp, bool showNum) {
+// ko11.9.1: los de la 2a generacion (152-251) con el nombre en dorado oscuro
+#define UI_GEN2_INK C565(0x98, 0x68, 0x00)
+static uint16_t nameInkFor(int16_t dex) { return dex > 151 ? UI_GEN2_INK : UI_INK; }
+
+void drawHpBox(int x, int y, int w, const char *name, uint16_t lvl, float hp, uint16_t maxHp, bool showNum,
+               uint16_t nameInk) {
   gfx->fillRoundRect(x, y, w, showNum ? 58 : 46, 10, UI_WHITE);
   gfx->drawRoundRect(x, y, w, showNum ? 58 : 46, 10, UI_INK);
   char lv[12];
@@ -464,8 +469,10 @@ void drawHpBox(int x, int y, int w, const char *name, uint16_t lvl, float hp, ui
   uint8_t sz = 2;
   setSize(sz);
   if (textW(name, sz) > w - lw - 22) { sz = 1; setSize(1); }
+  gfx->setTextColor(nameInk);
   setCur(x + 8, y + 5);
   printT(name);
+  gfx->setTextColor(UI_INK);
   int bx = x + 8, by = y + 28, bw = w - 16;
   float f = maxHp ? hp / maxHp : 0;
   if (f < 0) f = 0;
@@ -1018,8 +1025,8 @@ void renderBattleView() {
   updateShake(now);
   drawBattleBg();
   drawBattlers();
-  drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true);  // ko9: rival con numeros
-  drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true);
+  drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true, nameInkFor(bvFoeDex));  // ko9: rival con numeros
+  drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true, nameInkFor(bvMeDex));
   // ko10.11: ya lo tengo: "en la caja: N" bajo la caja del rival (5 s al aparecer)
   if (bKind == BK_WILD && !bLink && bvOwned && now - bvOwnedT < 5000) {
     char ob[32];

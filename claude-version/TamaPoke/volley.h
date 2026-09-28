@@ -24,6 +24,7 @@
 #define VB_PGRAV 1250.0f  // gravedad de los jugadores
 #define VB_JUMP_V 470.0f
 #define VB_MAXV 720.0f
+#define VB_SPIKE_MAXV 1000.0f  // remate: tope de velocidad
 
 enum : uint8_t { VB_SERVE = 0, VB_PLAY, VB_POINT, VB_OVER };
 
@@ -64,6 +65,9 @@ struct VolleyGame {
   float aiErr = 0;             // error de la IA en este punto
   uint32_t aiNext = 0;         // la IA solo "mira" cada cierto tiempo (reflejos)
   float aiTarget = 326;
+  bool autoMove0 = false;      // ko11.9.1: el lado 0 corre solo hacia la pelota (el jugador solo salta/remata)
+  uint32_t autoNext = 0;
+  float autoTarget = 140;
   uint16_t hits[2] = {0, 0};   // toques de cada lado (estadistica)
   uint16_t spikes[2] = {0, 0};
   VbRng rng;
@@ -97,9 +101,11 @@ struct VolleyGame {
     b.spiked = false;
     state = VB_SERVE;
     stateT = 0;
-    aiErr = (float)((int)rng.below(81) - 40) * (1.0f - aiLevel * 0.17f);
+    aiErr = (float)((int)rng.below(121) - 60) * (1.0f - aiLevel * 0.16f);
     aiNext = 0;
     aiTarget = homeX(1);
+    autoNext = 0;
+    autoTarget = homeX(0);
   }
 
   // ---- entradas ----
@@ -115,7 +121,7 @@ struct VolleyGame {
     p[s].jumped = false;
   }
   void spike(int s) {  // en el aire: el siguiente toque es un remate
-    if (airborne(s)) p[s].spikeUntil = t + 380;
+    if (airborne(s)) p[s].spikeUntil = t + (s == 0 && autoMove0 ? 1000 : 380);  // jugador: todo el salto
   }
   // tocar arriba = saltar, o rematar si ya esta en el aire
   void action(int s) { if (airborne(s)) spike(s); else jump(s); }
@@ -142,8 +148,8 @@ struct VolleyGame {
     VbPlayer &me = p[s];
     float head = bodyY(s) - me.hitR;
     bool mine = b.x > VB_NET_X || (state == VB_PLAY && b.vx > 0);
-    if (t >= aiNext) {  // reflejos: cada 260 ms (nivel 0) ... 90 ms (nivel 5)
-      aiNext = t + 260 - aiLevel * 34;
+    if (t >= aiNext) {  // reflejos: cada 380 ms (nivel 0) ... 100 ms (nivel 5)
+      aiNext = t + 380 - aiLevel * 56;
       float tx = homeX(s);
       if (state == VB_PLAY && mine) {
         float lx = predictX(head);
@@ -162,7 +168,7 @@ struct VolleyGame {
     // en el aire y cerca: remate a veces
     if (airborne(s) && !me.jumped && fabsf(dx) < 70 && fabsf(dy) < 80) {
       me.jumped = true;
-      if (rng.below(100) < 25 + aiLevel * 12) spike(s);
+      if (rng.below(100) < 5 + aiLevel * 9) spike(s);
     }
   }
 
@@ -193,9 +199,27 @@ struct VolleyGame {
     L += dir * (float)rng.below((uint32_t)span + 1);
     float v = vyFor(L);
     if (v < 60) v = 60;  // siempre algo hacia abajo
+    float vmax = sqrtf(VB_SPIKE_MAXV * VB_SPIKE_MAXV - pow * pow);  // no mas rapido que VB_SPIKE_MAXV
+    if (v > vmax) v = vmax;
     *vx = dir * pow;
     *vy = v;
     return clears(v);
+  }
+
+  // ko11.9.1: el lado 0 se coloca solo donde bajara la pelota (reflejos buenos,
+  // sin error): el jugador solo decide cuando saltar y rematar.
+  void thinkAuto() {
+    const int s = 0;
+    if (t >= autoNext) {
+      autoNext = t + 120;
+      float tx = homeX(s);
+      if (state == VB_PLAY && (b.x < VB_NET_X || b.vx < 0)) {
+        float lx = predictX(bodyY(s) - p[s].hitR);
+        if (lx < VB_NET_X) tx = lx - 20;  // por la izquierda: sale hacia el rival
+      }
+      autoTarget = tx;
+    }
+    moveTo(s, autoTarget);
   }
 
   // ---- un paso de la simulacion (dt en ms, se trocea en pasos de 10 ms) ----
@@ -204,6 +228,7 @@ struct VolleyGame {
       uint32_t d = dtMs > 10 ? 10 : dtMs;
       dtMs -= d;
       substep(d / 1000.0f, d);
+      if (autoMove0) thinkAuto();
       if (aiOn) thinkAi();
     }
   }
@@ -273,7 +298,9 @@ struct VolleyGame {
       float nx = dx / d, ny = dy / d;
       float dir = s ? -1.0f : 1.0f;
       float spVx = 0, spVy = 0;
-      bool canSpike = airborne(s) && q.spikeUntil > t && ny < 0.6f && b.y < VB_NET_TOP - 30;
+      // ko11.9.1: con autoMove0 el jugador remata solo si toca la pelota en el aire
+      bool wantSpike = q.spikeUntil > t || (s == 0 && autoMove0);
+      bool canSpike = airborne(s) && wantSpike && ny < 0.6f && b.y < VB_NET_TOP - 30;
       if (canSpike) canSpike = spikeAim(s, q.spikePow, &spVx, &spVy);
       if (canSpike) {  // remate: fuerte y hacia abajo, cae dentro del otro campo
         b.vx = spVx;

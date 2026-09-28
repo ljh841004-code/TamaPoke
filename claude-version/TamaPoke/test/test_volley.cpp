@@ -123,3 +123,27 @@ TEST(Volley, jump_spike_and_serve) {
   CHECK_EQ(h.state, (uint8_t)VB_SERVE);
   CHECK_EQ(h.server, (uint8_t)0);  // saca quien gano el punto
 }
+
+TEST(Volley, auto_move_runs_to_the_ball_and_air_hits_spike) {
+  // ko11.9.1: con autoMove0 el lado 0 va solo a donde bajara la pelota
+  VolleyGame g;
+  g.begin(21, 0);
+  g.autoMove0 = true;
+  g.step(VB_SERVE_MS + 10, false);
+  g.b.x = 300; g.b.y = 200; g.b.vx = -260; g.b.vy = -200;  // viene hacia nuestro campo
+  float land = g.predictX(g.bodyY(0) - g.p[0].hitR);
+  CHECK(land < VB_NET_X);
+  for (int i = 0; i < 80 && g.hits[0] == 0; i++) g.step(10, false);
+  CHECK(fabsf(g.p[0].x - (land - 20)) < 40 || g.hits[0] > 0);
+  // en el aire, cualquier toque de la pelota es un remate (sin segundo toque)
+  VolleyGame h;
+  h.begin(22, 0);
+  h.autoMove0 = true;
+  h.step(VB_SERVE_MS + 10, false);
+  h.jump(0);
+  h.step(250, false);
+  h.b.x = h.p[0].x + 10; h.b.y = h.bodyY(0) - h.p[0].hitR; h.b.vx = 0; h.b.vy = 50;
+  h.substep(0.01f, 10);
+  CHECK(h.b.spiked);
+  CHECK_EQ(h.spikes[0], (uint16_t)1);
+}

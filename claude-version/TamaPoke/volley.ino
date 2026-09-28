@@ -2,16 +2,11 @@
 // pantalla redonda). Izquierda = el que criamos; derecha = un Pokemon al azar
 // que maneja la IA. 5 puntos. La fisica y la IA estan en volley.h.
 //
-// Toques (un solo dedo):
-//   - mantener abajo (y >= VBC_PAD_Y) y deslizar = moverse (la franja de abajo
-//     entera se corresponde con nuestro medio campo)
-//   - tocar arriba = saltar; en el aire, tocar otra vez = remate (spike)
+// Toques (un solo dedo). ko11.9.1: el nuestro corre solo hacia la pelota.
+//   - tocar en cualquier sitio = saltar; si toca la pelota en el aire = remate (spike)
 //   - mantener el marcador 2 s = abandonar (sin premio)
 #include "volley.h"
 
-#define VBC_PAD_Y 392     // franja de movimiento (debajo de la pista)
-#define VBC_PAD_X0 100
-#define VBC_PAD_X1 366
 #define VBC_RESULT_MIN_MS 1500
 
 bool vbOpen = false;
@@ -46,12 +41,13 @@ void startVolley() {
   vb.p[0].speed = 175 + vbClampf(pet.speStat(), 0, 200) * 0.35f;
   vb.p[0].spikePow = 470 + vbClampf(pet.atkStat(), 0, 200) * 0.6f;
   vb.p[0].hitR = 30 + vbClampf(pet.defStat(), 0, 200) / 40.0f;
-  vb.p[0].dig = (uint8_t)(50 + vbClampf(pet.defStat(), 0, 200) / 10.0f);  // 50..70 %
+  vb.p[0].dig = (uint8_t)(60 + vbClampf(pet.defStat(), 0, 200) / 10.0f);  // 60..80 %
+  vb.autoMove0 = true;
   const DexEntry &e = DEX_TBL[vbFoeDex];
-  vb.p[1].speed = 170 + vbClampf(e.bSpe, 0, 150) * 0.3f + lvl * 12;
+  vb.p[1].speed = 160 + vbClampf(e.bSpe, 0, 150) * 0.3f + lvl * 10;
   vb.p[1].spikePow = 460 + vbClampf(e.bAtk, 0, 150) * 0.5f + lvl * 15;
   vb.p[1].hitR = 30 + vbClampf(e.bDef, 0, 150) / 50.0f;
-  vb.p[1].dig = (uint8_t)(40 + lvl * 8 + vbClampf(e.bDef, 0, 150) / 15.0f);  // 40..90 %
+  vb.p[1].dig = (uint8_t)(20 + lvl * 8 + vbClampf(e.bDef, 0, 150) / 15.0f);  // 20..70 %
   vbOpen = true;
   vbLast = millis();
   vbIntroUntil = vbLast + 1600;
@@ -69,21 +65,16 @@ void vbPress(int16_t x, int16_t y) {
     return;
   }
   if (timeLeft(vbIntroUntil)) { vbIntroUntil = 0; return; }  // saltar la presentacion
-  if (y >= VBC_PAD_Y) { vbHold(x, y); return; }
   if (y < 104) return;  // marcador (mantener 2 s = salir)
-  bool air = vb.airborne(0);
-  vb.action(0);
-  if (air) sfxPlay(SFX_PLAY);
+  if (!vb.airborne(0)) {
+    vb.jump(0);
+    sfxPlay(SFX_PLAY);
+  }
 }
 
-void vbHold(int16_t x, int16_t y) {
-  if (y < VBC_PAD_Y - 30) return;  // se puede subir un poco el dedo sin soltar
-  float f = (float)(x - VBC_PAD_X0) / (VBC_PAD_X1 - VBC_PAD_X0);
-  f = vbClampf(f, 0, 1);
-  vb.moveTo(0, VolleyGame::minX(0) + f * (VolleyGame::maxX(0) - VolleyGame::minX(0)));
-}
-
-void vbRelease() { vb.stop(0); }
+// ko11.9.1: moverse ya no depende del dedo
+void vbHold(int16_t x, int16_t y) {}
+void vbRelease() {}
 
 // ---- fin de la partida ----
 static void vbFinish() {
@@ -183,11 +174,6 @@ void renderVolley() {
   vbDrawPlayer(0, now);
   vbDrawPlayer(1, now);
   if (vb.state != VB_OVER) vbDrawBall((int)vb.b.x, (int)vb.b.y, now);
-  // la franja de mover (abajo)
-  gfx->fillRoundRect(VBC_PAD_X0, VBC_PAD_Y + 12, VBC_PAD_X1 - VBC_PAD_X0, 26, 12, C565(0x30, 0x30, 0x38));
-  int kx = VBC_PAD_X0 + (int)((vb.p[0].x - VolleyGame::minX(0)) / (VolleyGame::maxX(0) - VolleyGame::minX(0)) *
-                              (VBC_PAD_X1 - VBC_PAD_X0));
-  gfx->fillCircle(kx, VBC_PAD_Y + 25, 11, UI_WHITE);
   vbDrawScore(ink);
 
   if (intro) {  // presentacion: VS

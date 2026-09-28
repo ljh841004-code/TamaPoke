@@ -132,22 +132,11 @@ static void scenes(bool ko, const char *sfx) {
     vbFoeDex = 54; loadFoe(54, false);
     tick(300); render(); shot("70_volley_vs");
     tick(1500); render(); shot("71_volley_first_serve");
-    // el lado 0 lo juega un "jugador" sencillo hasta ver un remate, un punto y el final
+    // ko11.9.1: el nuestro corre solo; aqui solo se "toca" para saltar cuando la pelota baja cerca
     bool gotSpike = false, gotPoint = false;
-    uint32_t nextThink = 0;
     for (int i = 0; i < 20000 && vb.state != VB_OVER; i++) {
-      if (gMockMillis >= nextThink) {
-        nextThink = gMockMillis + 180;
-        float tx = VolleyGame::homeX(0);
-        if (vb.state == VB_PLAY && (vb.b.x < VB_NET_X || vb.b.vx < 0)) {
-          float lx = vb.predictX(vb.bodyY(0) - vb.p[0].hitR);
-          if (lx < VB_NET_X) tx = lx - 12;
-        }
-        vb.moveTo(0, tx);
-      }
-      if (vb.state == VB_PLAY && !vb.airborne(0) && vb.b.vy > 0 && fabsf(vb.b.x - vb.p[0].x) < 40 &&
-          vb.bodyY(0) - vb.b.y > 80 && vb.bodyY(0) - vb.b.y < 180) vb.jump(0);
-      if (vb.airborne(0)) vb.spike(0);
+      if (vb.state == VB_PLAY && !vb.airborne(0) && vb.b.vy > 0 && vb.b.x < VB_NET_X &&
+          fabsf(vb.b.x - vb.p[0].x) < 50 && vb.bodyY(0) - vb.b.y < 170) vbPress(233, 250);
       tick(20); render();
       if (!gotSpike && vb.state == VB_PLAY && vb.b.spiked && vb.b.spikeSide == 0 && vb.t - vb.p[0].spikeT > 60) {
         shot("72_volley_spike"); gotSpike = true;
@@ -181,6 +170,17 @@ static void scenes(bool ko, const char *sfx) {
   render(); shot("08_battle_menu");
   box.add(bFoe.dex, 5, false, true, 0); box.add(bFoe.dex, 7, false, true, 0); bvOwned = 2; bvOwnedT = gMockMillis;
   render(); shot("08b_battle_owned"); bvOwned = 0;
+  // ko11.9.1: rival de la 2a generacion (Totodile) con el nombre en dorado
+  if (ko) {
+    Battler keepFoe = bFoe;
+    bFoe = makeBattler(158, 12, 60, 60, 60);
+    bvSetup(bMe, bFoe, nullptr, false);
+    bPhase = BP_MENU; txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
+    render(); shot("08c_battle_gen2_name");
+    bFoe = keepFoe;
+    bvSetup(bMe, bFoe, nullptr, false);
+    bPhase = BP_MENU; txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
+  }
   // fork KO (ko7): efectos de cada tipo (viaje y impacto) + critico/muy eficaz
   for (int ty = -1; ty < PT_COUNT; ty++) {
     bPhase = BP_PLAY; bqAisMe = true; bqN = 1; bqI = 0;
