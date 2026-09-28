@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko11.9.3)
+# TamaPoke KO (v1.17-ko11.9.4)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko11.9.4: 배구 메뉴 현재 연승(X_VB_NOW_FMT), 강스파이크(VB_POWER_PCT 25·속도 ×1.22·받기 -20, drawMoveFx 공 따라가기, X_VB_POWER_FMT). PC 테스트 238개
 - ✅ ko11.9.3: backToTrainMenu(결과·그만두기 뒤), 배구 AI 반응 320-46L·스파이크 12+9L·받기 +10·속도 +10, sdBegin 4회 재시도, panicrec(set_arduino_panic_handler → RTC PC 6개 → tpdiag "pc"·crash.txt·창 표시), symbols/*.elf.xz. PC 테스트 237개
 - ✅ ko11.9.2: 훈련 기록 포켓몬마다(resetTrainRecords, all*Hi, rpp 마이그레이션), 짧은 보내주기(isShortStay 24h·evolvedHere, 계열 표시 안 함, 다음 알 보통), 왕관=작별만(onPetEnd), 길게 누르기 원(petHoldProgress, 400ms 끊김 이어 붙이기, 탭 지연), 재부팅 기록(rbWhere/crumb, tpdiag NVS, crash.txt, 백업 화면 창). PC 테스트 237개
 - ✅ ko11.9.1: 배구 autoMove0(thinkAuto)·톡 = 점프·공중 접촉 자동 스파이크, AI 약하게(반응 380-56L ms, 스파이크 5+9L%, 받기 20+8L%), 스파이크 최고 속도 1000, 전투 2세대 이름 금색(nameInkFor). PC 테스트 234개
