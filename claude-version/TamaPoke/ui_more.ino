@@ -1348,6 +1348,19 @@ void renderBackup() {
   drawFit(XT(X_BAK_AUTO), 362, 320, 0x8410, 1);
   if (bakMsg >= 0 && timeLeft(bakMsgUntil))
     drawFit(XT((XId)bakMsg), 390, 300, bakMsg == X_BAK_DONE ? UI_BAR_OK : UI_BAR_BAD, 2);
+  if (crashCount && !(bakMsg >= 0 && timeLeft(bakMsgUntil))) {  // ko11.9.2: ultimo reinicio inesperado
+    char when[24] = "", l[80];
+    if (crashEpoch > 1000000000UL) {
+      int y;
+      uint8_t mo, d;
+      wxDate(crashEpoch, &y, &mo, &d, nullptr);
+      snprintf(when, sizeof(when), "%02u.%02u %02u:%02u", mo, d, (unsigned)(crashEpoch / 3600 % 24),
+               (unsigned)(crashEpoch / 60 % 60));
+    }
+    snprintf(l, sizeof(l), XT(X_CRASH_FMT), when, crashReasonName(), crashWhereName(),
+             (unsigned)(crashWhere >> 8), (unsigned)(crashWhere & 0xFF), (unsigned)crashCount);
+    drawFit(l, 392, 300, UI_BAR_BAD, 1);
+  }
   drawBackArrow();  // ko11.6.1
   if (bakSel >= 0) drawBakConfirm(XT(X_BAK_CONFIRM), bakSel, X_BAK_RESTORE, X_BAK_CANCEL);
   gfx->flush();

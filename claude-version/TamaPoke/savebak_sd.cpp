@@ -179,3 +179,16 @@ bool bakRestore(uint8_t slot) {
   Serial.printf("BAK: restaurar ranura %u %s\n", slot, ok ? "ok" : "FALLO");
   return ok;
 }
+
+// ko11.9.2: registro de reinicios inesperados (se lee en cualquier PC)
+bool bakCrashLog(const char *line) {
+  if (!sdReady || !line) return false;
+  SdCardLock lock;
+  if (!lock) return false;
+  SD_MMC.mkdir("/tpsave");
+  File f = SD_MMC.open("/tpsave/crash.txt", FILE_APPEND);
+  if (!f) return false;
+  f.println(line);
+  f.close();
+  return true;
+}

@@ -292,10 +292,43 @@ RTC_NOINIT_ATTR static uint32_t rbWhere;  // ko11.9.2: donde estaba (pantalla <<
 static uint32_t rbMagic, rbStep, rbFails;
 static uint32_t rbWhere;
 #endif
+static uint8_t bootPrevStep = 0;
+static int bootPrevReason = 0;
 static uint32_t bootPrevWhere = 0;
 static bool bootRunCrash = false;  // ko11.9.2: se cayo jugando (no al arrancar)
 // ko11.9.2: miga de pan para saber donde se reinicia la placa jugando
 void crumb(uint16_t w) { rbWhere = w; }
+// ko11.9.2: el ultimo reinicio inesperado queda guardado (NVS "tpdiag", fuera de
+// la copia de la partida) y en /tpsave/crash.txt: se ve despues en la pantalla de copias
+int32_t crashReason = 0;
+uint32_t crashWhere = 0, crashEpoch = 0;
+uint16_t crashCount = 0;
+static const char *crumbName(uint8_t scr);
+static const char *resetName(int r);
+static void crashLogBoot(uint32_t epoch) {
+  Preferences p;
+  if (!p.begin("tpdiag", false)) return;
+  if (bootRunCrash) {
+    p.putInt("cr", bootPrevReason);
+    p.putUInt("cw", bootPrevWhere);
+    p.putUInt("ct", epoch);
+    p.putUShort("cn", (uint16_t)(p.getUShort("cn", 0) + 1));
+  }
+  crashReason = p.getInt("cr", 0);
+  crashWhere = p.getUInt("cw", 0);
+  crashEpoch = p.getUInt("ct", 0);
+  crashCount = p.getUShort("cn", 0);
+  p.end();
+  if (bootRunCrash) {
+    char l[96];
+    uint8_t scr = (uint8_t)(bootPrevWhere >> 8);
+    snprintf(l, sizeof(l), "epoch %u  %s  at %s %u.%u  fw %s", (unsigned)epoch, resetName(bootPrevReason),
+             crumbName(scr), (unsigned)scr, (unsigned)(bootPrevWhere & 0xFF), FW_VERSION);
+    bakCrashLog(l);
+  }
+}
+const char *crashWhereName() { return crumbName((uint8_t)(crashWhere >> 8)); }
+const char *crashReasonName() { return resetName(crashReason); }
 static const char *crumbName(uint8_t scr) {
   switch (scr) {
     case 1: return "volley"; case 2: return "defense"; case 3: return "speed"; case 4: return "ball game";
@@ -303,8 +336,6 @@ static const char *crumbName(uint8_t scr) {
     default: return "screen";
   }
 }
-static uint8_t bootPrevStep = 0;
-static int bootPrevReason = 0;
 bool safeMode = false;
 static bool bootGfxUp = false;
 static const char *resetName(int r) {
@@ -559,6 +590,7 @@ void setup() {
                   seen > 1767225600UL ? " (desde la ultima hora guardada)" : "");
   }
   pet.syncClock(e);
+  crashLogBoot(e);  // ko11.9.2
 
   bootStep(BS_NET);
   netBegin();    // WiFi/NTP: la primera sincronizacion va sola a los pocos segundos

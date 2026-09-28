@@ -435,6 +435,9 @@ static void scenes(bool ko, const char *sfx) {
   // ko11.6: copia de la partida en la SD
   openBackup(); render(); shot("18c_backup");
   bakSel = 1; render(); shot("18d_backup_confirm"); bakSel = -1;
+  // ko11.9.2: ultimo reinicio inesperado guardado
+  crashCount = 1; crashReason = 4; crashWhere = 0x0103; crashEpoch = gMockEpoch;
+  render(); shot("18f_backup_crash"); crashCount = 0;
   bakInfo(bakSlots); bakAsk = true; bakAskSlot = 1; render(); shot("18e_backup_boot_ask"); bakAsk = false;
   closeAll(); openReset(); render(); shot("23_reset");
   closeAll(); openUpdate(); render(); shot("19_update");

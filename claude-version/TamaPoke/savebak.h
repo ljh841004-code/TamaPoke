@@ -126,4 +126,5 @@ struct BakSlot { bool ok; BakHdr h; };
 void bakInfo(BakSlot out[2]);                         // las dos ranuras de la SD (CRC comprobado)
 int bakNewest(const BakSlot s[2]);                    // -1 si no hay ninguna valida
 bool bakBackupNow(int16_t dex, uint16_t lvl, uint32_t epoch, bool manual = false);  // en la ranura mas vieja
-bool bakRestore(uint8_t slot);                        // NVS <- ranura; hay que reiniciar despues
+bool bakRestore(uint8_t slot);
+bool bakCrashLog(const char *line);                  // ko11.9.2: anade una linea a /tpsave/crash.txt                        // NVS <- ranura; hay que reiniciar despues
