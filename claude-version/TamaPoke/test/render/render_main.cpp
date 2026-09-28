@@ -132,7 +132,7 @@ static void scenes(bool ko, const char *sfx) {
   // ko11.15: golpes -> energia llena (boton de la tecnica) y la tecnica en curso
   closeAll(); startSack(); tick(800);
   for (int i = 0; i < 22; i++) { sackTap(CX, 150); tick(70); }
-  render(); shot("25_sack");
+  tick(90); render(); shot("25_sack");
   sackTap(CX, SACK_BTN_Y + 20); tick(260); render(); shot("25c_sack_move");
   for (int i = 0; i < 80; i++) { tick(85); render(); }   // se acaba el plazo
   perfFrames = 120; perfRenderSum = 120 * 58; perfRenderMax = 71; perfStallMax = 12;  // ko11.3: linea de medida

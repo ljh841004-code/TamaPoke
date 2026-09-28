@@ -181,6 +181,9 @@ uint16_t sackBags = 0, sackBagHits = 0;  // ko10.7: sacos rotos y dano al saco a
 uint16_t sackCrits = 0;                  // ko11.15: tecnicas especiales usadas
 uint8_t sackLastDmg = 0, sackEnergy = 0;  // dano del ultimo golpe; energia 0..100
 uint32_t sackSpecialT = 0;               // cuando salio la tecnica (0 = no)
+int16_t sackFoe = 16, sackPrevFoe = 0;   // ko11.15.1: rival de practica (y el que acaba de caer)
+uint32_t sackFaintT = 0;                 // cuando cayo el anterior
+uint8_t sackEff = 2;                     // eficacia x2 de la ultima tecnica (4 muy eficaz)
 float sackShake = 0;
 uint8_t sackGain = 0;
 bool sackNewHi = false;
@@ -2748,6 +2751,21 @@ uint32_t sackBagMs(uint16_t i) {
   return ms < 2600 ? 2600 : (uint32_t)ms;
 }
 
+extern PmdMon foePmd;           // ui_extra.ino (el mismo que usan las batallas)
+void loadFoe(int16_t dex, bool shiny);
+// ko11.15.1: rival de practica. Al principio formas basicas comunes; luego
+// cualquiera menos los legendarios
+static int16_t sackPickFoe() {
+  for (int t = 0; t < 80; t++) {
+    int16_t d = (int16_t)(1 + random(DEX_COUNT));
+    uint8_t rar = DEX_TBL[d].rarity;
+    if (rar == R_LEGENDARIO || d == sackFoe) continue;
+    if (sackBags < 4 && rar != R_COMUN) continue;
+    return d;
+  }
+  return 19;
+}
+
 void startSack() {
   perfReset();  // ko11.3
   if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
@@ -2760,6 +2778,11 @@ void startSack() {
   sackHitT = sackSpecialT = 0;
   sackShake = 0;
   sackNewHi = false;
+  sackFaintT = 0;
+  sackPrevFoe = 0;
+  sackEff = 2;
+  sackFoe = sackPickFoe();
+  loadFoe(sackFoe, false);
 }
 
 static void sackDamage(uint16_t dmg, uint32_t now) {
@@ -2767,11 +2790,15 @@ static void sackDamage(uint16_t dmg, uint32_t now) {
   sackLastDmg = (uint8_t)(dmg > 255 ? 255 : dmg);
   sackHitT = now;
   sackBagHits += dmg;
-  if (sackBagHits >= sackBagHp(sackBags)) {  // roto: el siguiente
+  if (sackBagHits >= sackBagHp(sackBags)) {  // ko11.15.1: rival derrotado: el siguiente
     sackBags++;
     sackBagHits = 0;
-    sackShake = 34;
+    sackShake = 0;
     sackUntil = now + sackBagMs(sackBags);
+    sackPrevFoe = sackFoe;
+    sackFaintT = now;
+    sackFoe = sackPickFoe();
+    loadFoe(sackFoe, false);  // ~ms de SD; justo cuando cae el anterior
     sfxPlay(SFX_TAP);
   }
 }
@@ -2788,7 +2815,11 @@ void sackTap(int16_t x, int16_t y) {
     sackShake = 40;
     audioCry(pet.speciesId);
     sfxPlay(SFX_MEDAL);
-    sackDamage(12 + (sackBags > 40 ? 40 : sackBags), now);
+    // ko11.15.1: la tecnica respeta el tipo del rival (x2 muy eficaz, x0,5 poco, x0,25 nada)
+    sackEff = typeEff(DEX_TBL[pet.speciesId].ptype, DEX_TBL[sackFoe].ptype);
+    uint16_t base = 12 + (sackBags > 40 ? 40 : sackBags);
+    uint16_t dmg = sackEff >= 4 ? base * 2 : sackEff == 2 ? base : sackEff == 1 ? base / 2 : base / 4;
+    sackDamage(dmg ? dmg : 1, now);
     return;
   }
   if (onBtn) return;  // boton sin cargar: no cuenta
@@ -2808,7 +2839,7 @@ void renderSack() {
   // pantalla de resultado
   if (sackOverUntil) {
     if (!timeLeft(sackOverUntil)) { sackOpen = false; backToTrainMenu(); return; }
-    char b[24];
+    char b[40];  // ko11.15.1: "쓰러뜨린 상대 N마리" no cabia en 24
     char g[18];
     char sub[32];
     snprintf(b, sizeof(b), XT(X_SACK_BAGS_FMT), sackBags);
@@ -2828,24 +2859,38 @@ void renderSack() {
     return;
   }
 
-  // aporreo activo
+  // aporreo activo. ko11.15.1: un Pokemon rival en vez del saco
   sackShake *= 0.84f;
   int off = (int)(sackShake * sinf(now * 0.05f));
-  int sx = CX + off, top = 86, sy = 150;
-  gfx->fillRect(CX - 3, 56, 6, top - 56, ink);          // gancho/cuerda
-  gfx->fillRect(sx - 4, top - 30, 8, 34, ink);          // cadena
-  gfx->fillRoundRect(sx - 42, top, 84, 150, 26, C565(0xb5, 0x3a, 0x3a));  // saco
-  gfx->fillRoundRect(sx - 42, top, 84, 22, 18, C565(0x7e, 0x28, 0x28));   // tapa
-  gfx->drawRoundRect(sx - 42, top, 84, 150, 26, ink);
-  gfx->fillRect(sx - 42, top + 70, 84, 4, C565(0x7e, 0x28, 0x28));        // costura
+  {
+    const int fy = 78;  // arriba del sprite (40 px x3 = 120)
+    // plataforma (como en las batallas)
+    uint8_t bio = DEX_TBL[sackFoe].biome;
+    uint16_t soil = BIOME_SOIL[bio < BIOME_N ? bio : 0];
+    gfx->fillEllipse(CX, fy + 118, 78, 14, lerp565(soil, C565(0x10, 0x18, 0x20), 5, 16));
+    gfx->fillEllipse(CX, fy + 114, 78, 12, soil);
+    bool flash = sackHitT && now - sackHitT < 70;  // parpadeo al recibir
+    bool hurt = sackHitT && now - sackHitT < 260;
+    if (sackFaintT && now - sackFaintT < 300) {
+      // cayo: silueta del anterior hundiendose (su sprite grande ya se cambio)
+      uint32_t t = now - sackFaintT;
+      const uint8_t *pt = thumbs.get(sackPrevFoe);
+      if (pt) drawThumb(pt, CX - 60, fy + (int)(t / 3), 3, true);
+    } else if (foePmd.loaded) {  // el sprite animado de la SD, como en las batallas
+      uint8_t act = hurt && foePmd.has(PMD_HURT) ? PMD_HURT : PMD_IDLE;
+      drawPmdActM(foePmd, act, CX + off, fy + 116, now, true, flash, 5, 150);
+    } else {
+      const uint8_t *th = thumbs.get(sackFoe);
+      if (th) drawThumb(th, CX - 60 + off, fy, 3, flash);
+      else gfx->fillCircle(CX + off, fy + 60, 48, DEX_TBL[sackFoe].accent);
+    }
+  }
 
   // ko10.7: sacos rotos (grande), aguante del saco actual y su plazo
   char buf[8];
   snprintf(buf, sizeof(buf), "%u", sackBags);
-  gfx->setTextColor(ink);
-  setSize(6);
-  setCur(centerX(buf, 6), 250);
-  printT(buf);
+  drawFit(buf, 22, 200, ink, 4);  // ko11.15.1: derrotados, arriba
+  drawFit(dexName(sackFoe), 282, 300, sackFoe > 151 ? C565(0x98, 0x68, 0x00) : ink, 2);
   uint16_t hp = sackBagHp(sackBags);
   int bw = 280, hw = (int)((uint32_t)bw * (hp - sackBagHits) / hp);
   uiGauge(CX - bw / 2, 312, bw, 16, hw * 1000 / bw, UI_BAR_BAD, UI_TRACK);  // ko11.12
@@ -2861,7 +2906,7 @@ void renderSack() {
     uint8_t dz = sackLastDmg >= 10 ? 3 : 2;
     setSize(dz);
     gfx->setTextColor(sackLastDmg >= 10 ? UI_BAR_BAD : ink);
-    setCur(CX - 56 - textW(dm, dz), 170 - (int)(t / 20));
+    setCur(CX - 72 - textW(dm, dz), 150 - (int)(t / 20));
     printT(dm);
   }
   // barra de energia (derecha del saco) y boton de la tecnica
@@ -2884,8 +2929,11 @@ void renderSack() {
     // la tecnica: nombre arriba y su efecto de tipo sobre el saco
     if (sackSpecialT && now - sackSpecialT < SACK_SPECIAL_MS) {
       uint32_t t = now - sackSpecialT;
-      drawFit(mv, 30, 300, acc, 3);
-      drawMoveFx(DEX_TBL[pet.speciesId].ptype, CX, 420, CX, 160, 120 + t * 560 / SACK_SPECIAL_MS, true, 2,
+      drawFit(mv, 214, 300, acc, 3);
+      if (sackEff != 2)
+        drawFit(XT(sackEff >= 4 ? X_SUPER : sackEff == 1 ? X_NOTVERY : X_NOEFFECT), 250, 330,
+                sackEff >= 4 ? UI_BAR_BAD : ink, 2);
+      drawMoveFx(DEX_TBL[pet.speciesId].ptype, CX, 420, CX, 138, 120 + t * 560 / SACK_SPECIAL_MS, true, sackEff,
                  moveTier(pet.speciesId));
     }
   }
