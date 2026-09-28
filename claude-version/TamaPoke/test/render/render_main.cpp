@@ -208,9 +208,13 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); startSpeed();
   for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
   tick(300); speedPress(spdBx[0], spdBy[0]);
-  tick(200); render(); shot("07_train_speed");
+  tick(120); render(); shot("07_train_speed");
   // ko10.6: resultado con puntos por reflejos y la media
   for (int r = 0; r < SPD_ROUNDS; r++) {
+    if (r == 7) {  // ko11.16: a media partida (puntos de progreso, aro de tiempo)
+      for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
+      tick(700); render(); shot("07d_train_speed_mid");
+    }
     for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
     for (int k = 0; k < spdN; k++) { tick(300 + r * 5); speedPress(spdBx[k], spdBy[k]); }
     for (int i = 0; i < 60 && spdPhase == SP_FEED && !spdOverUntil; i++) { tick(20); render(); }

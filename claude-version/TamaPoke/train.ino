@@ -59,6 +59,8 @@ uint32_t spdRtSum = 0;     // suma de reflejos (ms) de los aciertos (ko11.14: po
 #define SPD_MAXN 5      // ko11.14: balones por ronda (3 -> 5)
 int16_t spdBx[SPD_MAXN], spdBy[SPD_MAXN];
 uint8_t spdN = 3, spdNext = 0, spdFail = 0;  // spdFail: 1 orden equivocado, 2 tiempo
+uint32_t spdTapT[SPD_MAXN];  // ko11.16: cuando se toco cada balon (estallido)
+uint8_t spdRes[SPD_ROUNDS];  // ko11.16: 0 pendiente, 1 bien, 2 fallo (puntos de progreso)
 bool spdGood = false, spdNewHi = false;
 
 extern bool vbOpen;  // ko11.9 (volley.ino)
@@ -473,6 +475,7 @@ void startSpeed() {
   spdRtSum = 0;
   spdOverUntil = 0;
   spdNewHi = false;
+  for (auto &v : spdRes) v = 0;
   spdNextRound();
   spdUntil += 900;  // un respiro para leer la ayuda
 }
@@ -484,6 +487,7 @@ uint16_t spdPoints(uint32_t rt) {
 
 static void spdResolve(bool good) {
   spdGood = good;
+  if (spdRound < SPD_ROUNDS) spdRes[spdRound] = good ? 1 : 2;
   if (good) {
     uint32_t per = (millis() - spdShowAt) / spdN;  // media por balon
     spdHits++;
@@ -505,6 +509,7 @@ void speedPress(int16_t x, int16_t y) {
   }
   if (best < 0) return;  // toque en vacio: no cuenta
   if (best != spdNext) { spdFail = 1; spdResolve(false); return; }
+  spdTapT[spdNext] = millis();
   spdNext++;
   if (spdNext >= spdN) spdResolve(true);
   else sfxPlay(SFX_TAP);
@@ -548,13 +553,25 @@ void renderSpeed() {
   drawGameScene();
   bool night = sceneHour() < 6 || sceneHour() >= 20;
   uint16_t ink = night ? UI_INK_NIGHT : UI_INK;
+  const uint16_t okC = C565(0x4c, 0xc8, 0x5c);
+  // ko11.16: el tiempo es un aro alrededor de la pantalla redonda (verde -> rojo)
+  if (spdPhase == SP_SHOW) {
+    uint32_t lim = spdLimit(), left = timeLeft(spdUntil);
+    float f = lim ? (float)left / lim : 0;
+    uint16_t rc = f > 0.5f ? okC : f > 0.25f ? UI_BAR_WARN : UI_BAR_BAD;
+    gfx->fillArc(CX, CX, 232, 222, 0, 360, lerp565(UI_TRACK, UI_INK, 2, 16));
+    if (f > 0.01f) gfx->fillArc(CX, CX, 232, 222, 270, 270 + f * 360.0f, rc);
+  }
+  // puntos arriba y 15 puntitos de progreso (verde bien, rojo fallo, aro = ahora)
   char b[16];
-  snprintf(b, sizeof(b), "%u/%u", spdRound + 1, SPD_ROUNDS);
-  drawFit(b, 24, 200, ink, 3);
   snprintf(b, sizeof(b), "%u", spdScore);
-  drawFit(b, 60, 200, C565(0x1a, 0x86, 0x34), 2);
-  if (spdPhase == SP_SHOW) {  // tiempo que queda
-    drawTimeBar(timeLeft(spdUntil), spdLimit(), 88);
+  drawFit(b, 34, 200, ink, 3);
+  for (int i = 0; i < SPD_ROUNDS; i++) {
+    int dx = CX - (SPD_ROUNDS - 1) * 7 + i * 14, dy = 84;
+    if (spdRes[i] == 1) gfx->fillCircle(dx, dy, 5, okC);
+    else if (spdRes[i] == 2) gfx->fillCircle(dx, dy, 5, UI_BAR_BAD);
+    else gfx->fillCircle(dx, dy, 4, lerp565(UI_TRACK, UI_INK, 3, 16));
+    if (i == spdRound && !spdOverUntil) gfx->drawCircle(dx, dy, 7, ink);
   }
   // el bicho abajo, mirando
   if (pmd.loaded) {
@@ -562,24 +579,41 @@ void renderSpeed() {
     drawPmdActM(pmd, act, CX, 420, now, true, false, 3, 96);
   }
   if (spdPhase == SP_SHOW || spdPhase == SP_FEED) {
+    uint32_t age = now - spdShowAt;
     for (int i = spdN - 1; i >= 0; i--) {
       int x = spdBx[i], y = spdBy[i];
-      if (i < spdNext) {  // ya tocado: aro verde
-        gfx->drawCircle(x, y, 28, C565(0x4c, 0xc8, 0x5c));
-        gfx->drawCircle(x, y, 27, C565(0x4c, 0xc8, 0x5c));
+      if (i < spdNext) {  // tocado: estallido (aro que crece y se apaga)
+        uint32_t t = now - spdTapT[i];
+        if (t < 260) {
+          int rr = 26 + (int)(t / 6);
+          uint16_t c = lerp565(okC, UI_WHITE, (int)(t / 30), 16);
+          gfx->drawCircle(x, y, rr, c);
+          gfx->drawCircle(x, y, rr - 1, c);
+          for (int k = 0; k < 6; k++) {  // chispas
+            float a = k * 1.047f;
+            gfx->fillCircle(x + (int)(cosf(a) * (rr + 6)), y + (int)(sinf(a) * (rr + 6)), 3, c);
+          }
+        }
         continue;
       }
-      // ko11.15: sin marcar cual toca; el numero grande en el centro de la pokeball
-      drawMap(SPR_ICON_PLAY, 16, x - 32, y - 32, 4, false);
-      char nb[4];
-      snprintf(nb, sizeof(nb), "%d", i + 1);
-      gfx->fillCircle(x, y, 17, UI_WHITE);
-      gfx->drawCircle(x, y, 17, UI_INK);
-      gfx->drawCircle(x, y, 16, UI_INK);
-      setSize(3);
-      gfx->setTextColor(UI_INK);
-      setCur(x - textW(nb, 3) / 2, y - textH(3) / 2);
-      printT(nb);
+      // aparece con un pequeno salto (escala 2 -> 4,25 -> 4 en ~150 ms, uno tras otro)
+      int32_t ta = (int32_t)age - i * 40;
+      if (ta < 0) continue;
+      int s4 = ta >= 150 ? 16 : ta < 100 ? 8 + (int)(ta * 9 / 100) : 17 - (int)((ta - 100) / 50);
+      int half = s4 * 2;
+      uiShade(x - half * 3 / 5, y + half - 7, half * 6 / 5, 8, 4, 4);  // sombra pegada al balon
+      drawMapQ(SPR_ICON_PLAY, 16, x - half, y - half, s4, false);
+      if (s4 >= 14) {
+        char nb[4];
+        snprintf(nb, sizeof(nb), "%d", i + 1);
+        gfx->fillCircle(x, y, 17, UI_WHITE);
+        gfx->drawCircle(x, y, 17, UI_INK);
+        gfx->drawCircle(x, y, 16, UI_INK);
+        setSize(3);
+        gfx->setTextColor(UI_INK);
+        setCur(x - textW(nb, 3) / 2, y - textH(3) / 2);
+        printT(nb);
+      }
     }
   }
   if (spdPhase == SP_FEED) {
