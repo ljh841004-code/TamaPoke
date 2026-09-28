@@ -92,8 +92,17 @@ void pwrSetup() {
 
 uint8_t pwrPoll() {
   if (!pmuOk) return 0;
-  pmu.getIrqStatus();
+  // ko11.16: si la lectura I2C falla, XPowersLib guarda -1 = 0xFF en el registro de
+  // estado y TODOS los bits salen a 1: "pulsacion corta" (y larga) falsas. En los
+  // juegos el tactil ocupa el bus y fallaba a veces: la pantalla se apagaba sola un
+  // momento (otro fallo la volvia a encender) y el juego seguia corriendo a oscuras
+  // (en velocidad, la ronda se perdia por tiempo). Un registro a 0xFF o las dos
+  // pulsaciones a la vez = lectura mala: se ignora (el IRQ real sigue ahi para la
+  // siguiente lectura)
+  uint32_t st = (uint32_t)pmu.getIrqStatus();
+  if ((st & 0xFF) == 0xFF || ((st >> 8) & 0xFF) == 0xFF || ((st >> 16) & 0xFF) == 0xFF) return 0;
   uint8_t r = (pmu.isPekeyShortPressIrq() ? 1 : 0) | (pmu.isPekeyLongPressIrq() ? 2 : 0);
+  if (r == 3) return 0;
   if (r) pmu.clearIrqStatus();
   return r;
 }
