@@ -140,6 +140,31 @@ static void scenes(bool ko, const char *sfx) {
   pet.vbStreak = 12; pet.vbBest = 13;  // ko11.9.4: el texto mas largo que cabe
   render(); shot("04_train_menu");
   trainMenuPage = 1; render(); shot("04b_train_menu_battle"); trainMenuPage = 0;
+  // ko11.9.4: material para comparar graficos (Ivysaur): pantalla actual, fondo sin
+  // bicho (dos mitades), escena sola y el sprite en crudo sobre magenta
+  if (ko) {
+    int16_t keepSp = pet.speciesId;
+    float keepX = beh.x, keepT = beh.targetX;
+    closeAll();
+    pet.speciesId = 2;
+    pmd.load(2, false);
+    beh.mode = 0; beh.x = beh.targetX = 233;
+    render(); shot("hq_main_cur");
+    beh.x = beh.targetX = 40; render(); shot("hq_main_petL");
+    beh.x = beh.targetX = 426; render(); shot("hq_main_petR");
+    beh.x = beh.targetX = 233;
+    bool night = sceneHour() < 6 || sceneHour() >= 20;
+    gfx->fillScreen(0);
+    drawScene(DEX_TBL[2].biome, gMockMillis, night);
+    gfx->flush(); shot("hq_scene");
+    gfx->fillScreen(0xF81F);
+    drawPmdAct(PMD_IDLE, 233, 400, 0, true, false, 2);
+    gfx->flush(); shot("hq_sprite2x");
+    printf("  hq: idle h=%u w=%u base=%u\n", pmd.acts[PMD_IDLE].h, pmd.acts[PMD_IDLE].w, pmd.acts[PMD_IDLE].base);
+    pet.speciesId = keepSp;
+    pmd.load((uint8_t)keepSp, pet.shiny);
+    beh.x = keepX; beh.targetX = keepT;
+  }
   // ko11.9: voleibol, el que se esta criando (Ivysaur) contra uno al azar (Psyduck)
   if (ko) {
     int16_t keepSp = pet.speciesId;
