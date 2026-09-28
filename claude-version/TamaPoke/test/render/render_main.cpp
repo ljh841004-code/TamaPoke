@@ -234,6 +234,8 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); pet.energy = 80; startWild();
   bPhase = BP_MENU; txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
   render(); shot("08_battle_menu");
+  bvMeFainted = bvFoeFainted = true; render(); shot("08z_battle_empty");  // fondo sin Pokemon (comparar sprites)
+  bvMeFainted = bvFoeFainted = false;
   box.add(bFoe.dex, 5, false, true, 0); box.add(bFoe.dex, 7, false, true, 0); bvOwned = 2; bvOwnedT = gMockMillis;
   render(); shot("08b_battle_owned"); bvOwned = 0;
   // ko11.9.1: rival de la 2a generacion (Totodile) con el nombre en dorado
