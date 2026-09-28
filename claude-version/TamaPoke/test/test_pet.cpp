@@ -1055,6 +1055,7 @@ TEST(ceremony, durante_la_ceremonia_no_se_puede_interactuar) {
 TEST(ceremony, soltar_marca_el_final_como_liberacion) {
   Pet p;
   makePet(p, 4);
+  p.ageMinutes = 24 * 60;  // ko11.9.2: criado al menos un dia (si no, cuenta como recien nacido)
   p.release();
   CHECK_EQ(p.ceremony, (uint8_t)CER_RELEASE);
   CHECK_EQ(p.lastEnd, (uint8_t)CER_RELEASE);
@@ -1312,4 +1313,33 @@ TEST(train, partida_vieja_pasa_sus_records_a_historico) {
   r.begin();
   CHECK_EQ(r.allDefHi, (uint16_t)30);
   CHECK_EQ(r.defHi, (uint16_t)0);
+}
+
+// ko11.9.2: soltarlo recien nacido (< 24 h, sin evolucionar) no gasta su familia
+TEST(release, recien_nacido_no_cuenta_como_criado) {
+  Pet p;
+  makePet(p, 4);
+  int16_t d = p.speciesId;
+  CHECK(p.isShortStay());
+  p.release();
+  CHECK(p.shortRelease);
+  mockSetMillis(CEREMONY_MS + 1000);
+  p.update(CEREMONY_MS + 1000);
+  CHECK(p.isEgg());
+  CHECK(!p.isFamRaised(d));
+  CHECK(!p.shortRelease);
+  // criado mas de un dia: si cuenta
+  p.adoptMon(7, 10, false, 100, 100, 100);
+  p.ageMinutes = 24 * 60 + 5;
+  CHECK(!p.isShortStay());
+  uint32_t t = CEREMONY_MS * 3;
+  mockSetMillis(t);
+  p.release();
+  mockSetMillis(t + CEREMONY_MS + 1000);
+  p.update(t + CEREMONY_MS + 1000);
+  CHECK(p.isFamRaised(7));
+  // evolucionado, aunque sea joven: cuenta
+  p.adoptMon(1, 5, false, 100, 100, 100);
+  p.evolvedHere = true;
+  CHECK(!p.isShortStay());
 }

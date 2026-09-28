@@ -115,8 +115,9 @@ void Pet::update(uint32_t nowMs) {
     // ko10.5: despedida o soltarlo = criado (su familia no vuelve en los huevos);
     // la escapada no cuenta. La interfaz lo guarda en la caja y deja elegir
     uint8_t how = ceremony;
-    if (how != CER_RUNAWAY && !isEgg()) markFamRaised(speciesId);
+    if (how != CER_RUNAWAY && !isEgg() && !(how == CER_RELEASE && shortRelease)) markFamRaised(speciesId);
     if (endHook) endHook(*this, how);
+    shortRelease = false;
     newEgg();
     return;
   }
@@ -456,7 +457,10 @@ void Pet::startRunaway() {
 
 void Pet::release() {
   if (isEgg() || ceremony != CER_NONE) return;
-  lastEnd = CER_RELEASE;
+  shortRelease = isShortStay();  // ko11.9.2
+  // soltarlo recien nacido no da la suerte de una crianza: el huevo siguiente es
+  // como tras una escapada (comun), para que no sirva para "tirar" huevos
+  lastEnd = shortRelease ? CER_RUNAWAY : CER_RELEASE;
   ceremony = CER_RELEASE;
   ceremonyUntil = millis() + CEREMONY_MS;
   heartUntil = ceremonyUntil;
@@ -474,6 +478,7 @@ void Pet::hatch() {
   geneSpe = 90 + random(21);
   trAtk = trDef = trSpe = 0;
   resetTrainRecords();  // ko11.9.2
+  evolvedHere = false;
   berryKnown = false;
   bond = 0;          // vinculo, medallas y nombre son del individuo
   bondToday = 0;
@@ -541,6 +546,9 @@ uint32_t Pet::careMinutesLeft() const {
 // puede abusar: con la energia llena salen unas 8 sesiones.
 // ko11.9.2: los historicos siempre >= los del bicho actual
 static inline void keepMax(uint16_t &all, uint16_t cur) { if (cur > all) all = cur; }
+#define SHORT_STAY_MIN (24u * 60u)
+bool Pet::isShortStay() const { return !isEgg() && !evolvedHere && ageMinutes < SHORT_STAY_MIN; }
+
 void Pet::resetTrainRecords() {
   keepMax(allStrHi, strHi); keepMax(allDefHi, defHi); keepMax(allSpeHi, speHi);
   keepMax(allGameHi, gameHi); keepMax(allVbBest, vbBest);
@@ -605,6 +613,7 @@ void Pet::evolve() {
   if (m) next = nuevas[random(m)];
   else if (n > 1) next = opts[random(n)];
   speciesId = next;
+  evolvedHere = true;  // ko11.9.2
   registerSpecies(speciesId);
   sfxPlay(SFX_EVOLVE);
   evolveUntil = millis() + EVOLVE_ANIM_MS;
@@ -993,6 +1002,7 @@ void Pet::save() {
   prefs.putUShort("agh", allGameHi);
   prefs.putUShort("avb", allVbBest);
   prefs.putUChar("rpp", 1);
+  prefs.putBool("evh", evolvedHere);
 }
 
 void Pet::load(bool *migrated) {
@@ -1096,6 +1106,7 @@ void Pet::load(bool *migrated) {
   allSpeHi = prefs.getUShort("asp", 0);
   allGameHi = prefs.getUShort("agh", 0);
   allVbBest = prefs.getUShort("avb", 0);
+  evolvedHere = prefs.getBool("evh", false);
   if (!prefs.getUChar("rpp", 0)) {
     // partida de antes de ko11.9.2: los records eran de siempre. Pasan a historicos
     // y el bicho actual empieza los suyos de cero (asi puede ganar el premio de record)
@@ -1236,6 +1247,7 @@ void Pet::adoptMon(int16_t dex, uint16_t lvl, bool isShiny, uint8_t gA, uint8_t 
   geneSpe = clampGene(gS);
   trAtk = trDef = trSpe = 0;
   resetTrainRecords();  // ko11.9.2
+  evolvedHere = false;
   fullness = 80; joy = 80; energy = 80; hygiene = 100;
   poops = 0; weight = 0;
   careMistakes = 0; mistakeCooldown = 0;

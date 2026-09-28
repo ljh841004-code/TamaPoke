@@ -2301,6 +2301,7 @@ void render() {
       setSize(2);
       setCur(centerX(q, 2), 196);
       printT(q);
+      if (pet.isShortStay()) drawFit(XT(X_RELEASE_SHORT), 228, 250, 0x8410, 1);  // ko11.9.2
       gfx->fillRoundRect(118, 252, 100, 52, 12, UI_BAR_OK);
       gfx->setTextColor(UI_WHITE);
       setCur(118 + (100 - textW(T(S_YES), 2)) / 2, 270);

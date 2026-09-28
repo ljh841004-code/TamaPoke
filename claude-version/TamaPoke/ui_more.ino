@@ -408,6 +408,10 @@ void bakRequest();  // ko11.6
 void onPetEnd(Pet &p, uint8_t how) {
   bakRequest();  // ko11.6: la despedida tambien va a la copia de la SD
   if (how == CER_RUNAWAY || p.isEgg()) return;  // escapada: huevo y ya
+  if (how != CER_FAREWELL) {  // ko11.9.2: la corona (salon) solo para quien llego al final
+    gNextPickPending = true;   // soltarlo lo decidimos nosotros: sin corona
+    return;
+  }
   hall.addRaised(p.speciesId, p.level(), p.shiny, p.geneAtk, p.geneDef, p.geneSpe, clockEpoch());  // salon
   gNextPickPending = true;
 }

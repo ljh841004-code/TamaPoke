@@ -171,6 +171,11 @@ public:
   uint16_t allStrHi = 0, allDefHi = 0, allSpeHi = 0, allGameHi = 0, allVbBest = 0;
   bool lastAllTime = false;  // la ultima sesion batio el record historico
   void resetTrainRecords();  // nuevo bicho: records a cero (los historicos se quedan)
+  // ko11.9.2: soltarlo recien nacido (menos de 24 h y sin evolucionar) no cuenta
+  // como criado: su familia puede volver en los huevos y no va al salon
+  bool evolvedHere = false;   // evoluciono con nosotros
+  bool shortRelease = false;  // la ceremonia en curso es una de esas
+  bool isShortStay() const;
 
   void begin();                 // carga estado de NVS (o crea el primer huevo)
   void update(uint32_t nowMs);  // llamar en cada loop()
