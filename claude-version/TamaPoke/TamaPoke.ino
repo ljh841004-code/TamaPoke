@@ -117,6 +117,8 @@ void bakAskTap(int16_t x, int16_t y);
 void bakAutoLoop(uint32_t now);
 bool inBattleScreen();    // ko11.8 (ui_extra.ino)
 extern bool vbOpen;       // ko11.9 (volley.ino): voleibol
+extern bool defOpen, spdOpen;  // train.ino (ko11.9.2: miga de pan)
+extern uint8_t xScreen;       // ui_extra.ino
 extern bool trainMenuOpen;     // train.ino
 extern uint8_t trainMenuPage;
 void startVolley();
@@ -285,9 +287,22 @@ enum : uint8_t { BS_SERIAL = 1, BS_PMU, BS_GFX, BS_TOUCH, BS_PET, BS_BOX, BS_HAL
                  BS_MUSIC, BS_FRAME, BS_RUN, BS_OK };
 #ifdef ESP_PLATFORM
 RTC_NOINIT_ATTR static uint32_t rbMagic, rbStep, rbFails;
+RTC_NOINIT_ATTR static uint32_t rbWhere;  // ko11.9.2: donde estaba (pantalla << 8 | paso)
 #else
 static uint32_t rbMagic, rbStep, rbFails;
+static uint32_t rbWhere;
 #endif
+static uint32_t bootPrevWhere = 0;
+static bool bootRunCrash = false;  // ko11.9.2: se cayo jugando (no al arrancar)
+// ko11.9.2: miga de pan para saber donde se reinicia la placa jugando
+void crumb(uint16_t w) { rbWhere = w; }
+static const char *crumbName(uint8_t scr) {
+  switch (scr) {
+    case 1: return "volley"; case 2: return "defense"; case 3: return "speed"; case 4: return "ball game";
+    case 5: return "sack"; case 6: return "train menu"; case 7: return "card"; case 0: return "main";
+    default: return "screen";
+  }
+}
 static uint8_t bootPrevStep = 0;
 static int bootPrevReason = 0;
 bool safeMode = false;
@@ -319,7 +334,18 @@ static void bootDrawStatus(const char *line1) {
   gfx->print("TamaPoke boot");
   gfx->setCursor(60, 190);
   gfx->print(line1);
-  if (bootPrevStep && bootPrevStep < BS_OK) {
+  if (bootRunCrash) {  // ko11.9.2: se reinicio jugando: por que y donde
+    gfx->setTextColor(0xFBE0);
+    gfx->setCursor(40, 250);
+    gfx->print("last crash:");
+    gfx->setCursor(40, 280);
+    gfx->print(resetName(bootPrevReason));
+    char ws[48];
+    uint8_t scr = (uint8_t)(bootPrevWhere >> 8);
+    snprintf(ws, sizeof(ws), "at: %s %u.%u", crumbName(scr), (unsigned)scr, (unsigned)(bootPrevWhere & 0xFF));
+    gfx->setCursor(40, 310);
+    gfx->print(ws);
+  } else if (bootPrevStep && bootPrevStep < BS_OK) {
     gfx->setTextColor(0xFBE0);
     gfx->setCursor(40, 250);
     char ls[48];
@@ -346,6 +372,11 @@ static void bootDiagBegin() {
 #endif
   if (rbMagic != 0x7B0071A5u) { rbMagic = 0x7B0071A5u; rbStep = 0; rbFails = 0; }
   bootPrevStep = (uint8_t)(rbStep <= BS_OK ? rbStep : 0);
+  bootPrevWhere = rbWhere;
+  rbWhere = 0;
+  bootRunCrash = (bootPrevStep == BS_OK || bootPrevStep == BS_RUN) &&
+                 (bootPrevReason == 4 /*PANIC*/ || bootPrevReason == 5 /*INT_WDT*/ || bootPrevReason == 6 /*TASK_WDT*/ ||
+                  bootPrevReason == 7 /*WDT*/ || bootPrevReason == 9 /*BROWNOUT*/);
   bool died = bootPrevStep != 0 && bootPrevStep != BS_OK && bootPrevReason != 1 /*POWERON*/;
   rbFails = died ? rbFails + 1 : 0;
   safeMode = rbFails >= 2;
@@ -359,6 +390,9 @@ static void bootDiagBegin() {
   Serial.printf("BOOT prev: step %u (%s), reason %d %s, fails %u%s\n", bootPrevStep,
                 BOOT_NAMES[bootPrevStep], bootPrevReason, resetName(bootPrevReason), (unsigned)rbFails,
                 safeMode ? " -> SAFE MODE" : "");
+  if (bootRunCrash)
+    Serial.printf("BOOT: se reinicio jugando: %s en %s %u.%u\n", resetName(bootPrevReason),
+                  crumbName((uint8_t)(bootPrevWhere >> 8)), (unsigned)(bootPrevWhere >> 8), (unsigned)(bootPrevWhere & 0xFF));
 }
 // en loop(): marca el primer frame y, a los 20 s estable, arranque correcto
 void bootDiagLoop() {
@@ -439,6 +473,10 @@ void setup() {
   if (!gfx->begin(80000000)) Serial.println("gfx->begin() fallo");
   else bootGfxUp = true;
   panel->setBrightness(180);
+  if (bootRunCrash && bootGfxUp) {  // ko11.9.2: dejar tiempo para hacer una foto
+    bootDrawStatus("restarted after a crash");
+    delay(5000);
+  }
   applyLangFont();  // fuente del idioma guardado (clasica salvo CJK)
 
   bootStep(BS_TOUCH);
@@ -585,6 +623,11 @@ void perfReset() { perfRenderMax = perfStallMax = 0; perfFrames = 0; }
 void loop() {
   uint32_t now = millis();
   uint32_t loopT0 = now, renderMs = 0;
+  {  // ko11.9.2: en que pantalla estamos (si se reinicia, se ve al arrancar)
+    uint8_t scr = vbOpen ? 1 : defOpen ? 2 : spdOpen ? 3 : gameOpen ? 4 : sackOpen ? 5 : trainMenuOpen ? 6
+                : cardOpen ? 7 : xScreen ? (uint8_t)(20 + xScreen) : 0;
+    crumb((uint16_t)(scr << 8));
+  }
   // ko11.8: en combate no hace caca. ko11.8.1: se decide ANTES del tick (antes iba
   // despues y el primer minuto aun podia caer) y dura 2 min tras salir del combate
   // o de su menu (pagina de batallas), para no encontrarla nada mas volver

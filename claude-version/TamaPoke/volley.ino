@@ -6,6 +6,7 @@
 //   - tocar en cualquier sitio = saltar; si toca la pelota en el aire = remate (spike)
 //   - mantener el marcador 2 s = abandonar (sin premio)
 #include "volley.h"
+void crumb(uint16_t w);  // TamaPoke.ino (ko11.9.2)
 
 #define VBC_RESULT_MIN_MS 1500
 
@@ -59,6 +60,7 @@ void startVolley() {
 
 // ---- toques ----
 void vbPress(int16_t x, int16_t y) {
+  crumb(0x010A);
   lastInteract = millis();
   if (vb.state == VB_OVER) {
     if (millis() - vbOverAt > VBC_RESULT_MIN_MS) vbOpen = false;
@@ -79,6 +81,7 @@ void vbRelease() {}
 // ---- fin de la partida ----
 static void vbFinish() {
   if (vbRewarded) return;
+  crumb(0x0109);
   vbRewarded = true;
   bool won = vb.winner == 0;
   uint16_t best0 = pet.vbBest;
@@ -159,6 +162,7 @@ void renderVolley() {
   if (dt > 120) dt = 120;  // tras una pausa larga (pantalla apagada...) no dar un salto
   vbLast = now;
   bool intro = timeLeft(vbIntroUntil) > 0;
+  crumb(0x0101);
   if (!intro) vb.step(dt);
   if (vb.state == VB_OVER && !vbOverAt) { vbOverAt = now; vbFinish(); }
   if (vb.score[0] != vbLastScore[0]) sfxPlay(SFX_MEDAL);
@@ -168,12 +172,17 @@ void renderVolley() {
 
   bool night = sceneHour() < 6 || sceneHour() >= 20;
   uint16_t ink = night ? UI_INK_NIGHT : UI_INK;
+  crumb(0x0102);
   drawScene(pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome, now, night);
   gfx->fillRect(40, VB_GROUND + 1, 386, 3, C565(0xf8, 0xf8, 0xf8));  // linea de la pista
   vbDrawNet();
+  crumb(0x0103);
   vbDrawPlayer(0, now);
+  crumb(0x0104);
   vbDrawPlayer(1, now);
+  crumb(0x0105);
   if (vb.state != VB_OVER) vbDrawBall((int)vb.b.x, (int)vb.b.y, now);
+  crumb(0x0106);
   vbDrawScore(ink);
 
   if (intro) {  // presentacion: VS
@@ -216,5 +225,7 @@ void renderVolley() {
     }
     if (now - vbOverAt > VBC_RESULT_MIN_MS) drawFit(XT(X_VB_TAP_CLOSE), 332, 300, 0x8410, 1);
   }
+  crumb(0x0107);
   gfx->flush();
+  crumb(0x0108);
 }
