@@ -99,6 +99,21 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); pet.rareCandy = 0; cardOpen = true; cardPage = 4; render(); shot("03m_card_candy_bagbtn"); closeAll();
   closeAll(); pet.berryKnown = true; feedMenuUntil = gMockMillis + 5000; render(); shot("01b_feed_menu");
   closeAll(); confirmUntil = gMockMillis + 5000; render(); shot("01c_confirm_release"); confirmUntil = 0;
+  {  // ko11.9.2: mantener sobre el bicho: circulo que se llena (con un corte del tactil en medio)
+    closeAll(); lastInteract = gMockMillis;
+    touchSample(true, 233, 220);
+    for (int i = 0; i < 40; i++) { tick(20); touchSample(true, 234, 221); }
+    touchSample(false, 234, 221); tick(120);           // el tactil "suelta" 120 ms
+    touchSample(true, 235, 221);
+    for (int i = 0; i < 20; i++) { tick(20); touchSample(true, 235, 222); }
+    render(); shot("01d_hold_ring");
+    printf("  hold: progreso %.2f, dialogo %d\n", petHoldProgress(), confirmUntil ? 1 : 0);
+    for (int i = 0; i < 90; i++) { tick(20); touchSample(true, 235, 222); }
+    render(); shot("01e_hold_dialog");
+    printf("  hold: dialogo %d\n", confirmUntil ? 1 : 0);
+    touchSample(false, 235, 222); tick(200);
+    confirmUntil = 0; wasPressed = false;
+  }
   closeAll(); openLinkMenu(); render(); shot("24_link_menu");
   closeAll(); cardOpen = true; cardPage = 0; openKeyboard(); nameBuf[0] = 0; nameLen = 0;
   for (uint8_t k : { CJI_K_B, CJI_K_B, CJI_K_I, CJI_K_DOT, CJI_K_O, CJI_K_I, CJI_K_N, CJI_K_N })

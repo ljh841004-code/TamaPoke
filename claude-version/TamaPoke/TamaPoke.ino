@@ -935,6 +935,33 @@ void handleSerial() {
 bool inPetZone(int16_t x, int16_t y) {
   return x > 110 && x < 356 && y > 95 && y < 310;
 }
+// ko11.9.2: mantener el dedo sobre el bicho 3 s = soltarlo. El tactil a veces
+// "suelta" un instante con el dedo quieto y el gesto se partia en toques cortos
+// (solo sonaba el grito): un apoyo de nuevo < 400 ms en el mismo sitio continua
+// la pulsacion. Mientras, un circulo se va llenando alrededor del bicho.
+#define PET_HOLD_MS 3000
+static inline uint32_t touchNow();
+#define PET_HOLD_GAP_MS 400
+static uint32_t petHoldT0 = 0, petHoldUpT = 0;
+static int16_t petHoldUpX = 0, petHoldUpY = 0;
+static bool petHoldDimWake = false;
+static uint32_t petTapPendT = 0;  // toque en el bicho que espera por si era un corte del tactil
+static int16_t petTapX = 0, petTapY = 0;
+extern bool gameOpen, sackOpen;
+extern uint32_t feedMenuUntil;
+static bool petHoldAllowed() {
+  return !galleryOpen && !cardOpen && !kbOpen && !clockOpen && !extraOpen() && !trainingOpen() && !gameOpen &&
+         !sackOpen && !feedMenuUntil && !pet.isEgg() && !confirmUntil && !pet.ceremony && !pet.awaitingStarter();
+}
+// 0..1 para el circulo (0 = no se dibuja)
+float petHoldProgress() {
+  if (!petHoldT0 || holdFired || !petHoldAllowed()) return 0;
+  if (!wasPressed && touchNow() - petHoldUpT >= PET_HOLD_GAP_MS) return 0;
+  if (!inPetZone(tX0, tY0) || abs(tXl - tX0) >= 30 || abs(tYl - tY0) >= 30) return 0;
+  uint32_t el = millis() - petHoldT0;
+  if (el < 300) return 0;  // un toque normal no ensena el circulo
+  return el >= PET_HOLD_MS ? 1.0f : (float)el / PET_HOLD_MS;
+}
 
 // ko10.8: el tactil se lee en su PROPIA tarea (nucleo 0, cada 8 ms) y deja los
 // cambios en una cola. Antes se leia en el loop, y el redibujado (unos 70 ms de
@@ -1040,6 +1067,11 @@ void i2cFastMode() {
 
 // el toque se resuelve al LEVANTAR el dedo para distinguir tap de deslizar
 void handleTouch() {
+  if (petTapPendT && !wasPressed && touchNow() - petTapPendT >= PET_HOLD_GAP_MS) {  // ko11.9.2
+    petTapPendT = 0;
+    petHoldT0 = 0;
+    if (petHoldAllowed()) onTap(petTapX, petTapY);
+  }
 #ifdef ESP_PLATFORM
   TouchEv e;
   bool any = false;
@@ -1107,9 +1139,19 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
   }
 
   if (pressed && !wasPressed) {  // empieza el gesto
-    tX0 = tXl = x;
-    tY0 = tYl = y;
-    tStart = touchNow();
+    // ko11.9.2: un corte breve del tactil en mitad de la pulsacion larga la continua
+    bool chain = petHoldT0 && !confirmUntil && touchNow() - petHoldUpT < PET_HOLD_GAP_MS &&
+                 abs(x - petHoldUpX) < 40 && abs(y - petHoldUpY) < 40;
+    if (!chain) {
+      tX0 = x;
+      tY0 = y;
+      tStart = touchNow();
+      petHoldDimWake = (dimStage > 0) || screenOff;
+    }
+    tXl = x;
+    tYl = y;
+    petHoldT0 = inPetZone(tX0, tY0) ? tStart : 0;
+    if (chain) petTapPendT = 0;  // era la misma pulsacion: no hay caricia
     holdFired = false;
     swallowGesture = (dimStage > 0) || screenOff;  // si estaba a oscuras, solo despierta
     if ((int32_t)(navGuardUntil - touchNow()) > 0) swallowGesture = true;  // ko11.6: hora del evento  // ko10.11: toque "de rebote" tras abrir algo
@@ -1130,17 +1172,21 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
       sfxPlay(SFX_DENY);
     }
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
-    if (!holdFired && !swallowGesture && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && !extraOpen() &&
-        !trainingOpen() &&
-        millis() - tStart > 3000 &&
-        abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) &&
-        !pet.isEgg() && !confirmUntil && !pet.ceremony) {
+    // ko11.9.2: tambien si el toque desperto la pantalla (antes se ignoraba entero)
+    if (!holdFired && (!swallowGesture || petHoldDimWake) && petHoldAllowed() && petHoldT0 &&
+        millis() - tStart > PET_HOLD_MS &&
+        abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0)) {
+      sfxPlay(SFX_TAP);
       confirmUntil = millis() + 10000;
       holdFired = true;
     }
   } else if (wasPressed) {  // levanta el dedo: resolver gesto
     tXl = x;  // ko10.8: el evento de levantar trae la ultima posicion leida
     tYl = y;
+    petHoldUpT = touchNow();  // ko11.9.2
+    petHoldUpX = x;
+    petHoldUpY = y;
+    if (holdFired) petHoldT0 = 0;
     lastInteract = millis();
     int dx = tXl - tX0, dy = tYl - tY0;
     uint32_t dt = touchNow() - tStart;  // ko11.6: duracion real del toque
@@ -1153,7 +1199,12 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
       // ko10.11: un toque de verdad dura algo; los roces de < 60 ms (rozar la
       // pantalla al pasar el dedo) ya no pulsan nada en los menus. Los juegos
       // rapidos no pasan por aqui (cuentan al apoyar)
-      else if (dt >= 60 && dt < 1500 && abs(dx) < 40 && abs(dy) < 40) {
+      else if (dt >= 60 && dt < 1500 && abs(dx) < 40 && abs(dy) < 40 && petHoldAllowed() && inPetZone(tX0, tY0) &&
+               !pet.sleeping) {
+        petTapPendT = petHoldUpT ? petHoldUpT : 1;  // ko11.9.2: la caricia espera 400 ms (corte del tactil?)
+        petTapX = tX0;
+        petTapY = tY0;
+      } else if (dt >= 60 && dt < 1500 && abs(dx) < 40 && abs(dy) < 40) {
         uint16_t sig0 = screenSig();
         onTap(tX0, tY0);
         // ko10.11: si el toque abrio/cerro una pantalla, 250 ms sin toques: un
@@ -4278,6 +4329,14 @@ void drawPetPMD() {
 
   drawPmdAct(act, (int)beh.x, PET_GROUND, (beh.mode == 3 && petFxT != 0xFFFFFFFFu) ? petFxT : now - beh.t0,
              loop || act == PMD_IDLE, false, 5);
+  {  // ko11.9.2: pulsacion larga para soltarlo: el circulo se llena en 3 s
+    float hp = petHoldProgress();
+    if (hp > 0) {
+      int rx = (int)beh.x, ry = PET_GROUND - 80;
+      gfx->fillArc(rx, ry, 104, 96, 0, 360, C565(0xe8, 0xe8, 0xe8));
+      gfx->fillArc(rx, ry, 104, 96, 270, 270 + hp * 360.0f, hp >= 1.0f ? UI_BAR_BAD : UI_BAR_WARN);
+    }
+  }
   if (m == MOOD_HAPPY && beh.mode == 3 && petFxT != 0xFFFFFFFFu) {
     int px = (int)beh.x, dir = px < CX ? 1 : -1;
     drawMoveFx(petFxType, px + dir * 40, PET_GROUND - 70, px + dir * 175, PET_GROUND - 80, petFxT, true, 2,
