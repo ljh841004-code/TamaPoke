@@ -867,6 +867,15 @@ void updateShake(uint32_t now) {
   bvShakeY = ((k / 45) & 1) ? amp / 2 : -amp / 2;
 }
 
+// ko11.15.1: en combate se miran: el tuyo de espaldas hacia arriba-derecha y el
+// rival hacia abajo-izquierda (si el sprite de la SD trae esas filas)
+static uint8_t battleFacing(const PmdMon &m, uint8_t act, bool mine) {
+  uint8_t d = act == PMD_IDLE ? PMD_IDLE_UR : act == PMD_ATTACK ? PMD_ATTACK_UR : act == PMD_HURT ? PMD_HURT_UR : 0xFF;
+  if (d == 0xFF) return act;
+  if (!mine) d += PMD_IDLE_DL - PMD_IDLE_UR;
+  return m.has(d) ? d : act;
+}
+
 // dibuja los dos Pokemon; anima al que actua segun el evento en curso
 void drawBattlers() {
   uint32_t now = millis();
@@ -935,6 +944,7 @@ void drawBattlers() {
   if (!foeHide && !foeGone) {
     if (foePmd.loaded) {
       if (!foePmd.has(foeAct)) foeAct = PMD_IDLE;
+      foeAct = battleFacing(foePmd, foeAct, false);
       drawPmdActM(foePmd, foeAct, foeX, foeG, now, true, foeSil, 4, 170);  // ko11.10.1: x4 (antes x3)
     } else {
       const uint8_t *th = thumbs.get(bvFoeDex);
@@ -944,6 +954,7 @@ void drawBattlers() {
   if (!meHide && !meGone) {
     if (pmd.loaded) {
       if (!pmd.has(meAct)) meAct = PMD_IDLE;
+      meAct = battleFacing(pmd, meAct, true);
       drawPmdAct(meAct, meX, meG, now, true, meSil, 4);
     } else {
       const uint8_t *th = thumbs.get(bvMeDex);

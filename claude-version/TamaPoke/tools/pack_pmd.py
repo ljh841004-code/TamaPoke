@@ -35,7 +35,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from PIL import Image
 
-OUT = os.path.join(os.path.dirname(__file__), 'sdcard', 'mons')
+OUT = os.environ.get('PMD_OUT') or os.path.join(os.path.dirname(__file__), 'sdcard', 'mons')
 CACHE = os.path.join(os.path.dirname(__file__), 'pmd_cache')
 BASE = 'https://raw.githubusercontent.com/PMDCollab/SpriteCollab/master/sprite'
 SLOW = 1.4          # el ritmo original de PMD se siente rapido en el tamagotchi
@@ -63,6 +63,10 @@ EXTRA = [
     (13, 'Charge', 0),
     (14, 'Shoot', 0),
     (15, 'Laying', 0),
+    # ko11.15.1: combate mirandose. Fila 3 = arriba-derecha (tu Pokemon, de espaldas),
+    # fila 7 = abajo-izquierda (el rival mirando al tuyo)
+    (16, 'Idle', 3), (17, 'Attack', 3), (18, 'Hurt', 3),
+    (19, 'Idle', 7), (20, 'Attack', 7), (21, 'Hurt', 7),
 ]
 
 

@@ -22,6 +22,9 @@ enum : uint8_t {
   PMD_ATTACK, PMD_POSE, PMD_HOP, PMD_NOD, PMD_BREATH, PMD_SIT,
   // ko10.8: extra (bloque EXT1 al final del archivo; los sprites viejos no las traen)
   PMD_ROTATE, PMD_CHARGE, PMD_SHOOT, PMD_LAYING,
+  // ko11.15.1: combate mirandose (fila 3 = arriba-derecha, de espaldas; fila 7 = abajo-izquierda).
+  // Van en el mismo bloque EXT1: un firmware viejo salta estos ids
+  PMD_IDLE_UR, PMD_ATTACK_UR, PMD_HURT_UR, PMD_IDLE_DL, PMD_ATTACK_DL, PMD_HURT_DL,
   PMD_NACTS
 };
 
