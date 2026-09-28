@@ -95,7 +95,7 @@ enum : uint8_t { BUB_NONE = 0, BUB_DOTS, BUB_BORED, BUB_HUNGRY, BUB_DIRTY, BUB_S
                  BUB_NOTE, BUB_RAIN, BUB_COLD, BUB_SUN };
 #define PET_GROUND 304  // linea de suelo de la mascota
 #define PET_MAXS 6      // ko11.10.1: con el dibujo liso el bicho se veia algo pequeno: x6 (antes x5)
-#define PET_FITH 200    //   alto objetivo del lienzo IDLE (antes 170)
+#define PET_FITH 176    //   alto objetivo del lienzo IDLE (antes 170): x5,5 con lienzo de 32
 PmdMon galleryPmd;  // sprite grande de la vista detalle de la galeria (PMD/TPK2, legal)
 
 // galeria pokedex
@@ -1898,8 +1898,8 @@ static void drawSeg7(int x, int y, int w, int h, int t, uint8_t d, uint16_t col,
   if (m & 0x40) seg(x + r, y + hh - r, w - t, t);         // centro
 }
 
-#define BIGCLK_Y 134   // ko10.1: bajo la fecha (y 114), que va bajo el mensaje de estado (y 90)
-#define BIGDATE_Y 113
+#define BIGCLK_Y 118   // ko11.10.1: todo el encabezado algo mas arriba (antes 134) para no chocar con el bicho
+#define BIGDATE_Y 100
 #define BIGCLK_W 38    // ko11.10.1: algo mas pequeno (antes 44x76) para dejar sitio al bicho
 #define BIGCLK_H 64
 
@@ -3545,27 +3545,31 @@ static void smEpx2(const uint8_t *src, int w, int h, uint8_t *dst) {
     }
   }
 }
-// src: w*h indices de paleta (0xFF = transparente); pinta en (x0,y0) a escala s
-void smoothBlit(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, int y0, int s, bool sil) {
-  if (w <= 0 || h <= 0 || s <= 0) return;
-  if (gSmoothGfx && s >= 2 && w <= SM_MAX && h <= SM_MAX && !gSmA) {
+// src: w*h indices de paleta (0xFF = transparente); pinta en (x0,y0).
+// ko11.10.1: escala en cuartos de pixel (s4 = 22 -> x5,5): el bicho del menu
+// principal puede crecer sin llegar a x6 y tapar el reloj
+void smoothBlitQ(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, int y0, int s4, bool sil) {
+  if (w <= 0 || h <= 0 || s4 <= 0) return;
+  if (gSmoothGfx && s4 >= 8 && w <= SM_MAX && h <= SM_MAX && !gSmA) {
     gSmA = (uint8_t *)ps_malloc(SM_MAX * SM_MAX * 4);
     gSmB = (uint8_t *)ps_malloc(SM_MAX * SM_MAX * 16);
   }
-  if (!gSmoothGfx || s < 2 || w > SM_MAX || h > SM_MAX || !gSmA || !gSmB) {  // como siempre
+  if (!gSmoothGfx || s4 < 8 || w > SM_MAX || h > SM_MAX || !gSmA || !gSmB) {  // como siempre
     for (int r = 0; r < h; r++)
       for (int c = 0; c < w; c++) {
         uint8_t v = src[r * w + c];
-        if (v != 0xFF) gfx->fillRect(x0 + c * s, y0 + r * s, s, s, sil ? INK_K : pal[v]);
+        if (v == 0xFF) continue;
+        int xa = x0 + c * s4 / 4, xb = x0 + (c + 1) * s4 / 4, ya = y0 + r * s4 / 4, yb = y0 + (r + 1) * s4 / 4;
+        if (xb > xa && yb > ya) gfx->fillRect(xa, ya, xb - xa, yb - ya, sil ? INK_K : pal[v]);
       }
     return;
   }
-  int k = s >= 4 ? 4 : 2, W = w * 2, H = h * 2;
+  int k = s4 >= 16 ? 4 : 2, W = w * 2, H = h * 2, d = 4 * k;
   smEpx2(src, w, h, gSmA);
   const uint8_t *img = gSmA;
   if (k == 4) { smEpx2(gSmA, W, H, gSmB); img = gSmB; W *= 2; H *= 2; }
   for (int r = 0; r < H; r++) {
-    int ya = y0 + r * s / k, yb = y0 + (r + 1) * s / k;
+    int ya = y0 + r * s4 / d, yb = y0 + (r + 1) * s4 / d;
     if (yb <= ya) continue;
     const uint8_t *row = img + r * W;
     for (int c = 0; c < W;) {
@@ -3573,11 +3577,14 @@ void smoothBlit(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, i
       if (v == 0xFF) { c++; continue; }
       int c2 = c + 1;
       while (c2 < W && row[c2] == v) c2++;
-      int xa = x0 + c * s / k, xb = x0 + c2 * s / k;
+      int xa = x0 + c * s4 / d, xb = x0 + c2 * s4 / d;
       if (xb > xa) gfx->fillRect(xa, ya, xb - xa, yb - ya, sil ? INK_K : pal[v]);
       c = c2;
     }
   }
+}
+void smoothBlit(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, int y0, int s, bool sil) {
+  smoothBlitQ(src, w, h, pal, x0, y0, s * 4, sil);
 }
 
 void drawThumb(const uint8_t *b, int x, int y, int s, bool sil) {
@@ -3823,8 +3830,8 @@ void drawHeader(const char *name, uint16_t nameColor, const char *msg) {
     int lum = ((c >> 11) & 31) * 2 + ((c >> 5) & 63) * 2 + (c & 31);  // aprox. 0..250
     return lum > 140 ? C565(0x1c, 0x22, 0x30) : UI_WHITE;
   };
-  printOutlined(centerX(name, 3), 52, name, 3, nameColor, edgeFor(nameColor), 2);
-  printOutlined(centerX(msg, 2), 90, msg, 2, inkColor(), edgeFor(inkColor()), 1);
+  printOutlined(centerX(name, 3), 44, name, 3, nameColor, edgeFor(nameColor), 2);  // ko11.10.1: 52 -> 44
+  printOutlined(centerX(msg, 2), 78, msg, 2, inkColor(), edgeFor(inkColor()), 1);  //            90 -> 78
 }
 
 // animacion de la ceremonia (10s): despedida = reverencia con corazones y se
@@ -4142,17 +4149,18 @@ void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
                  uint16_t fitH) {
   const PmdAct &a = m.acts[actId];
   if (!a.frames) return;
-  uint8_t sBase = m.acts[PMD_IDLE].h ? fitH / m.acts[PMD_IDLE].h : 5;
-  if (sBase < 2) sBase = 2;
-  if (sBase > maxS) sBase = maxS;
-  uint8_t s = sBase;
-  while (s > 2 && a.h * s > (fitH > 170 ? fitH + 80 : 250)) s--;  // acciones con frame grande (ataque)
+  // ko11.10.1: escala en cuartos (fitH 185 con lienzo de 32 -> x5,75 con tope maxS)
+  int sBase = m.acts[PMD_IDLE].h ? fitH * 4 / m.acts[PMD_IDLE].h : 20;
+  if (sBase < 8) sBase = 8;
+  if (sBase > maxS * 4) sBase = maxS * 4;
+  int s = sBase;
+  while (s > 8 && a.h * s > (fitH > 170 ? fitH + 80 : 250) * 4) s--;  // acciones con frame grande (ataque)
   uint8_t fi = pmdFrameAt(a, t, loop);
   const uint8_t *fr = a.data + (uint32_t)fi * a.w * a.h;
   // anclar por los pies (a.base), no por el alto del lienzo: asi las acciones
   // con padding distinto (Hurt, Eat...) quedan todas a la misma altura de suelo
-  int x0 = cx - a.w * s / 2, y0 = groundY - (a.base ? a.base : a.h) * s;
-  smoothBlit(fr, a.w, a.h, m.pal, x0, y0, s, sil);  // ko11.10: liso
+  int x0 = cx - a.w * s / 8, y0 = groundY - (a.base ? a.base : a.h) * s / 4;
+  smoothBlitQ(fr, a.w, a.h, m.pal, x0, y0, s, sil);  // ko11.10: liso
 }
 void drawPmdAct(uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS) {
   drawPmdActM(pmd, actId, cx, groundY, t, loop, sil, maxS, 170);
