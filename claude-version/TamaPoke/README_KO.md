@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko11.18)
+# TamaPoke KO (v1.17-ko11.19)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko11.19: 자동 전투 autoCount/autoLeft/autoPick(AUTO_POTION_HP 30·HARD 50·MAX 3, AUTO_STEP_MS 700, autoHardFoe), battleDoAction 분리, synthOrbs(ORB_SYNTH_FAIL_PCT 20·GREAT 5), releaseGift, giveItems 넘침 전환·addShards, syncClock 밤 22~7 잠·낮 최저 30·sleptOffline. PC 테스트 248개
 - ✅ ko11.18: brightLevel/setBrightLevel(NVS "bri" 1~10, 30+22×단계) XS_BRIGHT, drawBattery % (printOutlined), touchSample screenOff면 무시, renderFarewellTable(FAREWELL_AGE_MIN), DAILY_HEAL_PCT 35(팀 다음 상대 전), 실수 판정 포만·기분·청결 최저만, S_STREAK_FMT "연속 돌봄". PC 테스트 243개
 - ✅ ko11.17: retMark()/goBack()(RET_MAIN/CARD/TRAIN/CLOCK), trainFromCard·reopenTrainMenu, 모든 메뉴 NAV_L(1페이지=뒤로), 렌더러 navChecks 14개, 속도 spdBase(SPD_RANDOM_FROM 7, 1~60)·첫 볼 깜박, drawRibbon(보관함 리본 탭·목록·상세·다음 파트너), fameDetail 속성 빛·물결·drawMoveFx·반짝이. PC 테스트 242개
 - ✅ ko11.16.2: sdTryMount 6회(BOARD_MAX→20MHz→10MHz, 대기 150+150i ms), sdRemount(잠금·end·재마운트·sdDirty), sdWatch(기본 화면에서 스프라이트/SD 없으면 10초×6 뒤 60초마다, 음악 일시정지 후 재마운트·audioLoadMusic), X_BART 그림: 도트/원작. PC 테스트 242개
