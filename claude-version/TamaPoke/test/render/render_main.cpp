@@ -506,6 +506,13 @@ static void scenes(bool ko, const char *sfx) {
     snprintf(t, sizeof(t), XT(X_EXP_CANDY_FMT), dexName(12), 1u);
     strncat(t, "  ", sizeof(t) - strlen(t) - 1); strncat(t, XT(X_EXP_RARE), sizeof(t) - strlen(t) - 1);
     showToast(t); boxSel = -1; render(); shot("11i_box_release_toast"); toastUntil = 0;
+    // ko11.19: soltar a uno que solo te siguio: regalo pequeno (boton soltar x2)
+    for (uint8_t i = 0; i < box.count(); i++)
+      if (!(box.at(i).flags & (BOXF_CAUGHT | BOXF_RAISED))) {
+        boxSel = i; boxTap(120, 320); boxTap(120, 320);
+        render(); shot("11j_box_release_gift"); toastUntil = 0;
+        break;
+      }
   }
   // ko11.7: expedicion
   expPick = true; render(); shot("11e_exp_pick"); expPick = false;
@@ -533,7 +540,19 @@ static void scenes(bool ko, const char *sfx) {
     orbSel = 0; render(); shot("11p_orb_detail_worn");
     orbSel = 1; render(); shot("11q_orb_detail_fits");
     orbSel = 3; render(); shot("11r_orb_detail_nofit");
-    orbSel = -1; boxOrb = false;
+    orbSel = -1;
+    {  // ko11.19: fusion de orbes: elegir 3 -> animacion -> resultado
+      toastUntil = 0;
+      orbBagTap(CX, SYN_BTN_Y + 10);  // [구슬 합성]
+      int cx, cy;
+      for (int i : { 1, 2, 4 }) { orbCell(i, cx, cy); orbBagTap(cx, cy); }
+      render(); shot("11s_orb_synth_pick");
+      orbBagTap(290, SYN_BTN_Y + 10);  // [합성하기 3/3]
+      tick(700); render(); shot("11t_orb_synth_anim");
+      tick(900); render(); render(); shot("11u_orb_synth_result");
+      orbBagTap(CX, 200);
+    }
+    boxOrb = false;
   }
   xScreen = XS_NEXTPICK; nextPage = 0; render(); shot("11c_next_pick");
   xScreen = XS_BOX;

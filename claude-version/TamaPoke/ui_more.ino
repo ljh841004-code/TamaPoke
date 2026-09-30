@@ -29,6 +29,22 @@ int8_t orbSel = -1;           // orbe con la ventana abierta (indice de la vista
 uint8_t orbPage = 0;
 static const char *orbMsg = nullptr;
 static uint32_t orbMsgUntil = 0;
+// ko11.19: fusion (3 orbes de la bolsa -> 1 del tipo del Pokemon que crias)
+#define SYN_BTN_Y 364
+#define SYN_ANIM_MS 1500
+static bool synMode = false;
+static uint8_t synPick[3], synN = 0;   // posiciones en pet.orbBag
+static uint16_t synMat[3], synOut = 0;
+static uint8_t synRes = 0;
+static uint32_t synAnimT = 0;          // animacion en curso (0 = no)
+static bool synShow = false;           // ventana del resultado
+static bool orbSel_open() { return orbSel >= 0; }
+static bool synPicked(uint8_t bi) {
+  for (uint8_t i = 0; i < synN; i++) if (synPick[i] == bi) return true;
+  return false;
+}
+static void synReset() { synMode = false; synN = 0; synAnimT = 0; synShow = false; }
+
 static Box &cb() { return boxHall ? hall : box; }
 
 // ko10.4: la lista se ve ordenada por numero de pokedex (los repetidos quedan
@@ -388,7 +404,7 @@ void boxSwipe() {  // deslizar: cierra la ficha, o la caja si estaba en la lista
 static void boxTabTap(int16_t x) {
   if (x >= BOX_TAB_X1 && x < BOX_TAB_X1 + BOX_TAB_W && (boxHall || boxOrb)) { boxHall = false; boxOrb = false; }
   else if (x >= BOX_TAB_X2 && x < BOX_TAB_X2 + BOX_TAB_W && !boxHall) { boxHall = true; boxOrb = false; }
-  else if (x >= BOX_TAB_X3 && x < BOX_TAB_X3 + BOX_TAB_W3 && !boxOrb) { boxOrb = true; boxHall = false; orbSel = -1; orbPage = 0; }
+  else if (x >= BOX_TAB_X3 && x < BOX_TAB_X3 + BOX_TAB_W3 && !boxOrb) { boxOrb = true; boxHall = false; orbSel = -1; orbPage = 0; synReset(); }
   else return;
   boxPage = 0;
   boxSel = -1;
@@ -431,6 +447,18 @@ void boxTap(int16_t x, int16_t y) {
           char t[72];
           snprintf(t, sizeof(t), XT(X_EXP_CANDY_FMT), dexName(rd), 1u);
           if (gotRare) { strncat(t, "  ", sizeof(t) - strlen(t) - 1); strncat(t, XT(X_EXP_RARE), sizeof(t) - strlen(t) - 1); }
+          showToast(t);
+        } else {
+          // ko11.19: el que solo te siguio tambien deja un regalo pequeno
+          uint16_t go = 0;
+          uint8_t g = pet.releaseGift(rd, &go);
+          char t[96], it[48];
+          txFmt(t, sizeof(t), X_RG_THANKS, dexName(rd), nullptr);
+          if (g == RG_ORB) { orbName(go, it, sizeof(it)); size_t l = strlen(it); snprintf(it + l, sizeof(it) - l, " +%u%%", orbPct(go)); }
+          else if (g == RG_EXP) { char nb[8]; snprintf(nb, sizeof(nb), "%u", (unsigned)(20 + pet.level() * 2)); txFmt(it, sizeof(it), X_RG_EXP, "", nb); }
+          else snprintf(it, sizeof(it), "%s", XT(g == RG_BALL ? X_RG_BALL : g == RG_POTION ? X_RG_POTION : X_RG_SHARD));
+          strncat(t, " ", sizeof(t) - strlen(t) - 1);
+          strncat(t, it, sizeof(t) - strlen(t) - 1);
           showToast(t);
         }
         pet.saveNow();
@@ -538,20 +566,39 @@ void renderOrbBag() {
     bool fits = pet.orbFits(o);
     // pedestal: sombra ovalada bajo el orbe; el equipado, con aro dorado
     gfx->fillEllipse(cx, cy + ORB_R + 6, ORB_R, 5, uiLerp(UI_BG_DAY, UI_INK, 3, 16));
-    if (worn) {
+    uint8_t bi = (uint8_t)(k - (orbValid(pet.orb) ? 1 : 0));
+    bool picked = synMode && !worn && synPicked(bi);
+    if (worn && !synMode) {
       gfx->drawCircle(cx, cy, ORB_R + 5, C565(0xe8, 0xb0, 0x20));
       gfx->drawCircle(cx, cy, ORB_R + 6, C565(0xe8, 0xb0, 0x20));
     }
+    if (picked) {  // ko11.19: material elegido: aro verde que late
+      int pr = ORB_R + 6 + (int)((now / 90) % 3);
+      gfx->drawCircle(cx, cy, pr, UI_BAR_OK);
+      gfx->drawCircle(cx, cy, pr + 1, UI_BAR_OK);
+    }
     drawOrb(cx, cy, ORB_R, o, now + k * 137);  // cada uno a su ritmo
+    if (synMode && worn) {  // el equipado no se puede fundir
+      textAtX(XT(X_SYN_WORN), cx, cy + ORB_R + 12, 0x8410, 1);
+      continue;
+    }
+    if (picked) drawCheckMark(cx + ORB_R - 2, cy - ORB_R + 2, true);
     snprintf(b, sizeof(b), "+%u%%", orbPct(o));
     textAtX(b, cx, cy + ORB_R + 12, worn ? C565(0xb0, 0x80, 0x10) : fits ? C565(0x2e, 0x7d, 0x32) : 0x8410, 1);
   }
-  if (orbMsg && timeLeft(orbMsgUntil) && orbSel < 0) drawFit(orbMsg, 374, 320, UI_BAR_OK, 2);
-  else if (n) {
-    char c[24];
-    snprintf(c, sizeof(c), XT(X_ORB_COUNT_FMT), n);
-    if (orbPages() > 1) { strncat(c, "  ", sizeof(c) - strlen(c) - 1); snprintf(b, sizeof(b), XT(X_ORB_PAGE_FMT), orbPage + 1, orbPages()); strncat(c, b, sizeof(c) - strlen(c) - 1); }
-    drawFit(c, 380, 200, UI_INK, 1);
+  // abajo: [구슬 합성] (o, eligiendo: [취소] [합성하기 N/3]); el aviso encima
+  if (orbMsg && timeLeft(orbMsgUntil) && orbSel < 0) drawFit(orbMsg, SYN_BTN_Y + 8, 320, UI_BAR_OK, 2);
+  else if (synMode) {
+    drawBtn(93, SYN_BTN_Y, 110, 36, UI_TRACK, UI_INK, XT(X_SYN_CANCEL));
+    snprintf(b, sizeof(b), XT(X_SYN_GO_FMT), synN);
+    bool ready = synN == 3;
+    drawBtn(213, SYN_BTN_Y, 160, 36, ready ? C565(0x6a, 0x4c, 0xf0) : UI_TRACK, ready ? UI_WHITE : 0x8410, b);
+  } else if (n && !synShow && !synAnimT) {
+    drawBtn(CX - 80, SYN_BTN_Y, 160, 36, C565(0x6a, 0x4c, 0xf0), UI_WHITE, XT(X_SYN_BTN));
+  }
+  if (orbPages() > 1) {
+    snprintf(b, sizeof(b), XT(X_ORB_PAGE_FMT), orbPage + 1, orbPages());
+    drawFit(b, SYN_BTN_Y + 42, 100, UI_INK, 1);
   }
   drawNav(NAV_L, UI_INK);  // pagina anterior, o salir en la primera
   if (orbPage + 1 < orbPages()) drawNav(NAV_R, UI_INK);
@@ -583,11 +630,116 @@ void renderOrbBag() {
     drawBtn(x + 30 + (w - 50) / 2, by, (w - 50) / 2, 42, UI_TRACK, UI_INK, XT(X_CLOSE));
     if (orbMsg && timeLeft(orbMsgUntil)) drawFit(orbMsg, y + h + 8, 320, UI_BAR_OK, 1);
   }
+  // ko11.19: animacion de la fusion: los 3 giran hacia el centro y destellan
+  if (synAnimT) {
+    uint32_t t = now - synAnimT;
+    uiShade(0, 0, LCD_WIDTH, LCD_HEIGHT, 0, 9);
+    float p = t >= SYN_ANIM_MS ? 1.0f : (float)t / SYN_ANIM_MS;
+    if (p < 0.8f) {
+      float q = p / 0.8f;
+      int rad = (int)(96 * (1.0f - q * q));
+      for (int i = 0; i < 3; i++) {
+        float a = q * 9.0f + i * 2.094f;
+        int ox = CX + (int)(cosf(a) * rad), oy = 220 + (int)(sinf(a) * rad);
+        drawOrb(ox, oy, 22 - (int)(q * 8), synMat[i], now + i * 200);
+      }
+      gfx->fillCircle(CX, 220, 4 + (int)(q * 10), UI_WHITE);
+    } else {  // destello
+      int fr = 20 + (int)((p - 0.8f) / 0.2f * 140);
+      gfx->fillCircle(CX, 220, fr, uiLerp(UI_WHITE, C565(0xf8, 0xe8, 0x90), 6, 16));
+      gfx->fillCircle(CX, 220, fr * 2 / 3, UI_WHITE);
+    }
+    if (t >= SYN_ANIM_MS) { synAnimT = 0; synShow = true; sfxPlay(synRes ? SFX_MEDAL : SFX_DENY); }
+  }
+  // ventana del resultado
+  if (synShow) {
+    int x = 58, y = 88, w = 350, h = 294;
+    uiPanel(x, y, w, h, 20, UI_WHITE, UI_INK);
+    if (synRes) {
+      uint16_t o = synOut;
+      if (synRes == 2)  // exito grande: rayos dorados
+        for (int k = 0; k < 12; k++) {
+          float a = now * 0.001f + k * 0.5236f;
+          gfx->drawLine(CX + (int)(cosf(a) * 50), y + 96 + (int)(sinf(a) * 50), CX + (int)(cosf(a) * 78),
+                        y + 96 + (int)(sinf(a) * 78), C565(0xf0, 0xc0, 0x30));
+        }
+      gfx->fillCircle(CX, y + 90, 58, uiLerp(orbColor(orbType(o)), UI_WHITE, 13, 16));
+      drawOrb(CX, y + 96, 40, o, now);
+      drawFit(XT(synRes == 2 ? X_SYN_GREAT : X_SYN_OK), y + 14, w - 40, synRes == 2 ? C565(0xc0, 0x80, 0x10) : UI_BAR_OK, 2);
+      orbName(o, b, sizeof(b));
+      drawFit(b, y + 150, w - 30, uiLerp(orbColor(orbType(o)), UI_INK, 8, 16), 2);
+      snprintf(b, sizeof(b), XT(orbDef(o) ? X_ORB_DEFP_FMT : X_ORB_ATKP_FMT), orbPct(o));
+      drawFit(b, y + 178, w - 30, UI_INK, 2);
+    } else {
+      // fallo: esfera gris rajada y humo
+      uint16_t g = C565(0x90, 0x90, 0x98);
+      gfx->fillCircle(CX, y + 96, 36, g);
+      gfx->drawLine(CX - 10, y + 62, CX + 4, y + 90, UI_INK);
+      gfx->drawLine(CX + 4, y + 90, CX - 6, y + 108, UI_INK);
+      gfx->drawLine(CX - 6, y + 108, CX + 8, y + 130, UI_INK);
+      for (int k = 0; k < 3; k++)
+        gfx->fillCircle(CX - 30 + k * 30, y + 52 - (int)((now / 40 + k * 13) % 20), 7 + k, C565(0xc8, 0xc8, 0xcc));
+      drawFit(XT(X_SYN_FAIL), y + 150, w - 30, UI_BAR_BAD, 2);
+      drawFit(XT(X_SYN_FAIL_SUB), y + 178, w - 30, UI_INK, 2);
+    }
+    drawFit(XT(X_SYN_TAP), y + h - 40, w - 40, 0x8410, 1);
+  }
   uiFlush();
 }
 
 void orbBagTap(int16_t x, int16_t y) {
   uint8_t n = orbViewN();
+  if (synAnimT) return;                                      // ko11.19: animacion
+  if (synShow) { synShow = false; sfxPlay(SFX_TAP); return; }  // cerrar el resultado
+  if (synMode || (n && !orbSel_open())) {
+    if (y >= SYN_BTN_Y - 4 && y < SYN_BTN_Y + 40) {  // botones de abajo
+      if (!synMode) {
+        if (x < CX - 80 || x >= CX + 80) return;
+        if (pet.isEgg()) { orbSay(XT(X_SYN_EGG), false); return; }
+        if (pet.orbN < 3) { orbSay(XT(X_SYN_NEED), false); return; }
+        synMode = true;
+        synN = 0;
+        sfxPlay(SFX_TAP);
+        return;
+      }
+      if (x >= 93 && x < 203) { synReset(); sfxPlay(SFX_TAP); return; }  // cancelar
+      if (x >= 213 && x < 373 && synN == 3) {                            // fusionar
+        for (int i = 0; i < 3; i++) synMat[i] = pet.orbBag[synPick[i]];
+        synRes = pet.synthOrbs(synPick, synOut);
+        synMode = false;
+        synN = 0;
+        synAnimT = millis();
+        sfxPlay(SFX_EVOLVE);
+      }
+      return;
+    }
+  }
+  if (synMode) {  // elegir materiales (el equipado no)
+    if (navHit(NAV_L, x, y)) { if (orbPage > 0) orbPage--; else synReset(); sfxPlay(SFX_TAP); return; }
+    if (navHit(NAV_R, x, y)) { if (orbPage + 1 < orbPages()) orbPage++; sfxPlay(SFX_TAP); return; }
+    for (int i = 0; i < ORB_PER_PAGE; i++) {
+      int k = orbPage * ORB_PER_PAGE + i;
+      if (k >= n) break;
+      int cx, cy;
+      orbCell(i, cx, cy);
+      if (abs(x - cx) >= ORB_CELL_W / 2 || abs(y - cy) >= ORB_CELL_H / 2) continue;
+      bool worn;
+      orbViewAt(k, worn);
+      if (worn) { sfxPlay(SFX_DENY); return; }
+      uint8_t bi = (uint8_t)(k - (orbValid(pet.orb) ? 1 : 0));
+      for (uint8_t j = 0; j < synN; j++)
+        if (synPick[j] == bi) {  // quitar
+          for (uint8_t m = j; m + 1 < synN; m++) synPick[m] = synPick[m + 1];
+          synN--;
+          sfxPlay(SFX_TAP);
+          return;
+        }
+      if (synN < 3) { synPick[synN++] = bi; sfxPlay(SFX_TAP); }
+      else sfxPlay(SFX_DENY);
+      return;
+    }
+    return;
+  }
   if (orbSel >= 0) {  // ventana abierta
     int px, py, pw, ph;
     orbPopupRect(px, py, pw, ph);

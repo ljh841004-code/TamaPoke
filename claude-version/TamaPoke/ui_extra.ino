@@ -400,7 +400,9 @@ static void battleArtToggle() {
   sfxPlay(SFX_TAP);
 }
 static bool battleArtTap(int16_t x, int16_t y) {
-  if (!inRect(x, y, BART_X, BART_Y - 6, BART_W, BART_H + 10)) return false;
+  // ko11.19: zona de toque mucho mas grande (arriba del todo el tactil es menos preciso
+  // y la pildora es pequena): toda la franja de arriba, 40 px mas a cada lado
+  if (!inRect(x, y, BART_X - 40, 0, BART_W + 80, BART_Y + BART_H + 22)) return false;
   battleArtToggle();
   prgLoadFor(bvMeDex, prgFoeDex, prgFoeShiny);  // se ve al momento
   return true;

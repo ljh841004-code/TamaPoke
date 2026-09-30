@@ -79,6 +79,11 @@ static const uint8_t CANDY_COST[CU_COUNT] = { 3, 1, 5, 10, 5 };
 #define ORB_EVO_RARE_PCT 10   //   ... o (10 %) 1 caramelo raro
 #define ORB_WILD_PCT 8        // salvaje ganado o capturado: orbe de su tipo
 #define ORB_GYM_PCT 50        // revancha de gimnasio con premio del dia
+// ko11.19: fusion de orbes: 3 cualesquiera -> 1 del tipo del Pokemon que crias
+#define ORB_SYNTH_FAIL_PCT 20   // 1 de cada 5 falla (los 3 se pierden; consuelo: 2 trozos)
+#define ORB_SYNTH_GREAT_PCT 5   // exito grande: +25 %
+#define ORB_SYNTH_FAIL_SHARDS 2
+enum : uint8_t { RG_BALL = 1, RG_POTION, RG_SHARD, RG_EXP, RG_ORB };  // regalo al soltar (seguidores)
 static inline uint16_t orbMake(uint8_t type, bool def, uint8_t pct) {
   return (uint16_t)(0x8000 | (def ? 0x4000 : 0) | ((type & 15) << 8) | pct);
 }
@@ -169,6 +174,13 @@ public:
   // ko11.16: orbes. gainOrb: 1 nuevo a la bolsa, 2 mejoro uno igual (el viejo -> 1
   // caramelo), 3 no mejoraba (el nuevo -> 1 caramelo), 0 no se pudo
   uint8_t gainOrb(uint16_t o);
+  // ko11.19: fusion. idx = 3 posiciones distintas de orbBag. Devuelve 0 fallo, 1 exito,
+  // 2 exito grande; out = el orbe nuevo (0 si fallo)
+  uint8_t synthOrbs(const uint8_t idx[3], uint16_t &out);
+  void addShards(uint16_t n);  // ko11.19: trozos (10 = 1 caramelo raro)
+  // ko11.19: al soltar un Pokemon que SOLO te siguio: un regalo pequeno al azar.
+  // Devuelve RG_*; *orbOut = el orbe si RG_ORB
+  uint8_t releaseGift(int16_t dex, uint16_t *orbOut);
   bool equipOrb(uint8_t bagIdx);   // solo si es de su tipo; el equipado vuelve a la bolsa
   void unequipOrb();
   bool orbFits(uint16_t o) const;  // del tipo del Pokemon que crias

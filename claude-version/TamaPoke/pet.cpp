@@ -772,12 +772,7 @@ uint16_t Pet::candyToShards() {
     candy[f] = 0;
   }
   if (!n) return 0;
-  uint32_t sh = (uint32_t)rareShards + n;
-  while (sh >= SHARDS_PER_RARE) {
-    sh -= SHARDS_PER_RARE;
-    if (rareCandy < 999) rareCandy++;
-  }
-  rareShards = (uint16_t)sh;
+  addShards(n > 65535 ? 65535 : (uint16_t)n);
   save();
   return (uint16_t)(n > 65535 ? 65535 : n);
 }
@@ -1307,9 +1302,89 @@ void Pet::battleResult(uint8_t kind, bool won, bool fled, bool caught,
   save();
 }
 
+// ko11.19: lo que no cabe ya no se pierde: una ball de mas se vuelve pocion (y al
+// reves) si hay sitio, y si las dos estan llenas, un trozo de caramelo raro
 void Pet::giveItems(uint8_t b, uint8_t p) {
-  if (b && balls < BALL_MAX) balls = balls + b > BALL_MAX ? BALL_MAX : balls + b;
-  if (p && potions < POTION_MAX) potions = potions + p > POTION_MAX ? POTION_MAX : potions + p;
+  uint16_t shards = 0;
+  for (uint8_t i = 0; i < b; i++) {
+    if (balls < BALL_MAX) balls++;
+    else if (potions < POTION_MAX) potions++;
+    else shards++;
+  }
+  for (uint8_t i = 0; i < p; i++) {
+    if (potions < POTION_MAX) potions++;
+    else if (balls < BALL_MAX) balls++;
+    else shards++;
+  }
+  if (shards) addShards(shards);
+}
+
+void Pet::addShards(uint16_t n) {
+  uint32_t sh = (uint32_t)rareShards + n;
+  while (sh >= SHARDS_PER_RARE) {
+    sh -= SHARDS_PER_RARE;
+    if (rareCandy < 999) rareCandy++;
+  }
+  rareShards = (uint16_t)sh;
+}
+
+uint8_t Pet::releaseGift(int16_t dex, uint16_t *orbOut) {
+  if (orbOut) *orbOut = 0;
+  uint32_t r = random(100);
+  uint8_t g;
+  if (r < 35) g = RG_BALL;
+  else if (r < 65) g = RG_POTION;
+  else if (r < 90) g = RG_SHARD;
+  else if (r < 97) g = RG_EXP;
+  else g = RG_ORB;
+  if (g == RG_EXP && isEgg()) g = RG_SHARD;
+  // lleno: ball <-> pocion; las dos llenas: trozo
+  if (g == RG_BALL && balls >= BALL_MAX) g = potions < POTION_MAX ? RG_POTION : RG_SHARD;
+  else if (g == RG_POTION && potions >= POTION_MAX) g = balls < BALL_MAX ? RG_BALL : RG_SHARD;
+  switch (g) {
+    case RG_BALL: balls++; break;
+    case RG_POTION: potions++; break;
+    case RG_SHARD: addShards(1); break;
+    case RG_EXP: addExp(20 + level() * 2); break;
+    case RG_ORB: {
+      uint16_t o = orbMake(DEX_TBL[dex].ptype, random(2) != 0,
+                           (uint8_t)(ORB_MIN_PCT + random(ORB_MAX_PCT - ORB_MIN_PCT + 1)));
+      gainOrb(o);
+      if (orbOut) *orbOut = o;
+      break;
+    }
+  }
+  save();
+  return g;
+}
+
+uint8_t Pet::synthOrbs(const uint8_t idx[3], uint16_t &out) {
+  out = 0;
+  if (isEgg() || speciesId < 1) return 0;
+  uint8_t a = idx[0], b = idx[1], c = idx[2];
+  if (a >= orbN || b >= orbN || c >= orbN || a == b || a == c || b == c) return 0;
+  uint16_t sum = orbPct(orbBag[a]) + orbPct(orbBag[b]) + orbPct(orbBag[c]);
+  // quitar los 3 (de mayor a menor posicion para no mover los otros)
+  uint8_t s[3] = { a, b, c };
+  for (int i = 0; i < 2; i++)
+    for (int j = i + 1; j < 3; j++)
+      if (s[j] > s[i]) { uint8_t t = s[i]; s[i] = s[j]; s[j] = t; }
+  for (int i = 0; i < 3; i++) {
+    for (uint8_t k = s[i]; k + 1 < orbN; k++) orbBag[k] = orbBag[k + 1];
+    orbN--;
+  }
+  if ((int)random(100) < ORB_SYNTH_FAIL_PCT) {  // fallo: consuelo de trozos
+    addShards(ORB_SYNTH_FAIL_SHARDS);
+    save();
+    return 0;
+  }
+  bool great = (int)random(100) < ORB_SYNTH_GREAT_PCT;
+  int pct = great ? ORB_MAX_PCT : (int)(sum / 3) - 3 + (int)random(9);  // media -3 .. +5
+  if (pct < ORB_MIN_PCT) pct = ORB_MIN_PCT;
+  if (pct > ORB_MAX_PCT) pct = ORB_MAX_PCT;
+  out = orbMake(DEX_TBL[speciesId].ptype, random(2) != 0, (uint8_t)pct);
+  gainOrb(out);  // (guarda)
+  return great ? 2 : 1;
 }
 
 uint8_t Pet::wildWinItems() {

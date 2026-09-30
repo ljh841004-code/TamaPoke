@@ -1421,3 +1421,77 @@ TEST(orb, al_evolucionar_a_otro_tipo_se_vuelve_caramelos) {
     else CHECK_EQ(p.rareCandy, rare0 + 1);
   }
 }
+
+// ko11.19: fusion de orbes: 3 -> 1 del tipo del Pokemon; a veces falla (con consuelo)
+TEST(orb, fusion_tres_en_uno_con_fallos) {
+  int ok = 0, fail = 0, great = 0;
+  for (int k = 0; k < 400; k++) {
+    Pet p;
+    makePet(p, 4);  // charmander (fuego)
+    p.orbN = 0;
+    p.orbBag[p.orbN++] = orbMake(PT_WATER, false, 20);
+    p.orbBag[p.orbN++] = orbMake(PT_GRASS, true, 20);
+    p.orbBag[p.orbN++] = orbMake(PT_ICE, false, 20);
+    p.orbBag[p.orbN++] = orbMake(PT_ROCK, true, 12);  // no se toca
+    uint8_t idx[3] = { 0, 2, 1 };
+    uint16_t out;
+    uint16_t sh0 = p.rareShards;
+    uint8_t r = p.synthOrbs(idx, out);
+    CHECK_EQ(p.orbBag[0], orbMake(PT_ROCK, true, 12));  // el que no era material sigue
+    if (r == 0) {
+      fail++;
+      CHECK_EQ(p.orbN, (uint8_t)1);
+      CHECK_EQ(p.rareShards, (uint16_t)(sh0 + ORB_SYNTH_FAIL_SHARDS));
+    } else {
+      ok++;
+      if (r == 2) great++;
+      CHECK_EQ(orbType(out), (uint8_t)PT_FIRE);
+      CHECK(orbPct(out) >= 17 && orbPct(out) <= 25);  // media 20: -3 .. +5
+      CHECK_EQ(p.orbN, (uint8_t)2);
+    }
+  }
+  CHECK(fail > 40 && fail < 130);  // ~20 %
+  CHECK(ok > 270);
+  CHECK(great > 0);
+}
+
+TEST(orb, fusion_rechaza_repetidos_o_fuera_de_rango) {
+  Pet p;
+  makePet(p, 4);
+  p.orbN = 2;
+  p.orbBag[0] = orbMake(PT_WATER, false, 20);
+  p.orbBag[1] = orbMake(PT_GRASS, true, 20);
+  uint8_t idx[3] = { 0, 1, 1 };
+  uint16_t out;
+  CHECK_EQ(p.synthOrbs(idx, out), (uint8_t)0);
+  CHECK_EQ(p.orbN, (uint8_t)2);  // no se gasta nada
+}
+
+// ko11.19: soltar a un seguidor: siempre un regalo pequeno; lleno -> se cambia
+TEST(release, regalo_de_seguidor_nunca_se_pierde) {
+  int got[6] = { 0 };
+  for (int k = 0; k < 600; k++) {
+    Pet p;
+    makePet(p, 4);
+    p.balls = BALL_MAX;
+    p.potions = POTION_MAX;
+    uint16_t sh = p.rareShards, rc = p.rareCandy;
+    uint8_t g = p.releaseGift(19, nullptr);
+    got[g]++;
+    CHECK(g != RG_BALL && g != RG_POTION);  // llenos: nunca ball ni pocion
+    if (g == RG_SHARD) CHECK(p.rareShards == sh + 1 || p.rareCandy == rc + 1);
+  }
+  CHECK(got[RG_SHARD] > 400);
+  CHECK(got[RG_EXP] > 0);
+}
+
+TEST(items, lo_que_no_cabe_se_cambia) {
+  Pet p;
+  makePet(p, 4);
+  p.balls = BALL_MAX;
+  p.potions = POTION_MAX - 1;
+  p.rareShards = 0;
+  p.giveItems(2, 0);  // 1 -> pocion, 1 -> trozo
+  CHECK_EQ(p.potions, (uint8_t)POTION_MAX);
+  CHECK_EQ(p.rareShards, (uint16_t)1);
+}
