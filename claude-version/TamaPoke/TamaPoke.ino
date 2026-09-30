@@ -842,7 +842,9 @@ void updateBrightness(uint32_t now) {
   }
   uint32_t idle = now - lastInteract;
   dimStage = (idle > 300000) ? 2 : (idle > 90000) ? 1 : 0;
-  uint8_t target = pet.sleeping ? 25 : (usbPresent() ? 180 : 145);
+  // ko11.18: el mismo brillo con USB y con bateria (antes 145 con bateria para
+  // ahorrar: se notaba que la pantalla se oscurecia un poco al desenchufar)
+  uint8_t target = pet.sleeping ? 25 : 180;
   if (dimStage == 1) target = pet.sleeping ? 10 : 60;
   else if (dimStage == 2) target = 8;
   if (screenOff) target = 0;
@@ -4230,6 +4232,10 @@ void drawBattery() {
     int fw = (w - 4) * pc / 100;
     if (fw > 0) gfx->fillRect(x + 2, y + 2, fw, h - 4, col);
   }
+  // ko11.18: tambien el numero (cargando por USB tambien)
+  char t[6];
+  snprintf(t, sizeof(t), "%d%%", pc);
+  printOutlined(x + w + 7, y - 3, t, 1, charging ? UI_BAR_OK : col, gNight ? INK_K : UI_WHITE, 1);
 }
 
 // ko10.4: texto con contorno de 1-2 px (se lee sobre cielo nublado, nieve o nubes)
