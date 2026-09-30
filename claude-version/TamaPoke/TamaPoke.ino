@@ -3384,13 +3384,11 @@ void renderClock() {
   snprintf(ver, sizeof(ver), "TamaPoke v%s", FW_VERSION);
   gfx->setTextColor(UI_INK);
   setSize(1);
-  // ko11.6.1: punto verde = tabla de particiones nueva (nvs2) instalada con los 3 ficheros
-  // ko11.19.1: el punto va a la izquierda y el conjunto centrado: a la derecha del
-  // texto quedaba en el borde redondo de la pantalla y no se veia
-  int vw = textW(ver, 1), vx = CX - (vw + (bigPart() ? 16 : 0)) / 2;
-  if (bigPart()) { gfx->fillCircle(vx + 5, CLK_VER_Y + 9, 5, UI_BAR_OK); vx += 16; }
-  setCur(vx, CLK_VER_Y);
+  setCur(centerX(ver, 1), CLK_VER_Y);
   printT(ver);
+  // ko11.6.1: punto verde = tabla de particiones nueva (nvs2) instalada con los 3 ficheros
+  // (ko11.19.2: otra vez a la derecha; no se veia porque la placa tenia la tabla vieja)
+  if (bigPart()) gfx->fillCircle(centerX(ver, 1) + textW(ver, 1) + 10, CLK_VER_Y + 9, 5, UI_BAR_OK);
   drawBackArrow();  // ko11.6.1
   uiFlush();
 }
