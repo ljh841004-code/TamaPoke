@@ -835,6 +835,28 @@ void loop() {
 }
 
 // brillo segun sueno + inactividad (proteccion del AMOLED)
+// ko11.18: brillo elegido por el usuario (1..10, se guarda en NVS "bri"). El
+// mismo con USB y con bateria. 7 = 184 (el de antes con USB)
+uint8_t gBright = 0;
+uint8_t brightLevel() {
+  if (!gBright) {
+    Preferences p;
+    p.begin("tamapoke", true);
+    gBright = p.getUChar("bri", 7);
+    p.end();
+    if (gBright < 1 || gBright > 10) gBright = 7;
+  }
+  return gBright;
+}
+void setBrightLevel(uint8_t l) {
+  gBright = l < 1 ? 1 : l > 10 ? 10 : l;
+  Preferences p;
+  p.begin("tamapoke", false);
+  p.putUChar("bri", gBright);
+  p.end();
+}
+uint8_t brightValue() { return (uint8_t)(30 + brightLevel() * 22); }  // 52..250
+
 void updateBrightness(uint32_t now) {
   // los eventos visibles despiertan la pantalla solos
   if (pet.evolving() || pet.ceremony || pet.eating() || pet.showHeart()) {
@@ -844,8 +866,9 @@ void updateBrightness(uint32_t now) {
   dimStage = (idle > 300000) ? 2 : (idle > 90000) ? 1 : 0;
   // ko11.18: el mismo brillo con USB y con bateria (antes 145 con bateria para
   // ahorrar: se notaba que la pantalla se oscurecia un poco al desenchufar)
-  uint8_t target = pet.sleeping ? 25 : 180;
-  if (dimStage == 1) target = pet.sleeping ? 10 : 60;
+  uint8_t bv = brightValue();
+  uint8_t target = pet.sleeping ? (bv < 25 ? bv : 25) : bv;
+  if (dimStage == 1) target = pet.sleeping ? 10 : (bv < 60 ? bv : 60);
   else if (dimStage == 2) target = 8;
   if (screenOff) target = 0;
   static uint8_t current = 255;
@@ -1383,7 +1406,7 @@ void onTap(int16_t x, int16_t y) {
     if (navHit(NAV_DOWN, x, y)) { cardOpen = false; sfxPlay(SFX_TAP); return; }
     if (cardPage == 4) cardCandyTap(x, y);        // ko10.4: caramelos
     else if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
-    else if (cardPage == 3 && pet.careMistakes > 0 && y >= 296 && y < 362) {  // ko10.9: causa
+    else if (cardPage == 3 && pet.careMistakes > 0 && y >= 196 && y < 250) {  // ko10.9: causa (ko11.18: mas arriba)
       mistWhyUntil = millis() + 5000;
       sfxPlay(SFX_TAP);
     }
@@ -3606,22 +3629,24 @@ void renderCardMedals() {
 void renderCardProgress() {
   const DexEntry &d = DEX_TBL[pet.speciesId];
   gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(centerX(T(S_PROGRESS), 3), 44);
+  // ko11.18: todo un poco mas compacto arriba para que quepan las condiciones
+  // de la despedida abajo
+  setSize(2);
+  setCur(centerX(T(S_PROGRESS), 2), 24);
   printT(T(S_PROGRESS));
 
   // nivel grande
   char lv[10];
   snprintf(lv, sizeof(lv), T(S_LVL_FMT), pet.level());
-  setSize(5);
-  setCur(centerX(lv, 5), 86);
+  setSize(4);
+  setCur(centerX(lv, 4), 48);
   printT(lv);
 
   // barra de EXP hasta el siguiente nivel (fork KO, ko7: batallas + cuidado)
   uint16_t L = pet.level();
   uint32_t lo = expForLevel(L), hi = expForLevel(L + 1);
   uint32_t into = pet.exp > lo ? pet.exp - lo : 0, span = hi > lo ? hi - lo : 1;
-  int bx = 93, bw = 280, by = 158, bh = 22;
+  int bx = 93, bw = 280, by = 94, bh = 18;
   int f1000 = L >= LEVEL_MAX ? 1000 : (int)((uint64_t)1000 * into / span);
   uiGauge(bx, by, bw, bh, f1000, UI_EXP, UI_TRACK);  // ko11.12
   char nx[40];
@@ -3629,7 +3654,7 @@ void renderCardProgress() {
   else snprintf(nx, sizeof(nx), XT(X_EXP_NEXT_FMT), (unsigned long)(span - into));
   gfx->setTextColor(UI_INK);
   setSize(2);
-  setCur(centerX(nx, 2), by + 30);
+  setCur(centerX(nx, 2), by + 24);
   printT(nx);
   // ko9: o solo con el tiempo de crianza (ko10.2: 15 min x nivel)
   if (L < LEVEL_MAX) {
@@ -3637,14 +3662,10 @@ void renderCardProgress() {
     char tl[48];
     if (m >= 60) snprintf(tl, sizeof(tl), XT(X_CARE_LEFT_HM), (unsigned long)(m / 60), (unsigned long)(m % 60));
     else snprintf(tl, sizeof(tl), XT(X_CARE_LEFT_M), (unsigned long)m);
-    drawFit(tl, by + 56, 340, C565(0x60, 0x68, 0x70), 2);
+    drawFit(tl, by + 48, 340, C565(0x60, 0x68, 0x70), 2);
   }
 
-  // estado de evolucion
-  gfx->setTextColor(UI_INK);
-  setSize(2);
-  setCur(centerX(T(S_EVO_LABEL), 2), 250);
-  printT(T(S_EVO_LABEL));
+  // estado de evolucion (ko11.18: en una linea "진화: ...")
   char evoBuf[32];
   const char *evo;
   uint16_t evoCol = UI_INK;
@@ -3665,9 +3686,12 @@ void renderCardProgress() {
       evo = evoBuf;
     }
   }
-  gfx->setTextColor(evoCol);
-  setCur(centerX(evo, 2), 276);
-  printT(evo);
+  {
+    char el[64];
+    snprintf(el, sizeof(el), "%s: %s", T(S_EVO_LABEL), evo);
+    drawFit(el, 172, 350, evoCol, 2);
+  }
+  renderFarewellTable();  // ko11.18
 
   // descuidos (retrasan la evolucion)
   char ms[48];
@@ -3677,7 +3701,8 @@ void renderCardProgress() {
     snprintf(ms + l, sizeof(ms) - l, " %s", XT(X_MIST_TAP));
   }
   gfx->setTextColor(pet.careMistakes > 0 ? UI_BAR_BAD : UI_INK);
-  setCur(centerX(ms, 2), pet.careMistakes > 0 ? 308 : 318);
+  setSize(2);
+  setCur(centerX(ms, 2), 202);
   printT(ms);
   // ko10.6: 12 h seguidas con todo >= 40 perdonan un descuido; cuanto falta
   if (pet.careMistakes > 0) {
@@ -3694,7 +3719,7 @@ void renderCardProgress() {
         snprintf(when, sizeof(when), "(%u/%u %02u:%02u)", mo, dd, (unsigned)(sod / 3600), (unsigned)(sod / 60 % 60));
       }
       snprintf(hl, sizeof(hl), XT(X_MW_LAST_FMT), XT(WHY[pet.mistWhy < 5 ? pet.mistWhy : 0]), when);
-      drawFit(hl, 336, 360, UI_BAR_BAD, 2);
+      drawFit(hl, 228, 360, UI_BAR_BAD, 2);
       return;
     }
     if (pet.lowestStat() >= 40) {
@@ -3704,8 +3729,57 @@ void renderCardProgress() {
     } else {
       snprintf(hl, sizeof(hl), "%s", XT(X_MIST_HEAL_HINT));
     }
-    drawFit(hl, 336, 340, C565(0x60, 0x68, 0x70), 2);
+    drawFit(hl, 228, 340, C565(0x60, 0x68, 0x70), 2);
   }
+}
+
+// ko11.18: condiciones de la despedida (se ven de un vistazo: cumplida / no)
+static void drawCheckMark(int cx, int cy, bool ok) {
+  gfx->fillCircle(cx, cy, 10, ok ? UI_BAR_OK : C565(0xc8, 0xc8, 0xc8));
+  if (ok) {
+    gfx->drawLine(cx - 5, cy, cx - 1, cy + 4, UI_WHITE);
+    gfx->drawLine(cx - 5, cy + 1, cx - 1, cy + 5, UI_WHITE);
+    gfx->drawLine(cx - 1, cy + 4, cx + 5, cy - 4, UI_WHITE);
+    gfx->drawLine(cx - 1, cy + 5, cx + 5, cy - 3, UI_WHITE);
+  } else {
+    gfx->drawLine(cx - 4, cy - 4, cx + 4, cy + 4, UI_WHITE);
+    gfx->drawLine(cx - 4, cy + 4, cx + 4, cy - 4, UI_WHITE);
+    gfx->drawLine(cx - 3, cy - 4, cx + 5, cy + 4, UI_WHITE);
+    gfx->drawLine(cx - 3, cy + 4, cx + 5, cy - 4, UI_WHITE);
+  }
+}
+void renderFarewellTable() {
+  const int px = 70, py = 256, pw = 326, ph = 106;
+  uiPanel(px, py, pw, ph, 14, UI_WHITE, UI_INK);
+  drawFit(XT(X_FW_TITLE), py + 6, 200, C565(0xb0, 0x80, 0x10), 2);
+  bool finalForm = DEX_TBL[pet.speciesId].evolvesTo == 0;
+  uint32_t age = pet.ageMinutes;
+  bool timeOk = age >= FAREWELL_AGE_MIN;
+  char v[48];
+  for (int row = 0; row < 2; row++) {
+    int y = py + 36 + row * 26;
+    bool ok = row == 0 ? finalForm : timeOk;
+    drawCheckMark(px + 22, y + 8, ok);
+    gfx->setTextColor(UI_INK);
+    setSize(2);
+    setCur(px + 40, y);
+    printT(XT(row == 0 ? X_FW_FINAL : X_FW_TIME));
+    // a la derecha: OK, o lo que falta (forma) / cuanto llevais (tiempo)
+    if (ok) snprintf(v, sizeof(v), "OK");
+    else if (row == 0) snprintf(v, sizeof(v), "%s", XT(X_FW_EVO_NEED));
+    else snprintf(v, sizeof(v), XT(X_FW_TIME_FMT), (unsigned)(age / 1440), (unsigned)(age / 60 % 24));
+    uint8_t ts = textW(v, 2) > 110 ? 1 : 2;
+    setSize(ts);
+    gfx->setTextColor(ok ? UI_BAR_OK : UI_BAR_BAD);
+    setCur(px + pw - 16 - textW(v, ts), y + (ts == 1 ? 4 : 0));
+    printT(v);
+  }
+  // pie: listo / horas que faltan para los 3 dias / falta evolucionar
+  bool ready = finalForm && timeOk;
+  if (ready) snprintf(v, sizeof(v), "%s", XT(X_FW_READY));
+  else if (!timeOk) snprintf(v, sizeof(v), XT(X_FW_LEFT_FMT), (unsigned)((FAREWELL_AGE_MIN - age + 59) / 60));
+  else snprintf(v, sizeof(v), "%s", XT(X_FW_WAIT));
+  drawFit(v, py + ph - 22, pw - 30, ready ? UI_BAR_OK : 0x8410, 1);
 }
 
 // ---- ko10.4: pagina de caramelos (de la familia del Pokemon que crias)

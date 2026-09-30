@@ -764,7 +764,9 @@ void renderSound() {
     uiGauge(VOL_BAR_X, y + 34, VOL_BAR_W, 16, v * 10, on ? UI_BAR_OK : 0x8410, UI_TRACK);  // ko11.12
   }
   // ko11.8: elegir que fondos suenan (la duracion de cada uno esta en esa pantalla)
-  drawBtn(113, VOL_BGM_Y, 240, 34, UI_WHITE, UI_INK, XT(X_BGM_PICK_BTN));
+  // ko11.18: [배경음 고르기 >] [화면 밝기 >]
+  drawBtn(78, VOL_BGM_Y, 152, 34, UI_WHITE, UI_INK, XT(X_BGM_PICK_BTN));
+  drawBtn(236, VOL_BGM_Y, 152, 34, UI_WHITE, UI_INK, XT(X_BRIGHT_BTN));
   drawBtn(143, VOL_DONE_Y, 180, 40, UI_BAR_OK, UI_WHITE, XT(X_VOL_DONE));
   drawNav(NAV_L, UI_INK);  // ko11.17: volver a la hora
   uiFlush();
@@ -781,8 +783,13 @@ void soundTap(int16_t x, int16_t y) {
     if (audioEnabled()) sfxPlay(SFX_TAP);
     return;
   }
-  if (y >= VOL_BGM_Y && y < VOL_BGM_Y + 36 && x >= 113 && x < 353) {  // ko11.8
+  if (y >= VOL_BGM_Y && y < VOL_BGM_Y + 36 && x >= 78 && x < 230) {  // ko11.8
     openBgmPick();
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  if (y >= VOL_BGM_Y && y < VOL_BGM_Y + 36 && x >= 236 && x < 388) {  // ko11.18: brillo
+    xScreen = XS_BRIGHT;
     sfxPlay(SFX_TAP);
     return;
   }
@@ -803,6 +810,61 @@ void soundTap(int16_t x, int16_t y) {
     soundPreview(i);
     return;
   }
+}
+
+// ======================================================================
+// ko11.18: brillo de la pantalla (1..10), igual con USB y con bateria. Se ve al
+// momento; [<] / [완료] vuelve a sonido
+// ======================================================================
+#define BR_SEG_Y 214
+void renderBright() {
+  uiScreenBg();
+  drawFit(XT(X_BRIGHT_TITLE), 40, 300, UI_INK, 3);
+  uint8_t lv = brightLevel();
+  // sol que crece con el brillo
+  int r = 14 + lv * 2;
+  uint16_t sun = C565(0xf8, 0xc8, 0x30);
+  for (int k = 0; k < 12; k++) {
+    float a = k * 0.5236f;
+    int x1 = CX + (int)(cosf(a) * (r + 6)), y1 = 128 + (int)(sinf(a) * (r + 6));
+    int x2 = CX + (int)(cosf(a) * (r + 12 + lv)), y2 = 128 + (int)(sinf(a) * (r + 12 + lv));
+    gfx->drawLine(x1, y1, x2, y2, sun);
+    gfx->drawLine(x1 + 1, y1, x2 + 1, y2, sun);
+  }
+  gfx->fillCircle(CX, 128, r, sun);
+  gfx->fillCircle(CX - r / 3, 128 - r / 3, r / 3, C565(0xff, 0xec, 0xa0));
+  // 10 segmentos + [-] [+]
+  for (int i = 0; i < 10; i++) {
+    int x = 133 + i * 20;
+    uint16_t c = i < lv ? uiLerp(C565(0xf0, 0xa0, 0x20), C565(0xff, 0xe0, 0x60), i * 16 / 9, 16) : UI_TRACK;
+    uiButton(x, BR_SEG_Y, 16, 36, 4, c, UI_INK);
+  }
+  drawBtn(78, BR_SEG_Y, 48, 36, UI_WHITE, UI_INK, "-");
+  drawBtn(340, BR_SEG_Y, 48, 36, UI_WHITE, UI_INK, "+");
+  char b[12];
+  snprintf(b, sizeof(b), "%u%%", (unsigned)(lv * 10));
+  drawFit(b, 262, 200, UI_INK, 3);
+  drawFit(XT(X_BRIGHT_NOTE), 306, 340, UI_INK, 2);
+  drawFit(XT(X_BRIGHT_HINT), 332, 340, 0x8410, 1);
+  drawBtn(143, VOL_DONE_Y, 180, 40, UI_BAR_OK, UI_WHITE, XT(X_VOL_DONE));
+  drawNav(NAV_L, UI_INK);
+  uiFlush();
+}
+
+void brightTap(int16_t x, int16_t y) {
+  if (navHit(NAV_L, x, y) || (y >= VOL_DONE_Y - 4 && x >= 133 && x < 333) || y < 60) {
+    xScreen = XS_VOL;
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  if (y < BR_SEG_Y - 10 || y >= BR_SEG_Y + 46) return;
+  uint8_t lv = brightLevel();
+  if (x < 130) { if (lv > 1) lv--; }
+  else if (x >= 336) { if (lv < 10) lv++; }
+  else if (x >= 133 && x < 333) lv = (uint8_t)((x - 133) / 20 + 1);  // tocar un segmento
+  setBrightLevel(lv);
+  updateBrightness(millis());  // se ve ya
+  sfxPlay(SFX_TAP);
 }
 
 // ======================================================================

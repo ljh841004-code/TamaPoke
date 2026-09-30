@@ -14,7 +14,7 @@ enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_
                  XS_NEXTPICK,       // ko10.5: elegir el siguiente tras un ciclo
                  XS_CANDY,          // ko10.11: bolsa de caramelos
                  XS_FAME, XS_BAK,
-                 XS_BGM };  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
+                 XS_BGM, XS_BRIGHT };  // ko11.18: brillo  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
 uint8_t xScreen = XS_NONE;
 
 // ko11.17: [<] vuelve a la pantalla DESDE LA QUE se abrio el menu (la ficha, el
@@ -2423,6 +2423,7 @@ bool extraRender() {
     case XS_FAME: renderFame(); return true;          // ko11.1
     case XS_BAK: renderBackup(); return true;         // ko11.6
     case XS_BGM: renderBgmPick(); return true;        // ko11.8
+    case XS_BRIGHT: renderBright(); return true;      // ko11.18
     default: return false;
   }
 }
@@ -2445,6 +2446,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_FAME: fameTap(x, y); return true;
     case XS_BAK: backupTap(x, y); return true;
     case XS_BGM: bgmPickTap(x, y); return true;
+    case XS_BRIGHT: brightTap(x, y); return true;  // ko11.18
     default: return false;
   }
 }
@@ -2455,7 +2457,7 @@ bool extraSwipe() {
   if (xScreen == XS_LINKMENU) { goBack(); return true; }
   if (xScreen == XS_BOX) { boxSwipe(); return true; }
   if (xScreen == XS_VOL) { goBack(); return true; }
-  if (xScreen == XS_BGM) { xScreen = XS_VOL; return true; }  // ko11.8
+  if (xScreen == XS_BGM || xScreen == XS_BRIGHT) { xScreen = XS_VOL; return true; }  // ko11.8
   if (xScreen == XS_UPD) { xScreen = XS_NET; return true; }
   if (xScreen == XS_RESET) { goBack(); return true; }
   if (xScreen == XS_CANDY) { goBack(); return true; }  // ko10.11: vertical = cerrar

@@ -93,6 +93,13 @@ static void scenes(bool ko, const char *sfx) {
   pet.exp = expForLevel(17) + 400;  // fork KO (ko7): barra de EXP
   cardPage = 3;
   render(); shot("03b_card_progress");
+  {  // ko11.18: condiciones de la despedida: forma final y 3 dias (una si, otra no; luego las dos)
+    int16_t sp = pet.speciesId; uint32_t ex = pet.exp, ag = pet.ageMinutes;
+    pet.speciesId = 6; pet.exp = expForLevel(40); pet.ageMinutes = 2 * 1440 + 5 * 60; ensureMon();
+    render(); shot("03p_progress_farewell_wait");
+    pet.ageMinutes = 3 * 1440 + 90; render(); shot("03q_progress_farewell_ready");
+    pet.speciesId = sp; pet.exp = ex; pet.ageMinutes = ag; ensureMon();
+  }
   {  // ko11.17: Pikachu en la pantalla principal (retoque de color)
     int16_t sp = pet.speciesId; uint32_t ex = pet.exp;
     pet.speciesId = 25; pet.exp = expForLevel(20); ensureMon(); cardOpen = false;
@@ -552,6 +559,8 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); openClock(); render(); shot("15_clock_settings");
   clockDateMode = true; render(); shot("15b_clock_date"); clockDateMode = false;
   closeAll(); openSound(); render(); shot("16_sound");
+  xScreen = XS_BRIGHT; render(); shot("16d_brightness");  // ko11.18
+  brightTap(345, 230); render(); shot("16e_brightness_up"); setBrightLevel(7);
   closeAll(); openBgmPick(); render(); shot("16b_bgm_pick");  // ko11.8
   audioSetBgmMask(0x02); render(); shot("16c_bgm_pick_one"); audioSetBgmMask(0xFF);
   closeAll(); openNet(); render(); shot("18_net");
