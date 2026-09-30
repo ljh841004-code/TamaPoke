@@ -50,6 +50,7 @@ public:
   bool release(uint8_t i);            // lo suelta
   bool bumpLevel(uint8_t i, uint16_t cap = 100);  // ko11.20: +1 nivel (ayudante que gano)
   void markFlag(uint8_t i, uint8_t f);             // ko11.20: anade una marca (BOXF_TEAM)
+  bool set(uint8_t i, const BoxMon &m);            // ko11.20: la ficha cambia (evoluciono, sube de nivel)
   int pickRandom() const;             // indice al azar, -1 si vacia
   void wipe();                        // fork KO (ko8): [nuevo comienzo]
 private:
@@ -61,9 +62,16 @@ private:
   void save();
 };
 
-// ko11.20: una victoria en equipo de la liga: la entrada del salon (fecha + especie)
-// y sus ayudantes (0 = hueco). shiny: bit k = el ayudante k es variocolor
-struct __attribute__((packed)) FameTeam { uint32_t epoch; int16_t dex; int16_t help[2]; uint8_t shiny; };
+// ko11.20: salon de la liga: una ficha por Pokemon (se reconoce por su familia y
+// sus genes) con sus victorias en solitario y en equipo y los ayudantes de la
+// ultima en equipo (0 = hueco; shiny: bit k = el ayudante k es variocolor)
+struct __attribute__((packed)) FameRec {
+  uint32_t epoch;           // la de la ficha (primera victoria)
+  uint8_t fam, gA, gD, gS;
+  int16_t help[2];
+  uint8_t shiny;
+  uint16_t solo, team;
+};
 
 class DexLog {
 public:

@@ -738,6 +738,16 @@ Battler makeBoxBattler(int16_t dex, uint16_t lvl, uint16_t petLvl, uint8_t gA, u
   return makeBattler(dex, lvl, wildStat(e.bAtk, gA, lvl), wildStat(e.bDef, gD, lvl), wildStat(e.bSpe, gS, lvl));
 }
 
+uint8_t pickNextFoe(const Battler *team, uint8_t from, uint8_t n, uint8_t myType) {
+  uint8_t best = from;
+  int bs = -10;
+  for (uint8_t i = from; i < n; i++) {
+    int sc = typeMatch(team[i].type, myType);
+    if (sc > bs) { bs = sc; best = i; }
+  }
+  return best;
+}
+
 int8_t typeMatch(uint8_t mine, uint8_t foe) {
   uint8_t out = typeEff(mine, foe), in = typeEff(foe, mine);
   if (out > 2 && in <= 2) return 1;

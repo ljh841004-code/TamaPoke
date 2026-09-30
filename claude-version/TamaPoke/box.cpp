@@ -89,6 +89,13 @@ bool Box::put(const BoxMon &m) {
   return true;
 }
 
+bool Box::set(uint8_t i, const BoxMon &m) {
+  if (i >= n) return false;
+  mons[i] = m;
+  save();
+  return true;
+}
+
 void Box::markFlag(uint8_t i, uint8_t f) {
   if (i >= n || (mons[i].flags & f) == f) return;
   mons[i].flags |= f;

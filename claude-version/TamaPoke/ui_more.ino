@@ -1545,8 +1545,11 @@ static uint8_t famePages() {
 }
 
 // corona dorada grande (centrada en cx, con la base en y)
-static void drawCrownBig(int cx, int y, int w) {
-  uint16_t gold = C565(0xf0, 0xc0, 0x30), dark = C565(0xa0, 0x70, 0x10), red = C565(0xe0, 0x30, 0x40);
+// ko11.20: silver = solo gano en equipo (corona de plata)
+static void drawCrownBig(int cx, int y, int w, bool silver = false) {
+  uint16_t gold = silver ? C565(0xd4, 0xda, 0xe4) : C565(0xf0, 0xc0, 0x30);
+  uint16_t dark = silver ? C565(0x78, 0x80, 0x90) : C565(0xa0, 0x70, 0x10);
+  uint16_t red = silver ? C565(0x40, 0x80, 0xe0) : C565(0xe0, 0x30, 0x40);
   int h = w / 2, x = cx - w / 2;
   gfx->fillRect(x, y - h / 3, w, h / 3, gold);
   gfx->fillTriangle(x, y - h / 3, x + w / 6, y - h, x + w / 3, y - h / 3, gold);
@@ -1606,8 +1609,9 @@ static void fameDetail() {
   }
   uint32_t cyc = now % 2000;
   if (cyc < 1000) drawMoveFx(pt, acx, acy, acx, acy, 350 + cyc * 650 / 1000, true, 2, moveTier(m.dex));
-  if (m.flags & BOXF_TEAM) {  // ko11.20: los ayudantes a los lados, algo mas pequenos, con su luz
-    const FameTeam *t = fameTeamFor(m);
+  FameRec fr = fameRecOf(m);
+  if (fr.team && fr.help[0]) {  // ko11.20: los ayudantes (de la ultima en equipo) a los lados, algo mas pequenos, con su luz
+    const FameRec *t = &fr;
     static const int HX[PARTY_HELPERS] = { CX - 142, CX + 142 };
     for (uint8_t k = 0; t && k < PARTY_HELPERS; k++) {
       int16_t hd = t->help[k];
@@ -1649,12 +1653,13 @@ static void fameDetail() {
     if (th) drawThumb(th, CX - 60, ground - 120, 3, false);
   }
   if (top < 96) top = 96;
-  drawCrownBig(CX, top + 4, 64);
-  {  // ko11.20: en solitario o en equipo
-    bool team = m.flags & BOXF_TEAM;
-    const char *tl = XT(team ? X_FAME_TEAM_L : X_FAME_SOLO_L);
+  drawCrownBig(CX, top + 4, 64, m.flags & BOXF_TEAM);
+  {  // ko11.20: victorias en solitario y en equipo
+    FameRec r = fameRecOf(m);
+    char tl[40];
+    snprintf(tl, sizeof(tl), XT(X_FAME_COUNT_FMT), (unsigned)r.solo, (unsigned)r.team);
     int w = textW(tl, 1) + 28;
-    drawBtn(CX - w / 2, 54, w, 26, team ? 0x4C98 : C565(0xd0, 0x98, 0x20), UI_WHITE, tl);
+    drawBtn(CX - w / 2, 54, w, 26, r.solo ? C565(0xd0, 0x98, 0x20) : 0x4C98, UI_WHITE, tl);
   }
   for (int k = 0; k < 6; k++) {  // destellos alrededor
     float a = now * 0.0015f + k * 1.047f;
@@ -1708,10 +1713,11 @@ void renderFame() {
     uiButton(x + 4, y + 4, FM_CELL - 8, FM_CELL - 8, 14, (m.flags & BOXF_SHINY) ? C565(0xff, 0xf0, 0xc0) : UI_WHITE, C565(0xb0, 0x80, 0x10));
     const uint8_t *th = thumbs.get(m.dex);
     if (th) drawThumb(th, x + 8, y + 14, 2, false);
-    drawCrownBig(x + FM_CELL / 2, y + 22, 26);
-    bool team = m.flags & BOXF_TEAM;  // ko11.20: solo / equipo
-    drawBtn(x + FM_CELL - 52, y + FM_CELL - 30, 46, 22, team ? 0x4C98 : C565(0xd0, 0x98, 0x20), UI_WHITE,
-            XT(team ? X_FAME_TEAM : X_FAME_SOLO));
+    drawCrownBig(x + FM_CELL / 2, y + 22, 26, m.flags & BOXF_TEAM);
+    FameRec fr = fameRecOf(m);  // ko11.20: solo / equipo / los dos
+    const char *bt = XT(fr.solo && fr.team ? X_FAME_BOTH : fr.solo ? X_FAME_SOLO : X_FAME_TEAM);
+    int bw = textW(bt, 1) + 14;
+    drawBtn(x + FM_CELL - 6 - bw, y + FM_CELL - 30, bw, 22, fr.solo ? C565(0xd0, 0x98, 0x20) : 0x4C98, UI_WHITE, bt);
   }
   if (famePages() > 1) {
     snprintf(t, sizeof(t), XT(X_BAG_PAGE_FMT), famePage + 1, famePages());
@@ -1738,8 +1744,9 @@ void fameTap(int16_t x, int16_t y) {
   const BoxMon &m = fame.at((uint8_t)fameSel);
   galleryPmd.load((uint8_t)m.dex, m.flags & BOXF_SHINY);
   fameHelpUnload();
-  if (m.flags & BOXF_TEAM) {  // ko11.20
-    const FameTeam *t = fameTeamFor(m);
+  FameRec fr = fameRecOf(m);
+  if (fr.team && fr.help[0]) {  // ko11.20
+    const FameRec *t = &fr;
     for (uint8_t k = 0; t && k < PARTY_HELPERS; k++)
       if (t->help[k] >= 1) fameHelpPmd[k].load((uint8_t)t->help[k], (t->shiny >> k) & 1);
   }

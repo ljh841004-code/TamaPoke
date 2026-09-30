@@ -461,14 +461,20 @@ static void scenes(bool ko, const char *sfx) {
     fame.add(6, 58, false, false, gMockEpoch - 86400 * 3);
     fame.add(134, 61, true, false, gMockEpoch - 86400);
     fame.add(pet.speciesId, pet.level(), pet.shiny, false, gMockEpoch);
-    fame.markFlag(1, BOXF_TEAM);  // ko11.20: el del medio gano en equipo
-    { int16_t h[2] = { 7, 1 }; fameTeamAdd(fame.at(1), h, 0x02); }
+    {  // ko11.20: el del medio: solo en equipo (plata) con sus ayudantes; el ultimo, los dos
+      fame.markFlag(1, BOXF_TEAM);
+      FameRec *r = frGetOrAdd(fame.at(1));
+      r->solo = 0; r->team = 2; r->help[0] = 7; r->help[1] = 1; r->shiny = 0x02;
+      r = frGetOrAdd(fame.at(2));
+      r->solo = 3; r->team = 1; r->help[0] = 25; r->help[1] = 0;
+      frSave();
+    }
     pet.champWins = 3; pet.champStreak = 2; pet.champBest = 2;
     pet.fameStreak[1] = 1; pet.fameStreak[2] = 2;  // ko11.6.1: rachas
     render(); shot("59_league_fame");
     openFame(); render(); shot("59d_fame_grid");
     fameTap(FM_X + FM_CELL + 10, FM_Y + 10); render(); shot("59e_fame_detail");
-    fameClose(); fameTap(FM_X + 10, FM_Y + 10); render(); shot("59g_fame_detail_solo"); fameClose();
+    fameClose(); fameTap(FM_X + 10, FM_Y + 10); render(); shot("59g_fame_detail_both"); fameClose();
     fameTap(FM_X + FM_CELL + 10, FM_Y + 10);
     tick(450); render(); shot("59f_fame_detail_fx");  // ko11.17: tecnica de su tipo
     for (int f = 0; f < 20; f++) { char fn[32]; snprintf(fn, sizeof(fn), "92_fame_anim_%02d", f); tick(100); render(); shot(fn); }
@@ -478,6 +484,15 @@ static void scenes(bool ko, const char *sfx) {
     render(); shot("59b_league_intro");
     bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
     finishBattle(true, false, false); render(); shot("59c_league_win");
+    {  // ko11.20: el mismo Pokemon vuelve a ganar: la misma ficha, una victoria mas
+      uint8_t c0 = fame.count();
+      int ci = fameCardOfPet();
+      uint16_t s0 = ci >= 0 ? fameRecOf(fame.at((uint8_t)ci)).solo : 0;
+      bRewarded = false; finishBattle(true, false, false);
+      navCheck("salon: una ficha por Pokemon", fame.count() == c0 && ci >= 0 &&
+               fameRecOf(fame.at((uint8_t)ci)).solo == s0 + 1);
+    }
+
     closeAll();
     gymPage = 0; gymTap(GY_X + 10, GY_Y + 1 * (GY_H + GY_GAP) + 10);  // revancha de Misty
     if (xScreen == XS_PARTY) partyStart(true);

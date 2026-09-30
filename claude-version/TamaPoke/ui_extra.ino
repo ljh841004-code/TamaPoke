@@ -518,37 +518,102 @@ static void helperUse(const BoxMon &m) {
   huSave();
 }
 
-// ko11.20: los ayudantes de cada victoria en equipo de la liga (espacio "tpteam",
-// en la NVS grande): se une a la entrada del salon por su fecha y especie
-#define FAME_TEAM_MAX 60
-static FameTeam gFT[FAME_TEAM_MAX];
-static uint8_t gFTN = 0;
-static bool gFTLoaded = false;
-static void ftLoad() {
-  if (gFTLoaded) return;
-  Preferences p;
-  p.begin("tpteam", true, bigPart());
-  gFTN = p.isKey("t") ? (uint8_t)(p.getBytes("t", gFT, sizeof(gFT)) / sizeof(FameTeam)) : 0;
-  p.end();
-  gFTLoaded = true;
+// ko11.20: salon de la liga, una ficha por Pokemon (espacio "tpteam" en la NVS
+// grande, clave "r"): victorias en solitario / en equipo y los ultimos ayudantes.
+// Corona de oro = alguna victoria en solitario; de plata = solo en equipo (BOXF_TEAM).
+#define FAME_REC_MAX 60
+static FameRec gFR[FAME_REC_MAX];
+static uint8_t gFRN = 0;
+static bool gFRLoaded = false;
+static bool sameFameKey(const FameRec &r, const BoxMon &m) {
+  return r.epoch == m.epoch && r.fam == DEX_FAM[m.dex] && r.gA == m.geneAtk && r.gD == m.geneDef && r.gS == m.geneSpe;
 }
-const FameTeam *fameTeamFor(const BoxMon &m) {
-  ftLoad();
-  for (int i = gFTN - 1; i >= 0; i--)
-    if (gFT[i].epoch == m.epoch && gFT[i].dex == m.dex) return &gFT[i];
-  return nullptr;
-}
-static void fameTeamAdd(const BoxMon &m, const int16_t *help, uint8_t shiny) {
-  ftLoad();
-  if (gFTN == FAME_TEAM_MAX) { memmove(gFT, gFT + 1, sizeof(FameTeam) * (FAME_TEAM_MAX - 1)); gFTN--; }
-  FameTeam &t = gFT[gFTN++];
-  t.epoch = m.epoch; t.dex = m.dex;
-  for (uint8_t k = 0; k < PARTY_HELPERS; k++) t.help[k] = help[k];
-  t.shiny = shiny;
+static void frSave() {
   Preferences p;
   p.begin("tpteam", false, bigPart());
-  p.putBytes("t", gFT, gFTN * sizeof(FameTeam));
+  if (gFRN) p.putBytes("r", gFR, gFRN * sizeof(FameRec));
+  else p.remove("r");
+  p.putUChar("mg", 1);
   p.end();
+}
+static int frFind(const BoxMon &m) {
+  for (int i = gFRN - 1; i >= 0; i--) if (sameFameKey(gFR[i], m)) return i;
+  return -1;
+}
+// las fichas de antes (una por victoria): 1 en solitario, o 1 en equipo si tiene la marca
+static FameRec frDefault(const BoxMon &m) {
+  FameRec r = {};
+  r.epoch = m.epoch; r.fam = DEX_FAM[m.dex]; r.gA = m.geneAtk; r.gD = m.geneDef; r.gS = m.geneSpe;
+  bool team = m.flags & BOXF_TEAM;
+  r.solo = team ? 0 : 1;
+  r.team = team ? 1 : 0;
+  return r;
+}
+static FameRec *frGetOrAdd(const BoxMon &m) {
+  int i = frFind(m);
+  if (i >= 0) return &gFR[i];
+  if (gFRN == FAME_REC_MAX) { memmove(gFR, gFR + 1, sizeof(FameRec) * (FAME_REC_MAX - 1)); gFRN--; }
+  gFR[gFRN] = frDefault(m);
+  return &gFR[gFRN++];
+}
+static bool sameIndividual(const BoxMon &a, const BoxMon &b) {
+  return a.geneAtk && DEX_FAM[a.dex] == DEX_FAM[b.dex] && a.geneAtk == b.geneAtk && a.geneDef == b.geneDef &&
+         a.geneSpe == b.geneSpe;
+}
+// una vez: las fichas repetidas del mismo Pokemon (antes, una por victoria) se juntan
+static void fameMergeOld() {
+  bool changed = false;
+  for (int i = fame.count() - 1; i > 0; i--) {
+    const BoxMon mi = fame.at((uint8_t)i);
+    for (int j = 0; j < i; j++) {
+      BoxMon mj = fame.at((uint8_t)j);
+      if (!sameIndividual(mi, mj)) continue;
+      FameRec ri = frFind(mi) >= 0 ? gFR[frFind(mi)] : frDefault(mi);
+      FameRec *rj = frGetOrAdd(mj);
+      rj->solo += ri.solo;
+      rj->team += ri.team;
+      if (ri.team && ri.help[0]) { rj->help[0] = ri.help[0]; rj->help[1] = ri.help[1]; rj->shiny = ri.shiny; }
+      mj.dex = mi.dex;  // su forma y nivel mas recientes
+      mj.lvl = mi.lvl;
+      mj.flags = (uint8_t)((mj.flags | (mi.flags & BOXF_SHINY)) & ~BOXF_TEAM);
+      if (!rj->solo) mj.flags |= BOXF_TEAM;
+      fame.set((uint8_t)j, mj);
+      if (i < (int)sizeof(pet.fameStreak)) {
+        if (pet.fameStreak[i] > pet.fameStreak[j]) pet.fameStreak[j] = pet.fameStreak[i];
+        memmove(pet.fameStreak + i, pet.fameStreak + i + 1, sizeof(pet.fameStreak) - i - 1);
+        pet.fameStreak[sizeof(pet.fameStreak) - 1] = 0;
+      }
+      int k = frFind(mi);
+      if (k >= 0) { memmove(gFR + k, gFR + k + 1, sizeof(FameRec) * (gFRN - k - 1)); gFRN--; }
+      fame.release((uint8_t)i);
+      changed = true;
+      break;
+    }
+  }
+  frSave();
+  if (changed) pet.saveNow();
+}
+static void frLoad() {
+  if (gFRLoaded) return;
+  gFRLoaded = true;
+  Preferences p;
+  p.begin("tpteam", true, bigPart());
+  gFRN = p.isKey("r") ? (uint8_t)(p.getBytes("r", gFR, sizeof(gFR)) / sizeof(FameRec)) : 0;
+  bool merged = p.getUChar("mg", 0);
+  p.end();
+  if (!merged) fameMergeOld();
+}
+FameRec fameRecOf(const BoxMon &m) {
+  frLoad();
+  int i = frFind(m);
+  return i >= 0 ? gFR[i] : frDefault(m);
+}
+int fameCardOfPet() {
+  frLoad();
+  BoxMon me = {};
+  me.dex = pet.speciesId; me.geneAtk = pet.geneAtk; me.geneDef = pet.geneDef; me.geneSpe = pet.geneSpe;
+  for (int i = fame.count() - 1; i >= 0; i--) if (sameIndividual(fame.at((uint8_t)i), me)) return i;
+  return -1;
 }
 
 // salvaje
@@ -1672,6 +1737,10 @@ static bool nextTrainerMon() {
   pet.addExp(battleExp(bFoe.dex, bFoe.lvl));
   bvMeLvl = pet.level();
   bTeamI++;
+  if (bKind == BK_CHAMP) {  // ko11.20: el campeon elige segun el que tengo en el campo
+    uint8_t j = pickNextFoe(bTeam, bTeamI, bTeamN, bMe.type);
+    if (j != bTeamI) { Battler t = bTeam[bTeamI]; bTeam[bTeamI] = bTeam[j]; bTeam[j] = t; }
+  }
   bFoe = bTeam[bTeamI];
   // ko11.18: reto del dia: antes del siguiente rival se recupera el 35 % de la vida
   // que queda (40 -> +14 = 54), sin pasar del maximo. Gimnasio y liga, como antes
@@ -2400,26 +2469,46 @@ void finishBattle(bool won, bool fled, bool caught) {
       if (pet.champStreak > pet.champBest) pet.champBest = pet.champStreak;
       pet.giveItems(3, 3);  // ko11.1: antes +5/+5
       pet.addCandy(pet.speciesId, 10);
-      if (fame.full()) {  // lleno: se va el mas antiguo (y su racha con el)
-        fame.release(0);
-        memmove(pet.fameStreak, pet.fameStreak + 1, sizeof(pet.fameStreak) - 1);
-        pet.fameStreak[sizeof(pet.fameStreak) - 1] = 0;
+      // ko11.20: una ficha por Pokemon; con ayudantes que llegaron a luchar = en equipo
+      bool teamWin = pUsed & (uint8_t)~1u;
+      int ci = fameCardOfPet();
+      bool promoted = false;
+      if (ci < 0) {
+        if (fame.full()) {  // lleno: se va el mas antiguo (y su racha con el)
+          fame.release(0);
+          memmove(pet.fameStreak, pet.fameStreak + 1, sizeof(pet.fameStreak) - 1);
+          pet.fameStreak[sizeof(pet.fameStreak) - 1] = 0;
+        }
+        // ko11.1: con sus genes (la ficha del salon los ensena)
+        fame.addRaised(pet.speciesId, pet.level(), pet.shiny, pet.geneAtk, pet.geneDef, pet.geneSpe, clockEpoch());
+        ci = fame.count() - 1;
+        FameRec *r = frGetOrAdd(fame.at((uint8_t)ci));
+        r->solo = r->team = 0;
       }
-      // ko11.1: con sus genes (la ficha del salon los ensena)
-      fame.addRaised(pet.speciesId, pet.level(), pet.shiny, pet.geneAtk, pet.geneDef, pet.geneSpe, clockEpoch());
-      // ko11.20: con ayudantes que llegaron a luchar = victoria en equipo (si no, en solitario)
-      if (pUsed & (uint8_t)~1u) {
-        uint8_t last = (uint8_t)(fame.count() - 1);
-        fame.markFlag(last, BOXF_TEAM);
-        int16_t help[PARTY_HELPERS] = { 0, 0 };
-        uint8_t sh = 0, k = 0;
+      BoxMon card = fame.at((uint8_t)ci);
+      FameRec *r = frGetOrAdd(card);
+      bool wasSilver = r->solo == 0 && r->team > 0;
+      if (teamWin) {
+        if (r->team < 65535) r->team++;
+        uint8_t k = 0;
+        r->help[0] = r->help[1] = 0;
+        r->shiny = 0;
         for (uint8_t j = 1; j < pN && k < PARTY_HELPERS; j++)
-          if ((pUsed >> j) & 1) { if ((pShiny >> j) & 1) sh |= (uint8_t)(1 << k); help[k++] = pMon[j].dex; }
-        fameTeamAdd(fame.at(last), help, sh);
+          if ((pUsed >> j) & 1) { if ((pShiny >> j) & 1) r->shiny |= (uint8_t)(1 << k); r->help[k++] = pMon[j].dex; }
+      } else {
+        if (r->solo < 65535) r->solo++;
+        promoted = wasSilver;
       }
-      if (fame.count() >= 1 && fame.count() <= sizeof(pet.fameStreak))
-        pet.fameStreak[fame.count() - 1] = (uint8_t)(pet.champStreak > 255 ? 255 : pet.champStreak);
+      card.dex = pet.speciesId;  // forma y nivel de ahora
+      card.lvl = pet.level();
+      if (pet.shiny) card.flags |= BOXF_SHINY;
+      card.flags = (uint8_t)(r->solo ? (card.flags & ~BOXF_TEAM) : (card.flags | BOXF_TEAM));
+      fame.set((uint8_t)ci, card);
+      frSave();
+      if (ci < (int)sizeof(pet.fameStreak) && pet.champStreak > pet.fameStreak[ci])  // su mejor racha
+        pet.fameStreak[ci] = (uint8_t)(pet.champStreak > 255 ? 255 : pet.champStreak);
       snprintf(bNote, sizeof(bNote), XT(X_CHAMP_WIN), (unsigned)pet.champStreak);
+      if (promoted) snprintf(bPartyNote, sizeof(bPartyNote), "%s", XT(X_FAME_PROMOTE));  // ko11.20: plata -> oro
       bakRequest();  // ko11.6: copia en la SD
       bNote[sizeof(bNote) - 1] = 0;
       pet.saveNow();

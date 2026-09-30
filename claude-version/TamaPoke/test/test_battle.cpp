@@ -704,3 +704,11 @@ TEST(battle, cambiar_cuesta_el_turno) {
   CHECK_EQ(foe.hp, hp0);  // yo no ataco
   for (int i = 0; i < n; i++) CHECK_EQ(ev[i].side, (uint8_t)1);
 }
+
+TEST(battle, el_campeon_saca_el_que_mejor_le_va) {
+  Battler t[4] = { makeTrainerMon(4, 30), makeTrainerMon(74, 30), makeTrainerMon(25, 30), makeTrainerMon(1, 30) };
+  // contra un agua: planta (Bulbasaur, 3) o electrico (Pikachu, 2) -> el primero de ellos
+  CHECK_EQ(pickNextFoe(t, 1, 4, PT_WATER), 2);
+  CHECK_EQ(pickNextFoe(t, 3, 4, PT_WATER), 3);           // solo queda uno
+  CHECK_EQ(pickNextFoe(t, 1, 4, PT_NORMAL), 1);          // nadie tiene ventaja: el orden de siempre
+}

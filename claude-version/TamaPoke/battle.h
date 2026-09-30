@@ -146,6 +146,9 @@ Battler makeBoxBattler(int16_t dex, uint16_t lvl, uint16_t petLvl, uint8_t gA, u
 int8_t typeMatch(uint8_t mine, uint8_t foe);
 // el que entra al cambiar voluntariamente pierde el turno: solo ataca el rival (a = yo)
 int battleFoeOnly(Battler &a, Battler &b, BAct actB, BRng &rng, BEvent *ev, int maxEv);
+// liga (como PokeRogue): de los que le quedan (team[from..n-1]) el campeon saca el
+// que mejor le va contra mi tipo; empate = el primero (el orden de siempre)
+uint8_t pickNextFoe(const Battler *team, uint8_t from, uint8_t n, uint8_t myType);
 
 // probabilidad (por mil) de la especie "dex" en ese momento, antes de evolucionar
 // por nivel (para tests y para el comando serie WILD)
