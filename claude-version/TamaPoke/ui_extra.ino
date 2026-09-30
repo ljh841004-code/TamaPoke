@@ -347,7 +347,7 @@ char bvL1[80] = "", bvL2[64] = "";
 bool bvMeFainted = false, bvFoeFainted = false;  // ya se reprodujo su desmayo
 bool bvFoeCaught = false;  // fork KO (ko4): el rival ya esta dentro de la pokeball
 bool bCaught = false;      // la batalla acabo en captura
-int8_t bBoxMsg = -1;       // XId del aviso de la caja en el resultado (-1 = nada)
+int16_t bBoxMsg = -1;      // XId del aviso de la caja en el resultado (-1 = nada)
 #define BOX_JOIN_PCT 20    // ko5: % de salvajes vencidos que se unen a la caja
 PmdMon foePmd;
 // ko11.16: el orbe equipado sube ataque o defensa (solo si es de su tipo)

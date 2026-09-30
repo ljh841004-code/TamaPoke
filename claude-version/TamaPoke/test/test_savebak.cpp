@@ -80,3 +80,26 @@ TEST(savebak, marca_manual) {
   CHECK(bakParse(buf.data(), n, &h));
   CHECK_EQ(h.flags, 0u);
 }
+
+// ko11.19.1: la manual y la automatica tienen cada una su ranura
+static BakSlot mk(bool ok, uint32_t seq, bool manual) {
+  BakSlot s{};
+  s.ok = ok; s.h.seq = seq; s.h.flags = manual ? BAKF_MANUAL : 0;
+  return s;
+}
+TEST(savebak, manual_y_automatica_cada_una_su_ranura) {
+  BakSlot a[2] = { mk(false, 0, false), mk(false, 0, false) };
+  CHECK_EQ(bakPickSlot(a, false), 0);                 // vacias: la primera
+  BakSlot b[2] = { mk(true, 1, true), mk(false, 0, false) };
+  CHECK_EQ(bakPickSlot(b, false), 1);                 // la automatica no pisa la manual
+  CHECK_EQ(bakPickSlot(b, true), 0);                  // la manual pisa la manual
+  BakSlot c[2] = { mk(true, 5, true), mk(true, 6, false) };
+  CHECK_EQ(bakPickSlot(c, false), 1);
+  CHECK_EQ(bakPickSlot(c, true), 0);
+  BakSlot d[2] = { mk(true, 5, true), mk(true, 4, true) };  // dos manuales (de antes)
+  CHECK_EQ(bakPickSlot(d, false), 1);                 // la automatica ocupa la mas vieja
+  CHECK_EQ(bakPickSlot(d, true), 1);
+  BakSlot e[2] = { mk(true, 9, false), mk(true, 8, false) };  // dos automaticas
+  CHECK_EQ(bakPickSlot(e, true), 1);                  // la manual ocupa la mas vieja
+  CHECK_EQ(bakPickSlot(e, false), 1);
+}

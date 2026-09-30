@@ -123,8 +123,23 @@ static inline bool bakParse(const uint8_t *buf, size_t len, BakHdr *hdr, BakRecF
 
 // ---- en la placa (savebak_sd.cpp) ----
 struct BakSlot { bool ok; BakHdr h; };
+
+// ko11.19.1: en que ranura escribir. La manual y la automatica tienen cada una la
+// suya: se pisa la del mismo tipo (la mas vieja si las dos lo son); si no hay
+// ninguna de ese tipo, una vacia o la mas vieja. Asi una copia automatica nunca
+// borra la ultima manual (salvo que las dos sean manuales, de antes).
+static inline uint8_t bakPickSlot(const BakSlot s[2], bool manual) {
+  bool same[2];
+  for (int i = 0; i < 2; i++) same[i] = s[i].ok && ((s[i].h.flags & BAKF_MANUAL) != 0) == manual;
+  auto older = [&]() -> uint8_t { return s[1].h.seq < s[0].h.seq ? 1 : 0; };
+  if (same[0] && same[1]) return older();
+  if (same[0] != same[1]) return same[0] ? 0 : 1;
+  if (!s[0].ok) return 0;
+  if (!s[1].ok) return 1;
+  return older();
+}
 void bakInfo(BakSlot out[2]);                         // las dos ranuras de la SD (CRC comprobado)
 int bakNewest(const BakSlot s[2]);                    // -1 si no hay ninguna valida
-bool bakBackupNow(int16_t dex, uint16_t lvl, uint32_t epoch, bool manual = false);  // en la ranura mas vieja
+bool bakBackupNow(int16_t dex, uint16_t lvl, uint32_t epoch, bool manual = false);  // ranura: bakPickSlot
 bool bakRestore(uint8_t slot);
 bool bakCrashLog(const char *line);                  // ko11.9.2: anade una linea a /tpsave/crash.txt                        // NVS <- ranura; hay que reiniciar despues

@@ -82,7 +82,7 @@ bool bakBackupNow(int16_t dex, uint16_t lvl, uint32_t epoch, bool manual) {
   BakSlot s[2];
   bakInfo(s);
   int nw = bakNewest(s);
-  uint8_t slot = nw < 0 ? 0 : (uint8_t)(1 - nw);  // se pisa la mas vieja: la otra queda
+  uint8_t slot = bakPickSlot(s, manual);  // ko11.19.1: manual y automatica, cada una la suya
   uint32_t seq = nw < 0 ? 1 : s[nw].h.seq + 1;
   BakWriter w(buf, BAK_MAX_BYTES);
   w.begin(seq, epoch, dex, lvl, manual ? BAKF_MANUAL : 0);

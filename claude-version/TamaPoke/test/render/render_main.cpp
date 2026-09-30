@@ -609,6 +609,8 @@ static void scenes(bool ko, const char *sfx) {
   // ko11.6: copia de la partida en la SD
   openBackup(); render(); shot("18c_backup");
   bakSel = 1; render(); shot("18d_backup_confirm"); bakSel = -1;
+  backupTap(233, BAK_NOW_Y + 20); render(); shot("18h_backup_done");  // ko11.19.1: "백업했어요!" (antes salia otro texto)
+  navCheck("backup: aviso = hecho", bakMsg == X_BAK_DONE);
   // ko11.9.2: ultimo reinicio inesperado guardado: boton + ventana
   crashCount = 3; crashReason = 4; crashWhere = 0x0103; crashEpoch = gMockEpoch;
   crashPcN = 3; crashPc[0] = 0x4201a2b4; crashPc[1] = 0x42019f10; crashPc[2] = 0x4200e3c8;

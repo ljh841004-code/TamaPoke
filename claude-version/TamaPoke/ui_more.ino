@@ -1714,7 +1714,7 @@ void fameTap(int16_t x, int16_t y) {
 BakSlot bakSlots[2];
 int8_t bakSel = -1;
 bool bakCrashView = false;  // ko11.9.2: ventana del registro de reinicios          // ranura elegida para restaurar (confirmacion)
-int8_t bakMsg = -1;          // XId del ultimo aviso (-1 nada)
+int16_t bakMsg = -1;         // XId del ultimo aviso (-1 nada). ko11.19.1: int16 (con int8 X_BAK_DONE=311 se leia como X_CANT_NOW)
 uint32_t bakMsgUntil = 0;
 bool bakAsk = false;         // pregunta al arrancar
 int8_t bakAskSlot = -1;
@@ -1724,7 +1724,7 @@ static int32_t bakKnownDay = -2;  // dia de la copia mas nueva (-1 ninguna, -2 s
 
 void bakRequest() { bakPending = true; }
 
-static void bakSetMsg(XId m) { bakMsg = (int8_t)m; bakMsgUntil = millis() + 3000; }
+static void bakSetMsg(XId m) { bakMsg = (int16_t)m; bakMsgUntil = millis() + 3000; }
 
 static bool bakDoBackup(bool manual = false) {
   if (!sdReady) { bakSetMsg(X_BAK_NOSD); return false; }
