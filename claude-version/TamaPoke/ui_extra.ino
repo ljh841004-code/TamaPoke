@@ -1342,10 +1342,20 @@ static bool nextTrainerMon() {
   bvMeLvl = pet.level();
   bTeamI++;
   bFoe = bTeam[bTeamI];
+  // ko11.18: reto del dia: antes del siguiente rival se recupera el 35 % de la vida
+  // que queda (40 -> +14 = 54), sin pasar del maximo. Gimnasio y liga, como antes
+  uint16_t healed = 0;
+  if (bKind == BK_DAILY && bMe.hp > 0) {
+    uint16_t add = (uint16_t)((uint32_t)bMe.hp * DAILY_HEAL_PCT / 100);
+    if (bMe.hp + add > bMe.maxHp) add = bMe.maxHp - bMe.hp;
+    bMe.hp += add;
+    healed = add;
+  }
   bvSetup(bMe, bFoe, nullptr, false);
   const char *who = bKind == BK_GYM ? XT((XId)(X_LEADER_0 + bGym)) : bKind == BK_CHAMP ? XT(X_CHAMP_NAME) : XT(X_DAILY_FOE);
   txFmt(bvL1, sizeof(bvL1), X_TRAINER_NEXT, who, dexName(bFoe.dex));
   bvL2[0] = 0;
+  if (healed) snprintf(bvL2, sizeof(bvL2), XT(X_DAILY_HEAL_FMT), (unsigned)healed);
   bPhase = BP_INTRO;
   bPhaseT = millis();
   audioCry(bFoe.dex);

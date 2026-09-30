@@ -245,12 +245,16 @@ void Pet::tick() {
   // Descuido: dejar una estadistica por los suelos cuenta como error de
   // cuidado (con enfriamiento para no contar el mismo descuido cada minuto)
   if (mistakeCooldown > 0) mistakeCooldown--;
-  if (lowestStat() <= 10 && mistakeCooldown == 0) {
+  // ko11.18: la energia ya NO cuenta como descuido (baja sola jugando y entrenando);
+  // solo comida, animo e higiene
+  uint8_t lo3 = fullness < joy ? fullness : joy;
+  if (hygiene < lo3) lo3 = hygiene;
+  if (lo3 <= 10 && mistakeCooldown == 0) {
     careMistakes++;
     mistakeCooldown = 60;
-    // ko10.9: apunta la causa (la barra mas baja; empate: comida, animo, energia, higiene)
-    uint8_t lo = lowestStat();
-    mistWhy = fullness == lo ? MW_FOOD : joy == lo ? MW_JOY : energy == lo ? MW_ENERGY : MW_HYGIENE;
+    // ko10.9: apunta la causa (la barra mas baja; empate: comida, animo, higiene)
+    uint8_t lo = lo3;
+    mistWhy = fullness == lo ? MW_FOOD : joy == lo ? MW_JOY : MW_HYGIENE;
     mistEpoch = lastSeenEpoch;
     if (bond > 1) bond--;  // el descuido enfria el vinculo, pero sin arrasarlo:
                            // a -3 cada 30 min se perdia mucho mas de lo que se

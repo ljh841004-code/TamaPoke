@@ -1,4 +1,4 @@
-# TamaPoke KO v1.17-ko11.17 (클로드 버전)
+# TamaPoke KO v1.17-ko11.18 (클로드 버전)
 
 > 이 폴더는 **클로드(Claude) 버전**이에요. 저장소 루트의 TamaPoke v1.23과는 따로 관리하는 별도 갈래예요.
 > v1.23의 어드벤처·컬렉션 기능은 이 버전에 없어요. (소리와 한글 글꼴은 옮겨 왔어요)
@@ -14,9 +14,9 @@
 | 파일 | 내용 |
 |---|---|
 | `update.bin` | **SD카드 업데이트용**. 웹 설치 페이지로 보내고 [SD 업데이트] (아래 A) |
-| `tamapoke-ko-v1.17-ko11.17-app-0xe000.bin` | **esptool 업데이트용**. 주소 **0xe000**. 포켓몬은 그대로 남아요 |
-| `tamapoke-ko-v1.17-ko11.17.bin` | **새로 설치용** 통합 이미지. 주소 **0x0**. 저장 데이터가 초기화돼요 |
-| `TamaPoke_v1.17-ko11.17_정리.txt` | 기능·사용법 요약 메모 |
+| `tamapoke-ko-v1.17-ko11.18-app-0xe000.bin` | **esptool 업데이트용**. 주소 **0xe000**. 포켓몬은 그대로 남아요 |
+| `tamapoke-ko-v1.17-ko11.18.bin` | **새로 설치용** 통합 이미지. 주소 **0x0**. 저장 데이터가 초기화돼요 |
+| `TamaPoke_v1.17-ko11.18_정리.txt` | 기능·사용법 요약 메모 |
 | `TamaPoke/` | 전체 소스 (Arduino 스케치 폴더). 자세한 설명은 `TamaPoke/README_KO.md` |
 
 ## SD카드에 파일 넣기 (울음소리, 배경음, update.bin)
@@ -36,11 +36,11 @@
 
 ### B. esptool로
 1. Chrome/Edge에서 [ESP Tool (esptool-js)](https://espressif.github.io/esptool-js/) → Baudrate **115200** → Connect → 포트 선택
-2. 주소 **`0xe000`**에 `tamapoke-ko-v1.17-ko11.17-app-0xe000.bin` → Program (**Erase Flash 누르지 않기**)
+2. 주소 **`0xe000`**에 `tamapoke-ko-v1.17-ko11.18-app-0xe000.bin` → Program (**Erase Flash 누르지 않기**)
    (0x10000이 아니라 0xe000: SD 업데이트 뒤에도 esptool로 올린 펌웨어가 켜지게 부팅 선택 정보를 같이 써요.
    이 파일을 0x10000이나 0x0에 올리면 켜지지 않아요)
-3. 처음 설치하거나 초기화하고 싶다면: 주소 `0x0`에 `tamapoke-ko-v1.17-ko11.17.bin`
-4. 끝나면 USB를 뽑고 전원 버튼을 6초 눌러 껐다 켜기. 시계 화면 아래쪽에 `v1.17-ko11.17`이 보이면 성공
+3. 처음 설치하거나 초기화하고 싶다면: 주소 `0x0`에 `tamapoke-ko-v1.17-ko11.18.bin`
+4. 끝나면 USB를 뽑고 전원 버튼을 6초 눌러 껐다 켜기. 시계 화면 아래쪽에 `v1.17-ko11.18`이 보이면 성공
 
 > **ko3~ko5.1에서 ko6으로 올릴 때만** esptool이 바로 연결되지 않아요 (그 버전들의 USB 방식 때문).
 > 장치 관리자에서 COM 번호 확인 → esptool 창을 닫고 PowerShell에서
@@ -72,6 +72,17 @@
 얼음: 냉동빔과 얼음 결정, 독: 거품, 땅: 진흙과 흙먼지, 에스퍼: 고리, 벌레: 바늘, 바위: 떨어지는 돌,
 고스트: 그림자, 드래곤: 푸른 불꽃, 노말·격투·몸통박치기: 충격). **급소**는 화면이 흔들리고,
 **효과가 굉장했다**는 흰 충격파가 퍼져요. 모습은 `screenshots/21_battle_fx.png`.
+
+## ko11.18: 화면 밝기 설정, 배터리 %, 전원 버튼 화면 끄기 보호, 이별 조건표, 오늘의 도전 회복
+
+- **화면 밝기**: 시간 설정 > [소리 켬] > "소리/화면 설정" > [화면 밝기 >] 10단계. USB·배터리 같은 밝기, 저장됨
+- **배터리 %**: 위쪽 배터리 아이콘 옆에 숫자 (충전 중에도)
+- **PWR 짧게로 끈 화면은 터치로 안 켜짐** (가방 속에서 켜지던 문제). 켜기는 PWR 짧게 한 번 더. 길게 = 전원 꺼짐
+- **진행도에 이별 조건표**: 최종 진화형 / 함께한 시간 3일 (✔/✘, 남은 시간)
+- **오늘의 도전**: 1승 후 다음 포켓몬이 나오면 남은 체력의 35% 회복
+- **실수 횟수에 기력은 안 셈** (포만·기분·청결만)
+- 프로필 카드 "연속 돌봄 N일  최고 N일"
+- 모습: `screenshots/03p_progress_farewell_wait.png`, `16d_brightness.png`, `01_main.png`
 
 ## ko11.17: 모든 메뉴 ◀ 뒤로가기, 속도 훈련 숫자 이어가기, 리본·왕관
 
@@ -601,7 +612,7 @@ esptool 사이트에서 Add File로 3줄: `0x0` → `1_bootloader_0x0.bin`, `0x8
 2. **Espressif Flash Download Tool** (Windows 프로그램, 인터넷 필요 없음): ESP32-S3 선택 →
    파일과 주소(위 표) 입력 → START
 3. **esptool (파이썬)**: `pip install esptool` →
-   `esptool --chip esp32s3 write-flash 0xe000 tamapoke-ko-v1.17-ko11.17-app-0xe000.bin`
+   `esptool --chip esp32s3 write-flash 0xe000 tamapoke-ko-v1.17-ko11.18-app-0xe000.bin`
 4. **Arduino IDE**로 `TamaPoke/` 소스를 직접 올리기 (`TamaPoke/README_KO.md`의 설정 참고)
 5. **SD카드에 파일 보내기**: SD카드를 빼서 PC에 꽂고 `mons` 폴더에 직접 복사하거나,
    `.bin` 파일(update.bin 등)은 `TamaPoke/tools/sdcard/mons/`에 두고
@@ -624,6 +635,7 @@ SD카드 `mons` 폴더에 `bgm.wav`(평소), `battle_wild.wav`(배틀 중), `cry
 ## 버전 기록
 
 - **ko11.8** – 배경음 고르기(bgm.wav~bgm8.wav 켠 곡만 무작위), 승리 후 따라오기 팝업, 방어 후 반격(양쪽, 통신 형식 5), 전투 중 똥 없음, 보관함 ◀ 나가기·탭 위치
+- **ko11.18** – 화면 밝기 설정, 배터리 %, PWR로 끈 화면 터치 무시, 이별 조건표, 오늘의 도전 35% 회복, 실수에 기력 제외, 연속 돌봄
 - **ko11.17** – ◀ 뒤로가기(연 곳으로), 속도 숫자 이어가기·첫 숫자만 깜박, 리본(키운 포켓몬)·왕관 이펙트(챔피언)
 - **ko11.16.2** – SD카드 자동 재연결(스프라이트 없음 수정), 그림 버튼 도트/원작
 - **ko11.16.1** – 원작풍 전투 그림 선명하게·테두리, 이름 귀여운/원작풍 그림, 지역 화면에서 고르기

@@ -279,6 +279,15 @@ TEST(tick, descuido_cuenta_una_vez_por_hora) {
   CHECK_EQ(p.careMistakes, (uint8_t)2);
 }
 
+// ko11.18: con la energia sola por los suelos NO hay descuido
+TEST(tick, energia_baja_no_es_descuido) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 80, 80, 0, 80);
+  advance(p, 1);
+  CHECK_EQ(p.careMistakes, (uint8_t)0);
+}
+
 // ko10.9: el dia de crianza cuenta por fecha, no por bloques de 24 h
 TEST(tick, dia_de_crianza_por_fecha) {
   Pet p;
