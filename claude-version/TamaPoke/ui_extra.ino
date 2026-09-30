@@ -14,7 +14,7 @@ enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_
                  XS_NEXTPICK,       // ko10.5: elegir el siguiente tras un ciclo
                  XS_CANDY,          // ko10.11: bolsa de caramelos
                  XS_FAME, XS_BAK,
-                 XS_BGM, XS_BRIGHT };  // ko11.18: brillo  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
+                 XS_BGM, XS_BRIGHT, XS_PARTY };  // ko11.18: brillo  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
 uint8_t xScreen = XS_NONE;
 
 // ko11.17: [<] vuelve a la pantalla DESDE LA QUE se abrio el menu (la ficha, el
@@ -422,7 +422,8 @@ void loadFoe(int16_t dex, bool shiny) {
 // BP_NEXT (ko9.2, solo salvajes): tras el resultado, "seguir buscando o salir"
 // BP_DUP (ko10.4): repetido capturado -> quedarselo (caja) o cambiarlo por caramelos
 enum : uint8_t { BP_INTRO = 0, BP_MENU, BP_PLAY, BP_RESULT, BP_NEXT, BP_DUP,
-                 BP_JOIN };  // ko11.8: el vencido quiere venir -> preguntar
+                 BP_JOIN,   // ko11.8: el vencido quiere venir -> preguntar
+                 BP_SWAP };  // ko11.8: el vencido quiere venir -> preguntar
 #define BD_MS 20000UL  // sin elegir en 20 s: se lo queda (no se pierde nada)
 #define BDUP_KEEP_X 70  // botones de BP_DUP
 #define BDUP_CANDY_X 240
@@ -452,6 +453,23 @@ uint32_t bvOwnedT = 0;
 uint8_t bGym = 0;
 Battler bTeam[CHAMP_TEAM];  // ko10.11: la liga lleva 6 (antes 3)
 uint8_t bTeamN = 0, bTeamI = 0;
+// ko11.20: mi equipo contra entrenadores: [0] el que crias + hasta 2 ayudantes de la caja
+Battler pMon[PARTY_MAX];
+int8_t pBox[PARTY_MAX] = { -1, -1, -1 };  // indice en la caja (-1 = el que crias)
+uint8_t pN = 1, pCur = 0, pUsed = 1;      // pUsed: bit i = ya salio a luchar
+uint8_t pShiny = 0;                       // bit i = variocolor
+uint8_t bSwapMode = 0;  // BP_SWAP: 0 obligado (cayo el mio), 1 rival nuevo (puede quedarse), 2 manual (gasta turno)
+PmdMon helperPmd;
+int16_t helperPmdDex = 0;
+bool helperPmdShiny = false;
+// eleccion antes del combate (pantalla XS_PARTY, ui_more.ino)
+uint8_t ppKind = 0, ppRegion = 0, ppN = 0, ppFrom = 0, ppPage = 0;
+Battler ppTeam[CHAMP_TEAM];
+int8_t ppPick[PARTY_HELPERS] = { -1, -1 };        // indices en la caja (-1 = nadie)
+int16_t ppPickDex[PARTY_HELPERS] = { 0, 0 };      // para reconocerlos la proxima vez
+uint32_t ppPickEpoch[PARTY_HELPERS] = { 0, 0 };
+bool ppArmed = false;                             // startTrainer usa ppPick
+char bPartyNote[40] = "";                         // "도우미 Lv+1" en el resultado
 
 // salvaje
 Battler bMe, bFoe;
@@ -1071,15 +1089,16 @@ void drawBattlers() {
       if (th) drawThumb(th, foeX - GAL_CELL / 2, foeG - GAL_CELL, 2, foeSil);
     }
   }
-  if (!meHide && !meGone && orbValid(pet.orb) && bvMeDex == pet.speciesId && xScreen != XS_LINK)
+  if (!meHide && !meGone && pCur == 0 && orbValid(pet.orb) && bvMeDex == pet.speciesId && xScreen != XS_LINK)
     drawOrbSlot(meX + 64, meG - 12, 11, pet.orb, now);  // ko11.16: su orbe, abajo a la derecha (detras del sprite)
   if (!meHide && !meGone && prgMe.loaded && prgMe.has(PMD_IDLE_UR)) {  // ko11.16: de espaldas
     drawPrgBattler(prgMe, PMD_IDLE_UR, meX, meG, now, meSil, 12, 176);
   } else if (!meHide && !meGone) {
-    if (pmd.loaded) {
-      if (!pmd.has(meAct)) meAct = PMD_IDLE;
-      meAct = battleFacing(pmd, meAct, true);
-      drawPmdAct(meAct, meX, meG, now, true, meSil, 4);
+    PmdMon &mm = pCur ? helperPmd : pmd;  // ko11.20: el ayudante que lucha ahora
+    if (mm.loaded) {
+      if (!mm.has(meAct)) meAct = PMD_IDLE;
+      meAct = battleFacing(mm, meAct, true);
+      drawPmdActM(mm, meAct, meX, meG, now, true, meSil, 4, 170);
     } else {
       const uint8_t *th = thumbs.get(bvMeDex);
       if (th) drawThumb(th, meX - GAL_CELL / 2, meG - GAL_CELL, 3, meSil);
@@ -1173,6 +1192,167 @@ int battleMenuHit(int16_t x, int16_t y) {
   return BM_ACT[row][col];
 }
 
+// ======================================================================
+// ko11.20: equipo (el que crias + 2 ayudantes de la caja) contra entrenadores.
+// Como en PokeRogue: el rival se ve cuando sale; al caer uno suyo se pregunta
+// "¿cambiar?", al caer el mio se elige quien sale, y tocando mi caja de vida
+// se cambia a mano (el rival ataca ese turno).
+// ======================================================================
+#define SW_Y 330
+#define SW_H 46
+static bool partyOtherAlive() {
+  for (uint8_t j = 0; j < pN; j++) if (j != pCur && pMon[j].hp > 0) return true;
+  return false;
+}
+static void partyMeName() {
+  const char *mn = pCur == 0 ? (pet.nick[0] ? pet.nick : dexName(pet.speciesId)) : dexName(bMe.dex);
+  snprintf(bvMeName, sizeof(bvMeName), "%s%s", (pShiny >> pCur) & 1 ? "*" : "", mn);
+}
+static void partyLoadMe() {
+  if (!pCur) return;
+  bool sh = (pShiny >> pCur) & 1;
+  if (helperPmd.loaded && helperPmdDex == bMe.dex && helperPmdShiny == sh) return;
+  helperPmd.unload();
+  helperPmdDex = bMe.dex;
+  helperPmdShiny = sh;
+  helperPmd.load((uint8_t)bMe.dex, sh);
+}
+// el mejor para salir contra el rival de ahora (-1 = mejor quedarse, si se puede)
+static int8_t partyBest(bool forced) {
+  int8_t best = -1;
+  int bs = -10000;
+  for (uint8_t j = 0; j < pN; j++) {
+    if (j == pCur || pMon[j].hp == 0) continue;
+    int sc = typeMatch(pMon[j].type, bFoe.type) * 100 + (int)((uint32_t)pMon[j].hp * 50 / pMon[j].maxHp);
+    if (sc > bs) { bs = sc; best = (int8_t)j; }
+  }
+  if (!forced && best >= 0) {
+    int cur = typeMatch(bMe.type, bFoe.type) * 100 + (int)((uint32_t)bMe.hp * 50 / bMe.maxHp);
+    if (bs < cur + 60) return -1;  // solo si se gana mucho
+  }
+  return best;
+}
+static void partyAskSwap(uint8_t mode) {
+  pMon[pCur] = bMe;
+  bSwapMode = mode;
+  bPhase = BP_SWAP;
+  autoMenuT = millis();
+}
+static void partySwitchTo(uint8_t j) {
+  pMon[pCur] = bMe;
+  pCur = j;
+  pUsed |= (uint8_t)(1 << j);
+  bMe = pMon[j];
+  bvMeDex = bMe.dex;
+  bvMeType = bMe.type;
+  bvMeTier = moveTier(bMe.dex);
+  bvMeLvl = bMe.lvl;
+  bvMeMax = bMe.maxHp;
+  bvMeHp = bvMeTgt = bMe.hp;
+  bvMeFainted = false;
+  partyMeName();
+  partyLoadMe();
+  prgLoadFor(bMe.dex, bFoe.dex, bvFoeShiny);
+  txFmt(bvL1, sizeof(bvL1), X_PT_SENDOUT, bvMeName);
+  bvL2[0] = 0;
+  audioCry(bMe.dex);
+}
+// botones del cambio: [ayudante][ayudante][quedarse/cancelar]; who = indice o -1
+static int swapLayout(int16_t *xs, int16_t *ws, int8_t *who) {
+  int m = 0;
+  for (uint8_t j = 0; j < pN; j++) if (j != pCur && pMon[j].hp > 0) who[m++] = (int8_t)j;
+  bool extra = bSwapMode != 0;
+  int total = 320, gap = 6, ew = extra ? 80 : 0;
+  int bw = (total - ew - gap * (m - 1 + (extra ? 1 : 0))) / (m ? m : 1);
+  int x = 73;
+  for (int i = 0; i < m; i++) { xs[i] = (int16_t)x; ws[i] = (int16_t)bw; x += bw + gap; }
+  if (extra) { xs[m] = (int16_t)x; ws[m] = (int16_t)ew; who[m] = -1; m++; }
+  return m;
+}
+static void drawMiniBall(int cx, int cy, bool alive, bool cur) {
+  if (cur) gfx->fillCircle(cx, cy, 8, UI_BAR_WARN);
+  gfx->fillCircle(cx, cy, 6, alive ? UI_WHITE : C565(0x9a, 0x9a, 0x9a));
+  if (alive) gfx->fillRect(cx - 6, cy - 6, 13, 6, UI_BAR_BAD);
+  gfx->drawCircle(cx, cy, 6, UI_INK);
+  gfx->drawFastHLine(cx - 6, cy, 13, UI_INK);
+  gfx->fillCircle(cx, cy, 2, UI_WHITE);
+  gfx->drawCircle(cx, cy, 2, UI_INK);
+}
+// bolas del equipo: las del rival bajo su caja, las mias bajo la mia
+static void drawPartyBalls() {
+  if (bKind == BK_WILD || bLink) return;
+  for (uint8_t i = 0; i < bTeamN; i++)
+    drawMiniBall(96 + i * 18, 118, i > bTeamI || (i == bTeamI && bFoe.hp > 0), i == bTeamI);
+  if (pN > 1)
+    for (uint8_t i = 0; i < pN; i++) {
+      uint16_t hp = i == pCur ? bMe.hp : pMon[i].hp;
+      drawMiniBall(400 - (pN - 1 - i) * 18, 244, hp > 0, i == pCur);
+    }
+}
+static void drawSwapPanel() {
+  uiButton(40, 266, 386, 56, 12, UI_WHITE, UI_INK);
+  char t[64];
+  if (bSwapMode == 1) txFmt(t, sizeof(t), X_PT_NEXT_FMT, dexName(bFoe.dex));
+  else strncpy(t, XT(bSwapMode == 2 ? X_PT_MANUAL : X_PT_WHO), sizeof(t) - 1), t[sizeof(t) - 1] = 0;
+  drawFit(t, 285, 370, UI_INK, 2);
+  int16_t xs[PARTY_MAX + 1], ws[PARTY_MAX + 1];
+  int8_t who[PARTY_MAX + 1];
+  int m = swapLayout(xs, ws, who);
+  for (int i = 0; i < m; i++) {
+    if (who[i] < 0) {
+      drawBtn(xs[i], SW_Y, ws[i], SW_H, UI_TRACK, UI_INK, XT(bSwapMode == 2 ? X_BAK_CANCEL : X_PT_KEEP));
+      continue;
+    }
+    const Battler &b = pMon[who[i]];
+    int8_t tm = typeMatch(b.type, bFoe.type);
+    uint16_t bg = tm > 0 ? C565(0xd6, 0xf5, 0xcc) : tm < 0 ? C565(0xff, 0xdc, 0xdc) : UI_WHITE;
+    uiButton(xs[i], SW_Y, ws[i], SW_H, 10, bg, UI_INK);
+    drawThumbAt(b.dex, xs[i] + 22, SW_Y + SW_H / 2, 1, false);
+    gfx->setTextColor(UI_INK);
+    setSize(1);
+    setCur(xs[i] + 42, SW_Y + 4);
+    printT(dexName(b.dex));
+    char l[32];
+    snprintf(l, sizeof(l), "Lv%u %s", b.lvl, tm > 0 ? XT(X_PT_GOOD) : tm < 0 ? XT(X_PT_BAD) : "");
+    gfx->setTextColor(tm > 0 ? C565(0x1a, 0x8a, 0x3a) : tm < 0 ? UI_BAR_BAD : UI_INK);
+    setCur(xs[i] + 42, SW_Y + 22);
+    printT(l);
+    int bw = ws[i] - 50;
+    gfx->fillRect(xs[i] + 42, SW_Y + SW_H - 7, bw, 4, UI_TRACK);
+    gfx->fillRect(xs[i] + 42, SW_Y + SW_H - 7, (int)((uint32_t)bw * b.hp / b.maxHp), 4,
+                  b.hp * 4 < b.maxHp ? UI_BAR_BAD : UI_BAR_OK);
+  }
+}
+// toque en BP_SWAP
+static void swapTap(int16_t x, int16_t y) {
+  if (y < SW_Y || y >= SW_Y + SW_H) return;
+  int16_t xs[PARTY_MAX + 1], ws[PARTY_MAX + 1];
+  int8_t who[PARTY_MAX + 1];
+  int m = swapLayout(xs, ws, who);
+  for (int i = 0; i < m; i++) {
+    if (x < xs[i] || x >= xs[i] + ws[i]) continue;
+    sfxPlay(SFX_TAP);
+    uint8_t mode = bSwapMode;
+    if (who[i] < 0) {  // quedarse / cancelar
+      bPhase = BP_MENU;
+      autoMenuT = millis();
+      txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
+      bvL2[0] = 0;
+      return;
+    }
+    partySwitchTo((uint8_t)who[i]);
+    if (mode == 2) {  // a mano: el rival aprovecha el turno
+      BAct foeAct = battleAi(bFoe, bMe, bRng, 35);
+      bqN = battleFoeOnly(bMe, bFoe, foeAct, bRng, bq, BATTLE_MAX_EVENTS);
+      bqAisMe = true;
+      if (bqN > 0) { bPhase = BP_PLAY; startEvent(0); return; }
+    }
+    bPhase = BP_MENU;
+    autoMenuT = millis();
+    return;
+  }
+}
+
 // ko11.19: aviso del combate automatico (abajo, donde van los botones)
 static void drawAutoBanner() {
   char t[64];
@@ -1197,6 +1377,7 @@ void renderBattleView() {
   drawBattlers();
   drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true, nameInkFor(bvFoeDex));  // ko9: rival con numeros
   drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true, nameInkFor(bvMeDex));
+  drawPartyBalls();  // ko11.20
   // ko10.11: ya lo tengo: "en la caja: N" bajo la caja del rival (5 s al aparecer)
   if (bKind == BK_WILD && !bLink && bvOwned && now - bvOwnedT < 5000) {
     char ob[32];
@@ -1278,14 +1459,22 @@ void renderBattleView() {
         drawFit(XT((XId)bBoxMsg), ly, 320, bBoxMsg == X_BOX_FULL ? UI_BAR_BAD : UI_INK, 2);
         ly += 26;
       }
-      if (bNote[0] && ly <= 374) drawFit(bNote, ly, 330, C565(0xa0, 0x30, 0x60), 2);  // ko10.4: medalla / reto
+      if (bNote[0] && bPartyNote[0] && ly > 350) {  // ko11.20: sin sitio: los dos en una linea
+        char both[112];
+        snprintf(both, sizeof(both), "%s  %s", bNote, bPartyNote);
+        if (ly <= 374) drawFit(both, ly, 330, C565(0xa0, 0x30, 0x60), 2);
+      } else {
+        if (bNote[0] && ly <= 374) { drawFit(bNote, ly, 330, C565(0xa0, 0x30, 0x60), 2); ly += 24; }  // ko10.4: medalla / reto
+        if (bPartyNote[0] && ly <= 374) drawFit(bPartyNote, ly, 330, C565(0x1a, 0x8a, 0x3a), 2);  // ko11.20
+      }
     } else if (good && ly < 374) {
       drawFit(XT(X_REWARD), ly, 320, UI_INK, 2);
     }
   } else {
-    drawBattleMsg();
+    if (bPhase == BP_SWAP) drawSwapPanel();  // ko11.20
+    else drawBattleMsg();
     if (bPhase == BP_MENU && !autoLeft) { drawBattleMenu(); if (xScreen == XS_WILD) drawBattleArtChip(); }  // ko11.16
-    if (autoLeft && bPhase != BP_RESULT) drawAutoBanner();  // ko11.19
+    if (autoLeft && bPhase != BP_RESULT && bPhase != BP_SWAP) drawAutoBanner();  // ko11.19
   }
   uiFlush();
 }
@@ -1314,6 +1503,7 @@ void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool fo
   bDupPending = false;  // ko10.4
   bJoinPending = false;  // ko11.8
   bNote[0] = 0;
+  bPartyNote[0] = 0;  // ko11.20
   bvMeFainted = bvFoeFainted = false;
   bvFoeCaught = bCaught = false;
   bBoxMsg = -1;
@@ -1364,6 +1554,19 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
   bRng = BRng(esp_random());
   bMe = makeBattler(pet.speciesId, pet.level(), pet.atkStat(), pet.defStat(), pet.speStat());
   applyOrb(bMe);  // ko11.16
+  // ko11.20: el equipo: el que crias primero y los ayudantes elegidos
+  pN = 1; pCur = 0; pUsed = 1; pShiny = 0;
+  pMon[0] = bMe; pBox[0] = -1;
+  for (uint8_t k = 0; ppArmed && k < PARTY_HELPERS; k++) {
+    int8_t bi = ppPick[k];
+    if (bi < 0 || bi >= box.count()) continue;
+    const BoxMon &m = box.at((uint8_t)bi);
+    pMon[pN] = makeBoxBattler(m.dex, m.lvl, pet.level(), m.geneAtk, m.geneDef, m.geneSpe);
+    pBox[pN] = bi;
+    if (m.flags & BOXF_SHINY) pShiny |= (uint8_t)(1 << pN);
+    pN++;
+  }
+  ppArmed = false;
   bFoe = bTeam[0];
   bvSetup(bMe, bFoe, nullptr, false);
   bGroup = WG_COMMON;
@@ -1400,6 +1603,7 @@ static bool nextTrainerMon() {
     healed = add;
   }
   bvSetup(bMe, bFoe, nullptr, false);
+  partyMeName();  // ko11.20: puede estar luchando un ayudante
   const char *who = bKind == BK_GYM ? XT((XId)(X_LEADER_0 + bGym)) : bKind == BK_CHAMP ? XT(X_CHAMP_NAME) : XT(X_DAILY_FOE);
   txFmt(bvL1, sizeof(bvL1), X_TRAINER_NEXT, who, dexName(bFoe.dex));
   bvL2[0] = 0;
@@ -1670,6 +1874,38 @@ bool gymSwipe(int dir) {
   return true;
 }
 
+// ko11.20: antes de un entrenador, elegir ayudantes de la caja (si hay alguno)
+static void partyOpen(uint8_t kind, uint8_t region, const Battler *team, uint8_t n, uint8_t from) {
+  if (!box.count()) { ppArmed = false; xScreen = XS_NONE; startTrainer(kind, region, team, n); return; }
+  ppKind = kind;
+  ppRegion = region;
+  ppN = n > CHAMP_TEAM ? CHAMP_TEAM : n;
+  for (uint8_t i = 0; i < ppN; i++) ppTeam[i] = team[i];
+  ppFrom = from;
+  for (uint8_t k = 0; k < PARTY_HELPERS; k++) {  // los de la ultima vez, si siguen en la caja
+    int8_t f = -1;
+    for (uint8_t i = 0; ppPickDex[k] && i < box.count(); i++)
+      if (box.at(i).dex == ppPickDex[k] && box.at(i).epoch == ppPickEpoch[k] && (k == 0 || i != ppPick[0])) { f = (int8_t)i; break; }
+    ppPick[k] = f;
+  }
+  if (ppPick[0] < 0 && ppPick[1] >= 0) { ppPick[0] = ppPick[1]; ppPick[1] = -1; }
+  ppPage = 0;
+  xScreen = XS_PARTY;
+  sfxPlay(SFX_TAP);
+}
+void partyStart(bool solo) {
+  ppArmed = !solo;
+  for (uint8_t k = 0; k < PARTY_HELPERS; k++) {
+    bool ok = ppPick[k] >= 0 && ppPick[k] < box.count();
+    ppPickDex[k] = ok ? box.at((uint8_t)ppPick[k]).dex : 0;
+    ppPickEpoch[k] = ok ? box.at((uint8_t)ppPick[k]).epoch : 0;
+  }
+  xScreen = XS_NONE;
+  startTrainer(ppKind, ppRegion, ppTeam, ppN);
+  if (xScreen != XS_WILD) xScreen = ppFrom;  // no se pudo (cansado...)
+}
+void partyCancel() { xScreen = ppFrom; sfxPlay(SFX_TAP); }
+
 void gymTap(int16_t x, int16_t y) {
   if (inRect(x, y, CX - 80, GY_BACK_Y, 160, 40)) { sfxPlay(SFX_TAP); goBack(); return; }  // ko11.17
   // ko10.11: flechas de pagina y la pagina de la liga (ko11.17: en la 1a, [<] = volver)
@@ -1699,12 +1935,12 @@ void gymTap(int16_t x, int16_t y) {
   if (got) {  // ko10.11: revancha: equipo del tipo, al azar y a tu nivel
     Battler team[REMATCH_MAX];
     uint8_t n = gymRematchTeam(i, pet.level(), esp_random(), team);
-    startTrainer(BK_GYM, g.region, team, n);
+    partyOpen(BK_GYM, g.region, team, n, XS_GYM);  // ko11.20
     return;
   }
   Battler team[GYM_MAX_TEAM];
   for (uint8_t j = 0; j < g.n; j++) team[j] = makeTrainerMon(g.dex[j], g.lv[j]);
-  startTrainer(BK_GYM, g.region, team, g.n);
+  partyOpen(BK_GYM, g.region, team, g.n, XS_GYM);
 }
 
 // ---- ko10.11: revanchas (premio 1 vez al dia por gimnasio) y liga
@@ -1789,7 +2025,7 @@ static void leagueTap(int16_t x, int16_t y) {
   Battler team[CHAMP_TEAM];
   championTeam(pet.level(), esp_random(), team);
   xScreen = XS_NONE;
-  startTrainer(BK_CHAMP, CHAMP_REGION, team, CHAMP_TEAM);
+  partyOpen(BK_CHAMP, CHAMP_REGION, team, CHAMP_TEAM, XS_GYM);
 }
 
 // ---- reto del dia
@@ -1855,11 +2091,14 @@ void dailyTap(int16_t x, int16_t y) {
   Battler team[DAILY_TEAM];
   dailyTeam(day, pet.level(), team);
   xScreen = XS_NONE;
-  startTrainer(BK_DAILY, dailyRegion(day), team, DAILY_TEAM);
+  partyOpen(BK_DAILY, dailyRegion(day), team, DAILY_TEAM, XS_DAILY);
 }
 
 void endBattleScreen() {
   foePmd.unload();
+  helperPmd.unload();  // ko11.20
+  helperPmdDex = 0;
+  pN = 1; pCur = 0;
   xScreen = XS_NONE;
 }
 
@@ -1876,8 +2115,14 @@ void wildTap(int16_t x, int16_t y) {
   if (bPhase == BP_DUP) { wildDupTap(x, y); return; }
   if (bPhase == BP_JOIN) { wildJoinTap(x, y); return; }  // ko11.8
   if (bPhase == BP_NEXT) { wildNextTap(x, y); return; }
+  if (bPhase == BP_SWAP) { swapTap(x, y); return; }  // ko11.20
   if (bPhase != BP_MENU) return;
   if (battleArtTap(x, y)) return;  // ko11.16: PMD <-> PokeRogue
+  if (pN > 1 && bKind != BK_WILD && !bLink && inRect(x, y, 236, 176, 176, 58) && partyOtherAlive()) {  // ko11.20
+    sfxPlay(SFX_TAP);
+    partyAskSwap(2);
+    return;
+  }
   int a = battleMenuHit(x, y);
   if (a < 0) return;
   if (autoAllowed() && a == BA_BALL) {  // ko11.19: [자동]
@@ -2018,13 +2263,19 @@ void finishBattle(bool won, bool fled, bool caught) {
   bCaught = caught;
   bPhase = BP_RESULT;
   bPhaseT = millis();
+  if (!bRewarded && won && bKind != BK_WILD && !bLink && pN > 1) {  // ko11.20: los ayudantes que lucharon +1 nivel
+    uint8_t up = 0;
+    for (uint8_t j = 1; j < pN; j++)
+      if ((pUsed >> j) & 1 && pBox[j] >= 0 && box.bumpLevel((uint8_t)pBox[j], LEVEL_MAX)) up++;
+    if (up) snprintf(bPartyNote, sizeof(bPartyNote), XT(X_PT_LVUP_FMT), up);
+  }
   if (!bRewarded) {
     bRewarded = true;
     bool wildExp = bKind == BK_WILD && !bLink && bExpDex;  // ko11
     pet.battleResult(bLink ? BATTLE_LINK : BATTLE_WILD, won, fled, caught, wildExp ? bExpDex : bFoe.dex,
                      wildExp ? bExpLvl : bFoe.lvl);
     if (won && bKind == BK_WILD && !bLink) bItems = pet.wildWinItems();  // ko11.1: por probabilidad
-    bvMeLvl = pet.level();  // fork KO (ko7): la caja de vida ensena el nivel nuevo
+    if (pCur == 0) bvMeLvl = pet.level();  // fork KO (ko7): la caja de vida ensena el nivel nuevo (ko11.20: si lucha el que crias)
     sfxPlay(pet.lastLvlUp ? SFX_LEVEL : won || caught ? SFX_MEDAL : SFX_BYE);  // ko7: subida de nivel
     // fork KO: el capturado va siempre a la caja; el vencido, solo a veces
     // (ko5: 1 de cada 5 "quiere unirse"; si no, la pokeball no servia de nada)
@@ -2073,6 +2324,8 @@ void finishBattle(bool won, bool fled, bool caught) {
       }
       // ko11.1: con sus genes (la ficha del salon los ensena)
       fame.addRaised(pet.speciesId, pet.level(), pet.shiny, pet.geneAtk, pet.geneDef, pet.geneSpe, clockEpoch());
+      // ko11.20: con ayudantes que llegaron a luchar = victoria en equipo (si no, en solitario)
+      if (pUsed & (uint8_t)~1u) fame.markFlag((uint8_t)(fame.count() - 1), BOXF_TEAM);
       if (fame.count() >= 1 && fame.count() <= sizeof(pet.fameStreak))
         pet.fameStreak[fame.count() - 1] = (uint8_t)(pet.champStreak > 255 ? 255 : pet.champStreak);
       snprintf(bNote, sizeof(bNote), XT(X_CHAMP_WIN), (unsigned)pet.champStreak);
@@ -2133,12 +2386,22 @@ void updateWild() {
     battleDoAction(autoPick());
     return;
   }
+  if (autoLeft && bPhase == BP_SWAP && now - autoMenuT > AUTO_STEP_MS) {  // ko11.20: elige solo
+    int8_t j = partyBest(bSwapMode == 0);
+    if (j >= 0) partySwitchTo((uint8_t)j);
+    else txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName), bvL2[0] = 0;
+    bPhase = BP_MENU;
+    autoMenuT = now;
+    return;
+  }
   if (bPhase == BP_INTRO) {
     if (bPhaseT == 0 || now - bPhaseT > 2200) {
       bPhase = BP_MENU;
       autoMenuT = now;
       txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
       bvL2[0] = 0;
+      // ko11.20: sale otro del rival: como en PokeRogue, "¿cambiar?"
+      if (bKind != BK_WILD && !bLink && bTeamI > 0 && partyOtherAlive()) partyAskSwap(1);
     }
   } else if (bPhase == BP_PLAY) {
     if (stepEvents()) {
@@ -2149,7 +2412,10 @@ void updateWild() {
       }
       if (caught) finishBattle(false, false, true);
       else if (fled) finishBattle(false, true, false);
-      else if (bMe.hp == 0) finishBattle(false, false, false);
+      else if (bMe.hp == 0) {  // ko11.20: si queda alguien del equipo, sale otro
+        if (bKind != BK_WILD && !bLink && partyOtherAlive()) { pMon[pCur] = bMe; partyAskSwap(0); }
+        else finishBattle(false, false, false);
+      }
       else if (bFoe.hp == 0) { if (!nextTrainerMon()) finishBattle(true, false, false); }
       else {
         bPhase = BP_MENU;
@@ -2514,6 +2780,7 @@ bool extraRender() {
     case XS_BAK: renderBackup(); return true;         // ko11.6
     case XS_BGM: renderBgmPick(); return true;        // ko11.8
     case XS_BRIGHT: renderBright(); return true;      // ko11.18
+    case XS_PARTY: renderPartyPick(); return true;    // ko11.20
     default: return false;
   }
 }
@@ -2537,6 +2804,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_BAK: backupTap(x, y); return true;
     case XS_BGM: bgmPickTap(x, y); return true;
     case XS_BRIGHT: brightTap(x, y); return true;  // ko11.18
+    case XS_PARTY: partyPickTap(x, y); return true;  // ko11.20
     default: return false;
   }
 }
@@ -2553,6 +2821,7 @@ bool extraSwipe() {
   if (xScreen == XS_CANDY) { goBack(); return true; }  // ko10.11: vertical = cerrar
   if (xScreen == XS_FAME) { fameClose(); return true; }       // ko11.1
   if (xScreen == XS_REGION || xScreen == XS_GYM || xScreen == XS_DAILY) { goBack(); return true; }  // ko11.17
+  if (xScreen == XS_PARTY) { partyCancel(); return true; }  // ko11.20
   if (xScreen == XS_NEXTPICK) {
     xScreen = XS_NONE;  // ko10.5: en la eleccion, cerrar = quedarse el huevo
     return true;

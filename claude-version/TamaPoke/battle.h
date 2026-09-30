@@ -134,6 +134,18 @@ uint8_t gymRematchTeam(uint8_t gym, uint16_t petLvl, uint32_t seed, Battler out[
 // liga: 6 formas finales fuertes (sin legendarios) de tipos distintos, nivel +2..+5
 void championTeam(uint16_t petLvl, uint32_t seed, Battler out[CHAMP_TEAM]);
 
+// ---- ko11.20: equipo (el que crias + hasta 2 ayudantes de la caja) contra entrenadores
+#define PARTY_MAX 3
+#define PARTY_HELPERS 2
+// un Pokemon de la caja como luchador: su nivel no pasa del de tu Pokemon (asi un
+// Lv70 de la caja no gana solo) y sus genes cuentan como en los salvajes
+Battler makeBoxBattler(int16_t dex, uint16_t lvl, uint16_t petLvl, uint8_t gA, uint8_t gD, uint8_t gS);
+// tipo mio contra el tipo del rival: +1 ventaja (le pego muy eficaz y el a mi no),
+// -1 desventaja (al reves), 0 igual
+int8_t typeMatch(uint8_t mine, uint8_t foe);
+// el que entra al cambiar voluntariamente pierde el turno: solo ataca el rival (a = yo)
+int battleFoeOnly(Battler &a, Battler &b, BAct actB, BRng &rng, BEvent *ev, int maxEv);
+
 // probabilidad (por mil) de la especie "dex" en ese momento, antes de evolucionar
 // por nivel (para tests y para el comando serie WILD)
 uint16_t wildPermil(int16_t dex, uint8_t region, uint16_t petLvl, uint8_t hour, uint8_t wx,

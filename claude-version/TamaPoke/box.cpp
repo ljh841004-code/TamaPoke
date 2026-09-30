@@ -89,6 +89,19 @@ bool Box::put(const BoxMon &m) {
   return true;
 }
 
+void Box::markFlag(uint8_t i, uint8_t f) {
+  if (i >= n || (mons[i].flags & f) == f) return;
+  mons[i].flags |= f;
+  save();
+}
+
+bool Box::bumpLevel(uint8_t i, uint16_t cap) {
+  if (i >= n || mons[i].lvl >= cap || mons[i].lvl >= 100) return false;
+  mons[i].lvl++;
+  save();
+  return true;
+}
+
 bool Box::release(uint8_t i) {
   if (i >= n) return false;
   memmove(&mons[i], &mons[i + 1], sizeof(BoxMon) * (n - i - 1));

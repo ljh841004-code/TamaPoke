@@ -423,6 +423,7 @@ static void scenes(bool ko, const char *sfx) {
     gMockEpoch = 1772356800u; pet.lastSeenEpoch = gMockEpoch;  // lluvia
     pet.badges = 0x03;
     gymPage = 0; gymTap(GY_X + 10, GY_Y + 2 * (GY_H + GY_GAP) + 10);  // 3er gimnasio
+    if (xScreen == XS_PARTY) partyStart(true);  // ko11.20: sin ayudantes
     render(); shot("54_gym_intro");
     // ko11.19: [자동] [N마리] y el combate automatico
     tick(2300); updateWild(); render(); shot("54b_gym_auto_menu");
@@ -460,25 +461,69 @@ static void scenes(bool ko, const char *sfx) {
     fame.add(6, 58, false, false, gMockEpoch - 86400 * 3);
     fame.add(134, 61, true, false, gMockEpoch - 86400);
     fame.add(pet.speciesId, pet.level(), pet.shiny, false, gMockEpoch);
+    fame.markFlag(1, BOXF_TEAM);  // ko11.20: el del medio gano en equipo
     pet.champWins = 3; pet.champStreak = 2; pet.champBest = 2;
     pet.fameStreak[1] = 1; pet.fameStreak[2] = 2;  // ko11.6.1: rachas
     render(); shot("59_league_fame");
     openFame(); render(); shot("59d_fame_grid");
     fameTap(FM_X + FM_CELL + 10, FM_Y + 10); render(); shot("59e_fame_detail");
+    fameClose(); fameTap(FM_X + 10, FM_Y + 10); render(); shot("59g_fame_detail_solo"); fameClose();
+    fameTap(FM_X + FM_CELL + 10, FM_Y + 10);
     tick(450); render(); shot("59f_fame_detail_fx");  // ko11.17: tecnica de su tipo
     for (int f = 0; f < 20; f++) { char fn[32]; snprintf(fn, sizeof(fn), "92_fame_anim_%02d", f); tick(100); render(); shot(fn); }
     fameClose(); fameClose();
-    leagueTap(GY_X + 40, LG_BTN_Y + 10); render(); shot("59b_league_intro");
+    leagueTap(GY_X + 40, LG_BTN_Y + 10);
+    if (xScreen == XS_PARTY) partyStart(true);
+    render(); shot("59b_league_intro");
     bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
     finishBattle(true, false, false); render(); shot("59c_league_win");
     closeAll();
     gymPage = 0; gymTap(GY_X + 10, GY_Y + 1 * (GY_H + GY_GAP) + 10);  // revancha de Misty
+    if (xScreen == XS_PARTY) partyStart(true);
     render(); shot("57b_rematch_intro");
     closeAll();
     fame.wipe(); pet.champWins = 0;
     memset(pet.gymWins, 0, sizeof(pet.gymWins)); memset(pet.gymDay, 0, sizeof(pet.gymDay));
     pet.badges = 0;
     gMockEpoch = 1790343900; pet.lastSeenEpoch = gMockEpoch;
+  }
+  // ko11.20: equipo contra entrenadores (ayudantes de la caja, cambio al estilo PokeRogue)
+  {
+    closeAll(); pet.energy = 80; pet.badges = 0;
+    box.wipe();
+    box.add(7, 30, false, true, gMockEpoch - 3000);   // Squirtle: agua > roca
+    box.add(4, 20, false, true, gMockEpoch - 2000);   // Charmander: fuego < roca
+    box.add(1, 16, true, true, gMockEpoch - 1000);    // Bulbasaur: planta > roca
+    box.add(25, 18, false, false, gMockEpoch);        // Pikachu
+    box.add(133, 12, false, true, gMockEpoch);        // Eevee
+    openGyms(); gymPage = 0; gymTap(GY_X + 10, GY_Y + 10);  // Brock (roca)
+    navCheck("equipo: gimnasio abre la eleccion", xScreen == XS_PARTY);
+    render(); shot("53a_party_pick");
+    partyPickTap(200, PP_ROW_Y + 10);                          // 1a fila
+    partyPickTap(200, PP_ROW_Y + (PP_ROW_H + PP_ROW_GAP) + 10);  // 2a fila
+    render(); shot("53b_party_pick_two");
+    navCheck("equipo: 2 elegidos", ppPickN() == 2);
+    partyPickTap(250, PP_BTN_Y + 10);  // [시작 2/2]
+    navCheck("equipo: 3 en el combate", xScreen == XS_WILD && pN == 3);
+    tick(2300); updateWild(); render(); shot("53c_party_battle");
+    bMe.hp = 0; bvMeTgt = 0; bqN = bqI = 0; bPhase = BP_PLAY; bvMeFainted = true;
+    updateWild(); render(); shot("53d_party_swap_forced");
+    navCheck("equipo: cae el mio -> elegir", bPhase == BP_SWAP && bSwapMode == 0);
+    wildTap(90, SW_Y + 10);
+    tick(100); render(); shot("53e_party_helper_in");
+    navCheck("equipo: sale el ayudante", pCur != 0 && bPhase == BP_MENU);
+    bFoe.hp = 0; nextTrainerMon(); tick(2300); updateWild(); render(); shot("53f_party_next_switch");
+    navCheck("equipo: rival nuevo -> cambiar?", bPhase == BP_SWAP && bSwapMode == 1);
+    wildTap(380, SW_Y + 10);  // [그대로]
+    wildTap(300, 190);        // mi caja de vida -> cambio a mano
+    render(); shot("53g_party_manual");
+    navCheck("equipo: cambio a mano", bPhase == BP_SWAP && bSwapMode == 2);
+    wildTap(380, SW_Y + 10);  // [취소]
+    bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
+    finishBattle(true, false, false); render(); shot("53h_party_win");
+    navCheck("equipo: ayudantes +1 nivel", bPartyNote[0] != 0);
+    closeAll(); endBattleScreen();
+    box.wipe(); pet.badges = 0;
   }
   // ko10.1: elegir region y encuentros
   {

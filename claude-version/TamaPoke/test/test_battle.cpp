@@ -680,3 +680,27 @@ TEST(wild, comunes_de_la_playa_son_de_agua) {
   CHECK_EQ(other, 0);
   for (int16_t d : { 15, 162, 22 }) CHECK_EQ(wildPermil(d, 1, 30, 13, WX_CLEAR, SEASON_AUTUMN), 0);
 }
+
+// ko11.20: ayudantes de la caja y ventaja de tipo
+TEST(battle, ayudante_no_pasa_del_nivel_del_que_crias) {
+  Battler b = makeBoxBattler(149, 70, 25, 100, 100, 100);
+  CHECK_EQ(b.lvl, (uint16_t)25);
+  Battler c = makeBoxBattler(25, 12, 25, 100, 100, 100);
+  CHECK_EQ(c.lvl, (uint16_t)12);
+  CHECK(b.hp == b.maxHp);
+}
+TEST(battle, ventaja_de_tipo) {
+  CHECK_EQ(typeMatch(PT_WATER, PT_ROCK), 1);
+  CHECK_EQ(typeMatch(PT_FIRE, PT_WATER), -1);
+  CHECK_EQ(typeMatch(PT_NORMAL, PT_NORMAL), 0);
+}
+TEST(battle, cambiar_cuesta_el_turno) {
+  Battler me = makeTrainerMon(7, 20), foe = makeTrainerMon(74, 20);
+  BRng r(5);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  uint16_t hp0 = foe.hp;
+  int n = battleFoeOnly(me, foe, BA_TACKLE, r, ev, BATTLE_MAX_EVENTS);
+  CHECK(n >= 1);
+  CHECK_EQ(foe.hp, hp0);  // yo no ataco
+  for (int i = 0; i < n; i++) CHECK_EQ(ev[i].side, (uint8_t)1);
+}

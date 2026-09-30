@@ -13,7 +13,8 @@
 #define HALL_MAX 251   // ko10.5: salon de la fama (criados hasta el final): 1 por familia de sobra
 #define BOX_CAP_MAX HALL_MAX
 
-enum : uint8_t { BOXF_SHINY = 1, BOXF_CAUGHT = 2, BOXF_RAISED = 4 };  // CAUGHT: con pokeball (si no, ganado)
+enum : uint8_t { BOXF_SHINY = 1, BOXF_CAUGHT = 2, BOXF_RAISED = 4,
+                 BOXF_TEAM = 8 };  // ko11.20: salon de la liga: gano con ayudantes (sin la marca = solo)  // CAUGHT: con pokeball (si no, ganado)
 // ko10.5: RAISED = criado hasta el final (despedida/soltado): corona en la caja
 
 struct __attribute__((packed)) BoxMon {
@@ -47,6 +48,8 @@ public:
   bool take(uint8_t i, BoxMon &out);  // saca el i-esimo (para criarlo)
   bool put(const BoxMon &m);          // ko11.7: vuelve tal cual (de una expedicion)
   bool release(uint8_t i);            // lo suelta
+  bool bumpLevel(uint8_t i, uint16_t cap = 100);  // ko11.20: +1 nivel (ayudante que gano)
+  void markFlag(uint8_t i, uint8_t f);             // ko11.20: anade una marca (BOXF_TEAM)
   int pickRandom() const;             // indice al azar, -1 si vacia
   void wipe();                        // fork KO (ko8): [nuevo comienzo]
 private:

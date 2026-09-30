@@ -1623,6 +1623,12 @@ static void fameDetail() {
   }
   if (top < 96) top = 96;
   drawCrownBig(CX, top + 4, 64);
+  {  // ko11.20: en solitario o en equipo
+    bool team = m.flags & BOXF_TEAM;
+    const char *tl = XT(team ? X_FAME_TEAM_L : X_FAME_SOLO_L);
+    int w = textW(tl, 1) + 28;
+    drawBtn(CX - w / 2, 54, w, 26, team ? 0x4C98 : C565(0xd0, 0x98, 0x20), UI_WHITE, tl);
+  }
   for (int k = 0; k < 6; k++) {  // destellos alrededor
     float a = now * 0.0015f + k * 1.047f;
     int sx = acx + (int)(cosf(a) * 100), sy = acy + (int)(sinf(a) * 70);
@@ -1676,6 +1682,9 @@ void renderFame() {
     const uint8_t *th = thumbs.get(m.dex);
     if (th) drawThumb(th, x + 8, y + 14, 2, false);
     drawCrownBig(x + FM_CELL / 2, y + 22, 26);
+    bool team = m.flags & BOXF_TEAM;  // ko11.20: solo / equipo
+    drawBtn(x + FM_CELL - 46, y + FM_CELL - 30, 40, 22, team ? 0x4C98 : C565(0xd0, 0x98, 0x20), UI_WHITE,
+            XT(team ? X_FAME_TEAM : X_FAME_SOLO));
   }
   if (famePages() > 1) {
     snprintf(t, sizeof(t), XT(X_BAG_PAGE_FMT), famePage + 1, famePages());
@@ -2005,4 +2014,118 @@ void dexRewardLoop(uint32_t now) {
     sfxPlay(SFX_MEDAL);
     return;
   }
+}
+
+// ======================================================================
+// ko11.20: doumi (ayudantes) antes de gimnasio / liga / reto del dia
+// Hasta 2 de la caja. En el gimnasio se sabe el tipo del lider: "유리" / "불리".
+// En la liga y el reto, como en PokeRogue, el rival se ve al salir.
+// ======================================================================
+#define PP_ROWS 4
+#define PP_ROW_Y 96
+#define PP_ROW_H 44
+#define PP_ROW_GAP 4
+#define PP_NAV_Y 292
+#define PP_BTN_Y 334
+static uint8_t ppView[BOX_MAX];
+static uint8_t ppViewN = 0;
+static int ppFoeType() { return ppKind == BK_GYM && bGym < GYM_COUNT ? GYM_TYPE[bGym] : -1; }
+static uint8_t ppPickN() { return (ppPick[0] >= 0) + (ppPick[1] >= 0); }
+// orden: en el gimnasio primero los que tienen ventaja; luego por nivel
+static void ppBuildView() {
+  ppViewN = 0;
+  for (uint8_t i = 0; i < box.count() && ppViewN < BOX_MAX; i++) ppView[ppViewN++] = i;
+  int ft = ppFoeType();
+  for (uint8_t a = 0; a < ppViewN; a++)
+    for (uint8_t b = a + 1; b < ppViewN; b++) {
+      const BoxMon &x = box.at(ppView[a]), &y = box.at(ppView[b]);
+      int sx = (ft >= 0 ? typeMatch(DEX_TBL[x.dex].ptype, (uint8_t)ft) * 1000 : 0) + x.lvl;
+      int sy = (ft >= 0 ? typeMatch(DEX_TBL[y.dex].ptype, (uint8_t)ft) * 1000 : 0) + y.lvl;
+      if (sy > sx) { uint8_t t = ppView[a]; ppView[a] = ppView[b]; ppView[b] = t; }
+    }
+}
+static uint8_t ppPages() { return ppViewN ? (uint8_t)((ppViewN + PP_ROWS - 1) / PP_ROWS) : 1; }
+
+void renderPartyPick() {
+  uiScreenBg();
+  ppBuildView();
+  if (ppPage >= ppPages()) ppPage = ppPages() - 1;
+  char t[48];
+  snprintf(t, sizeof(t), XT(X_PT_TITLE_FMT), ppPickN());
+  drawFit(t, 30, 300, UI_INK, 2);
+  int ft = ppFoeType();
+  if (ft >= 0) {
+    snprintf(t, sizeof(t), XT(X_PT_VS_TYPE_FMT), typeName((uint8_t)ft));
+    int w = textW(t, 1) + 28;
+    drawBtn(CX - w / 2, 58, w, 28, orbColor((uint8_t)ft), UI_WHITE, t);
+  } else {
+    snprintf(t, sizeof(t), XT(X_PT_VS_N_FMT), ppN);
+    drawFit(t, 64, 330, UI_INK, 1);
+  }
+  uint16_t pl = pet.level();
+  for (int r = 0; r < PP_ROWS; r++) {
+    int k = ppPage * PP_ROWS + r;
+    if (k >= ppViewN) break;
+    uint8_t bi = ppView[k];
+    const BoxMon &m = box.at(bi);
+    int y = PP_ROW_Y + r * (PP_ROW_H + PP_ROW_GAP);
+    bool sel = ppPick[0] == (int8_t)bi || ppPick[1] == (int8_t)bi;
+    uiButton(73, y, 320, PP_ROW_H, 10, sel ? C565(0xe6, 0xf8, 0xdc) : UI_WHITE, sel ? UI_BAR_OK : UI_INK);
+    drawThumbAt(m.dex, 100, y + PP_ROW_H / 2, 1, false);
+    char l[48];
+    snprintf(l, sizeof(l), "%s%s", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex));
+    gfx->setTextColor(UI_INK);
+    setSize(2);
+    setCur(126, y + 3);
+    printT(l);
+    uint8_t ty = DEX_TBL[m.dex].ptype;
+    snprintf(l, sizeof(l), "Lv%u  %s", m.lvl < pl ? m.lvl : pl, typeName(ty));
+    setSize(1);
+    gfx->setTextColor(orbColor(ty));
+    setCur(126, y + 26);
+    printT(l);
+    if (ft >= 0) {
+      int8_t tm = typeMatch(ty, (uint8_t)ft);
+      if (tm) drawBtn(286, y + 9, 50, 26, tm > 0 ? UI_BAR_OK : UI_BAR_BAD, UI_WHITE, XT(tm > 0 ? X_PT_GOOD : X_PT_BAD));
+    }
+    if (sel) drawCheckMark(364, y + PP_ROW_H / 2, true);
+    else gfx->drawCircle(364, y + PP_ROW_H / 2, 10, C565(0xb0, 0xb0, 0xb0));
+  }
+  if (ppPages() > 1) {
+    drawBtn(113, PP_NAV_Y, 60, 32, ppPage ? UI_WHITE : UI_TRACK, UI_INK, "<");
+    drawBtn(293, PP_NAV_Y, 60, 32, ppPage + 1 < ppPages() ? UI_WHITE : UI_TRACK, UI_INK, ">");
+    char pg[12];
+    snprintf(pg, sizeof(pg), "%u/%u", ppPage + 1, ppPages());
+    drawFit(pg, PP_NAV_Y + 8, 100, UI_INK, 2);
+  }
+  uint8_t n = ppPickN();
+  drawBtn(83, PP_BTN_Y, 110, 44, UI_TRACK, UI_INK, XT(X_PT_ALONE));
+  snprintf(t, sizeof(t), XT(X_PT_GO_FMT), n);
+  drawBtn(203, PP_BTN_Y, 180, 44, n ? UI_BAR_OK : C565(0x9a, 0xc8, 0x9a), UI_WHITE, t);
+  drawNav(NAV_L, UI_INK);
+  uiFlush();
+}
+
+void partyPickTap(int16_t x, int16_t y) {
+  if (navHit(NAV_L, x, y)) { partyCancel(); return; }
+  if (inRect(x, y, 83, PP_BTN_Y, 110, 44)) { sfxPlay(SFX_TAP); partyStart(true); return; }
+  if (inRect(x, y, 203, PP_BTN_Y, 180, 44)) { sfxPlay(SFX_TAP); partyStart(ppPickN() == 0); return; }
+  if (ppPages() > 1 && y >= PP_NAV_Y && y < PP_NAV_Y + 32) {
+    if (x >= 113 && x < 173 && ppPage) { ppPage--; sfxPlay(SFX_TAP); }
+    else if (x >= 293 && x < 353 && ppPage + 1 < ppPages()) { ppPage++; sfxPlay(SFX_TAP); }
+    return;
+  }
+  if (x < 73 || x >= 393 || y < PP_ROW_Y) return;
+  int r = (y - PP_ROW_Y) / (PP_ROW_H + PP_ROW_GAP);
+  if (r >= PP_ROWS || (y - PP_ROW_Y) % (PP_ROW_H + PP_ROW_GAP) >= PP_ROW_H) return;
+  ppBuildView();
+  int k = ppPage * PP_ROWS + r;
+  if (k >= ppViewN) return;
+  int8_t bi = (int8_t)ppView[k];
+  if (ppPick[0] == bi) { ppPick[0] = ppPick[1]; ppPick[1] = -1; }        // quitar
+  else if (ppPick[1] == bi) ppPick[1] = -1;
+  else if (ppPick[0] < 0) ppPick[0] = bi;                               // poner
+  else if (ppPick[1] < 0) ppPick[1] = bi;
+  else { ppPick[0] = ppPick[1]; ppPick[1] = bi; }                        // lleno: el mas viejo sale
+  sfxPlay(SFX_TAP);
 }

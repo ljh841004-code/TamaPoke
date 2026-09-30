@@ -627,6 +627,17 @@ int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
   return n < maxEv ? n : maxEv;
 }
 
+// ko11.20: cambio voluntario: el rival ataca y yo no hago nada
+int battleFoeOnly(Battler &a, Battler &b, BAct actB, BRng &rng, BEvent *ev, int maxEv) {
+  int n = 0;
+  if (a.hp == 0 || b.hp == 0) return 0;
+  if (actB != BA_TACKLE && actB != BA_TYPE) actB = BA_TACKLE;
+  bool landed = false;
+  doAttack(b, a, actB, 1, rng, ev, maxEv, n, a, b, &landed);
+  a.guard = b.guard = false;
+  return n < maxEv ? n : maxEv;
+}
+
 uint8_t battleAuto(Battler a, Battler b, uint32_t seed, BEvent *ev, int maxEv, int *nEv) {
   // tongsin: los dos aparatos simulan la misma batalla; su reloj puede no
   // coincidir, asi que aqui siempre hace buen tiempo (si no, se desincronizan)
@@ -716,6 +727,23 @@ void championTeam(uint16_t petLvl, uint32_t seed, Battler out[CHAMP_TEAM]) {
       if (baseTotal(pick[j]) < baseTotal(pick[i])) { int16_t t = pick[i]; pick[i] = pick[j]; pick[j] = t; }
   for (uint8_t i = 0; i < CHAMP_TEAM; i++)
     out[i] = makeTrainerMon(pick[i < k ? i : 0], trainerLvl((int32_t)petLvl + 2 + (i * 4) / (CHAMP_TEAM - 1)));
+}
+
+// ---- ko11.20: equipo contra entrenadores
+Battler makeBoxBattler(int16_t dex, uint16_t lvl, uint16_t petLvl, uint8_t gA, uint8_t gD, uint8_t gS) {
+  if (dex < 1 || dex > DEX_COUNT) dex = 16;
+  if (lvl > petLvl) lvl = petLvl;
+  if (lvl < 1) lvl = 1;
+  const DexEntry &e = DEX_TBL[dex];
+  return makeBattler(dex, lvl, wildStat(e.bAtk, gA, lvl), wildStat(e.bDef, gD, lvl), wildStat(e.bSpe, gS, lvl));
+}
+
+int8_t typeMatch(uint8_t mine, uint8_t foe) {
+  uint8_t out = typeEff(mine, foe), in = typeEff(foe, mine);
+  if (out > 2 && in <= 2) return 1;
+  if (in > 2 && out <= 2) return -1;
+  if (out < 2 && in >= 2) return -1;  // mis golpes no le hacen casi nada
+  return 0;
 }
 
 // ---- ko10.11: salvajes de tu talla
