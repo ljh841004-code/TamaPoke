@@ -13,6 +13,9 @@
 #define HEART_MS 1500UL
 #define EVOLVE_ANIM_MS 5200UL              // animacion de evolucion (mas larga = mas epica)
 #define CEREMONY_MS 10000UL                // duracion de la despedida en pantalla
+#define OFF_NIGHT_FROM 22   // ko11.19: apagada, de 22:00 a 7:00 duerme sola
+#define OFF_NIGHT_TO 7
+#define OFF_AWAKE_FLOOR 30  // ko11.19: apagada y de dia: las barras no bajan de 30 (antes 15)
 #define FAREWELL_AGE_MIN (3UL * 24 * 60)   // se despide a los 3 dias de juego (en forma final)
 #define TRAIN_EXP_PCT 5        // ko10.7: EXP por entrenar (% del nivel actual)
 #define TRAIN_EXP_PCT_HI 20    // ... y si bate el record (+1 caramelo)
@@ -160,6 +163,7 @@ public:
   uint16_t orb = 0;
   uint16_t orbBag[ORB_BAG_MAX] = { 0 };
   uint8_t orbN = 0;
+  uint8_t sleptOffline = 0;  // ko11.19: con la placa apagada paso la noche durmiendo (aviso "잘 잤어요!")
   uint8_t orbEvoNote = 0;   // 1 = al evolucionar el orbe se volvio caramelos, 2 = caramelo raro (aviso)
   bool candyTrade(int16_t famDex, uint16_t times);
   // ko11.16: orbes. gainOrb: 1 nuevo a la bolsa, 2 mejoro uno igual (el viejo -> 1

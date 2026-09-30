@@ -1084,19 +1084,36 @@ TEST(ceremony, un_huevo_no_se_despide_ni_se_suelta) {
 }
 
 // ---------------------------------------------------------------- offline
-TEST(offline, aplica_el_tiempo_apagado_con_suelo_de_15) {
+TEST(offline, aplica_el_tiempo_apagado_de_dia_con_suelo_de_30) {
+  // ko11.19: de dia (8:00 -> 18:00) baja como siempre pero el suelo es 30 (antes 15)
   Pet p;
   makePet(p, 4);
   setStats(p, 80, 80, 80, 100);
-  p.setClock(1000u * 86400);
-  p.syncClock(1000u * 86400 + 600 * 60);  // 600 minutos apagado
+  p.setClock(1000u * 86400 + 8 * 3600);
+  p.syncClock(1000u * 86400 + 8 * 3600 + 600 * 60);  // 600 minutos apagado
   CHECK_EQ(p.ageMinutes, (uint32_t)600);
-  CHECK_MSG(p.fullness == 15, "suelo de comida offline = 15");
-  CHECK_MSG(p.energy == 15, "suelo de energia offline = 15");
-  CHECK_MSG(p.joy == 15, "suelo de felicidad offline = 15");
-  CHECK_MSG(p.hygiene == 15, "suelo de higiene offline = 15");
+  CHECK_MSG(p.fullness == 30, "suelo de comida offline = 30");
+  CHECK_MSG(p.energy == 30, "suelo de energia offline = 30");
+  CHECK_MSG(p.joy == 30, "suelo de felicidad offline = 30");
+  CHECK_MSG(p.hygiene == 30, "suelo de higiene offline = 30");
   CHECK_MSG(p.careMistakes == 0, "en ausencia no se acumulan descuidos");
-  CHECK_EQ(p.poops, (uint8_t)2);  // una caca cada 4 h
+  CHECK_EQ(p.poops, (uint8_t)2);  // una caca cada 4 h (despierto)
+  CHECK_EQ(p.sleptOffline, (uint8_t)0);
+}
+
+TEST(offline, de_noche_apagada_duerme_sola) {
+  // ko11.19: apagada de 23:00 a 7:00 sin acostarla: cuenta como dormida
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 80, 80, 40, 100);
+  p.setClock(1000u * 86400 + 23 * 3600);
+  p.syncClock(1000u * 86400 + 31 * 3600);  // 8 h, toda de noche
+  CHECK_MSG(p.energy >= 95, "dormida recupera la energia");
+  CHECK_MSG(p.fullness >= 29 && p.joy >= 34 && p.hygiene >= 44, "baja lento, con los suelos de dormir (30/35/45)");
+  CHECK_EQ(p.poops, (uint8_t)0);   // durmiendo no ensucia
+  CHECK_EQ(p.careMistakes, (uint8_t)0);
+  CHECK_EQ(p.sleptOffline, (uint8_t)1);  // al volver: "잘 잤어요!"
+  CHECK(!p.sleeping);  // no se queda acostada: al encender esta despierta
 }
 
 TEST(offline, tope_de_dos_semanas) {

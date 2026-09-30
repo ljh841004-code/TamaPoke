@@ -144,6 +144,14 @@ static void drawExpResult() {
 
 // en loop(): aviso en la pantalla principal cuando vuelve (una vez)
 void expLoop() {
+  // ko11.19: apagada toda la noche: al volver, "잘 잤어요!" (una vez, en la principal)
+  if (pet.sleptOffline && !extraOpen() && !screenOff && !pet.isEgg() && !cardOpen && !clockOpen) {
+    char t[64];
+    txFmt(t, sizeof(t), X_SLEPT_WELL, pet.nick[0] ? pet.nick : dexName(pet.speciesId), nullptr);
+    showToast(t);
+    sfxPlay(SFX_HEART);
+    pet.sleptOffline = 0;
+  }
   // ko11.16: tras la animacion de evolucion, el aviso del orbe que se volvio caramelos
   if (pet.orbEvoNote && !pet.evolving() && !extraOpen() && !screenOff) {
     showToast(XT(pet.orbEvoNote == 2 ? X_ORB_EVO_RARE : X_ORB_EVO_CANDY));

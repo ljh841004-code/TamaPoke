@@ -129,13 +129,19 @@ void Pet::syncClock(uint32_t nowEpoch) {
   }
   if (mins > 14UL * 24 * 60) mins = 14UL * 24 * 60;  // tope: 2 semanas
 
+  // ko11.19: con la placa apagada, la noche (22-7 h) cuenta como dormida aunque no
+  // la acostaras (antes amanecia con todo a 15), y de dia el suelo sube a 30
+  uint32_t nightMins = 0, awakeMins = 0;
   for (uint32_t i = 0; i < mins; i++) {
     ageMinutes++;
     if (isEgg()) {
       if (ageMinutes >= 3) hatch();  // eclosiona en tu ausencia
       continue;
     }
-    if (sleeping) {  // descanso: baja lento y con suelo, igual que en vivo
+    uint8_t hr = (uint8_t)(((seen + (i + 1) * 60UL) / 3600UL) % 24);
+    bool night = hr >= OFF_NIGHT_FROM || hr < OFF_NIGHT_TO;
+    if (night && !sleeping) nightMins++;
+    if (sleeping || night) {  // descanso: baja lento y con suelo, igual que en vivo
       energy = clamp100(energy + 6);
       if (ageMinutes % 2 == 0) {
         fullness = dropTo(fullness, 1, 30);
@@ -144,16 +150,18 @@ void Pet::syncClock(uint32_t nowEpoch) {
       if (ageMinutes % 3 == 0) hygiene = dropTo(hygiene, 1, 45);
       continue;
     }
-    fullness = dropTo(fullness, 2, 15);
-    energy = dropTo(energy, 1, 15);
-    hygiene = dropTo(hygiene, 1, 15);
-    joy = dropTo(joy, 1, 15);
+    awakeMins++;
+    fullness = dropTo(fullness, 2, OFF_AWAKE_FLOOR);
+    energy = dropTo(energy, 1, OFF_AWAKE_FLOOR);
+    hygiene = dropTo(hygiene, 1, OFF_AWAKE_FLOOR);
+    joy = dropTo(joy, 1, OFF_AWAKE_FLOOR);
   }
   if (!isEgg()) {
-    if (!sleeping) {  // durmiendo no ensucia
-      uint8_t p = poops + mins / 240;
+    if (!sleeping) {  // durmiendo no ensucia (ko11.19: la noche tampoco)
+      uint8_t p = poops + awakeMins / 240;
       poops = p > 3 ? 3 : p;
     }
+    if (nightMins >= 120) sleptOffline = 1;  // al menos 2 h de noche: "잘 잤어요!"
     // la evolucion NO se aplica offline: queda lista y la dispara el usuario
     // tocando al bicho cuando vuelve (para que vea la transformacion)
   }
