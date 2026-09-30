@@ -609,11 +609,16 @@ static void scenes(bool ko, const char *sfx) {
   boxSel = -1;
   hall.addRaised(6, 36, false, 108, 101, 99, gMockEpoch);
   hall.addRaised(134, 42, true, 104, 99, 107, gMockEpoch);
+  hall.addRaised(25, 50, false, 110, 106, 108, gMockEpoch);  // ko11.21: con las 8 medallas
+  hall.markFlag(2, BOXF_PERFECT);
   pet.markFamRaised(16);  // Pidgey ya criado: en gris
   pet.markFamRaised(6);
   render(); shot("11a_box_tabs");
   toastUntil = 0; boxHall = true; render(); shot("11b_box_hall");
-  boxSel = 0; render(); shot("11d_hall_detail"); boxSel = -1; boxHall = false;  // ko11.17: escarapela
+  boxSel = 0; render(); shot("11d_hall_detail"); boxSel = -1;  // ko11.17: escarapela
+  for (int i = 0; i < hall.count(); i++) if (hall.at((uint8_t)i).flags & BOXF_PERFECT) boxSel = i;
+  if (boxSel >= 0) { render(); shot("11e_hall_perfect"); }
+  boxSel = -1; boxHall = false;
   {  // ko11.16: bolsa de orbes (tercera pestana)
     toastUntil = 0; boxOrb = true; render(); shot("11o_orb_bag_empty");
     uint8_t pt = DEX_TBL[pet.speciesId].ptype;

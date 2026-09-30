@@ -265,7 +265,33 @@ void renderBoxDetail() {
   char head[48];
   snprintf(head, sizeof(head), "%s%s", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex));
   drawFit(head, 44, 300, DEX_TBL[m.dex].accent, 3);
+  bool perfect = m.flags & BOXF_PERFECT;
+  if (perfect) {  // ko11.21: crianza perfecta: halo dorado que late, rayos que giran y destellos
+    uint32_t t = millis();
+    uint16_t gold = C565(0xf0, 0xc0, 0x30);
+    float pl = 0.5f + 0.5f * sinf(t * 0.004f);
+    for (int k = 0; k < 12; k++) {
+      float a = t * 0.0008f + k * 0.5236f;
+      int r0 = 50, r1 = 74 + (int)(pl * 8);
+      gfx->drawLine(CX + (int)(cosf(a) * r0), 136 + (int)(sinf(a) * r0), CX + (int)(cosf(a) * r1),
+                    136 + (int)(sinf(a) * r1), uiLerp(gold, UI_BG_DAY, 7, 16));
+    }
+    gfx->fillCircle(CX, 136, 58 + (int)(pl * 4), uiLerp(gold, UI_BG_DAY, 12, 16));
+    gfx->fillCircle(CX, 136, 48, uiLerp(gold, UI_BG_DAY, 10, 16));
+    int ph = (int)((t / 12) % 60);
+    gfx->drawCircle(CX, 136, 48 + ph / 2, uiLerp(gold, UI_BG_DAY, 8 + ph / 8, 16));
+  }
   drawThumbAt(m.dex, CX, 136, 3, false);
+  if (perfect) {
+    uint32_t t = millis();
+    for (int k = 0; k < 6; k++) {
+      float a = t * 0.0015f + k * 1.047f;
+      int sx = CX + (int)(cosf(a) * 70), sy = 136 + (int)(sinf(a) * 54);
+      int ln = 2 + (int)((t / 90 + k * 3) % 4);
+      gfx->drawFastHLine(sx - ln, sy, 2 * ln + 1, UI_WHITE);
+      gfx->drawFastVLine(sx, sy - ln, 2 * ln + 1, UI_WHITE);
+    }
+  }
   if (m.flags & BOXF_RAISED) drawRibbon(CX + 78, 104, 14);  // ko11.17: lo criaste hasta el final
   char l[48];
   snprintf(l, sizeof(l), "No.%03d  Lv.%u  %s", m.dex, m.lvl, typeName(DEX_TBL[m.dex].ptype));
@@ -275,7 +301,13 @@ void renderBoxDetail() {
   snprintf(l, sizeof(l), "%s  %s", XT((m.flags & BOXF_RAISED) ? X_RAISED_TAG
                                       : (m.flags & BOXF_CAUGHT) ? X_CAUGHT_TAG : X_WON_TAG), date);
   drawFit(l, 232, 340, UI_INK, 2);
-  drawFit(XT(boxHall ? X_HALL_NOTE : X_BOX_NEXT), 262, 360, UI_INK, 1);
+  if (perfect) {  // ko11.21
+    const char *pt = XT(X_PERFECT_L);
+    int w = textW(pt, 1) + 30;
+    drawBtn(CX - w / 2, 252, w, 28, C565(0xe0, 0xa8, 0x20), UI_WHITE, pt);
+  } else {
+    drawFit(XT(boxHall ? X_HALL_NOTE : X_BOX_NEXT), 262, 360, UI_INK, 1);
+  }
   bool conf = timeLeft(boxConfirmUntil) > 0;
   if (boxHall) {  // ko10.5: los de corona son recuerdos: no se sueltan
     drawBtn(165, 300, 136, 48, UI_TRACK, UI_INK, XT(X_CLOSE));
@@ -347,6 +379,8 @@ void renderBox() {
       C565(0xff, 0xf2, 0xd0), C565(0xee, 0xe4, 0xff), C565(0xdc, 0xf6, 0xf2),
     };
     uint16_t rowBg = same > 1 ? DUP_BG[m.dex % 6] : UI_WHITE;
+    bool perfect = m.flags & BOXF_PERFECT;  // ko11.21
+    if (perfect) rowBg = C565(0xff, 0xf2, 0xc4);
     uiButton(73, y, 320, BOX_ROW_H, 10, rowBg, UI_INK);
     drawThumbAt(m.dex, 104, y + BOX_ROW_H / 2, 1, false);
     if (same > 1) {
@@ -365,6 +399,18 @@ void renderBox() {
     setSize(1);
     setCur(134, y + 28);
     printT(l);
+    if (perfect) {  // ko11.21: "완벽 육성" en oro y destellos junto a la cinta
+      gfx->setTextColor(C565(0xc0, 0x86, 0x10));
+      setCur(134 + textW(l, 1) + 10, y + 28);
+      printT(XT(X_PERFECT));
+      uint32_t t = millis();
+      for (int q = 0; q < 3; q++) {
+        int ph = (int)((t / 90 + q * 5) % 14);
+        int sx = 363 + (q - 1) * 14, sy = y + 6 + (q % 2) * 22, ln = ph < 7 ? ph / 2 + 1 : (14 - ph) / 2 + 1;
+        gfx->drawFastHLine(sx - ln, sy, 2 * ln + 1, C565(0xf0, 0xb8, 0x20));
+        gfx->drawFastVLine(sx, sy - ln, 2 * ln + 1, C565(0xf0, 0xb8, 0x20));
+      }
+    }
     if (m.flags & BOXF_RAISED) drawRibbon(363, y + 17, 9);  // ko10.5: criado (ko11.17: escarapela)
     else if (m.flags & BOXF_CAUGHT) drawMap(SPR_ICON_PLAY, 16, 352, y + 7, 2, false);
   }
@@ -795,7 +841,10 @@ void onPetEnd(Pet &p, uint8_t how) {
     gNextPickPending = true;   // soltarlo lo decidimos nosotros: sin corona
     return;
   }
-  hall.addRaised(p.speciesId, p.level(), p.shiny, p.geneAtk, p.geneDef, p.geneSpe, clockEpoch());  // salon
+  bool added = hall.addRaised(p.speciesId, p.level(), p.shiny, p.geneAtk, p.geneDef, p.geneSpe, clockEpoch());  // salon
+  // ko11.21: con las 8 medallas = crianza perfecta (brilla en la cinta)
+  const uint16_t all = (uint16_t)((1u << MED_COUNT) - 1);
+  if (added && (p.medals & all) == all) hall.markFlag((uint8_t)(hall.count() - 1), BOXF_PERFECT);
   gNextPickPending = true;
 }
 
