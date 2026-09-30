@@ -89,6 +89,11 @@ enum : uint8_t { DEV_NONE = 0, DEV_TYPE, DEV_SHINY };
 struct DayEvent { uint8_t kind; uint8_t ptype; bool moonNight; };
 bool fullMoon(uint32_t epoch);            // luna llena ese dia (±1 dia)
 DayEvent dayEvent(uint32_t localEpoch);   // 0 = sin reloj: sin evento
+// ko11.19: combate automatico (entrenadores): medicina segun lo dificil que sea
+#define AUTO_POTION_HP 30        // usa pocion por debajo del 30 % ...
+#define AUTO_POTION_HP_HARD 50   // ... o del 50 % si el rival es fuerte
+#define AUTO_POTION_MAX 3        // pociones por combate (rival normal); fuerte: sin limite
+#define AUTO_STEP_MS 700         // pausa entre turnos del combate automatico
 #define DAILY_HEAL_PCT 35                 // ko11.18: reto del dia: entre rivales, +35 % de la vida que queda
 #define EVENT_TYPE_PCT 25                 // dia de un tipo: 1 de cada 4 es de ese tipo
 #define EVENT_MOON_MULT 3

@@ -1119,6 +1119,31 @@ void drawBattleMsg() {
 #define BM_GAP 6
 static const uint8_t BM_ACT[2][3] = { { BA_TACKLE, BA_TYPE, BA_GUARD }, { BA_POTION, BA_BALL, BA_RUN } };
 
+// ko11.19: combate automatico contra entrenadores (gimnasio, liga, reto del dia).
+// autoCount = cuantos rivales seguidos (1..los que quedan); autoLeft = en marcha
+uint8_t autoCount = 1, autoLeft = 0, autoPotions = 0;
+static uint32_t autoMenuT = 0;
+static void battleDoAction(int a);
+static bool autoAllowed() { return bKind != BK_WILD && !bLink; }
+static uint8_t autoRemaining() { return bTeamN > bTeamI ? (uint8_t)(bTeamN - bTeamI) : 1; }
+static bool autoHardFoe() {
+  return bKind == BK_CHAMP || bFoe.lvl > bMe.lvl + 2 || typeEff(bFoe.type, bMe.type) > 2 ||
+         bFoe.maxHp > bMe.maxHp + bMe.maxHp / 4;
+}
+// que haria un buen jugador: pocion si hace falta (mas pronto si el rival es fuerte),
+// a veces defenderse de un golpe muy eficaz, y si no el ataque que mas hace
+static uint8_t autoPick() {
+  bool hard = autoHardFoe();
+  uint32_t hpPct = (uint32_t)bMe.hp * 100 / (bMe.maxHp ? bMe.maxHp : 1);
+  uint32_t foePct = (uint32_t)bFoe.hp * 100 / (bFoe.maxHp ? bFoe.maxHp : 1);
+  bool foeAlmostDown = foePct <= 15 && hpPct >= 15;  // rematar antes que curarse
+  if (pet.potions && !foeAlmostDown && hpPct < (hard ? AUTO_POTION_HP_HARD : AUTO_POTION_HP) &&
+      (hard || autoPotions < AUTO_POTION_MAX))
+    return BA_POTION;
+  if (typeEff(bFoe.type, bMe.type) >= 4 && hpPct < 70 && bRng.below(100) < 25) return BA_GUARD;
+  return battleAi(bMe, bFoe, bRng, 0);
+}
+
 void drawBattleMenu() {
   const DexEntry &me = DEX_TBL[bvMeDex];
   char pot[16], ball[16];
@@ -1129,6 +1154,13 @@ void drawBattleMenu() {
   drawBtn(x1, BM_Y1, BM_W, BM_H, me.accent, UI_WHITE, moveName(BA_TYPE, bvMeType, bvMeTier));
   drawBtn(x2, BM_Y1, BM_W, BM_H, 0x4C98, UI_WHITE, XT(X_GUARD));
   drawBtn(x0, BM_Y2, BM_W, BM_H, pet.potions ? UI_BAR_OK : UI_TRACK, pet.potions ? UI_WHITE : UI_INK, pot);
+  if (autoAllowed()) {  // ko11.19: entrenadores: [자동] [N마리] en vez de ball / huir
+    char cnt[16];
+    snprintf(cnt, sizeof(cnt), XT(X_AUTO_CNT_FMT), (unsigned)autoCount);
+    drawBtn(x1, BM_Y2, BM_W, BM_H, C565(0x6a, 0x4c, 0xf0), UI_WHITE, XT(X_AUTO_BTN));
+    drawBtn(x2, BM_Y2, BM_W, BM_H, UI_WHITE, UI_INK, cnt);
+    return;
+  }
   drawBtn(x1, BM_Y2, BM_W, BM_H, pet.balls ? UI_BAR_BAD : UI_TRACK, pet.balls ? UI_WHITE : UI_INK, ball);
   drawBtn(x2, BM_Y2, BM_W, BM_H, UI_TRACK, UI_INK, XT(X_RUN));
 }
@@ -1139,6 +1171,16 @@ int battleMenuHit(int16_t x, int16_t y) {
   int col = (x - BM_X) / (BM_W + BM_GAP);
   if (col > 2 || (x - BM_X) % (BM_W + BM_GAP) >= BM_W) return -1;
   return BM_ACT[row][col];
+}
+
+// ko11.19: aviso del combate automatico (abajo, donde van los botones)
+static void drawAutoBanner() {
+  char t[64];
+  snprintf(t, sizeof(t), XT(X_AUTO_ON_FMT), (unsigned)autoLeft);
+  uint16_t pc = C565(0x6a, 0x4c, 0xf0);
+  gfx->fillRoundRect(BM_X, BM_Y1, 3 * BM_W + 2 * BM_GAP, BM_H, 12, pc);
+  drawFit(t, BM_Y1 + BM_H / 2 - 10, 3 * BM_W, UI_WHITE, 2);
+  drawFit(XT(X_AUTO_TAP), BM_Y2 + 8, 3 * BM_W, 0x6B4D, 1);
 }
 
 void renderBattleView() {
@@ -1242,7 +1284,8 @@ void renderBattleView() {
     }
   } else {
     drawBattleMsg();
-    if (bPhase == BP_MENU) { drawBattleMenu(); if (xScreen == XS_WILD) drawBattleArtChip(); }  // ko11.16
+    if (bPhase == BP_MENU && !autoLeft) { drawBattleMenu(); if (xScreen == XS_WILD) drawBattleArtChip(); }  // ko11.16
+    if (autoLeft && bPhase != BP_RESULT) drawAutoBanner();  // ko11.19
   }
   uiFlush();
 }
@@ -1315,6 +1358,7 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
   bKind = kind;
   bRegion = region < REGION_COUNT ? region : 0;
   bTeamN = n;
+  autoLeft = 0; autoPotions = 0; autoCount = n;  // ko11.19: por defecto, todo el equipo
   bTeamI = 0;
   for (uint8_t i = 0; i < n; i++) bTeam[i] = team[i];
   bRng = BRng(esp_random());
@@ -1340,6 +1384,8 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
 // el rival cayo: si le quedan Pokemon, sale el siguiente (EXP del vencido ya)
 static bool nextTrainerMon() {
   if (bKind == BK_WILD || bTeamI + 1 >= bTeamN) return false;
+  if (autoLeft) autoLeft--;  // ko11.19: uno menos en automatico
+  if (autoCount > bTeamN - bTeamI - 1) autoCount = (uint8_t)(bTeamN - bTeamI - 1);
   pet.addExp(battleExp(bFoe.dex, bFoe.lvl));
   bvMeLvl = pet.level();
   bTeamI++;
@@ -1366,6 +1412,7 @@ static bool nextTrainerMon() {
 
 void startWildIn(uint8_t region) {
   if (!battleAllowed(true)) return;
+  autoLeft = 0;  // ko11.19
   wildAlertUntil = 0;
   cardOpen = false;
   bRegion = region < REGION_COUNT ? region : 0;
@@ -1817,6 +1864,12 @@ void endBattleScreen() {
 }
 
 void wildTap(int16_t x, int16_t y) {
+  if (autoLeft) {  // ko11.19: cualquier toque para el automatico
+    autoLeft = 0;
+    strncpy(bvL1, XT(X_AUTO_STOP), sizeof(bvL1) - 1); bvL2[0] = 0;
+    sfxPlay(SFX_TAP);
+    return;
+  }
   if (bPhase == BP_INTRO) { bPhaseT = 0; return; }  // saltar la intro
   // ko9.2: tocar el resultado pasa ya a la pregunta
   if (bPhase == BP_RESULT && millis() - bPhaseT > 800) { afterResult(); return; }
@@ -1827,6 +1880,23 @@ void wildTap(int16_t x, int16_t y) {
   if (battleArtTap(x, y)) return;  // ko11.16: PMD <-> PokeRogue
   int a = battleMenuHit(x, y);
   if (a < 0) return;
+  if (autoAllowed() && a == BA_BALL) {  // ko11.19: [자동]
+    if (autoCount > autoRemaining() || autoCount < 1) autoCount = autoRemaining();
+    autoLeft = autoCount;
+    autoMenuT = millis();
+    sfxPlay(SFX_MEDAL);
+    return;
+  }
+  if (autoAllowed() && a == BA_RUN) {  // ko11.19: [N마리] 1 -> 2 -> ... -> los que quedan
+    autoCount = autoCount >= autoRemaining() ? 1 : autoCount + 1;
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  battleDoAction(a);
+}
+
+// ko11.19: un turno con la accion a (toque o combate automatico)
+static void battleDoAction(int a) {
   // fork KO (ko4): los objetos se gastan al elegirlos; sin existencias no hay turno
   if (bKind != BK_WILD && (a == BA_BALL || a == BA_RUN)) {  // ko10.4: entrenador
     strncpy(bvL1, XT(X_TRAINER_NO), sizeof(bvL1) - 1); bvL2[0] = 0; sfxPlay(SFX_DENY); return;
@@ -1839,6 +1909,7 @@ void wildTap(int16_t x, int16_t y) {
   }
   sfxPlay(SFX_TAP);
   BAct foeAct = battleAi(bFoe, bMe, bRng, 35);  // el salvaje es algo torpe
+  if (a == BA_POTION && autoLeft) autoPotions++;
   bqN = battleTurn(bMe, bFoe, (BAct)a, foeAct, bRng, bq, BATTLE_MAX_EVENTS, true);
   bqAisMe = true;
   bPhase = BP_PLAY;
@@ -1941,6 +2012,7 @@ static void wildJoinTap(int16_t x, int16_t y) {
 }
 
 void finishBattle(bool won, bool fled, bool caught) {
+  autoLeft = 0;  // ko11.19
   bWon = won;
   bFled = fled;
   bCaught = caught;
@@ -2057,9 +2129,14 @@ bool stepEvents() {
 
 void updateWild() {
   uint32_t now = millis();
+  if (autoLeft && bPhase == BP_MENU && now - autoMenuT > AUTO_STEP_MS) {  // ko11.19
+    battleDoAction(autoPick());
+    return;
+  }
   if (bPhase == BP_INTRO) {
     if (bPhaseT == 0 || now - bPhaseT > 2200) {
       bPhase = BP_MENU;
+      autoMenuT = now;
       txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
       bvL2[0] = 0;
     }
@@ -2076,6 +2153,7 @@ void updateWild() {
       else if (bFoe.hp == 0) { if (!nextTrainerMon()) finishBattle(true, false, false); }
       else {
         bPhase = BP_MENU;
+        autoMenuT = now;
         txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
         bvL2[0] = 0;
       }

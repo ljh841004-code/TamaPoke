@@ -8,6 +8,7 @@ extern uint32_t gMockMillis, gMockEpoch;
 extern bool gMockPortal;
 extern const char *gSdRoot;
 
+static void navCheck(const char *name, bool ok) { printf("  NAV %s: %s\n", ok ? "ok  " : "FAIL", name); }
 static void shot(const char *name) {
   char path[256];
   snprintf(path, sizeof(path), "build/shots/%s.raw", name);
@@ -423,6 +424,27 @@ static void scenes(bool ko, const char *sfx) {
     pet.badges = 0x03;
     gymPage = 0; gymTap(GY_X + 10, GY_Y + 2 * (GY_H + GY_GAP) + 10);  // 3er gimnasio
     render(); shot("54_gym_intro");
+    // ko11.19: [자동] [N마리] y el combate automatico
+    tick(2300); updateWild(); render(); shot("54b_gym_auto_menu");
+    wildTap(BM_X + 2 * (BM_W + BM_GAP) + 10, BM_Y2 + 10);  // N -> 1
+    render(); shot("54c_gym_auto_count");
+    navCheck("auto: N마리 1..restantes", autoCount == 1);
+    wildTap(BM_X + 2 * (BM_W + BM_GAP) + 10, BM_Y2 + 10);
+    wildTap(BM_X + BM_W + BM_GAP + 10, BM_Y2 + 10);  // [자동]
+    navCheck("auto: en marcha", autoLeft == 2);
+    render(); shot("54d_gym_auto_on");
+    { uint16_t hp0 = bMe.hp; uint8_t p0 = pet.potions; pet.potions = 5;
+      bMe.hp = bMe.maxHp / 3; bFoe.hp = bFoe.maxHp;
+      bool hard = autoHardFoe();
+      navCheck("auto: pocion segun rival", (autoPick() == BA_POTION) == hard);
+      bMe.hp = bMe.maxHp / 5;
+      navCheck("auto: pocion bajo 30 %", autoPick() == BA_POTION);
+      bMe.hp = hp0; pet.potions = p0; }
+    tick(800); updateWild();
+    navCheck("auto: juega solo", bPhase == BP_PLAY);
+    wildTap(200, 200);
+    navCheck("auto: tocar para", autoLeft == 0);
+    for (int i = 0; i < 40 && bPhase == BP_PLAY; i++) { tick(500); updateWild(); }
     bPhase = BP_MENU; bvL1[0] = 0;
     bFoe.hp = 0; bvFoeTgt = 0;
     nextTrainerMon(); render(); shot("55_gym_next");
@@ -617,7 +639,6 @@ static void scenes(bool ko, const char *sfx) {
 }
 
 // ko11.17: [<] vuelve a la pantalla desde la que se abrio cada menu
-static void navCheck(const char *name, bool ok) { printf("  NAV %s: %s\n", ok ? "ok  " : "FAIL", name); }
 static void navChecks() {
   const int LX = 20, LY = 200;  // flecha izquierda
   closeAll(); cardOpen = true; cardPage = 3; openBox(); boxTap(LX, LY);
