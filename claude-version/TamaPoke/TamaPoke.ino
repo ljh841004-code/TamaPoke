@@ -1144,6 +1144,15 @@ void handleTouch() {
 }
 
 void touchSample(bool pressed, int16_t x, int16_t y) {
+  // ko11.18: pantalla apagada con el PWR corto: el tactil NO la enciende (en el
+  // bolso se encendia sola con cualquier roce). Solo otra pulsacion corta del PWR.
+  // (la atenuacion automatica por inactividad sigue despertando con un toque)
+  if (screenOff) {
+    wasPressed = pressed;
+    petTapPendT = 0;
+    petHoldT0 = 0;
+    return;
+  }
   // ko9.1: en los juegos de entrenamiento se abandona MANTENIENDO el dedo 2 s
   // quieto (antes: tocar la franja de arriba, y<72). La pokeball de las 12 del
   // juego de velocidad, las que caen en el de defensa y el saco llegan a esa
