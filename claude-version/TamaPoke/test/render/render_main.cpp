@@ -462,6 +462,7 @@ static void scenes(bool ko, const char *sfx) {
     fame.add(134, 61, true, false, gMockEpoch - 86400);
     fame.add(pet.speciesId, pet.level(), pet.shiny, false, gMockEpoch);
     fame.markFlag(1, BOXF_TEAM);  // ko11.20: el del medio gano en equipo
+    { int16_t h[2] = { 7, 1 }; fameTeamAdd(fame.at(1), h, 0x02); }
     pet.champWins = 3; pet.champStreak = 2; pet.champBest = 2;
     pet.fameStreak[1] = 1; pet.fameStreak[2] = 2;  // ko11.6.1: rachas
     render(); shot("59_league_fame");
@@ -498,6 +499,8 @@ static void scenes(bool ko, const char *sfx) {
     box.add(133, 12, false, true, gMockEpoch);        // Eevee
     openGyms(); gymPage = 0; gymTap(GY_X + 10, GY_Y + 10);  // Brock (roca)
     navCheck("equipo: gimnasio abre la eleccion", xScreen == XS_PARTY);
+    helperUse(box.at(1)); helperUse(box.at(1)); helperUse(box.at(1));  // Charmander: hoy ya 3 veces
+    helperUse(box.at(0));
     render(); shot("53a_party_pick");
     partyPickTap(200, PP_ROW_Y + 10);                          // 1a fila
     partyPickTap(200, PP_ROW_Y + (PP_ROW_H + PP_ROW_GAP) + 10);  // 2a fila

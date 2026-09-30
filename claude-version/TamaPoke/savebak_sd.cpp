@@ -13,6 +13,7 @@ static const char *const BAK_PATH[2] = { "/tpsave/save0.bak", "/tpsave/save1.bak
 struct BakNs { const char *ns; bool big; };
 static const BakNs BAK_NS[] = {
   { "tamapoke", false }, { "tpbox", true }, { "tphall", true }, { "tpfame", true }, { "tpdex", true },
+  { "tpteam", true },  // ko11.20: ayudantes de las victorias en equipo
 };
 
 static const char *partFor(bool big) { return (big && bigPart()) ? bigPart() : NVS_DEFAULT_PART_NAME; }

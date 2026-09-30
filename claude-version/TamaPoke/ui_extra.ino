@@ -471,6 +471,86 @@ uint32_t ppPickEpoch[PARTY_HELPERS] = { 0, 0 };
 bool ppArmed = false;                             // startTrainer usa ppPick
 char bPartyNote[40] = "";                         // "도우미 Lv+1" en el resultado
 
+// ko11.20: cada ayudante, HELPER_USES_PER_DAY combates al dia (espacio "tpparty":
+// el dia y {especie, llegada a la caja, veces}; se reconoce por especie + fecha)
+struct __attribute__((packed)) HelperUse { int16_t dex; uint32_t epoch; uint8_t n; };
+static HelperUse gHU[16];
+static uint8_t gHUN = 0;
+static uint16_t gHUDay = 0xFFFF;
+static bool gHULoaded = false;
+static void huLoad() {
+  uint16_t today = (uint16_t)(pet.lastSeenEpoch / 86400u);
+  if (!gHULoaded) {
+    Preferences p;
+    p.begin("tpparty", true);
+    gHUDay = p.getUShort("day", 0xFFFF);
+    gHUN = p.isKey("use") ? (uint8_t)(p.getBytes("use", gHU, sizeof(gHU)) / sizeof(HelperUse)) : 0;
+    p.end();
+    gHULoaded = true;
+  }
+  if (gHUDay != today) { gHUDay = today; gHUN = 0; }
+}
+static void huSave() {
+  Preferences p;
+  p.begin("tpparty", false);
+  p.putUShort("day", gHUDay);
+  if (gHUN) p.putBytes("use", gHU, gHUN * sizeof(HelperUse));
+  else p.remove("use");
+  p.end();
+}
+uint8_t helperUsesLeft(const BoxMon &m) {
+  huLoad();
+  for (uint8_t i = 0; i < gHUN; i++)
+    if (gHU[i].dex == m.dex && gHU[i].epoch == m.epoch)
+      return gHU[i].n >= HELPER_USES_PER_DAY ? 0 : (uint8_t)(HELPER_USES_PER_DAY - gHU[i].n);
+  return HELPER_USES_PER_DAY;
+}
+static void helperUse(const BoxMon &m) {
+  huLoad();
+  uint8_t i = 0;
+  while (i < gHUN && !(gHU[i].dex == m.dex && gHU[i].epoch == m.epoch)) i++;
+  if (i == gHUN) {
+    if (gHUN == 16) { memmove(gHU, gHU + 1, sizeof(HelperUse) * 15); gHUN--; i = gHUN; }
+    gHU[i].dex = m.dex; gHU[i].epoch = m.epoch; gHU[i].n = 0;
+    gHUN++;
+  }
+  if (gHU[i].n < 255) gHU[i].n++;
+  huSave();
+}
+
+// ko11.20: los ayudantes de cada victoria en equipo de la liga (espacio "tpteam",
+// en la NVS grande): se une a la entrada del salon por su fecha y especie
+#define FAME_TEAM_MAX 60
+static FameTeam gFT[FAME_TEAM_MAX];
+static uint8_t gFTN = 0;
+static bool gFTLoaded = false;
+static void ftLoad() {
+  if (gFTLoaded) return;
+  Preferences p;
+  p.begin("tpteam", true, bigPart());
+  gFTN = p.isKey("t") ? (uint8_t)(p.getBytes("t", gFT, sizeof(gFT)) / sizeof(FameTeam)) : 0;
+  p.end();
+  gFTLoaded = true;
+}
+const FameTeam *fameTeamFor(const BoxMon &m) {
+  ftLoad();
+  for (int i = gFTN - 1; i >= 0; i--)
+    if (gFT[i].epoch == m.epoch && gFT[i].dex == m.dex) return &gFT[i];
+  return nullptr;
+}
+static void fameTeamAdd(const BoxMon &m, const int16_t *help, uint8_t shiny) {
+  ftLoad();
+  if (gFTN == FAME_TEAM_MAX) { memmove(gFT, gFT + 1, sizeof(FameTeam) * (FAME_TEAM_MAX - 1)); gFTN--; }
+  FameTeam &t = gFT[gFTN++];
+  t.epoch = m.epoch; t.dex = m.dex;
+  for (uint8_t k = 0; k < PARTY_HELPERS; k++) t.help[k] = help[k];
+  t.shiny = shiny;
+  Preferences p;
+  p.begin("tpteam", false, bigPart());
+  p.putBytes("t", gFT, gFTN * sizeof(FameTeam));
+  p.end();
+}
+
 // salvaje
 Battler bMe, bFoe;
 BRng bRng(1);
@@ -1886,6 +1966,7 @@ static void partyOpen(uint8_t kind, uint8_t region, const Battler *team, uint8_t
     int8_t f = -1;
     for (uint8_t i = 0; ppPickDex[k] && i < box.count(); i++)
       if (box.at(i).dex == ppPickDex[k] && box.at(i).epoch == ppPickEpoch[k] && (k == 0 || i != ppPick[0])) { f = (int8_t)i; break; }
+    if (f >= 0 && !helperUsesLeft(box.at((uint8_t)f))) f = -1;  // hoy ya no puede
     ppPick[k] = f;
   }
   if (ppPick[0] < 0 && ppPick[1] >= 0) { ppPick[0] = ppPick[1]; ppPick[1] = -1; }
@@ -1895,6 +1976,8 @@ static void partyOpen(uint8_t kind, uint8_t region, const Battler *team, uint8_t
 }
 void partyStart(bool solo) {
   ppArmed = !solo;
+  for (uint8_t k = 0; ppArmed && k < PARTY_HELPERS; k++)  // un uso del dia para cada ayudante
+    if (ppPick[k] >= 0 && ppPick[k] < box.count()) helperUse(box.at((uint8_t)ppPick[k]));
   for (uint8_t k = 0; k < PARTY_HELPERS; k++) {
     bool ok = ppPick[k] >= 0 && ppPick[k] < box.count();
     ppPickDex[k] = ok ? box.at((uint8_t)ppPick[k]).dex : 0;
@@ -2325,7 +2408,15 @@ void finishBattle(bool won, bool fled, bool caught) {
       // ko11.1: con sus genes (la ficha del salon los ensena)
       fame.addRaised(pet.speciesId, pet.level(), pet.shiny, pet.geneAtk, pet.geneDef, pet.geneSpe, clockEpoch());
       // ko11.20: con ayudantes que llegaron a luchar = victoria en equipo (si no, en solitario)
-      if (pUsed & (uint8_t)~1u) fame.markFlag((uint8_t)(fame.count() - 1), BOXF_TEAM);
+      if (pUsed & (uint8_t)~1u) {
+        uint8_t last = (uint8_t)(fame.count() - 1);
+        fame.markFlag(last, BOXF_TEAM);
+        int16_t help[PARTY_HELPERS] = { 0, 0 };
+        uint8_t sh = 0, k = 0;
+        for (uint8_t j = 1; j < pN && k < PARTY_HELPERS; j++)
+          if ((pUsed >> j) & 1) { if ((pShiny >> j) & 1) sh |= (uint8_t)(1 << k); help[k++] = pMon[j].dex; }
+        fameTeamAdd(fame.at(last), help, sh);
+      }
       if (fame.count() >= 1 && fame.count() <= sizeof(pet.fameStreak))
         pet.fameStreak[fame.count() - 1] = (uint8_t)(pet.champStreak > 255 ? 255 : pet.champStreak);
       snprintf(bNote, sizeof(bNote), XT(X_CHAMP_WIN), (unsigned)pet.champStreak);

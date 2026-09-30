@@ -137,6 +137,7 @@ void championTeam(uint16_t petLvl, uint32_t seed, Battler out[CHAMP_TEAM]);
 // ---- ko11.20: equipo (el que crias + hasta 2 ayudantes de la caja) contra entrenadores
 #define PARTY_MAX 3
 #define PARTY_HELPERS 2
+#define HELPER_USES_PER_DAY 3  // cada ayudante: 3 combates al dia
 // un Pokemon de la caja como luchador: su nivel no pasa del de tu Pokemon (asi un
 // Lv70 de la caja no gana solo) y sus genes cuentan como en los salvajes
 Battler makeBoxBattler(int16_t dex, uint16_t lvl, uint16_t petLvl, uint8_t gA, uint8_t gD, uint8_t gS);

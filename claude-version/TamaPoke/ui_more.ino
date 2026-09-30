@@ -1566,7 +1566,10 @@ void openFame() {
   sfxPlay(SFX_TAP);
 }
 
+PmdMon fameHelpPmd[PARTY_HELPERS];  // ko11.20: los ayudantes de una victoria en equipo
+static void fameHelpUnload() { for (auto &h : fameHelpPmd) h.unload(); }
 void fameClose() {
+  fameHelpUnload();
   if (fameSel >= 0) { fameSel = -1; galleryPmd.unload(); return; }
   galleryPmd.unload();
   xScreen = XS_GYM;  // vuelve a la pagina de la liga
@@ -1603,6 +1606,30 @@ static void fameDetail() {
   }
   uint32_t cyc = now % 2000;
   if (cyc < 1000) drawMoveFx(pt, acx, acy, acx, acy, 350 + cyc * 650 / 1000, true, 2, moveTier(m.dex));
+  if (m.flags & BOXF_TEAM) {  // ko11.20: los ayudantes a los lados, algo mas pequenos, con su luz
+    const FameTeam *t = fameTeamFor(m);
+    static const int HX[PARTY_HELPERS] = { CX - 142, CX + 142 };
+    for (uint8_t k = 0; t && k < PARTY_HELPERS; k++) {
+      int16_t hd = t->help[k];
+      if (hd < 1 || hd > DEX_COUNT) continue;
+      uint16_t hc = orbColor(DEX_TBL[hd].ptype);
+      int hy = ground - 50;
+      float hp = 0.5f + 0.5f * sinf(now * 0.004f + 1.5f + k * 1.5f);
+      gfx->fillCircle(HX[k], hy, 46 + (int)(hp * 4), uiLerp(hc, UI_BG_DAY, 12, 16));
+      gfx->fillCircle(HX[k], hy, 34, uiLerp(hc, UI_BG_DAY, 9, 16));
+      int ph = (int)((now / 14 + k * 50) % 80);
+      gfx->drawCircle(HX[k], hy, 34 + ph / 2, uiLerp(hc, UI_BG_DAY, 6 + ph / 8, 16));
+      if (fameHelpPmd[k].loaded && fameHelpPmd[k].acts[PMD_IDLE].frames)
+        drawPmdActM(fameHelpPmd[k], PMD_IDLE, HX[k], ground - 10, 0, true, false, 4, 110);
+      else drawThumbAt(hd, HX[k], hy, 2, false);
+      for (int q = 0; q < 3; q++) {  // destellos pequenos
+        float a = now * 0.002f + q * 2.09f + k;
+        int sx = HX[k] + (int)(cosf(a) * 44), sy = hy + (int)(sinf(a) * 36);
+        gfx->drawFastHLine(sx - 3, sy, 7, UI_WHITE);
+        gfx->drawFastVLine(sx, sy - 3, 7, UI_WHITE);
+      }
+    }
+  }
   if (galleryPmd.loaded && galleryPmd.acts[PMD_IDLE].frames) {
     // ko11.1: retrato grande y quieto (frame 0) para que la corona quede justo en la cabeza
     const PmdAct &ia = galleryPmd.acts[PMD_IDLE];
@@ -1683,7 +1710,7 @@ void renderFame() {
     if (th) drawThumb(th, x + 8, y + 14, 2, false);
     drawCrownBig(x + FM_CELL / 2, y + 22, 26);
     bool team = m.flags & BOXF_TEAM;  // ko11.20: solo / equipo
-    drawBtn(x + FM_CELL - 46, y + FM_CELL - 30, 40, 22, team ? 0x4C98 : C565(0xd0, 0x98, 0x20), UI_WHITE,
+    drawBtn(x + FM_CELL - 52, y + FM_CELL - 30, 46, 22, team ? 0x4C98 : C565(0xd0, 0x98, 0x20), UI_WHITE,
             XT(team ? X_FAME_TEAM : X_FAME_SOLO));
   }
   if (famePages() > 1) {
@@ -1710,6 +1737,12 @@ void fameTap(int16_t x, int16_t y) {
   fameSel = (int16_t)(n - 1 - idx);
   const BoxMon &m = fame.at((uint8_t)fameSel);
   galleryPmd.load((uint8_t)m.dex, m.flags & BOXF_SHINY);
+  fameHelpUnload();
+  if (m.flags & BOXF_TEAM) {  // ko11.20
+    const FameTeam *t = fameTeamFor(m);
+    for (uint8_t k = 0; t && k < PARTY_HELPERS; k++)
+      if (t->help[k] >= 1) fameHelpPmd[k].load((uint8_t)t->help[k], (t->shiny >> k) & 1);
+  }
   audioCry(m.dex);
 }
 
@@ -2070,7 +2103,8 @@ void renderPartyPick() {
     const BoxMon &m = box.at(bi);
     int y = PP_ROW_Y + r * (PP_ROW_H + PP_ROW_GAP);
     bool sel = ppPick[0] == (int8_t)bi || ppPick[1] == (int8_t)bi;
-    uiButton(73, y, 320, PP_ROW_H, 10, sel ? C565(0xe6, 0xf8, 0xdc) : UI_WHITE, sel ? UI_BAR_OK : UI_INK);
+    uint8_t left = helperUsesLeft(m);  // ko11.20: hoy le quedan
+    uiButton(73, y, 320, PP_ROW_H, 10, sel ? C565(0xe6, 0xf8, 0xdc) : left ? UI_WHITE : UI_TRACK, sel ? UI_BAR_OK : UI_INK);
     drawThumbAt(m.dex, 100, y + PP_ROW_H / 2, 1, false);
     char l[48];
     snprintf(l, sizeof(l), "%s%s", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex));
@@ -2083,6 +2117,10 @@ void renderPartyPick() {
     setSize(1);
     gfx->setTextColor(orbColor(ty));
     setCur(126, y + 26);
+    printT(l);
+    snprintf(l, sizeof(l), XT(X_PT_USES_FMT), left, (unsigned)HELPER_USES_PER_DAY);
+    gfx->setTextColor(left ? 0x8410 : UI_BAR_BAD);
+    setCur(126 + textW("Lv100  ", 1) + textW(typeName(ty), 1) + 6, y + 26);
     printT(l);
     if (ft >= 0) {
       int8_t tm = typeMatch(ty, (uint8_t)ft);
@@ -2122,6 +2160,7 @@ void partyPickTap(int16_t x, int16_t y) {
   int k = ppPage * PP_ROWS + r;
   if (k >= ppViewN) return;
   int8_t bi = (int8_t)ppView[k];
+  if (ppPick[0] != bi && ppPick[1] != bi && !helperUsesLeft(box.at((uint8_t)bi))) { sfxPlay(SFX_DENY); return; }  // hoy ya no
   if (ppPick[0] == bi) { ppPick[0] = ppPick[1]; ppPick[1] = -1; }        // quitar
   else if (ppPick[1] == bi) ppPick[1] = -1;
   else if (ppPick[0] < 0) ppPick[0] = bi;                               // poner

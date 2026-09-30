@@ -61,6 +61,10 @@ private:
   void save();
 };
 
+// ko11.20: una victoria en equipo de la liga: la entrada del salon (fecha + especie)
+// y sus ayudantes (0 = hueco). shiny: bit k = el ayudante k es variocolor
+struct __attribute__((packed)) FameTeam { uint32_t epoch; int16_t dex; int16_t help[2]; uint8_t shiny; };
+
 class DexLog {
 public:
   // ko10: 251 especies (gen 1 + 2). Los guardados de 151 se leen y se amplian.
