@@ -1766,6 +1766,7 @@ static bool nextTrainerMon() {
 void startWildIn(uint8_t region) {
   if (!battleAllowed(true)) return;
   autoLeft = 0;  // ko11.19
+  partyEnd();    // ko11.20.1: siempre con el que crias
   wildAlertUntil = 0;
   cardOpen = false;
   bRegion = region < REGION_COUNT ? region : 0;
@@ -2250,9 +2251,7 @@ void dailyTap(int16_t x, int16_t y) {
 
 void endBattleScreen() {
   foePmd.unload();
-  helperPmd.unload();  // ko11.20
-  helperPmdDex = 0;
-  pN = 1; pCur = 0;
+  partyEnd();  // ko11.20
   xScreen = XS_NONE;
 }
 
@@ -2324,10 +2323,20 @@ bool ownsSpecies(int16_t dex) {
 }
 
 // tras el resultado: el repetido (si lo hay) y luego "seguir?"
+// ko11.20.1: al acabar un combate de equipo vuelve a luchar el que crias (antes, al
+// volver a la lista de gimnasios no se reiniciaba y en el siguiente salvaje salia
+// el ultimo ayudante con el nombre de tu Pokemon)
+static void partyEnd() {
+  helperPmd.unload();
+  helperPmdDex = 0;
+  pN = 1; pCur = 0; pUsed = 1; pShiny = 0;
+}
+
 static void afterResult() {
   // ko10.11: tras un gimnasio se vuelve a la lista de gimnasios (en la pagina de
   // ese gimnasio, con la medalla nueva a la vista) y tras el reto del dia, a su
   // pantalla. Antes volvia a la principal y habia que entrar otra vez
+  if (bKind != BK_WILD) partyEnd();
   if (bKind == BK_GYM) {
     foePmd.unload();
     openGyms();
@@ -2759,6 +2768,7 @@ const char *partnerName(char *buf, size_t n) {
 }
 
 void startLinkBattle() {
+  partyEnd();  // ko11.20.1
   const LinkPet &th = linkPartner();
   if (th.t.dex < 1 || th.t.dex > DEX_COUNT) { linkFinish(XT(X_LINK_LOST), 2500); return; }
   // la instantanea que se envio, no las stats de ahora: si el nivel cambiara

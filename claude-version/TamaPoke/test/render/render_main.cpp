@@ -541,6 +541,10 @@ static void scenes(bool ko, const char *sfx) {
     bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
     finishBattle(true, false, false); render(); shot("53h_party_win");
     navCheck("equipo: ayudantes +1 nivel", bPartyNote[0] != 0);
+    afterResult();  // vuelve a la lista de gimnasios
+    closeAll(); pet.energy = 80; startWildIn(petRegion());  // ko11.20.1: el siguiente salvaje
+    navCheck("equipo: luego un salvaje con el que crias", pCur == 0 && bvMeDex == pet.speciesId);
+    render(); shot("53i_wild_after_team");
     closeAll(); endBattleScreen();
     box.wipe(); pet.badges = 0;
   }
