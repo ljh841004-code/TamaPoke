@@ -1936,7 +1936,7 @@ void regionTap(int16_t x, int16_t y) {
 // ko10.4: gimnasios (8 medallas) y reto del dia
 // ======================================================================
 static const uint16_t BADGE_COL[GYM_COUNT] = {
-  C565(0x8a, 0x8a, 0x8a), C565(0x3a, 0x8c, 0xe0), C565(0xf0, 0x90, 0x30), C565(0x6c, 0xc0, 0x5c),
+  C565(0x9c, 0xa4, 0xb0), C565(0x3a, 0x8c, 0xe0), C565(0xf0, 0x90, 0x30), C565(0x6c, 0xc0, 0x5c),
   C565(0xf0, 0x7a, 0xa8), C565(0xe0, 0xb8, 0x30), C565(0xd8, 0x40, 0x40), C565(0x40, 0xa0, 0x60),
 };
 #define GY_PER_PAGE 4
@@ -1968,7 +1968,9 @@ void openGyms() {
 
 static void drawBadge(int x, int y, int r, uint8_t i, bool got) {
   if (got) {
-    gfx->fillCircle(x, y, r, BADGE_COL[i]);
+    // ko11.20.1: borde oscuro: el gris (roca) ya no parece un hueco vacio
+    gfx->fillCircle(x, y, r + 1, UI_INK);
+    gfx->fillCircle(x, y, r - 1, BADGE_COL[i]);
     gfx->fillCircle(x - r / 3, y - r / 3, r / 3, UI_WHITE);  // brillo
   } else {
     gfx->drawCircle(x, y, r, UI_TRACK);

@@ -415,6 +415,7 @@ static void scenes(bool ko, const char *sfx) {
     pet.badges = 0x07;  // 3 medallas
     openGyms(); gymPage = 0; render(); shot("50_gyms_p1");
     gymPage = 1; render(); shot("50b_gyms_p2");
+    { uint8_t kb = pet.badges; pet.badges = 0xFF; gymPage = 0; render(); shot("50c_gyms_all8"); pet.badges = kb; }
     closeAll(); openDaily(); render(); shot("51_daily");
     closeAll(); trainMenuOpen = true; trainMenuPage = 1; render(); shot("52_battle_page"); trainMenuOpen = false;
     closeAll(); openRegionPick(); regionPage = 1; render(); shot("53_region_locked");
