@@ -3527,15 +3527,16 @@ void renderCardProfile() {
   if (pmd.loaded) drawPmdActFit(PMD_IDLE, CX, 214, millis(), 6, 230);
 
   // racha con llama
-  char rl[40];  // en japones pierde cifras con 30 a partir de 100 dias
+  char rl[64];  // ko11.18: "연속 돌봄 N일  최고 N일" (mas largo: 64)
   snprintf(rl, sizeof(rl), T(S_STREAK_FMT), pet.streak, pet.bestStreak);
-  int rw = 24 + textW(rl, 3);
+  uint8_t rsz = textW(rl, 3) > 330 ? 2 : 3;  // si no cabe, un punto menos
+  int rw = 24 + textW(rl, rsz);
   int sx = CX - rw / 2, sy = 222;
   gfx->fillTriangle(sx + 9, sy + 1, sx + 1, sy + 23, sx + 17, sy + 23, UI_BAR_BAD);
   gfx->fillTriangle(sx + 9, sy + 10, sx + 5, sy + 23, sx + 13, sy + 23, UI_BAR_WARN);
   gfx->setTextColor(UI_INK);
-  setSize(3);
-  setCur(sx + 24, sy);
+  setSize(rsz);
+  setCur(sx + 24, sy + (rsz == 2 ? 4 : 0));
   printT(rl);
 
   // vinculo: etiqueta, barra y numero en grande
