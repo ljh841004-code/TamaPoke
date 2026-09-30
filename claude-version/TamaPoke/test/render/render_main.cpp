@@ -597,7 +597,7 @@ static void scenes(bool ko, const char *sfx) {
   galleryDetail = 197; galleryPmd.load(197, false); render(); shot("32_dex_umbreon");
   galleryDetail = 0; galleryPage = 0;
   // sonido y hora
-  closeAll(); openClock(); render(); shot("15_clock_settings");
+  closeAll(); openClock(); setBigPart("nvs2"); render(); shot("15z_clock_nvs2"); setBigPart(nullptr); render(); shot("15_clock_settings");
   clockDateMode = true; render(); shot("15b_clock_date"); clockDateMode = false;
   closeAll(); openSound(); render(); shot("16_sound");
   xScreen = XS_BRIGHT; render(); shot("16d_brightness");  // ko11.18
