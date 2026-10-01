@@ -742,6 +742,8 @@ static void navChecks() {
   closeAll(); openTrainMenu(); trainMenuPage = 1; tick(3000); pet.energy = 80;
   openRegionPick(); bool reg = xScreen == XS_REGION; regionTap(LX, LY);
   navCheck("entrenamiento(batallas) -> region -> [<]", reg && xScreen == XS_NONE && trainMenuOpen && trainMenuPage == 1);
+  { uint8_t b0 = pet.badges; pet.badges = 0xFF; closeAll(); openGyms();
+    navCheck("gimnasios con 8 medallas: empieza en la 1a pagina", gymPage == 0); pet.badges = b0; }
   closeAll(); openTrainMenu(); trainMenuPage = 1; openGyms(); gymPage = 0; gymTap(LX, LY);
   navCheck("entrenamiento -> gimnasios -> [<]", xScreen == XS_NONE && trainMenuOpen && trainMenuPage == 1);
   closeAll(); openTrainMenu(); trainMenuPage = 1; openDaily(); dailyTap(LX, LY);

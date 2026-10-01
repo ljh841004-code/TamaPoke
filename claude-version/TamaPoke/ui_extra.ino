@@ -1997,7 +1997,9 @@ void openGyms() {
   cardOpen = false;
   xScreen = XS_GYM;
   uint8_t nb = badgeCount(pet.badges);
-  gymPage = nb >= GYM_COUNT ? 2 : nb >= GY_PER_PAGE ? 1 : 0;  // la pagina del proximo (con 8, la liga)
+  // la pagina del proximo gimnasio. ko11.27: con las 8 medallas, la 1a (Brock): antes saltaba a
+  // la liga y para las revanchas habia que volver atras (la liga sigue a dos paginas)
+  gymPage = (nb >= GY_PER_PAGE && nb < GYM_COUNT) ? 1 : 0;
   sfxPlay(SFX_TAP);
 }
 
