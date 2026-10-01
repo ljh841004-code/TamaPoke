@@ -1739,6 +1739,7 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
   }
   ppArmed = false;
   if (kind == BK_STORY) storyAddParty();  // ko11.22: los de la historia (no la caja)
+  gStoryFlyAt = kind == BK_STORY ? &bMe : nullptr;  // ko11.23.3
   if (kind == BK_ROGUE) rogueApplyParty();  // ko11.21: la expedicion trae la vida de la oleada anterior
   bFoe = bTeam[0];
   bvSetup(bMe, bFoe, nullptr, false);
@@ -2380,6 +2381,7 @@ static void partyEnd() {
   helperPmdDex = 0;
   pN = 1; pCur = 0; pUsed = 1; pShiny = 0;
   pSlot0Pet = true;
+  gStoryFlyAt = nullptr;  // ko11.23.3
 }
 
 static void afterResult() {

@@ -461,6 +461,14 @@ uint8_t weatherMul(uint8_t wx, uint8_t moveType) {
   return 2;
 }
 
+// ko11.23.3: en la historia no hay tipo volador (un tipo por Pokemon; Pidgey es normal). Para que,
+// como en el original, la familia Pidgey pueda con la hierba: SOLO el mio (gStoryFlyAt = &bMe),
+// su ataque de tipo hace x2 a los de hierba. El Pidgeot del rival no lo tiene
+const Battler *gStoryFlyAt = nullptr;
+static bool storyFly(const Battler &at, const Battler &df, uint8_t move) {
+  return gStoryFlyAt == &at && move == BA_TYPE && at.dex >= 16 && at.dex <= 18 && df.type == PT_GRASS;
+}
+
 // dano base de un movimiento (sin aleatorio ni critico), para la IA y el calculo
 static uint32_t rawDamage(const Battler &at, const Battler &df, uint8_t move, uint8_t *effOut) {
   uint8_t mtype = (move == BA_TYPE) ? at.type : (uint8_t)PT_NORMAL;
@@ -470,6 +478,7 @@ static uint32_t rawDamage(const Battler &at, const Battler &df, uint8_t move, ui
   if (mtype == at.type) d = d * 3 / 2;  // STAB
   d = d * weatherMul(sBattleWx, mtype) / 2;  // ko10.4: lluvia / sol / nieve
   uint8_t eff = typeEff(mtype, df.type);
+  if (storyFly(at, df, move)) eff = 4;  // ko11.23.3
   if (effOut) *effOut = eff;
   return d * eff / 2;
 }

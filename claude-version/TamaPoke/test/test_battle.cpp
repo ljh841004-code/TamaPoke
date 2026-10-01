@@ -93,6 +93,34 @@ TEST(battle, inmune_no_hace_dano) {
   }
 }
 
+// ko11.23.3: historia: la familia Pidgey (solo la mia) hace x2 a la hierba; el rival no
+static uint8_t effOf(Battler &a, Battler &b) {
+  BRng rng(7);
+  for (int t = 0; t < 20; t++) {
+    BEvent ev[BATTLE_MAX_EVENTS];
+    Battler x = a, y = b;
+    const Battler *keep = gStoryFlyAt;
+    if (keep == &a) gStoryFlyAt = &x;
+    int n = battleTurn(x, y, BA_TYPE, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+    gStoryFlyAt = keep;
+    for (int i = 0; i < n; i++) if (ev[i].side == 0 && ev[i].kind == EV_HIT) return ev[i].eff;
+  }
+  return 255;
+}
+TEST(battle, historia_pidgey_contra_hierba) {
+  Battler p = makeBattler(17, 30, 80, 60, 80);  // Pidgeotto (normal)
+  Battler g = makeBattler(2, 30, 80, 60, 60);   // Ivysaur (hierba)
+  gStoryFlyAt = nullptr;
+  CHECK_EQ(effOf(p, g), (uint8_t)2);            // fuera de la historia: normal
+  gStoryFlyAt = &p;
+  CHECK_EQ(effOf(p, g), (uint8_t)4);            // el mio, en la historia: x2
+  Battler w = makeBattler(7, 30, 80, 60, 60);   // contra agua: nada especial
+  CHECK_EQ(effOf(p, w), (uint8_t)2);
+  Battler r = makeBattler(18, 30, 80, 60, 80);  // el Pidgeot del rival (otro Battler): normal
+  CHECK_EQ(effOf(r, g), (uint8_t)2);
+  gStoryFlyAt = nullptr;
+}
+
 TEST(battle, proteger_reduce_el_dano_y_cura) {
   uint32_t sinGuard = 0, conGuard = 0;
   for (uint32_t s = 1; s <= 200; s++) {

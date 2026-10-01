@@ -141,6 +141,7 @@ void championTeam(uint16_t petLvl, uint32_t seed, Battler out[CHAMP_TEAM]);
 // un Pokemon de la caja como luchador: su nivel no pasa del de tu Pokemon (asi un
 // Lv70 de la caja no gana solo) y sus genes cuentan como en los salvajes
 Battler makeBoxBattler(int16_t dex, uint16_t lvl, uint16_t petLvl, uint8_t gA, uint8_t gD, uint8_t gS);
+extern const Battler *gStoryFlyAt;  // ko11.23.3: historia: la familia Pidgey (solo la mia) x2 contra hierba
 // tipo mio contra el tipo del rival: +1 ventaja (le pego muy eficaz y el a mi no),
 // -1 desventaja (al reves), 0 igual
 int8_t typeMatch(uint8_t mine, uint8_t foe);
