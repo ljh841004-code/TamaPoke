@@ -19,7 +19,8 @@
 #define ST_ROW_H 48
 #define ST_ROW_GAP 6
 #define ST_RESTART_Y 364
-#define STORY_FOE_EASE 15   // ko11.23.2: rivales de la historia -15 % (vida, ataque, defensa, velocidad)
+#define STORY_FOE_EASE 15   // ko11.23.2: rivales de la historia -15 % (vida, defensa, velocidad)
+#define STORY_FOE_ATK_EASE 10  // ko11.23.3: el ataque solo -10 % (con -15 % era algo blando)
 #define ST_PG_LX 92
 #define ST_PG_RX 330
 #define ST_PG_W 44
@@ -713,7 +714,7 @@ static void stStartBattle() {
     // ko11.23.2: la historia algo mas facil (el usuario perdia casi siempre al principio): -15 % en todo
     Battler &b = team[i];
     b.maxHp = b.hp = (uint16_t)(b.maxHp * (100 - STORY_FOE_EASE) / 100 > 0 ? b.maxHp * (100 - STORY_FOE_EASE) / 100 : 1);
-    b.atk = (uint16_t)(b.atk * (100 - STORY_FOE_EASE) / 100 > 0 ? b.atk * (100 - STORY_FOE_EASE) / 100 : 1);
+    b.atk = (uint16_t)(b.atk * (100 - STORY_FOE_ATK_EASE) / 100 > 0 ? b.atk * (100 - STORY_FOE_ATK_EASE) / 100 : 1);
     b.def = (uint16_t)(b.def * (100 - STORY_FOE_EASE) / 100 > 0 ? b.def * (100 - STORY_FOE_EASE) / 100 : 1);
     b.spe = (uint16_t)(b.spe * (100 - STORY_FOE_EASE) / 100 > 0 ? b.spe * (100 - STORY_FOE_EASE) / 100 : 1);
   }

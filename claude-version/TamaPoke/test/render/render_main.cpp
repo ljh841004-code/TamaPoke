@@ -865,7 +865,7 @@ static void storyShots() {
   navCheck("historia: lucha el companero (no el que crias)", bMe.dex == 7 && bMe.lvl == 5 && !pSlot0Pet);
   navCheck("historia: el rival lleva la ventaja", bFoe.dex == 1);
   { Battler ref = makeTrainerMon(1, 5);
-    navCheck("historia: rival -15% (vida y ataque)", bFoe.maxHp == ref.maxHp * 85 / 100 && bFoe.atk == ref.atk * 85 / 100); }
+    navCheck("historia: rival vida -15%, ataque -10%", bFoe.maxHp == ref.maxHp * 85 / 100 && bFoe.atk == ref.atk * 90 / 100 && bFoe.def == ref.def * 85 / 100); }
   tick(2300); updateWild(); render(); shot("77_story_battle");
   // ko11.23.1: [◀] en el combate: 1er toque avisa, 2o sale (sin derrota)
   { uint8_t lw = stDone[0];
