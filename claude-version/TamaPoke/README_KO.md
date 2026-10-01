@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko11.20.1)
+# TamaPoke KO (v1.17-ko11.21)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko11.21: 스토리 모드 story.h/story_ko.cpp(대본 표: BG/SAY/NARR/MON/CHOICE(2·3칸)/LABEL/GOTO/BATTLE/GIVE/END/STARTER)/ui_story.ino, XS_STORY/STORYCH/SCENE/ROGUE, BK_STORY/BK_ROGUE, 동료 stPDex/stPExp(STORY_FLOOR, 승리 +1레벨, pSlot0Pet=false로 출전, 보상은 pet), 원정 rgStarter·rgPartnerLv=4+웨이브, 인물 그림 SdThumbs portraits(/mons/story.bin, tools/pack_story.py), NVS "tpstory"(SD 백업 포함), 조사 {아}. PC 테스트 253개
 - ✅ ko11.20.1: partyEnd()(afterResult 트레이너·endBattleScreen·startWildIn·startLinkBattle) — pCur 남아 야생에서 도우미 모습, drawBadge 검은 테두리·회색→은색, BOXF_PERFECT 16(onPetEnd 메달 8개) 리본 전당 금빛 효과. PC 테스트 256개
 - ✅ ko11.20: 팀 pMon[3]/pBox/pCur/pUsed, XS_PARTY(ppPick, 하루 HELPER_USES_PER_DAY 3 "tpparty"), BP_SWAP(모드 0 강제/1 다음 상대/2 수동=battleFoeOnly), makeBoxBattler(레벨 캡), typeMatch, pickNextFoe(챔피언), Box::bumpLevel/markFlag/set, 명예의 전당 FameRec("tpteam" nvs2, 1마리 1장·solo/team·도우미, 옛 카드 합치기 1회), 금/은관, SD 백업에 tpteam. PC 테스트 256개
 - ✅ ko11.19.1: bakMsg/bBoxMsg int8_t → int16_t (X_BAK_DONE 311이 X_CANT_NOW 55로 잘림), bakPickSlot(수동·자동 각자 칸, 테스트), 버전 녹색 점 왼쪽·함께 가운데. PC 테스트 249개
