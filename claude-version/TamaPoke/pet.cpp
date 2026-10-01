@@ -1235,7 +1235,7 @@ void Pet::load(bool *migrated) {
 void Pet::wipeGameKeepSettings() {
   // ko11.8: "bgmMask" = fondos elegidos en la pantalla de sonido (tambien es ajuste)
   // ko11.23.3: "bri" (brillo) y "chg" (limite de carga) tambien son ajustes
-  static const char *const KEEP_U8[] = { "volBgm", "volCry", "volSfx", "lang", "bgmMask", "bri", "chg", "vib" };
+  static const char *const KEEP_U8[] = { "volBgm", "volCry", "volSfx", "lang", "bgmMask", "bri", "chg", "vib", "vibLv" };  // ko11.26: fuerza de la vibracion
   const int NK = sizeof(KEEP_U8) / sizeof(KEEP_U8[0]);
   uint8_t u8[NK];
   bool has[NK];

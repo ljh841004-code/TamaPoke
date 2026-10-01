@@ -32,6 +32,8 @@ uint32_t esp_random() { return nextRand(); }
 void *ps_malloc(size_t n) { return malloc(n); }
 void pinMode(int, int) {}
 void digitalWrite(int, int) {}
+bool ledcAttach(uint8_t, uint32_t, uint8_t) { return true; }
+bool ledcWrite(uint8_t, uint32_t) { return true; }
 int digitalRead(int) { return 0; }
 int digitalPinToInterrupt(int p) { return p; }
 void attachInterrupt(int, void (*)(), int) {}

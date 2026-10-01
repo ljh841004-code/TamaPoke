@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko11.25)
+# TamaPoke KO (v1.17-ko11.26)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko11.26: XS_SET 설정 화면(NAV_TOP·아래로 밀기, RET_SET, 시간은 clockClose), 시간 화면 정리, 소리 화면 밝기 버튼·네트워크 화면 업데이트/백업 버튼 이동, 카드 능력치 쪽 버튼 제거, 보관함 BOX_TAB_X4 사탕 탭(bagFromBox), 진동 세기 vibLv 0..2(LEDC 20kHz, 115/180/255, 30ms 킥, KEEP_U8). PC 테스트 255개, 화면 검사 92개
 - ✅ ko11.25: VIB_PIN 18 (Grove 진동 모듈), vibPulse(ms,n,gap) 논블로킹 + vibLoop, "vib" NVS(기본 켬, 새로 시작 유지), 켤 때 180ms, 야생 200×3, 타격 70/140ms, 소리 끔 + 새 똥 250×2, 소리 화면 [진동 켜짐/꺼짐]. PC 테스트 255개
 - ✅ ko11.24.1: Wire.setTimeOut 50→200 (crash.txt ko11.17·ko11.24 같은 pc 0x4037a37f = i2c_master_isr_handler_default / i2c_isr_receive_handler, 포기된 터치 읽기의 늦은 응답). PC 테스트 255개
 - ✅ ko11.24: MT_STORY/STORY_A/STORY_END/SBATTLE/SROCKET/SGYM (audio.cpp 후보 파일 순서대로, 없으면 기존), storyBattleTrack/storySceneTrack, batSetChargeLimit(4.1V/4.2V, "chg"), KEEP_U8에 bri·chg. PC 테스트 255개

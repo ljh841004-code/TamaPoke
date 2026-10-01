@@ -43,7 +43,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko11.25"
+#define FW_VERSION "1.17-ko11.26"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -492,10 +492,18 @@ static void bigStoreBegin() {
 // ======================================================================
 // ko11.25: motor de vibracion (IO18). Sin bloquear: n pulsos de 'on' ms separados 'gap' ms.
 // Se puede apagar como el sonido ("vib" en la NVS). Sin modulo no pasa nada (el pin en bajo)
+// ko11.26: fuerza por PWM (LEDC 20 kHz, inaudible): debil / media / fuerte ("vibLv").
+// El motor parado no arranca con poca tension: los primeros VIB_KICK_MS van a tope
+#define VIB_PWM_HZ 20000
+#define VIB_KICK_MS 30
+static const uint8_t VIB_DUTY[3] = { 115, 180, 255 };  // ~45 / 70 / 100 %
 static bool vibOn = false;
+static bool vibKick = false;
+static int8_t gVibLv = -1;
 static uint32_t vibT = 0;
 static uint8_t vibLeft = 0;
 static uint16_t vibOnMs = 0, vibGapMs = 0;
+static uint32_t vibKickEnd = 0;
 static int8_t gVibEn = -1;
 bool vibEnabled() {
   if (gVibEn < 0) {
@@ -512,11 +520,31 @@ void vibSetEnabled(bool on) {
   p.begin("tamapoke", false);
   p.putUChar("vib", gVibEn);
   p.end();
-  if (!on) { vibLeft = 0; vibOn = false; digitalWrite(VIB_PIN, LOW); }
+  if (!on) { vibLeft = 0; vibOn = false; vibKick = false; ledcWrite(VIB_PIN, 0); }
+}
+// 0 = debil, 1 = media, 2 = fuerte (la de ko11.25)
+uint8_t vibLevel() {
+  if (gVibLv < 0) {
+    Preferences p;
+    p.begin("tamapoke", true);
+    gVibLv = p.getUChar("vibLv", 2);
+    p.end();
+    if (gVibLv > 2) gVibLv = 2;
+  }
+  return (uint8_t)gVibLv;
+}
+void vibSetLevel(uint8_t lv) {
+  gVibLv = lv > 2 ? 2 : lv;
+  Preferences p;
+  p.begin("tamapoke", false);
+  p.putUChar("vibLv", (uint8_t)gVibLv);
+  p.end();
 }
 void vibBegin() {
   pinMode(VIB_PIN, OUTPUT);
   digitalWrite(VIB_PIN, LOW);
+  ledcAttach(VIB_PIN, VIB_PWM_HZ, 8);
+  ledcWrite(VIB_PIN, 0);
 }
 void vibPulse(uint16_t ms, uint8_t n, uint16_t gap) {
   if (vibOn || vibLeft || !vibEnabled()) return;  // ya vibrando: no se pisa (golpes seguidos no se alargan)
@@ -525,15 +553,22 @@ void vibPulse(uint16_t ms, uint8_t n, uint16_t gap) {
 }
 void vibLoop(uint32_t now) {
   if (vibOn) {
+    if (vibKick && (int32_t)(now - vibKickEnd) >= 0) {  // ya gira: a la fuerza elegida
+      vibKick = false;
+      ledcWrite(VIB_PIN, VIB_DUTY[vibLevel()]);
+    }
     if ((int32_t)(now - vibT) >= 0) {
-      digitalWrite(VIB_PIN, LOW);
+      ledcWrite(VIB_PIN, 0);
       vibOn = false;
+      vibKick = false;
       vibT = now + vibGapMs;
     }
     return;
   }
   if (vibLeft && (int32_t)(now - vibT) >= 0) {
-    digitalWrite(VIB_PIN, HIGH);
+    ledcWrite(VIB_PIN, 255);  // arranque a tope
+    vibKick = vibLevel() < 2;
+    vibKickEnd = now + VIB_KICK_MS;
     vibOn = true;
     vibLeft--;
     vibT = now + vibOnMs;

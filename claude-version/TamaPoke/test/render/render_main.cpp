@@ -674,11 +674,16 @@ static void scenes(bool ko, const char *sfx) {
   clockDateMode = true; render(); shot("15b_clock_date"); clockDateMode = false;
   closeAll(); openSettings(); setBigPart("nvs2"); render(); shot("14_settings"); setBigPart(nullptr);  // ko11.26
   closeAll(); openSound(); render(); shot("16_sound");
-  { bool v0 = vibEnabled(), a0 = audioEnabled();  // ko11.25: [진동 켬/끔] junto a [소리]
+  { bool a0 = audioEnabled();  // ko11.25: [진동] junto a [소리]; ko11.26: 꺼짐 -> 약 -> 중 -> 강
+    vibSetEnabled(true); vibSetLevel(2);
     soundTap(SND_BTN_X1 + 70, 96); render(); shot("16g_sound_vib_off");
-    navCheck("sonido: [진동] alterna la vibracion (no el sonido)", vibEnabled() != v0 && audioEnabled() == a0);
+    navCheck("sonido: [진동 강] -> apagada (no el sonido)", !vibEnabled() && audioEnabled() == a0);
+    soundTap(SND_BTN_X1 + 70, 96); render(); shot("16h_sound_vib_weak");
+    navCheck("sonido: apagada -> [진동 약]", vibEnabled() && vibLevel() == 0);
     soundTap(SND_BTN_X1 + 70, 96);
-    navCheck("sonido: [진동] otra vez = como estaba", vibEnabled() == v0); }
+    navCheck("sonido: [진동 약] -> [진동 중]", vibEnabled() && vibLevel() == 1);
+    soundTap(SND_BTN_X1 + 70, 96);
+    navCheck("sonido: [진동 중] -> [진동 강]", vibEnabled() && vibLevel() == 2); }
   xScreen = XS_BRIGHT; render(); shot("16d_brightness");  // ko11.18
   brightTap(345, 230); render(); shot("16e_brightness_up"); setBrightLevel(7);
   brightTap(290, 338); render(); shot("16f_charge_limit");  // ko11.23.3

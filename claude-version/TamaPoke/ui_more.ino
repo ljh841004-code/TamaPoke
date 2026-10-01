@@ -978,8 +978,11 @@ void renderSound() {
   // ko11.25: [소리 켬/끔] [진동 켬/끔] lado a lado
   drawBtn(SND_BTN_X0, 78, 150, 40, on ? UI_BAR_OK : UI_TRACK, on ? UI_WHITE : UI_INK,
           XT(on ? X_SOUND_ON : X_SOUND_OFF));
+  // ko11.26: [진동 꺼짐 / 약 / 중 / 강]: cada toque pasa al siguiente
   bool vb = vibEnabled();
-  drawBtn(SND_BTN_X1, 78, 150, 40, vb ? UI_BAR_OK : UI_TRACK, vb ? UI_WHITE : UI_INK, XT(vb ? X_VIB_ON : X_VIB_OFF));
+  static const XId VLBL[3] = { X_VIB_WEAK, X_VIB_MID, X_VIB_ON };
+  drawBtn(SND_BTN_X1, 78, 150, 40, vb ? UI_BAR_OK : UI_TRACK, vb ? UI_WHITE : UI_INK,
+          XT(vb ? VLBL[vibLevel()] : X_VIB_OFF));
   static const XId LBL[3] = { X_VOL_BGM, X_VOL_CRY, X_VOL_SYS };
   for (int i = 0; i < 3; i++) {
     int y = VOL_ROW_Y + i * VOL_ROW_H;
@@ -1016,8 +1019,11 @@ void soundTap(int16_t x, int16_t y) {
     return;
   }
   if (y >= 78 && y < 118 && x >= SND_BTN_X1 && x < SND_BTN_X1 + 150) {  // ko11.25: vibracion
-    vibSetEnabled(!vibEnabled());
-    if (vibEnabled()) vibPulse(150, 1, 0);  // asi se nota que esta encendida
+    // ko11.26: apagada -> debil -> media -> fuerte -> apagada
+    if (!vibEnabled()) { vibSetLevel(0); vibSetEnabled(true); }
+    else if (vibLevel() < 2) vibSetLevel(vibLevel() + 1);
+    else vibSetEnabled(false);
+    if (vibEnabled()) vibPulse(150, 1, 0);  // asi se nota la fuerza elegida
     sfxPlay(SFX_TAP);
     return;
   }
