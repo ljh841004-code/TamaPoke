@@ -34,7 +34,15 @@ void audioSetBattleMusic(bool active, bool newSession = false);
 // ko11: que cancion toca. En combate: MT_GYM -> battle_gym.wav, MT_CHAMP ->
 // battle_champ.wav (si no estan, battle_wild.wav). Fuera: MT_FAME -> fame.wav o
 // fame2.wav al azar (si no estan, bgm.wav); normal: bgm.wav o bgm2.wav al azar
-enum : uint8_t { MT_NORMAL = 0, MT_GYM, MT_CHAMP, MT_FAME };
+enum : uint8_t { MT_NORMAL = 0, MT_GYM, MT_CHAMP, MT_FAME,
+  // ko11.24: historia. Cada una prueba sus ficheros en orden y si no hay ninguno suena la de siempre
+  MT_STORY,      // escenas del juego: story.wav -> bgm2.wav (Pallet Town)
+  MT_STORY_A,    // escenas del anime: story_anime.wav -> story.wav -> bgm2.wav
+  MT_STORY_END,  // final: story_end.wav -> fame2.wav -> fame.wav
+  MT_SBATTLE,    // combate normal / oleada: story_battle.wav -> battle_wild.wav
+  MT_SROCKET,    // Team Rocket: story_rocket.wav -> story_battle.wav
+  MT_SGYM,       // lider / Alto Mando / jefe de oleada: story_gym.wav -> battle_gym.wav
+};
 void audioSetMusicTrack(uint8_t track);
 // ko11.8: fondos normales elegibles: /mons/bgm.wav, bgm2.wav ... bgm8.wav. Suenan al
 // azar solo los activados (mascara guardada en "bgmMask"; por defecto todos).

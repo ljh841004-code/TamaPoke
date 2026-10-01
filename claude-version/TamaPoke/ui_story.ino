@@ -1052,3 +1052,26 @@ void storyBattleQuit(uint8_t kind) {
   stWho = W_NONE; stPage = 0; stTypeT = millis();
   stBattleWait = true;
 }
+
+// ko11.24: la musica de la historia (audio.cpp prueba los ficheros y, si faltan, la de siempre)
+uint8_t storyBattleTrack() {
+  if (bKind == BK_ROGUE) return rgWave % 10 == 0 ? MT_SGYM : MT_SBATTLE;  // jefe cada 10
+  switch (stBattleWho) {
+    case W_RIVAL: case W_GARY: case W_RITCHIE: return MT_CHAMP;  // Final Battle! (Rival)
+    case W_GRUNT: case W_TR: return MT_SROCKET;
+    case W_GIO: return (stStyle == 0 && stCh == 11) ? MT_SGYM : MT_SROCKET;  // 12장: lider del gimnasio
+    case W_BROCK: case W_MISTY: case W_SURGE: case W_ERIKA: case W_KOGA: case W_SABRINA: case W_BLAINE:
+    case W_LORELEI: case W_BRUNO: case W_AGATHA: case W_LANCE: return MT_SGYM;
+    default: return MT_SBATTLE;
+  }
+}
+uint8_t storySceneTrack() {
+  if (xScreen == XS_SCENE && stStyle < STORY_STYLES && stCh + 1 == STORY_NCH[stStyle]) {
+    // el ultimo capitulo, pasado su ultimo combate: el final
+    const SChapter &ch = STORY[stStyle][stCh];
+    bool battleLeft = false;
+    for (uint16_t k = stStep; k < ch.n; k++) if (ch.steps[k].op == ST_BATTLE) { battleLeft = true; break; }
+    if (!battleLeft) return MT_STORY_END;
+  }
+  return stStyle == 1 && xScreen != XS_STORY ? MT_STORY_A : MT_STORY;
+}

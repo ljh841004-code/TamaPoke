@@ -2978,8 +2978,14 @@ void updateLink() {
 // /mons/battle_wild.wav suena durante el combate (salvaje y tongsin), no en el
 // resultado: al acabar vuelve /mons/bgm.wav
 // ko11: que pista toca ahora (ver audioSetMusicTrack)
+uint8_t storyBattleTrack();  // ko11.24 (ui_story.ino)
+uint8_t storySceneTrack();
 uint8_t musicTrackNow() {
-  if (battleMusicActive()) return bKind == BK_GYM ? MT_GYM : bKind == BK_CHAMP ? MT_CHAMP : MT_NORMAL;
+  if (battleMusicActive()) {
+    if (bKind == BK_STORY || bKind == BK_ROGUE) return storyBattleTrack();  // ko11.24
+    return bKind == BK_GYM ? MT_GYM : bKind == BK_CHAMP ? MT_CHAMP : MT_NORMAL;
+  }
+  if (xScreen == XS_SCENE || xScreen == XS_STORY || xScreen == XS_STORYCH) return storySceneTrack();  // ko11.24
   if ((xScreen == XS_GYM && gymPage == 2) || xScreen == XS_FAME) return MT_FAME;  // liga y salon
   return MT_NORMAL;
 }

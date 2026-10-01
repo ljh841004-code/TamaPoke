@@ -196,7 +196,19 @@ static void audioTask(void *) {
               const char *base = request & 1u ? "/mons/battle_wild.wav" : "/mons/bgm.wav";
               const char *path = base;
               static char bgmPathBuf[48];
+              // ko11.24: la historia prueba varios ficheros en orden (el primero que haya)
+              const char *cand[3] = { nullptr, nullptr, nullptr };
               if (request & 1u) {
+                if (tr == MT_SBATTLE) cand[0] = "/mons/story_battle.wav";
+                else if (tr == MT_SROCKET) { cand[0] = "/mons/story_rocket.wav"; cand[1] = "/mons/story_battle.wav"; }
+                else if (tr == MT_SGYM) { cand[0] = "/mons/story_gym.wav"; cand[1] = "/mons/battle_gym.wav"; }
+              } else if (tr == MT_STORY) { cand[0] = "/mons/story.wav"; cand[1] = "/mons/bgm2.wav"; }
+              else if (tr == MT_STORY_A) { cand[0] = "/mons/story_anime.wav"; cand[1] = "/mons/story.wav"; cand[2] = "/mons/bgm2.wav"; }
+              else if (tr == MT_STORY_END) { cand[0] = "/mons/story_end.wav"; cand[1] = "/mons/fame2.wav"; cand[2] = "/mons/fame.wav"; }
+              if (cand[0]) {
+                for (int k = 0; k < 3 && cand[k]; k++)
+                  if (SD_MMC.exists(cand[k])) { path = cand[k]; break; }
+              } else if (request & 1u) {
                 if (tr == MT_GYM) path = "/mons/battle_gym.wav";
                 else if (tr == MT_CHAMP) path = "/mons/battle_champ.wav";
               } else if (tr == MT_FAME) {
