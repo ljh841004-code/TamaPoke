@@ -447,6 +447,13 @@ uint8_t bGroup = WG_COMMON;  // de que grupo salio el rival (WG_RARE: brillo al 
 // ko10.4: combates contra entrenador (gimnasio / reto del dia): varios rivales seguidos
 enum : uint8_t { BK_WILD = 0, BK_GYM, BK_DAILY, BK_CHAMP, BK_STORY, BK_ROGUE };  // ko11.21: historia y expedicion  // ko10.11: liga
 uint8_t bKind = BK_WILD;
+// ko11.22: en la historia, como en Rojo/Verde, a nivel bajo el rival aun no sabe su ataque de tipo
+// (Placaje/Aranazo hasta ~nivel 8). Sin esto, el 1er combate (rival con ventaja de tipo, x2) era casi imposible
+#define STORY_TYPED_LV 8
+extern Battler bFoe;
+static BAct foeMoveRule(BAct a) {
+  return (a == BA_TYPE && bKind == BK_STORY && bFoe.lvl < STORY_TYPED_LV) ? BA_TACKLE : a;
+}
 uint8_t bvOwned = 0;      // ko10.11: de esta especie en la caja
 int16_t bExpDex = 0;      // ko11: la EXP del salvaje sale de su especie y nivel ANTES de ajustarlo
 uint16_t bExpLvl = 0;
@@ -462,6 +469,7 @@ uint8_t pN = 1, pCur = 0, pUsed = 1;      // pUsed: bit i = ya salio a luchar
 uint8_t pShiny = 0;                       // bit i = variocolor
 bool pSlot0Pet = true;                    // ko11.21: el primero es el que crias (no en historia/expedicion)
 Battler storyPartnerBattler();
+void storyAddParty();
 uint8_t bSwapMode = 0;  // BP_SWAP: 0 obligado (cayo el mio), 1 rival nuevo (puede quedarse), 2 manual (gasta turno)
 PmdMon helperPmd;
 int16_t helperPmdDex = 0;
@@ -1491,7 +1499,7 @@ static void swapTap(int16_t x, int16_t y) {
     }
     partySwitchTo((uint8_t)who[i]);
     if (mode == 2) {  // a mano: el rival aprovecha el turno
-      BAct foeAct = battleAi(bFoe, bMe, bRng, 35);
+      BAct foeAct = foeMoveRule(battleAi(bFoe, bMe, bRng, 35));
       bqN = battleFoeOnly(bMe, bFoe, foeAct, bRng, bq, BATTLE_MAX_EVENTS);
       bqAisMe = true;
       if (bqN > 0) { bPhase = BP_PLAY; startEvent(0); return; }
@@ -1719,6 +1727,7 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
     pN++;
   }
   ppArmed = false;
+  if (kind == BK_STORY) storyAddParty();  // ko11.22: los de la historia (no la caja)
   if (kind == BK_ROGUE) rogueApplyParty();  // ko11.21: la expedicion trae la vida de la oleada anterior
   bFoe = bTeam[0];
   bvSetup(bMe, bFoe, nullptr, false);
@@ -2321,7 +2330,7 @@ static void battleDoAction(int a) {
     strncpy(bvL1, XT(X_NO_BALL), sizeof(bvL1) - 1); bvL2[0] = 0; sfxPlay(SFX_DENY); return;
   }
   sfxPlay(SFX_TAP);
-  BAct foeAct = battleAi(bFoe, bMe, bRng, 35);  // el salvaje es algo torpe
+  BAct foeAct = foeMoveRule(battleAi(bFoe, bMe, bRng, 35));  // el salvaje es algo torpe
   if (a == BA_POTION && autoLeft) autoPotions++;
   bqN = battleTurn(bMe, bFoe, (BAct)a, foeAct, bRng, bq, BATTLE_MAX_EVENTS, true);
   bqAisMe = true;

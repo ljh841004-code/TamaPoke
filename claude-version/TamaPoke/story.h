@@ -13,13 +13,14 @@
 //   ST_GIVE   a = SG_* , b = cuantos, c = especie (caramelos)
 //   ST_END    fin del capitulo (se marca como superado)
 //   ST_STARTER c = especie del companero de la historia (el que lucha en este estilo)
+//   ST_JOIN   c = un Pokemon que se une al equipo de la historia (como en el original; max 2)
 //
 // ko11.21: cada estilo tiene SU companero (juego: el inicial elegido con Oak, anime:
 // Pikachu); los premios van al Pokemon que crias. CHOICE con 3 opciones: "p|A|B|C", c = 3a etiqueta
 #pragma once
 #include <stdint.h>
 
-enum : uint8_t { ST_BG = 0, ST_SAY, ST_NARR, ST_MON, ST_CHOICE, ST_LABEL, ST_GOTO, ST_BATTLE, ST_GIVE, ST_END, ST_STARTER };
+enum : uint8_t { ST_BG = 0, ST_SAY, ST_NARR, ST_MON, ST_CHOICE, ST_LABEL, ST_GOTO, ST_BATTLE, ST_GIVE, ST_END, ST_STARTER, ST_JOIN };
 enum : uint8_t { SG_BALL = 1, SG_POTION, SG_CANDY, SG_RARE, SG_EXP };
 
 // retratos (orden de tools/pack_story.py -> /mons/story.bin, id 1..N)
@@ -39,6 +40,7 @@ struct SStep {
 // equipo de un combate de la historia: niveles fijos (como en el original)
 // dex = -1: el inicial del rival, el que tiene ventaja sobre tu companero (y evoluciona con el nivel)
 #define STORY_TEAM_MAX 4
+#define STORY_JOIN_MAX 2  // los que se unen en la historia (el companero + 2 = 3, como el equipo de combate)
 struct STeam {
   uint8_t n;
   int16_t dex[STORY_TEAM_MAX];
@@ -68,7 +70,7 @@ extern const int16_t STORY_PARTNER0[STORY_STYLES];  // companero por defecto (an
 enum : uint8_t {
   SX_TITLE = 0, SX_DONE, SX_LOCKED, SX_RESUME, SX_PROG_FMT, SX_BEST_FMT, SX_VS_FMT, SX_WILD_GROUP,
   SX_TAP_BATTLE, SX_TIRED, SX_LOST, SX_CLEAR_FMT, SX_GOT_BALL, SX_GOT_POTION, SX_GOT_CANDY, SX_GOT_RARE,
-  SX_GOT_EXP, SX_INTRO_FMT, SX_TAP_NEXT, SX_NEW, SX_COUNT
+  SX_GOT_EXP, SX_INTRO_FMT, SX_TAP_NEXT, SX_NEW, SX_JOIN_FMT, SX_COUNT
 };
 extern const char *const STX[SX_COUNT];
 

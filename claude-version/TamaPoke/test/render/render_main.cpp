@@ -799,6 +799,20 @@ static void storyShots() {
   sceneUntil([] { return stEnd; }); render(); shot("79c_scene_clear");
   navCheck("historia: capitulo 1 superado", stDone[0] & 1);
   sceneTo(1); render(); shot("71b_story_chapters_after");
+  // ko11.22: 2장: 구구가 동료가 되고, 웅 전에는 동료와 함께 (보관함 도우미 없이)
+  stJ[0][0] = stJ[0][1] = 0; stResStyle = 0xFF;
+  stStart(0, 1);
+  sceneUntil([] { return stJ[0][0] == 16; }); render(); shot("79d_scene_join");
+  navCheck("historia: 구구 se une", stJ[0][0] == 16);
+  sceneUntil([] { return stBattleWait; });
+  storySceneTap(233, 330);
+  navCheck("historia: combate directo (sin elegir ayudantes de la caja)", xScreen == XS_WILD && bKind == BK_STORY);
+  navCheck("historia: equipo = companero + 구구", pN == 2 && pBox[1] == -1 && pMon[1].dex == 16 && !pSlot0Pet);
+  tick(2300); updateWild(); render(); shot("79e_story_battle_team");
+  bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
+  finishBattle(true, false, false); afterResult();
+  navCheck("historia: tras el combate, equipo deshecho", pN == 1 && xScreen == XS_SCENE);
+  stJ[0][0] = 0; stResStyle = 0xFF;
   // anime: 2화 (로켓단)
   stDone[1] = 1; stPDex[1] = 25; stStart(1, 1);
   sceneTo(1); render(); shot("80_anime_rocket");

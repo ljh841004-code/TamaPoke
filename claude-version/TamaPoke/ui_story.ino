@@ -29,6 +29,8 @@ uint16_t rgBest = 0;                      // expedicion: mejor oleada
 int16_t stPDex[STORY_STYLES] = { 0, 0 };
 uint32_t stPExp[STORY_STYLES] = { 0, 0 };
 PmdMon storyPmd;                          // su sprite en las escenas
+// ko11.22: los que se unen en la historia (juego: 구구, 피피; anime: 캐터피, 파이리). 0 = nadie
+int16_t stJ[STORY_STYLES][STORY_JOIN_MAX] = { { 0, 0 }, { 0, 0 } };
 static int16_t storyPmdDex = 0;
 static bool stLoaded = false;
 static uint8_t stBg = 0, stWho = W_NONE;
@@ -56,6 +58,8 @@ static void stLoad() {
   stPDex[1] = (int16_t)p.getShort("pd1", 0);
   stPExp[0] = p.getUInt("pe0", 0);
   stPExp[1] = p.getUInt("pe1", 0);
+  stJ[0][0] = p.getShort("j00", 0); stJ[0][1] = p.getShort("j01", 0);
+  stJ[1][0] = p.getShort("j10", 0); stJ[1][1] = p.getShort("j11", 0);
   p.end();
 }
 static void stSave() {
@@ -71,6 +75,8 @@ static void stSave() {
   p.putShort("pd1", stPDex[1]);
   p.putUInt("pe0", stPExp[0]);
   p.putUInt("pe1", stPExp[1]);
+  p.putShort("j00", stJ[0][0]); p.putShort("j01", stJ[0][1]);
+  p.putShort("j10", stJ[1][0]); p.putShort("j11", stJ[1][1]);
   p.end();
 }
 static uint8_t stDoneCount(uint8_t s) {
@@ -249,6 +255,19 @@ static void stRun() {
         while (k < ch.n && !(ch.steps[k].op == ST_LABEL && ch.steps[k].a == s.a)) k++;
         stStep = k < ch.n ? k : stStep + 1;
         continue;
+      }
+      case ST_JOIN: {  // ko11.22: se une al equipo de la historia (si ya estaba, nada)
+        int8_t k = -1;
+        bool have = false;
+        for (int8_t i = 0; i < STORY_JOIN_MAX; i++) {
+          if (stJ[stStyle][i] == s.c) have = true;
+          if (stJ[stStyle][i] <= 0 && k < 0) k = i;
+        }
+        if (!have && k >= 0) { stJ[stStyle][k] = s.c; stSave(); }
+        txFmtRaw(stText, sizeof(stText), STX[SX_JOIN_FMT], dexName(s.c), nullptr);
+        stWho = W_NONE; stPage = 0; stTypeT = millis();
+        sfxPlay(SFX_MEDAL);
+        return;
       }
       case ST_SAY: stShow(s.t, s.who); return;
       case ST_NARR: stShow(s.t, W_NONE); return;
@@ -505,7 +524,24 @@ static void stStartBattle() {
     team[i] = makeTrainerMon(stEvolveFor(d, (uint16_t)lv), (uint16_t)lv);
   }
   stBattleWho = s.who;
-  partyOpen(BK_STORY, tm.region, team, tm.n, XS_SCENE);
+  // ko11.22: sin ayudantes de la caja: luchan el companero y los que se unieron en la historia
+  ppArmed = false;
+  xScreen = XS_NONE;
+  startTrainer(BK_STORY, tm.region, team, tm.n);
+  if (xScreen != XS_WILD) xScreen = XS_SCENE;
+}
+
+// startTrainer: los que se unieron en la historia, detras del companero (un poco por debajo de su nivel)
+void storyAddParty() {
+  uint16_t lv = stPartnerLv(stStyle);
+  lv = lv > 4 ? lv - 2 : 3;
+  for (uint8_t i = 0; i < STORY_JOIN_MAX && pN < PARTY_MAX; i++) {
+    int16_t d = stJ[stStyle][i];
+    if (d <= 0) continue;
+    pMon[pN] = makeBoxBattler(stEvolveFor(d, lv), lv, lv, 105, 105, 105);
+    pBox[pN] = -1;
+    pN++;
+  }
 }
 
 // startTrainer: quien lucha en primer lugar (historia: el companero; expedicion: el inicial elegido)
