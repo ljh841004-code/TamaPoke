@@ -147,7 +147,10 @@ Cji kbCji;               // ko8: silabas en construccion (teclado cheonjiin)
 bool kbKo = true;        // ko8: teclado coreano (true) o alfabeto (false)
 uint8_t cardPage = 0;         // 0 perfil, 1 stats+medallas
 #define CARD_PAGES 5          // ko10.4: + pagina de caramelos
-const char *cardMsg = nullptr;  // ko10.4: aviso breve en la pagina de caramelos
+const char *cardMsg = nullptr;  // ko10.4: aviso breve en la pagina de caramelos (ko11.27: y el perfil)
+#define PROF_FAV_Y 290   // ko11.27: filas del perfil (comida favorita, dias juntos, aviso)
+#define PROF_DAY_Y 316
+#define PROF_HINT_Y 341
 uint32_t cardMsgUntil = 0;
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
 int clockH = 12, clockM = 0;  // hora en edicion
@@ -1449,6 +1452,7 @@ void onSwipe(int dir) {
   if (cardOpen) {  // dentro de la ficha: cambiar entre las 4 paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
     cardPage = p < 0 ? 0 : (p > CARD_PAGES - 1 ? CARD_PAGES - 1 : p);
+    cardMsgUntil = 0;  // ko11.27: el aviso es de la pagina en la que se toco
     return;
   }
   if (!galleryOpen) {
@@ -1510,11 +1514,17 @@ void onTap(int16_t x, int16_t y) {
   if (pet.ceremony) return;  // durante la despedida no hay botones
   if (cardOpen) {
     // ko10.8: flechas (antes de todo lo demas: tocar fuera cierra la ficha)
+    if (navHit(NAV_L, x, y) || navHit(NAV_R, x, y)) cardMsgUntil = 0;  // ko11.27
     if (navHit(NAV_L, x, y)) { if (cardPage > 0) cardPage--; else cardOpen = false; sfxPlay(SFX_TAP); return; }  // ko11.17: 1a pagina = cerrar
     if (navHit(NAV_R, x, y)) { if (cardPage < CARD_PAGES - 1) { cardPage++; sfxPlay(SFX_TAP); } return; }
     if (navHit(NAV_DOWN, x, y)) { cardOpen = false; sfxPlay(SFX_TAP); return; }
     if (cardPage == 4) cardCandyTap(x, y);        // ko10.4: caramelos
     else if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
+    else if (cardPage == 0 && y >= PROF_FAV_Y - 14 && y < PROF_FAV_Y + 30) {  // ko11.27: que es la comida favorita
+      cardMsg = XT(pet.berryKnown ? X_FAV_HINT_KNOWN : X_FAV_HINT_UNK);
+      cardMsgUntil = millis() + 4000;
+      sfxPlay(SFX_TAP);
+    }
     else if (cardPage == 3 && pet.careMistakes > 0 && y >= 196 && y < 250) {  // ko10.9: causa (ko11.18: mas arriba)
       mistWhyUntil = millis() + 5000;
       sfxPlay(SFX_TAP);
@@ -3582,17 +3592,55 @@ void renderCardProfile() {
     uiGauge(bx, y + 8, bw, 14, (pet.bond > 100 ? 100 : pet.bond) * 10, C565(0xd4, 0x52, 0x7e), UI_TRACK);
   }
 
-  uint8_t fav = pet.favFood();
-  const char *berry = !pet.berryKnown ? T(S_BERRY_UNK)
-                      : fav == 0 ? T(S_BERRY_RED)
-                      : fav == 1 ? T(S_BERRY_BLUE)
-                      : fav == 2 ? T(S_BERRY_GREEN) : XT(X_FOOD_CANDY);
-  char info[48];
-  // ko9: dia de crianza (1, 2, 3...); ko10.9: por fecha (ver Pet::raiseDay)
-  snprintf(info, sizeof(info), T(S_INFO_FMT), berry, (unsigned long)pet.raiseDay());
-  drawFit(info, 298, 380, UI_INK, 3);
+  // ko11.27: "좋아하는 먹이 [icono] 빨간 열매" (el mismo dibujo que el menu de comida) y
+  // "함께한 지 N일째 (fecha부터)". Antes "빨간 열매   2일차" no se entendia
+  {
+    static const char *const *const ICON[4] = { SPR_ICON_FOOD, SPR_ICON_BERRY_B, SPR_ICON_BERRY_G, SPR_ICON_CANDY };
+    uint8_t fav = pet.favFood();
+    const char *lbl = XT(X_FAV_FOOD);
+    const char *nm = !pet.berryKnown ? "???"
+                     : fav == 0 ? T(S_BERRY_RED)
+                     : fav == 1 ? T(S_BERRY_BLUE)
+                     : fav == 2 ? T(S_BERRY_GREEN) : XT(X_FOOD_CANDY);
+    int iw = pet.berryKnown ? 32 + 8 : 0;
+    int w = textW(lbl, 2) + 12 + iw + textW(nm, 2);
+    int x = CX - w / 2, y = PROF_FAV_Y;
+    gfx->setTextColor(0x8410);
+    setSize(2);
+    setCur(x, y);
+    printT(lbl);
+    x += textW(lbl, 2) + 12;
+    if (pet.berryKnown) { drawMap(ICON[fav & 3], 16, x, y - 6, 2, false); x += iw; }
+    gfx->setTextColor(UI_INK);
+    setCur(x, y);
+    printT(nm);
+  }
+  {
+    char dl[32], since[24] = "";
+    snprintf(dl, sizeof(dl), XT(X_DAYS_WITH_FMT), (unsigned long)pet.raiseDay());
+    uint32_t born = pet.raiseStartEpoch();
+    if (born) {
+      int yy; uint8_t mo, d;
+      wxDate(born, &yy, &mo, &d, nullptr);
+      snprintf(since, sizeof(since), XT(X_SINCE_FMT), (unsigned)yy, mo, d);
+    }
+    int w = textW(dl, 2) + (since[0] ? 10 + textW(since, 1) : 0);
+    int x = CX - w / 2;
+    gfx->setTextColor(UI_INK);
+    setSize(2);
+    setCur(x, PROF_DAY_Y);
+    printT(dl);
+    if (since[0]) {
+      gfx->setTextColor(0x8410);
+      setSize(1);
+      setCur(x + textW(dl, 2) + 10, PROF_DAY_Y + 4);
+      printT(since);
+    }
+  }
 
-  drawFit(T(S_RENAME_HINT), 338, 300, UI_INK, 2);
+  // tocar la fila de la comida: que significa (unos segundos en lugar del aviso de renombrar)
+  if (cardMsg && timeLeft(cardMsgUntil)) drawFit(cardMsg, PROF_HINT_Y, 340, UI_BAR_BAD, 2);
+  else drawFit(T(S_RENAME_HINT), PROF_HINT_Y, 300, UI_INK, 2);
 }
 
 // pagina 1: combate (4 barras + botones: salvaje, tongsin, entrenar)

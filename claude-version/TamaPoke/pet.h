@@ -369,6 +369,12 @@ public:
   // ko10.9: dia de crianza por FECHA (hoy - dia en que empezo + 1). Antes eran
   // bloques de 24 h de edad: empezar a las 15 h y mirar al dia siguiente a las 9 h
   // seguia diciendo "dia 1". Sin reloj, como antes
+  // ko11.27: dia (epoch local) en que empezo la crianza; 0 sin reloj
+  uint32_t raiseStartEpoch() const {
+    if (!lastSeenEpoch) return 0;
+    uint32_t age = ageMinutes * 60u;
+    return age < lastSeenEpoch ? lastSeenEpoch - age : 0;
+  }
   uint32_t raiseDay() const {
     if (!lastSeenEpoch) return ageMinutes / 1440 + 1;
     uint32_t age = ageMinutes * 60u;

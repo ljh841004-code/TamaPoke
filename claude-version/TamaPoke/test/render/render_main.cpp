@@ -120,6 +120,14 @@ static void scenes(bool ko, const char *sfx) {
   pet.careMistakes = 0;
   pet.berryKnown = true; pet.ageMinutes = 2 * 1440 + 300; pet.bond = 46; pet.streak = 3; pet.bestStreak = 5;
   cardPage = 0; render(); shot("03c_card_profile");
+  {  // ko11.27: comida favorita (desconocida / conocida + toque = que significa) y dias juntos
+    bool bk = pet.berryKnown;
+    pet.berryKnown = false; render(); shot("03r_profile_fav_unknown");
+    pet.berryKnown = true; render(); shot("03s_profile_fav_known");
+    onTap(CX, PROF_FAV_Y + 8); render(); shot("03t_profile_fav_tap");
+    navCheck("perfil: tocar la comida = explicacion", cardOpen && cardPage == 0 && cardMsg == XT(X_FAV_HINT_KNOWN) && timeLeft(cardMsgUntil));
+    cardMsgUntil = 0; pet.berryKnown = bk;
+  }
   strcpy(pet.nick, "불꽃이"); render(); shot("03e_card_profile_nick"); pet.nick[0] = 0;
   cardPage = 2; render(); shot("03d_card_medals");
   pet.addCandy(pet.speciesId, 12); cardPage = 4; render(); shot("03f_card_candy");
