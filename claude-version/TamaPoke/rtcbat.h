@@ -8,6 +8,7 @@ void rtcSetEpoch(uint32_t e);
 
 // PMU AXP2101: estado de la bateria
 bool batBegin();
+void batSetChargeLimit(bool cap90);  // ko11.23.3: 4.2 V (100 %) o 4.1 V (~90 %, alarga la vida)
 void pmuEnablePanel();           // enciende BLDO1 (OLED VDD 3.3V); llamar antes de gfx->begin()
 int batPercent();                // 0-100, -1 si no hay bateria conectada
 bool batCharging();

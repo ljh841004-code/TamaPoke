@@ -155,6 +155,7 @@ bool rtcBegin() { return true; }
 uint32_t rtcEpoch() { return gMockEpoch; }
 void rtcSetEpoch(uint32_t e) { gMockEpoch = e; }
 bool batBegin() { return true; }
+void batSetChargeLimit(bool) {}
 void pmuEnablePanel() {}
 int batPercent() { return 78; }
 bool batCharging() { return false; }

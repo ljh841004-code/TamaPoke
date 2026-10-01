@@ -1234,17 +1234,19 @@ void Pet::load(bool *migrated) {
 
 void Pet::wipeGameKeepSettings() {
   // ko11.8: "bgmMask" = fondos elegidos en la pantalla de sonido (tambien es ajuste)
-  static const char *const KEEP_U8[] = { "volBgm", "volCry", "volSfx", "lang", "bgmMask" };
-  uint8_t u8[5];
-  bool has[5];
-  for (int i = 0; i < 5; i++) {
+  // ko11.23.3: "bri" (brillo) y "chg" (limite de carga) tambien son ajustes
+  static const char *const KEEP_U8[] = { "volBgm", "volCry", "volSfx", "lang", "bgmMask", "bri", "chg" };
+  const int NK = sizeof(KEEP_U8) / sizeof(KEEP_U8[0]);
+  uint8_t u8[NK];
+  bool has[NK];
+  for (int i = 0; i < NK; i++) {
     has[i] = prefs.isKey(KEEP_U8[i]);
     u8[i] = prefs.getUChar(KEEP_U8[i], 0);
   }
   bool hasSnd = prefs.isKey("snd"), snd = prefs.getBool("snd", true);
   uint32_t seen = prefs.getUInt("seen", 0);
   prefs.clear();
-  for (int i = 0; i < 5; i++)
+  for (int i = 0; i < NK; i++)
     if (has[i]) prefs.putUChar(KEEP_U8[i], u8[i]);
   if (hasSnd) prefs.putBool("snd", snd);
   if (seen) prefs.putUInt("seen", seen);

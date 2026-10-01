@@ -46,6 +46,13 @@ bool batBegin() {
   return pmuOk;
 }
 
+// ko11.23.3: tension final de carga. 4,1 V para en ~90 % (la bateria envejece menos si
+// pasa dias enchufada); 4,2 V es el valor de siempre (100 %)
+void batSetChargeLimit(bool cap90) {
+  if (!pmuOk) return;
+  pmu.setChargeTargetVoltage(cap90 ? XPOWERS_AXP2101_CHG_VOL_4V1 : XPOWERS_AXP2101_CHG_VOL_4V2);
+}
+
 // Enciende la alimentacion de la AMOLED. En la Waveshare 1.75 el panel (OLED VDD)
 // cuelga del rail BLDO1 a 3.3V del AXP2101. El firmware daba por hecho que estaba
 // encendido; si el PMU se resetea (drenaje total), BLDO1 queda OFF y la pantalla

@@ -597,6 +597,7 @@ void setup() {
   rtcBegin();
   bootStep(BS_POWER);
   batBegin();
+  { bool chargeCap90(); batSetChargeLimit(chargeCap90()); }  // ko11.23.3
   pwrSetup();
   bootStep(BS_I2C);
   if (!safeMode) i2cFastMode();  // ko11.3
@@ -855,6 +856,25 @@ void setBrightLevel(uint8_t l) {
   p.begin("tamapoke", false);
   p.putUChar("bri", gBright);
   p.end();
+}
+// ko11.23.3: limite de carga (0 = 100 %, 1 = ~90 %)
+static int8_t gChgCap = -1;
+bool chargeCap90() {
+  if (gChgCap < 0) {
+    Preferences p;
+    p.begin("tamapoke", true);
+    gChgCap = p.getUChar("chg", 0) ? 1 : 0;
+    p.end();
+  }
+  return gChgCap == 1;
+}
+void setChargeCap90(bool on) {
+  gChgCap = on ? 1 : 0;
+  Preferences p;
+  p.begin("tamapoke", false);
+  p.putUChar("chg", gChgCap);
+  p.end();
+  batSetChargeLimit(on);
 }
 uint8_t brightValue() { return (uint8_t)(30 + brightLevel() * 22); }  // 52..250
 

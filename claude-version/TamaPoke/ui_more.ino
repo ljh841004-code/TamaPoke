@@ -1026,6 +1026,11 @@ void soundTap(int16_t x, int16_t y) {
 // momento; [<] / [완료] vuelve a sonido
 // ======================================================================
 #define BR_SEG_Y 214
+#define BR_CHG_Y 324   // ko11.23.3
+#define BR_CHG_X0 78
+#define BR_CHG_X1 210
+bool chargeCap90();
+void setChargeCap90(bool on);
 void renderBright() {
   uiScreenBg();
   drawFit(XT(X_BRIGHT_TITLE), 40, 300, UI_INK, 3);
@@ -1053,8 +1058,12 @@ void renderBright() {
   char b[12];
   snprintf(b, sizeof(b), "%u%%", (unsigned)(lv * 10));
   drawFit(b, 262, 200, UI_INK, 3);
-  drawFit(XT(X_BRIGHT_NOTE), 306, 340, UI_INK, 2);
-  drawFit(XT(X_BRIGHT_HINT), 332, 340, 0x8410, 1);
+  // ko11.23.3: limite de carga [100%] [~90%] (el aviso del brillo deja sitio)
+  bool cap = chargeCap90();
+  gfx->drawFastHLine(118, BR_CHG_Y - 30, 230, UI_TRACK);
+  drawFit(XT(X_CHG_LABEL), BR_CHG_Y - 24, 300, C565(0x60, 0x68, 0x70), 1);
+  drawBtn(BR_CHG_X0, BR_CHG_Y, 120, 34, cap ? UI_WHITE : UI_BAR_OK, cap ? UI_INK : UI_WHITE, XT(X_CHG_FULL));
+  drawBtn(BR_CHG_X1, BR_CHG_Y, 170, 34, cap ? UI_BAR_OK : UI_WHITE, cap ? UI_WHITE : UI_INK, XT(X_CHG_SAFE));
   drawBtn(143, VOL_DONE_Y, 180, 40, UI_BAR_OK, UI_WHITE, XT(X_VOL_DONE));
   drawNav(NAV_L, UI_INK);
   uiFlush();
@@ -1063,6 +1072,13 @@ void renderBright() {
 void brightTap(int16_t x, int16_t y) {
   if (navHit(NAV_L, x, y) || (y >= VOL_DONE_Y - 4 && x >= 133 && x < 333) || y < 60) {
     xScreen = XS_VOL;
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  if (y >= BR_CHG_Y - 6 && y < BR_CHG_Y + 40) {  // ko11.23.3: limite de carga
+    if (x >= BR_CHG_X0 && x < BR_CHG_X0 + 120) setChargeCap90(false);
+    else if (x >= BR_CHG_X1 && x < BR_CHG_X1 + 170) setChargeCap90(true);
+    else return;
     sfxPlay(SFX_TAP);
     return;
   }

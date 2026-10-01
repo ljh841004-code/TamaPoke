@@ -675,6 +675,10 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); openSound(); render(); shot("16_sound");
   xScreen = XS_BRIGHT; render(); shot("16d_brightness");  // ko11.18
   brightTap(345, 230); render(); shot("16e_brightness_up"); setBrightLevel(7);
+  brightTap(290, 338); render(); shot("16f_charge_limit");  // ko11.23.3
+  navCheck("brillo: [약 90%] = limite de carga", chargeCap90() && xScreen == XS_BRIGHT);
+  brightTap(130, 338);
+  navCheck("brillo: [100%] = sin limite", !chargeCap90());
   closeAll(); openBgmPick(); render(); shot("16b_bgm_pick");  // ko11.8
   audioSetBgmMask(0x02); render(); shot("16c_bgm_pick_one"); audioSetBgmMask(0xFF);
   closeAll(); openNet(); render(); shot("18_net");
