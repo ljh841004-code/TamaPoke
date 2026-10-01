@@ -467,6 +467,8 @@ Battler pMon[PARTY_MAX];
 int8_t pBox[PARTY_MAX] = { -1, -1, -1 };  // indice en la caja (-1 = el que crias)
 uint8_t pN = 1, pCur = 0, pUsed = 1;      // pUsed: bit i = ya salio a luchar
 uint8_t pShiny = 0;                       // bit i = variocolor
+uint32_t bQuitArm = 0;                    // ko11.23.1: [◀] armado (salir de un combate de la historia)
+void storyBattleQuit(uint8_t kind);
 bool pSlot0Pet = true;                    // ko11.21: el primero es el que crias (no en historia/expedicion)
 Battler storyPartnerBattler();
 void storyAddParty();
@@ -1632,6 +1634,15 @@ void renderBattleView() {
     else drawBattleMsg();
     if (bPhase == BP_MENU && !autoLeft) { drawBattleMenu(); if (xScreen == XS_WILD) drawBattleArtChip(); }  // ko11.16
     if (autoLeft && bPhase != BP_RESULT && bPhase != BP_SWAP) drawAutoBanner();  // ko11.19
+    if (bPhase == BP_MENU && !autoLeft && xScreen == XS_WILD && (bKind == BK_STORY || bKind == BK_ROGUE)) {  // ko11.23.1: salir
+      drawNav(NAV_L, UI_INK);
+      if (bQuitArm && millis() - bQuitArm < 3000) {
+        const char *q = STX[SX_QUIT_SURE];
+        int w = textW(q, 2) + 28;
+        uiButton(CX - w / 2, 128, w, 36, 18, UI_BAR_BAD, UI_INK);
+        drawFit(q, 134, w - 12, UI_WHITE, 2);
+      }
+    }
   }
   uiFlush();
 }
@@ -2294,6 +2305,20 @@ void wildTap(int16_t x, int16_t y) {
   if (bPhase == BP_NEXT) { wildNextTap(x, y); return; }
   if (bPhase == BP_SWAP) { swapTap(x, y); return; }  // ko11.20
   if (bPhase != BP_MENU) return;
+  // ko11.23.1: historia / expedicion: [◀] dos veces = salir del combate (sin premio ni derrota)
+  if ((bKind == BK_STORY || bKind == BK_ROGUE) && navHit(NAV_L, x, y)) {
+    if (bQuitArm && millis() - bQuitArm < 3000) {
+      bQuitArm = 0;
+      uint8_t k = bKind;
+      endBattleScreen();
+      storyBattleQuit(k);
+    } else {
+      bQuitArm = millis() ? millis() : 1;
+      sfxPlay(SFX_DENY);
+    }
+    return;
+  }
+  bQuitArm = 0;
   if (battleArtTap(x, y)) return;  // ko11.16: PMD <-> PokeRogue
   if (pN > 1 && bKind != BK_WILD && !bLink && inRect(x, y, 236, 176, 176, 58) && partyOtherAlive()) {  // ko11.20
     sfxPlay(SFX_TAP);

@@ -855,6 +855,7 @@ static void storyShots() {
   storySceneTap(ST_BOX_X + 12 + 2 * 118 + 50, ST_BOX_Y + 70);  // 꼬부기
   navCheck("historia: companero elegido", stPDex[0] == 7);
   sceneTo(0); render(); shot("74c_scene_partner");
+  navCheck("historia: el companero no sale dos veces (stMon = companero)", stMon == 7);
   sceneTo(1); render(); shot("75_scene_rival");
   sceneUntil([] { return stBattleWait; }); render(); shot("76_scene_battle_wait");
   navCheck("historia: espera el combate", stBattleWait);
@@ -864,6 +865,16 @@ static void storyShots() {
   navCheck("historia: lucha el companero (no el que crias)", bMe.dex == 7 && bMe.lvl == 5 && !pSlot0Pet);
   navCheck("historia: el rival lleva la ventaja", bFoe.dex == 1);
   tick(2300); updateWild(); render(); shot("77_story_battle");
+  // ko11.23.1: [◀] en el combate: 1er toque avisa, 2o sale (sin derrota)
+  { uint8_t lw = stDone[0];
+    wildTap(20, NAV_Y); render(); shot("77b_story_battle_quit_armed");
+    navCheck("historia: [◀] en combate, 1er toque sigue en el combate", xScreen == XS_WILD);
+    wildTap(20, NAV_Y);
+    navCheck("historia: [◀] 2o toque vuelve a la escena (espera el combate)", xScreen == XS_SCENE && stBattleWait && pN == 1 && stDone[0] == lw);
+    stTypeT = millis() - 600000UL; render(); shot("77c_story_battle_quit_scene");
+    stTypeT = millis() - 600000UL; storySceneTap(233, 330);
+    navCheck("historia: tras salir, tocar = el mismo combate otra vez", xScreen == XS_WILD && bKind == BK_STORY);
+    tick(2300); updateWild(); }
   bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
   finishBattle(true, false, false); afterResult();
   navCheck("historia: vuelve a la escena", xScreen == XS_SCENE);
@@ -912,6 +923,11 @@ static void storyShots() {
   if (xScreen == XS_PARTY) partyStart(true);
   navCheck("expedicion: oleada 1", xScreen == XS_WILD && bKind == BK_ROGUE);
   navCheck("expedicion: lucha el inicial elegido", bMe.dex == 25 && bMe.lvl == 5);
+  tick(2300); updateWild();
+  wildTap(20, NAV_Y); wildTap(20, NAV_Y);
+  navCheck("expedicion: [◀] x2 vuelve al campamento sin perder la oleada", xScreen == XS_ROGUE && rgOn && rgWave == 1 && rgPhase == RG_HUB);
+  rogueTap(100, RG_BTN_Y + 20);  // 이어하기
+  navCheck("expedicion: 이어하기 tras salir", xScreen == XS_WILD && bKind == BK_ROGUE);
   tick(2300); updateWild(); render(); shot("82_rogue_wave1");
   bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0; bMe.hp = bMe.maxHp / 2;
   finishBattle(true, false, false); afterResult();

@@ -576,7 +576,9 @@ void renderStoryScene() {
   } else if (storyPmd.loaded && storyPmd.has(PMD_IDLE)) drawPmdActM(storyPmd, PMD_IDLE, 132, 258, now, true, false, 4, 170);
   else drawThumbAt(stPartnerDex(stStyle), 132, 220, 3, false);
   // el Pokemon de la escena (si hay) y quien habla a la derecha
-  if (stMon > 0) drawThumbAt(stMon, 250, 214, 2, false);
+  // el Pokemon de la escena, salvo que sea el propio companero (ya esta a la izquierda; ko11.23.1)
+  bool monIsPartner = stPDex[stStyle] > 0 && (stMon == stPartnerDex(stStyle) || stMon == stPartnerBase(stStyle));
+  if (stMon > 0 && !monIsPartner) drawThumbAt(stMon, 250, 214, 2, false);
   if (stWho != W_NONE && stWho != W_PET) {
     const uint8_t *b = portraits.get(stWho);
     if (b) drawThumb(b, 330 - b[0], 262 - b[1] * 2, 2, false);
@@ -1025,4 +1027,20 @@ void rogueTap(int16_t x, int16_t y) {
     sfxPlay(SFX_TAP);
     rgPhase = RG_PICK;
   }
+}
+
+// ko11.23.1: se salio del combate con [◀] (endBattleScreen ya deshizo el equipo): como antes de empezarlo
+void storyBattleQuit(uint8_t kind) {
+  sfxPlay(SFX_TAP);
+  if (kind == BK_ROGUE) {  // la vida de la oleada anterior sigue guardada (rogueSaveParty no se llamo)
+    rgPhase = RG_HUB;
+    rgResult[0] = 0;
+    xScreen = XS_ROGUE;
+    return;
+  }
+  xScreen = XS_SCENE;
+  stPicking = false;
+  snprintf(stText, sizeof(stText), "%s", STX[SX_QUIT_DONE]);
+  stWho = W_NONE; stPage = 0; stTypeT = millis();
+  stBattleWait = true;
 }
