@@ -43,7 +43,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko11.24"
+#define FW_VERSION "1.17-ko11.24.1"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -514,7 +514,11 @@ void setup() {
   // Red de seguridad para PMU/RTC (SensorLib NO respeta este timeout en el
   // tactil; el cuelgue del tactil dormido se resuelve gateando por INT, ver
   // handleTouch).
-  Wire.setTimeOut(50);
+  // ko11.24.1: 200 ms (antes 50). Panic en i2c_master_isr_handler_default (crash.txt:
+  // ko11.17 y ko11.24, siempre la misma pila): una lectura del tactil que se daba por
+  // perdida a los 50 ms y cuya respuesta llegaba tarde -> la ISR escribia donde ya no
+  // tocaba. Con mas margen esa transaccion abandonada practicamente no ocurre.
+  Wire.setTimeOut(200);
   // ko11.4: CAUSA de los tirones al aporrear. SensorLib lee con Wire.readBytes(),
   // que es Stream::readBytes: si el CST9217 no contesta (NACK, pasa a veces al
   // soltar/apoyar muy rapido) espera el timeout de Stream, 1000 ms por defecto,
