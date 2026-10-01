@@ -6,16 +6,20 @@
 //             ({1} = el nombre de tu Pokemon, con particulas coreanas {1}{이}, {1}{은}...)
 //   ST_NARR   t = narracion (sin personaje)
 //   ST_MON    c = Pokemon que aparece en la escena (0 = ninguno)
-//   ST_CHOICE t = "pregunta|opcion A|opcion B", a/b = etiqueta a la que salta cada opcion
+//   ST_CHOICE t = "pregunta|opcion A|opcion B[|opcion C]", a/b/c = etiqueta a la que salta cada opcion
 //   ST_LABEL  a = etiqueta
 //   ST_GOTO   a = etiqueta
 //   ST_BATTLE a = equipo (STORY_TEAMS), who = retrato del rival
 //   ST_GIVE   a = SG_* , b = cuantos, c = especie (caramelos)
 //   ST_END    fin del capitulo (se marca como superado)
+//   ST_STARTER c = especie del companero de la historia (el que lucha en este estilo)
+//
+// ko11.21: cada estilo tiene SU companero (juego: el inicial elegido con Oak, anime:
+// Pikachu); los premios van al Pokemon que crias. CHOICE con 3 opciones: "p|A|B|C", c = 3a etiqueta
 #pragma once
 #include <stdint.h>
 
-enum : uint8_t { ST_BG = 0, ST_SAY, ST_NARR, ST_MON, ST_CHOICE, ST_LABEL, ST_GOTO, ST_BATTLE, ST_GIVE, ST_END };
+enum : uint8_t { ST_BG = 0, ST_SAY, ST_NARR, ST_MON, ST_CHOICE, ST_LABEL, ST_GOTO, ST_BATTLE, ST_GIVE, ST_END, ST_STARTER };
 enum : uint8_t { SG_BALL = 1, SG_POTION, SG_CANDY, SG_RARE, SG_EXP };
 
 // retratos (orden de tools/pack_story.py -> /mons/story.bin, id 1..N)
@@ -32,8 +36,8 @@ struct SStep {
   const char *t;
 };
 
-// equipo de un combate de la historia: nivel = el de tu Pokemon + lv[i] (minimo 3)
-// dex = -1: el inicial del rival, el que tiene ventaja sobre tu tipo (y evoluciona con el nivel)
+// equipo de un combate de la historia: niveles fijos (como en el original)
+// dex = -1: el inicial del rival, el que tiene ventaja sobre tu companero (y evoluciona con el nivel)
 #define STORY_TEAM_MAX 4
 struct STeam {
   uint8_t n;
@@ -56,6 +60,9 @@ extern const uint8_t STORY_TEAM_COUNT;
 extern const char *const STORY_WHO_NAME[W_COUNT];
 extern const char *const STORY_STYLE_NAME[3];
 extern const char *const STORY_STYLE_SUB[3];
+// nivel minimo del companero en cada capitulo (para que la historia siempre se pueda seguir)
+extern const uint8_t STORY_FLOOR[STORY_STYLES][STORY_CHAPTERS];
+extern const int16_t STORY_PARTNER0[STORY_STYLES];  // companero por defecto (antes de elegir)
 
 // textos de las pantallas de la historia (solo coreano, como los guiones)
 enum : uint8_t {
@@ -69,6 +76,6 @@ extern const char *const STX[SX_COUNT];
 enum : uint8_t {
   RX_BEST_FMT = 0, RX_START, RX_CONT, RX_GIVEUP, RX_WAVE_FMT, RX_NEXT, RX_PICK, RX_HEAL, RX_BALL, RX_CANDY,
   RX_OVER, RX_RESULT_FMT, RX_NEWBEST, RX_TIRED, RX_WILD_FMT, RX_TRAINER, RX_BOSS_FMT, RX_INFO, RX_WON_FMT,
-  RX_COUNT
+  RX_STARTER, RX_COUNT
 };
 extern const char *const RGX[RX_COUNT];

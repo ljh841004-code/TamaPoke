@@ -460,6 +460,8 @@ Battler pMon[PARTY_MAX];
 int8_t pBox[PARTY_MAX] = { -1, -1, -1 };  // indice en la caja (-1 = el que crias)
 uint8_t pN = 1, pCur = 0, pUsed = 1;      // pUsed: bit i = ya salio a luchar
 uint8_t pShiny = 0;                       // bit i = variocolor
+bool pSlot0Pet = true;                    // ko11.21: el primero es el que crias (no en historia/expedicion)
+Battler storyPartnerBattler();
 uint8_t bSwapMode = 0;  // BP_SWAP: 0 obligado (cayo el mio), 1 rival nuevo (puede quedarse), 2 manual (gasta turno)
 PmdMon helperPmd;
 int16_t helperPmdDex = 0;
@@ -1236,12 +1238,12 @@ void drawBattlers() {
       if (th) drawThumb(th, foeX - GAL_CELL / 2, foeG - GAL_CELL, 2, foeSil);
     }
   }
-  if (!meHide && !meGone && pCur == 0 && orbValid(pet.orb) && bvMeDex == pet.speciesId && xScreen != XS_LINK)
+  if (!meHide && !meGone && pCur == 0 && pSlot0Pet && orbValid(pet.orb) && bvMeDex == pet.speciesId && xScreen != XS_LINK)
     drawOrbSlot(meX + 64, meG - 12, 11, pet.orb, now);  // ko11.16: su orbe, abajo a la derecha (detras del sprite)
   if (!meHide && !meGone && prgMe.loaded && prgMe.has(PMD_IDLE_UR)) {  // ko11.16: de espaldas
     drawPrgBattler(prgMe, PMD_IDLE_UR, meX, meG, now, meSil, 12, 176);
   } else if (!meHide && !meGone) {
-    PmdMon &mm = pCur ? helperPmd : pmd;  // ko11.20: el ayudante que lucha ahora
+    PmdMon &mm = (pCur || !pSlot0Pet) ? helperPmd : pmd;  // ko11.20: el ayudante que lucha ahora
     if (mm.loaded) {
       if (!mm.has(meAct)) meAct = PMD_IDLE;
       meAct = battleFacing(mm, meAct, true);
@@ -1352,11 +1354,11 @@ static bool partyOtherAlive() {
   return false;
 }
 static void partyMeName() {
-  const char *mn = pCur == 0 ? (pet.nick[0] ? pet.nick : dexName(pet.speciesId)) : dexName(bMe.dex);
+  const char *mn = pCur == 0 && pSlot0Pet ? (pet.nick[0] ? pet.nick : dexName(pet.speciesId)) : dexName(bMe.dex);
   snprintf(bvMeName, sizeof(bvMeName), "%s%s", (pShiny >> pCur) & 1 ? "*" : "", mn);
 }
 static void partyLoadMe() {
-  if (!pCur) return;
+  if (!pCur && pSlot0Pet) return;
   bool sh = (pShiny >> pCur) & 1;
   if (helperPmd.loaded && helperPmdDex == bMe.dex && helperPmdShiny == sh) return;
   helperPmd.unload();
@@ -1700,7 +1702,10 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
   for (uint8_t i = 0; i < n; i++) bTeam[i] = team[i];
   bRng = BRng(esp_random());
   bMe = makeBattler(pet.speciesId, pet.level(), pet.atkStat(), pet.defStat(), pet.speStat());
-  applyOrb(bMe);  // ko11.16
+  pSlot0Pet = true;
+  // ko11.21: en la historia y la expedicion lucha su companero; los premios, para el que crias
+  if (kind == BK_STORY || kind == BK_ROGUE) { bMe = storyPartnerBattler(); pSlot0Pet = false; }
+  else applyOrb(bMe);  // ko11.16
   // ko11.20: el equipo: el que crias primero y los ayudantes elegidos
   pN = 1; pCur = 0; pUsed = 1; pShiny = 0;
   pMon[0] = bMe; pBox[0] = -1;
@@ -1708,7 +1713,7 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
     int8_t bi = ppPick[k];
     if (bi < 0 || bi >= box.count()) continue;
     const BoxMon &m = box.at((uint8_t)bi);
-    pMon[pN] = makeBoxBattler(m.dex, m.lvl, pet.level(), m.geneAtk, m.geneDef, m.geneSpe);
+    pMon[pN] = makeBoxBattler(m.dex, m.lvl, pSlot0Pet ? pet.level() : bMe.lvl, m.geneAtk, m.geneDef, m.geneSpe);
     pBox[pN] = bi;
     if (m.flags & BOXF_SHINY) pShiny |= (uint8_t)(1 << pN);
     pN++;
@@ -1717,7 +1722,7 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
   if (kind == BK_ROGUE) rogueApplyParty();  // ko11.21: la expedicion trae la vida de la oleada anterior
   bFoe = bTeam[0];
   bvSetup(bMe, bFoe, nullptr, false);
-  if (pCur) { partyMeName(); partyLoadMe(); }
+  if (pCur || !pSlot0Pet) { partyMeName(); partyLoadMe(); }
   bGroup = WG_COMMON;
   bqAisMe = true;
   bLink = false;
@@ -1744,7 +1749,7 @@ static bool nextTrainerMon() {
   if (autoLeft) autoLeft--;  // ko11.19: uno menos en automatico
   if (autoCount > bTeamN - bTeamI - 1) autoCount = (uint8_t)(bTeamN - bTeamI - 1);
   pet.addExp(battleExp(bFoe.dex, bFoe.lvl));
-  bvMeLvl = pet.level();
+  if (pCur == 0 && pSlot0Pet) bvMeLvl = pet.level();
   bTeamI++;
   if (bKind == BK_CHAMP) {  // ko11.20: el campeon elige segun el que tengo en el campo
     uint8_t j = pickNextFoe(bTeam, bTeamI, bTeamN, bMe.type);
@@ -2340,6 +2345,7 @@ static void partyEnd() {
   helperPmd.unload();
   helperPmdDex = 0;
   pN = 1; pCur = 0; pUsed = 1; pShiny = 0;
+  pSlot0Pet = true;
 }
 
 static void afterResult() {
@@ -2451,7 +2457,7 @@ void finishBattle(bool won, bool fled, bool caught) {
     pet.battleResult(bLink ? BATTLE_LINK : BATTLE_WILD, won, fled, caught, wildExp ? bExpDex : bFoe.dex,
                      wildExp ? bExpLvl : bFoe.lvl);
     if (won && bKind == BK_WILD && !bLink) bItems = pet.wildWinItems();  // ko11.1: por probabilidad
-    if (pCur == 0) bvMeLvl = pet.level();  // fork KO (ko7): la caja de vida ensena el nivel nuevo (ko11.20: si lucha el que crias)
+    if (pCur == 0 && pSlot0Pet) bvMeLvl = pet.level();  // fork KO (ko7): la caja de vida ensena el nivel nuevo (ko11.20: si lucha el que crias)
     sfxPlay(pet.lastLvlUp ? SFX_LEVEL : won || caught ? SFX_MEDAL : SFX_BYE);  // ko7: subida de nivel
     // fork KO: el capturado va siempre a la caja; el vencido, solo a veces
     // (ko5: 1 de cada 5 "quiere unirse"; si no, la pokeball no servia de nada)

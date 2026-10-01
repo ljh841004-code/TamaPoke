@@ -25,6 +25,11 @@ uint8_t stDone[STORY_STYLES] = { 0, 0 };  // bit i = capitulo i superado
 uint8_t stResStyle = 0xFF, stResCh = 0;   // punto guardado (0xFF = ninguno)
 uint16_t stResStep = 0;
 uint16_t rgBest = 0;                      // expedicion: mejor oleada
+// ko11.21: el companero de cada estilo (juego: el elegido con Oak, anime: Pikachu) y su exp
+int16_t stPDex[STORY_STYLES] = { 0, 0 };
+uint32_t stPExp[STORY_STYLES] = { 0, 0 };
+PmdMon storyPmd;                          // su sprite en las escenas
+static int16_t storyPmdDex = 0;
 static bool stLoaded = false;
 static uint8_t stBg = 0, stWho = W_NONE;
 static int16_t stMon = 0;
@@ -32,8 +37,9 @@ static char stText[320];
 static uint8_t stPage = 0;
 static uint32_t stTypeT = 0;
 static bool stChoice = false, stBattleWait = false, stEnd = false, stTired = false;
-static char stOpt[2][64];
-static uint8_t stOptLabel[2];
+static char stOpt[3][64];
+static uint8_t stOptLabel[3];
+static uint8_t stOptN = 2;  // 2 o 3 opciones
 
 static void stLoad() {
   if (stLoaded) return;
@@ -46,6 +52,10 @@ static void stLoad() {
   stResCh = p.getUChar("rc", 0);
   stResStep = p.getUShort("rp", 0);
   rgBest = p.getUShort("rb", 0);
+  stPDex[0] = (int16_t)p.getShort("pd0", 0);
+  stPDex[1] = (int16_t)p.getShort("pd1", 0);
+  stPExp[0] = p.getUInt("pe0", 0);
+  stPExp[1] = p.getUInt("pe1", 0);
   p.end();
 }
 static void stSave() {
@@ -57,6 +67,10 @@ static void stSave() {
   p.putUChar("rc", stResCh);
   p.putUShort("rp", stResStep);
   p.putUShort("rb", rgBest);
+  p.putShort("pd0", stPDex[0]);
+  p.putShort("pd1", stPDex[1]);
+  p.putUInt("pe0", stPExp[0]);
+  p.putUInt("pe1", stPExp[1]);
   p.end();
 }
 static uint8_t stDoneCount(uint8_t s) {
@@ -169,8 +183,9 @@ void storyChaptersTap(int16_t x, int16_t y) {
 // ---------------- motor ----------------
 static const SStep &stCur() { return STORY[stStyle][stCh].steps[stStep]; }
 
+static const char *stPartnerName();
 static void stShow(const char *tpl, uint8_t who, const char *a2 = nullptr) {
-  txFmtRaw(stText, sizeof(stText), tpl, stPetName(), a2);
+  txFmtRaw(stText, sizeof(stText), tpl, stPartnerName(), a2);
   stWho = who;
   stPage = 0;
   stTypeT = millis();
@@ -184,13 +199,26 @@ static int16_t stEvolveFor(int16_t d, uint16_t lv) {
   }
   return d;
 }
-// el inicial del rival: el que tiene ventaja sobre tu tipo
+// el companero del estilo: su forma base, su nivel (con el minimo del capitulo) y su forma de ahora
+static int16_t stPartnerBase(uint8_t s) { return stPDex[s] > 0 ? stPDex[s] : STORY_PARTNER0[s]; }
+static uint16_t stPartnerLv(uint8_t s) {
+  uint16_t lv = levelForExp(stPExp[s]);
+  uint8_t fl = STORY_FLOOR[s][stCh < STORY_CHAPTERS ? stCh : 0];
+  return lv < fl ? fl : lv;
+}
+static int16_t stPartnerDex(uint8_t s) { return stEvolveFor(stPartnerBase(s), stPartnerLv(s)); }
+static const char *stPartnerName() { return dexName(stPartnerDex(stStyle)); }
+static void stLoadPartnerPmd() {
+  int16_t d = stPartnerDex(stStyle);
+  if (storyPmd.loaded && storyPmdDex == d) return;
+  storyPmd.unload();
+  storyPmdDex = d;
+  storyPmd.load((uint8_t)d, false);
+}
+// el inicial del rival: el que tiene ventaja sobre tu companero (como en Rojo/Azul)
 static int16_t stRivalStarter() {
-  uint8_t t = DEX_TBL[pet.speciesId].ptype;
-  if (t == PT_WATER || t == PT_ELECTRIC || t == PT_ROCK || t == PT_GROUND) return 1;   // planta
-  if (t == PT_GRASS || t == PT_ICE || t == PT_BUG || t == PT_STEEL) return 4;         // fuego
-  if (t == PT_FIRE) return 7;                                                        // agua
-  return 133;
+  int16_t b = stPartnerBase(stStyle);
+  return b == 1 ? 4 : b == 4 ? 7 : b == 7 ? 1 : 133;
 }
 
 static void stSetResume() {
@@ -208,6 +236,14 @@ static void stRun() {
       case ST_BG: stBg = s.a < REGION_COUNT ? s.a : 0; stStep++; continue;
       case ST_MON: stMon = s.c; stStep++; continue;
       case ST_LABEL: stStep++; continue;
+      case ST_STARTER:  // el companero de este estilo (empieza en el nivel del capitulo)
+        // (si se repite el capitulo con el mismo, conserva lo que ya crecio)
+        if (stPDex[stStyle] != s.c) stPExp[stStyle] = expForLevel(STORY_FLOOR[stStyle][stCh]);
+        stPDex[stStyle] = s.c;
+        stSave();
+        stLoadPartnerPmd();
+        stStep++;
+        continue;
       case ST_GOTO: {
         uint16_t k = 0;
         while (k < ch.n && !(ch.steps[k].op == ST_LABEL && ch.steps[k].a == s.a)) k++;
@@ -218,14 +254,17 @@ static void stRun() {
       case ST_NARR: stShow(s.t, W_NONE); return;
       case ST_CHOICE: {
         char buf[200];
-        txFmtRaw(buf, sizeof(buf), s.t, stPetName(), nullptr);
-        char *p1 = strchr(buf, '|'), *p2 = p1 ? strchr(p1 + 1, '|') : nullptr;
+        txFmtRaw(buf, sizeof(buf), s.t, stPartnerName(), nullptr);
+        char *p1 = strchr(buf, '|'), *p2 = p1 ? strchr(p1 + 1, '|') : nullptr, *p3 = p2 ? strchr(p2 + 1, '|') : nullptr;
         if (p1) *p1 = 0;
         if (p2) *p2 = 0;
+        if (p3) *p3 = 0;
         snprintf(stText, sizeof(stText), "%s", buf);
         snprintf(stOpt[0], sizeof(stOpt[0]), "%s", p1 ? p1 + 1 : "");
         snprintf(stOpt[1], sizeof(stOpt[1]), "%s", p2 ? p2 + 1 : "");
-        stOptLabel[0] = s.a; stOptLabel[1] = s.b;
+        snprintf(stOpt[2], sizeof(stOpt[2]), "%s", p3 ? p3 + 1 : "");
+        stOptLabel[0] = s.a; stOptLabel[1] = s.b; stOptLabel[2] = (uint8_t)s.c;
+        stOptN = p3 ? 3 : 2;
         stWho = W_NONE; stPage = 0; stTypeT = millis();
         stChoice = true;
         return;
@@ -286,6 +325,7 @@ static void stStart(uint8_t s, uint8_t c) {
     if (ch.steps[k].op == ST_MON) stMon = ch.steps[k].c;
   }
   xScreen = XS_SCENE;
+  stLoadPartnerPmd();
   stRun();
 }
 
@@ -356,9 +396,10 @@ void renderStoryScene() {
   bRegion = stBg; bLink = false;
   bvShakeX = bvShakeY = 0;
   drawBattleBg();
-  // tu Pokemon a la izquierda (se ilumina cuando habla)
-  if (pmd.loaded && pmd.has(PMD_IDLE)) drawPmdAct(PMD_IDLE, 132, 258, now, true, false, 4);
-  else drawThumbAt(pet.speciesId, 132, 220, 3, false);
+  // el companero de la historia a la izquierda (aun no, antes de recibirlo)
+  if (stPDex[stStyle] <= 0) {
+  } else if (storyPmd.loaded && storyPmd.has(PMD_IDLE)) drawPmdActM(storyPmd, PMD_IDLE, 132, 258, now, true, false, 4, 170);
+  else drawThumbAt(stPartnerDex(stStyle), 132, 220, 3, false);
   // el Pokemon de la escena (si hay) y quien habla a la derecha
   if (stMon > 0) drawThumbAt(stMon, 250, 214, 2, false);
   if (stWho != W_NONE && stWho != W_PET) {
@@ -368,7 +409,7 @@ void renderStoryScene() {
   }
   // cuadro de dialogo
   uiPanel(ST_BOX_X, ST_BOX_Y, ST_BOX_W, ST_BOX_H, 14, UI_WHITE, UI_INK);
-  const char *name = stWho == W_PET ? stPetName() : stWho != W_NONE ? STORY_WHO_NAME[stWho] : nullptr;
+  const char *name = stWho == W_PET ? stPartnerName() : stWho != W_NONE ? STORY_WHO_NAME[stWho] : nullptr;
   if (name && name[0]) {
     int w = textW(name, 2) + 24;
     drawBtn(ST_BOX_X + 12, ST_BOX_Y - 22, w, 32, stWho == W_PET ? UI_BAR_OK : ST_STYLE_COL[stStyle], UI_WHITE, name);
@@ -389,7 +430,10 @@ void renderStoryScene() {
     printT(t);
     if (shown <= 0) break;
   }
-  if (stChoice) {
+  if (stChoice && stOptN == 3) {  // tres opciones cortas en fila (los iniciales)
+    static const uint16_t c3[3] = { C565(0x48, 0xa8, 0x58), C565(0xe0, 0x60, 0x30), C565(0x38, 0x80, 0xd8) };
+    for (int k = 0; k < 3; k++) stBtn(ST_BOX_X + 12 + k * 118, ST_BOX_Y + 52, 110, 48, c3[k], UI_WHITE, stOpt[k]);
+  } else if (stChoice) {
     stBtn(ST_BOX_X + 12, ST_BOX_Y + 42, ST_BOX_W - 24, 32, ST_STYLE_COL[stStyle], UI_WHITE, stOpt[0]);
     stBtn(ST_BOX_X + 12, ST_BOX_Y + 78, ST_BOX_W - 24, 32, 0x4C98, UI_WHITE, stOpt[1]);
   } else if (!stTyping()) {
@@ -414,7 +458,11 @@ void storySceneTap(int16_t x, int16_t y) {
   if (stTyping()) { stTypeT = millis() - 600000UL; return; }  // mostrar todo de golpe
   if (stChoice) {
     if (y < ST_BOX_Y + 40 || y > ST_BOX_Y + 112) return;
-    int k = y < ST_BOX_Y + 76 ? 0 : 1;
+    int k;
+    if (stOptN == 3) {
+      if (x < ST_BOX_X + 12 || x >= ST_BOX_X + 12 + 3 * 118) return;
+      k = (x - ST_BOX_X - 12) / 118;
+    } else k = y < ST_BOX_Y + 76 ? 0 : 1;
     sfxPlay(SFX_TAP);
     uint8_t lab = stOptLabel[k];
     const SChapter &ch = STORY[stStyle][stCh];
@@ -440,7 +488,8 @@ static void stStartBattle() {
   if (s.a >= STORY_TEAM_COUNT) { stStep++; stRun(); return; }
   if (!pet.canBattle() || pet.tooTiredToBattle()) {  // cansado: se descansa y se vuelve
     stSetResume();
-    stShow(STX[SX_TIRED], W_NONE);
+    txFmtRaw(stText, sizeof(stText), STX[SX_TIRED], stPetName(), nullptr);  // el que crias es el cansado
+    stWho = W_NONE; stPage = 0; stTypeT = millis();
     stBattleWait = false;
     stTired = true;
     sfxPlay(SFX_DENY);
@@ -448,9 +497,8 @@ static void stStartBattle() {
   }
   const STeam &tm = STORY_TEAMS[s.a];
   Battler team[STORY_TEAM_MAX];
-  uint16_t pl = pet.level();
   for (uint8_t i = 0; i < tm.n && i < STORY_TEAM_MAX; i++) {
-    int lv = (int)pl + tm.lv[i];
+    int lv = tm.lv[i];  // niveles fijos, como en el original
     if (lv < 3) lv = 3;
     if (lv > LEVEL_MAX) lv = LEVEL_MAX;
     int16_t d = tm.dex[i] < 0 ? stRivalStarter() : tm.dex[i];
@@ -460,10 +508,29 @@ static void stStartBattle() {
   partyOpen(BK_STORY, tm.region, team, tm.n, XS_SCENE);
 }
 
+// startTrainer: quien lucha en primer lugar (historia: el companero; expedicion: el inicial elegido)
+static uint16_t rgPartnerLv();
+static int16_t rgPartnerDex();
+Battler storyPartnerBattler() {
+  int16_t d;
+  uint16_t lv;
+  if (bKind == BK_ROGUE) { d = rgPartnerDex(); lv = rgPartnerLv(); }
+  else { d = stPartnerDex(stStyle); lv = stPartnerLv(stStyle); }
+  return makeBoxBattler(d, lv, lv, 110, 110, 110);
+}
+
 // vuelta del combate (afterResult): ganado -> sigue; perdido -> se puede repetir
 void storyAfterBattle(bool won) {
   xScreen = XS_SCENE;
-  if (won) { stStep++; stRun(); return; }
+  if (won) {  // el companero sube un nivel (los premios del combate ya fueron al que crias)
+    uint16_t lv = stPartnerLv(stStyle);
+    if (lv < LEVEL_MAX) stPExp[stStyle] = expForLevel(lv + 1);
+    stSave();
+    stLoadPartnerPmd();
+    stStep++;
+    stRun();
+    return;
+  }
   stShow(STX[SX_LOST], W_NONE);
   stBattleWait = true;
 }
@@ -482,7 +549,10 @@ const char *storyFoeName() {
 // Si el Pokemon se cansa, la expedicion se guarda y se sigue luego.
 // ======================================================================
 static const uint8_t RG_ROUTE[8] = { 0, 2, 15, 1, 6, 8, 3, 13 };  // 초원 숲 광산 바닷가 발전소 늪 화산 용의 계곡
-enum : uint8_t { RG_HUB = 0, RG_REWARD, RG_OVER };
+enum : uint8_t { RG_HUB = 0, RG_REWARD, RG_OVER, RG_PICK };
+// ko11.21: la expedicion se hace con un inicial propio que crece una vez por oleada
+static const int16_t RG_STARTERS[5] = { 1, 4, 7, 25, 133 };
+int16_t rgStarter = 1;
 uint8_t rgPhase = RG_HUB;
 bool rgOn = false;
 uint16_t rgWave = 1;
@@ -502,6 +572,7 @@ static void rgSave() {
   p.putBytes("rm", rgMax, sizeof(rgMax));
   p.putUChar("rk", rgHpOk);
   p.putUShort("rb", rgBest);
+  p.putShort("rd", rgStarter);
   p.end();
 }
 static void rgLoad() {
@@ -516,9 +587,12 @@ static void rgLoad() {
   if (p.isKey("rh")) p.getBytes("rh", rgHp, sizeof(rgHp));
   if (p.isKey("rm")) p.getBytes("rm", rgMax, sizeof(rgMax));
   rgHpOk = p.getUChar("rk", 0);
+  rgStarter = (int16_t)p.getShort("rd", 1);
   p.end();
 }
 static uint8_t rgRegion(uint16_t w) { return RG_ROUTE[((w - 1) / 5) % 8]; }
+static uint16_t rgPartnerLv() { uint16_t lv = 4 + rgWave; return lv > LEVEL_MAX ? LEVEL_MAX : lv; }
+static int16_t rgPartnerDex() { return stEvolveFor(rgStarter > 0 ? rgStarter : 1, rgPartnerLv()); }
 
 void rogueOpen() {
   rgLoad();
@@ -529,10 +603,10 @@ void rogueOpen() {
 // la oleada w: salvaje (1), entrenador cada 5 (2) o jefe cada 10 (3, mas fuerte)
 static uint8_t rgMakeTeam(uint16_t w, Battler *team) {
   uint8_t reg = rgRegion(w);
-  uint16_t pl = pet.level();
-  int lv = (int)pl - 3 + (int)(w * 2) / 3;
+  int lv = (int)rgPartnerLv() - 1;  // un poco por debajo del inicial
   bool boss = w % 10 == 0, trainer = !boss && w % 5 == 0;
   if (boss) lv += 3;
+  else if (trainer) lv += 1;
   if (lv < 3) lv = 3;
   if (lv > LEVEL_MAX) lv = LEVEL_MAX;
   uint8_t n = boss ? 3 : trainer ? 2 : 1;
@@ -625,13 +699,27 @@ static void rgTeamBar(int y) {  // la vida del equipo (de lo guardado)
 }
 
 #define RG_BTN_Y 300
+#define RG_PICK_X 55
+#define RG_PICK_STEP 74
 void renderRogue() {
   uiScreenBg();
   drawFit(STORY_STYLE_NAME[2], 34, 300, ST_STYLE_COL[2], 3);
   char t[64];
   snprintf(t, sizeof(t), RGX[RX_BEST_FMT], (unsigned)rgBest);
   drawFit(t, 76, 300, UI_INK, 2);
-  if (rgPhase == RG_REWARD) {
+  if (rgPhase == RG_PICK) {  // el inicial de esta expedicion
+    drawFit(RGX[RX_STARTER], 130, 330, UI_INK, 2);
+    for (int i = 0; i < 5; i++) {
+      int x = RG_PICK_X + i * RG_PICK_STEP;
+      uiButton(x, 170, RG_PICK_STEP - 6, 120, 12, rgStarter == RG_STARTERS[i] ? C565(0xe8, 0xe4, 0xff) : UI_WHITE, UI_INK);
+      drawThumbAt(RG_STARTERS[i], x + 34, 218, 2, false);
+      const char *nm = dexName(RG_STARTERS[i]);
+      gfx->setTextColor(UI_INK);
+      setSize(1);
+      setCur(x + 34 - textW(nm, 1) / 2, 260);
+      printT(nm);
+    }
+  } else if (rgPhase == RG_REWARD) {
     drawFit(rgResult, 114, 320, UI_BAR_OK, 3);
     if (rgNewBest) drawFit(RGX[RX_NEWBEST], 150, 300, UI_BAR_WARN, 2);
     drawFit(RGX[RX_PICK], 184, 320, UI_INK, 2);
@@ -650,6 +738,9 @@ void renderRogue() {
       drawFit(t, 160, 300, UI_INK, 3);
       drawFit(XT((XId)(X_REG_0 + rgRegion(rgWave))), 204, 300, ST_STYLE_COL[2], 2);
       rgTeamBar(236);
+      char pl[64];
+      snprintf(pl, sizeof(pl), "%s Lv.%u", dexName(rgPartnerDex()), (unsigned)rgPartnerLv());
+      drawFit(pl, 256, 300, UI_INK, 1);
       drawBtn(83, RG_BTN_Y, 150, 52, ST_STYLE_COL[2], UI_WHITE, RGX[RX_CONT]);
       drawBtn(243, RG_BTN_Y, 140, 52, UI_TRACK, UI_INK, RGX[RX_GIVEUP]);
     } else {
@@ -662,7 +753,7 @@ void renderRogue() {
 }
 
 void rogueTap(int16_t x, int16_t y) {
-  if (navHit(NAV_L, x, y)) { rgPhase = RG_HUB; xScreen = XS_STORY; sfxPlay(SFX_TAP); return; }
+  if (navHit(NAV_L, x, y)) { if (rgPhase == RG_PICK) { rgPhase = RG_HUB; sfxPlay(SFX_TAP); return; } rgPhase = RG_HUB; xScreen = XS_STORY; sfxPlay(SFX_TAP); return; }
   if (rgPhase == RG_REWARD) {
     if (y < 222 || y > 282 || x < 73 || x >= 403) return;
     int k = (x - 73) / 110;
@@ -682,6 +773,16 @@ void rogueTap(int16_t x, int16_t y) {
     rgStartWave(false);
     return;
   }
+  if (rgPhase == RG_PICK) {
+    if (y < 170 || y > 290 || x < RG_PICK_X || x >= RG_PICK_X + 5 * RG_PICK_STEP) return;
+    rgStarter = RG_STARTERS[(x - RG_PICK_X) / RG_PICK_STEP];
+    sfxPlay(SFX_TAP);
+    rgPhase = RG_HUB;
+    rgOn = true; rgWave = 1; rgHpOk = 0; rgNewBest = false;
+    rgSave();
+    rgStartWave(true);
+    return;
+  }
   if (rgPhase == RG_OVER) {
     if (inRect(x, y, 133, RG_BTN_Y, 200, 52)) { rgPhase = RG_HUB; rgNewBest = false; sfxPlay(SFX_TAP); }
     return;
@@ -694,10 +795,8 @@ void rogueTap(int16_t x, int16_t y) {
     }
     return;
   }
-  if (inRect(x, y, 133, RG_BTN_Y, 200, 52)) {
+  if (inRect(x, y, 133, RG_BTN_Y, 200, 52)) {  // primero se elige el inicial
     sfxPlay(SFX_TAP);
-    rgOn = true; rgWave = 1; rgHpOk = 0; rgNewBest = false;
-    rgSave();
-    rgStartWave(true);
+    rgPhase = RG_PICK;
   }
 }

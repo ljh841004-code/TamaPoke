@@ -772,16 +772,25 @@ static void storyShots() {
   sceneTo(0); render(); shot("72b_scene_narr");
   sceneTo(1); render(); shot("73_scene_oak");
   sceneTo(2); render(); shot("74_scene_pet");
+  stPDex[0] = 0; stPExp[0] = 0;
+  sceneUntil([] { return stChoice; }); render(); shot("74b_scene_starter");
+  navCheck("historia: Oak deja elegir entre 3", stChoice && stOptN == 3);
+  storySceneTap(ST_BOX_X + 12 + 2 * 118 + 50, ST_BOX_Y + 70);  // 꼬부기
+  navCheck("historia: companero elegido", stPDex[0] == 7);
+  sceneTo(0); render(); shot("74c_scene_partner");
   sceneTo(1); render(); shot("75_scene_rival");
   sceneUntil([] { return stBattleWait; }); render(); shot("76_scene_battle_wait");
   navCheck("historia: espera el combate", stBattleWait);
   storySceneTap(233, 330);  // -> combate (o elegir ayudantes)
   if (xScreen == XS_PARTY) partyStart(true);
   navCheck("historia: combate", xScreen == XS_WILD && bKind == BK_STORY);
+  navCheck("historia: lucha el companero (no el que crias)", bMe.dex == 7 && bMe.lvl == 5 && !pSlot0Pet);
+  navCheck("historia: el rival lleva la ventaja", bFoe.dex == 1);
   tick(2300); updateWild(); render(); shot("77_story_battle");
   bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
   finishBattle(true, false, false); afterResult();
   navCheck("historia: vuelve a la escena", xScreen == XS_SCENE);
+  navCheck("historia: el companero sube de nivel", stPartnerLv(0) == 6 && pSlot0Pet);
   sceneTo(0); render(); shot("78_scene_after");
   sceneUntil([] { return stChoice; }); render(); shot("79_scene_choice");
   navCheck("historia: eleccion", stChoice);
@@ -791,7 +800,7 @@ static void storyShots() {
   navCheck("historia: capitulo 1 superado", stDone[0] & 1);
   sceneTo(1); render(); shot("71b_story_chapters_after");
   // anime: 2화 (로켓단)
-  stDone[1] = 1; stStart(1, 1);
+  stDone[1] = 1; stPDex[1] = 25; stStart(1, 1);
   sceneTo(1); render(); shot("80_anime_rocket");
   sceneTo(2); render(); shot("80b_anime_rocket2");
   stDone[1] = 0; stDone[0] = 0; stResStyle = 0xFF;
@@ -799,8 +808,12 @@ static void storyShots() {
   xScreen = XS_STORY; storyMenuTap(200, ST_CARD_Y + 2 * (ST_CARD_H + ST_CARD_GAP) + 20);
   render(); shot("81_rogue_hub");
   rogueTap(233, RG_BTN_Y + 20);
+  render(); shot("81b_rogue_pick");
+  navCheck("expedicion: elegir inicial", rgPhase == RG_PICK);
+  rogueTap(RG_PICK_X + 3 * RG_PICK_STEP + 30, 230);  // 피카츄
   if (xScreen == XS_PARTY) partyStart(true);
   navCheck("expedicion: oleada 1", xScreen == XS_WILD && bKind == BK_ROGUE);
+  navCheck("expedicion: lucha el inicial elegido", bMe.dex == 25 && bMe.lvl == 5);
   tick(2300); updateWild(); render(); shot("82_rogue_wave1");
   bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0; bMe.hp = bMe.maxHp / 2;
   finishBattle(true, false, false); afterResult();
