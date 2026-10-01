@@ -138,6 +138,14 @@ static inline uint8_t bakPickSlot(const BakSlot s[2], bool manual) {
   if (!s[1].ok) return 1;
   return older();
 }
+// ko11.21.1: la automatica mas nueva (-1 ninguna). La "una al dia" mira SOLO las automaticas:
+// antes miraba la mas nueva de todas y una copia manual de hoy la saltaba (con dos manuales, nunca habia automatica)
+static inline int bakNewestAuto(const BakSlot s[2]) {
+  int best = -1;
+  for (int i = 0; i < 2; i++)
+    if (s[i].ok && !(s[i].h.flags & BAKF_MANUAL) && (best < 0 || s[i].h.seq > s[best].h.seq)) best = i;
+  return best;
+}
 void bakInfo(BakSlot out[2]);                         // las dos ranuras de la SD (CRC comprobado)
 int bakNewest(const BakSlot s[2]);                    // -1 si no hay ninguna valida
 bool bakBackupNow(int16_t dex, uint16_t lvl, uint32_t epoch, bool manual = false);  // ranura: bakPickSlot

@@ -103,3 +103,14 @@ TEST(savebak, manual_y_automatica_cada_una_su_ranura) {
   CHECK_EQ(bakPickSlot(e, true), 1);                  // la manual ocupa la mas vieja
   CHECK_EQ(bakPickSlot(e, false), 1);
 }
+// ko11.21.1: "una al dia" mira solo las automaticas (dos manuales de hoy no la saltan)
+TEST(savebak, automatica_mas_nueva) {
+  BakSlot d[2] = { mk(true, 5, true), mk(true, 4, true) };
+  CHECK_EQ(bakNewestAuto(d), -1);                     // solo manuales: toca automatica
+  BakSlot c[2] = { mk(true, 7, true), mk(true, 6, false) };
+  CHECK_EQ(bakNewestAuto(c), 1);                      // la manual mas nueva no cuenta
+  BakSlot e[2] = { mk(true, 9, false), mk(true, 8, false) };
+  CHECK_EQ(bakNewestAuto(e), 0);
+  BakSlot f[2] = { mk(false, 9, false), mk(false, 0, false) };
+  CHECK_EQ(bakNewestAuto(f), -1);
+}

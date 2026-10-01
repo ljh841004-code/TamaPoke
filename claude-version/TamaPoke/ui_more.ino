@@ -1818,7 +1818,7 @@ bool bakAsk = false;         // pregunta al arrancar
 int8_t bakAskSlot = -1;
 static bool bakPending = false;
 static uint32_t bakLastT = 0;
-static int32_t bakKnownDay = -2;  // dia de la copia mas nueva (-1 ninguna, -2 sin mirar)
+static int32_t bakKnownDay = -2;  // dia de la copia AUTOMATICA mas nueva (-1 ninguna, -2 sin mirar)
 
 void bakRequest() { bakPending = true; }
 
@@ -1831,7 +1831,7 @@ static bool bakDoBackup(bool manual = false) {
   bool ok = bakBackupNow(pet.speciesId, pet.level(), gClockTrusted ? e : 0, manual);
   bakLastT = millis() ? millis() : 1;
   bakPending = false;
-  if (ok && gClockTrusted) bakKnownDay = (int32_t)(e / 86400);
+  if (ok && gClockTrusted && !manual) bakKnownDay = (int32_t)(e / 86400);  // ko11.21.1: la manual no cuenta
   return ok;
 }
 
@@ -1855,7 +1855,7 @@ void bakAutoLoop(uint32_t now) {
     if (bakKnownDay == -2) {
       BakSlot s[2];
       bakInfo(s);
-      int n = bakNewest(s);
+      int n = bakNewestAuto(s);  // ko11.21.1: solo las automaticas
       bakKnownDay = n < 0 ? -1 : (int32_t)(s[n].h.epoch / 86400);
     }
     due = (int32_t)(clockEpoch() / 86400) != bakKnownDay;
