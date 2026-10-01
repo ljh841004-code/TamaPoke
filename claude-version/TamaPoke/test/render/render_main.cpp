@@ -672,6 +672,7 @@ static void scenes(bool ko, const char *sfx) {
   // sonido y hora
   closeAll(); openClock(); setBigPart("nvs2"); render(); shot("15z_clock_nvs2"); setBigPart(nullptr); render(); shot("15_clock_settings");
   clockDateMode = true; render(); shot("15b_clock_date"); clockDateMode = false;
+  closeAll(); openSettings(); setBigPart("nvs2"); render(); shot("14_settings"); setBigPart(nullptr);  // ko11.26
   closeAll(); openSound(); render(); shot("16_sound");
   { bool v0 = vibEnabled(), a0 = audioEnabled();  // ko11.25: [진동 켬/끔] junto a [소리]
     soundTap(SND_BTN_X1 + 70, 96); render(); shot("16g_sound_vib_off");
@@ -744,14 +745,50 @@ static void navChecks() {
   navCheck("entrenamiento -> tongsin -> [<]", xScreen == XS_NONE && trainMenuOpen);
   closeAll(); cardOpen = true; cardPage = 0; openLinkMenu(); linkMenuTap(LX, LY);
   navCheck("ficha -> tongsin -> [<]", xScreen == XS_NONE && cardOpen);
-  closeAll(); openClock(); openNet(); netTap(LX, LY);
-  navCheck("hora -> red -> [<]", xScreen == XS_NONE && clockOpen);
-  closeAll(); openClock(); openSound(); soundTap(LX, LY);
-  navCheck("hora -> sonido -> [<]", xScreen == XS_NONE && clockOpen);
-  closeAll(); openClock(); openSound(); openBgmPick(); bgmPickTap(LX, LY);
+  // ko11.26: menu de ajustes (flecha de arriba); cada boton y su [<]
+  const int SX[2] = { 147, 319 };
+  auto setBtn = [&](int i) { settingsTap(SX[i % 2], 98 + (i / 2) * 68 + 28); };
+  closeAll(); tick(3000); onTap(233, 20);
+  navCheck("principal: flecha de arriba = ajustes", xScreen == XS_SET && !clockOpen);
+  closeAll(); onSwipeV(1);
+  navCheck("principal: deslizar abajo = ajustes", xScreen == XS_SET);
+  closeAll(); openSettings(); setBtn(0);
+  navCheck("ajustes -> [시간] abre la hora", clockOpen && xScreen == XS_NONE);
+  clockTap(LX, LY);
+  navCheck("ajustes -> hora -> [<]", !clockOpen && xScreen == XS_SET);
+  setBtn(0); clockTap(233, 316 + 20);
+  navCheck("ajustes -> hora -> [OK]", !clockOpen && xScreen == XS_SET);
+  closeAll(); openSettings(); setBtn(1); bool snd = xScreen == XS_VOL; soundTap(LX, LY);
+  navCheck("ajustes -> sonido -> [<]", snd && xScreen == XS_SET);
+  closeAll(); openSettings(); setBtn(1); openBgmPick(); bgmPickTap(LX, LY);
   navCheck("sonido -> fondos -> [<]", xScreen == XS_VOL);
-  closeAll(); openClock(); openReset(); resetTap(LX, LY);
-  navCheck("hora -> reinicio -> [<]", xScreen == XS_NONE && clockOpen);
+  soundTap(LX, LY);
+  navCheck("... -> sonido -> [<] = ajustes", xScreen == XS_SET);
+  closeAll(); openSettings(); setBtn(2); bool br = xScreen == XS_BRIGHT; brightTap(LX, LY);
+  navCheck("ajustes -> brillo -> [<]", br && xScreen == XS_SET);
+  closeAll(); openSettings(); setBtn(3); bool nt = xScreen == XS_NET; netTap(LX, LY);
+  navCheck("ajustes -> red -> [<]", nt && xScreen == XS_SET);
+  closeAll(); openSettings(); setBtn(4); bool up = xScreen == XS_UPD; updateTap(LX, LY);
+  navCheck("ajustes -> SD update -> [<]", up && xScreen == XS_SET);
+  closeAll(); openSettings(); setBtn(5); bool bk = xScreen == XS_BAK; backupTap(LX, LY);
+  navCheck("ajustes -> copias -> [<]", bk && xScreen == XS_SET);
+  { Lang l0 = gLang; closeAll(); openSettings(); setBtn(6);
+    navCheck("ajustes -> [언어] cambia el idioma", gLang != l0 && xScreen == XS_SET);
+    while (gLang != l0) setBtn(6); }
+  closeAll(); openSettings(); setBtn(7); bool rs = xScreen == XS_RESET; resetTap(LX, LY);
+  navCheck("ajustes -> reinicio -> [<]", rs && xScreen == XS_SET);
+  settingsTap(LX, LY);
+  navCheck("ajustes -> [<] = principal", xScreen == XS_NONE && !clockOpen);
+  // ko11.26: la caja tiene la pestana de caramelos
+  closeAll(); openBox(); boxTap(342 + 21, 48 + 19);
+  navCheck("caja -> [사탕] abre la bolsa", xScreen == XS_CANDY);
+  candyBagTap(LX, LY);
+  navCheck("caja -> caramelos -> [<] = caja", xScreen == XS_BOX);
+  closeAll(); openBox(); boxTap(342 + 21, 48 + 19); onSwipeV(-1);
+  navCheck("caja -> caramelos -> deslizar = caja", xScreen == XS_BOX);
+  // ko11.26: la ficha de combate ya no tiene botones (tocar = cerrar)
+  closeAll(); cardOpen = true; cardPage = 1; onTap(150, 240);
+  navCheck("ficha combate: sin botones", !cardOpen && xScreen == XS_NONE && !trainMenuOpen);
   closeAll(); cardOpen = true; cardPage = 0; onTap(LX, LY);
   navCheck("ficha (1a pagina) -> [<]", !cardOpen);
   closeAll(); tick(3000);
@@ -974,10 +1011,6 @@ int main(int argc, char **argv) {
   pet.fullness = 72; pet.joy = 88; pet.energy = 54; pet.hygiene = 23;
   pet.balls = 5; pet.potions = 2;
   ensureMon();
-  // WIFI_TAP_CHECK: tocar la pildora WiFi del reloj abre la red
-  openClock(); onTap(233, 311);
-  printf("  wifi tap: clockOpen=%d xScreen=%d (XS_NET=%d)\n", clockOpen, xScreen, XS_NET);
-  xScreen = XS_NONE;
   navChecks();
   storyShots();
   scenes(true, "");

@@ -222,16 +222,9 @@ enum : uint8_t { NAV_L = 0, NAV_R, NAV_UP, NAV_DOWN, NAV_TOP };  // ko11.15.1: N
 #define NAV_RX 440
 #define NAV_Y 200
 #define NAV_BY 446
-#define NAV_TY 26   // ko11.15.1: flecha de arriba (hora/ajustes, como deslizar hacia abajo)
+#define NAV_TY 26   // ko11.15.1: flecha de arriba (ko11.26: menu de ajustes, como deslizar hacia abajo)
 #define NAV_R_ 15
 #define BTN_HALF 23  // boton de 46x46 (ko10.9; antes 52x52)
-// fork KO: botones de la pagina de combate de la ficha (ko4: rejilla 2x2)
-#define CARD_ROW1_Y 222
-#define CARD_ROW2_Y 270
-#define CARD_COL1_X 96
-#define CARD_COL2_X 236
-#define CARD_COL_W 134
-#define CARD_BTN_H 40
 #define BTN_HIT 36   // radio tactil (un poco mas generoso)
 
 // grietas del huevo (pixeles 'k' sobre el sprite)
@@ -1394,13 +1387,13 @@ void onSwipeV(int dir) {
   if (extraSwipe()) return;           // fork KO: pantallas nuevas
   if (trainingSwipe()) return;        // fork KO (ko4): entrenamiento
   if (gameOpen || galleryOpen || kbOpen || sackOpen || pet.ceremony) return;
-  if (clockOpen) { clockOpen = false; return; }
+  if (clockOpen) { clockClose(); return; }
   if (cardOpen) {
     if (dir < 0) cardOpen = false;  // arriba cierra la ficha
     return;
   }
-  if (dir > 0) {                    // deslizar abajo: ajustar hora
-    if (!confirmUntil && !feedMenuUntil) openClock();
+  if (dir > 0) {                    // deslizar abajo: ajustes (ko11.26; antes la hora)
+    if (!confirmUntil && !feedMenuUntil) openSettings();
   } else if (!pet.isEgg() && !confirmUntil && !feedMenuUntil) {
     cardOpen = true;                // deslizar arriba: ficha
     cardPage = 0;
@@ -1491,15 +1484,7 @@ void onTap(int16_t x, int16_t y) {
       mistWhyUntil = millis() + 5000;
       sfxPlay(SFX_TAP);
     }
-    else if (cardPage == 1 && y >= CARD_ROW1_Y && y < CARD_ROW2_Y + CARD_BTN_H &&
-             x >= CARD_COL1_X && x < CARD_COL2_X + CARD_COL_W) {
-      bool right = x >= CARD_COL2_X - 3;
-      bool row2 = y >= CARD_ROW2_Y - 4;
-      if (!row2 && !right) openRegionPick();                  // salvaje (ko10.1: region; cierra la ficha)
-      else if (!row2) openLinkMenu();                          // tongsin (cierra la ficha)
-      else if (!right) openTrainMenu();                        // ko4: entrenamiento
-      else openBox();                                          // ko4: caja
-    } else {
+    else {
       cardOpen = false;
     }
     return;
@@ -1560,7 +1545,7 @@ void onTap(int16_t x, int16_t y) {
       sfxPlay(SFX_TAP);
       return;
     }
-    if (navHit(NAV_TOP, x, y)) { openClock(); sfxPlay(SFX_TAP); return; }  // ko11.15.1
+    if (navHit(NAV_TOP, x, y)) { openSettings(); sfxPlay(SFX_TAP); return; }  // ko11.26: ajustes (antes la hora)
     if (navHit(NAV_R, x, y)) { openBox(); sfxPlay(SFX_TAP); return; }       // ko11.15.1: caja
     if (!pet.isEgg() && navHit(NAV_UP, x, y)) { cardOpen = true; cardPage = 0; sfxPlay(SFX_TAP); return; }
   }
@@ -3356,7 +3341,7 @@ void applyClock() {
   else pet.setClock(e);
   gRtcWasLost = false;
   gClockTrusted = true;  // la hora ya es de fiar (tambien para pasarla por tongsin)
-  clockOpen = false;
+  clockClose();  // ko11.26: vuelve a ajustes
 }
 
 // ko11.6.1: salir con la flecha izquierda (como en las demas pantallas). El
@@ -3371,25 +3356,14 @@ void drawClockBtn(int x, int y, const char *l) {
   printT(l);
 }
 
-// pildoras de idioma centradas en y; rellena la activa
-#define LANG_PILL_Y 272   // ko10.3: todo 20-30 px mas arriba (la version se cortaba abajo)
-#define LANG_PILL_H 30
-#define LANG_PILL_X 336          // pildora de idioma (cicla LANG_COUNT al tocar)
-#define LANG_PILL_W 96
-#define WIFI_PILL_X 178   // fork KO
-#define WIFI_PILL_W 110
-#define RST_PILL_X 163    // fork KO (ko8): [nuevo comienzo]
-#define RST_PILL_Y 374
-#define RST_PILL_H 30
+// codigo del idioma (lo usa el menu de ajustes)
 #define CLK_BTN_Y 170   // botones +/- (antes 190)
 #define CLK_PILL_X 143  // ko10.4: pildora hora/fecha bajo el titulo
 #define CLK_PILL_Y 66
 #define CLK_PILL_W 180
 #define CLK_PILL_H 30
 #define CLK_OK_Y 316    // [OK] (antes 340)
-#define CLK_VER_Y 410   // version (antes 436: con "ko10.2" ya rozaba el borde)
-#define RST_PILL_W 140
-static const char *const LANG_CODES[LANG_COUNT] = { "ES", "EN", "FR", "DE", "IT", "PT", "JA", "KO" };
+const char *const LANG_CODES[LANG_COUNT] = { "ES", "EN", "FR", "DE", "IT", "PT", "JA", "KO" };
 
 void renderClock() {
   uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
@@ -3422,54 +3396,13 @@ void renderClock() {
   setCur(276, CLK_BTN_Y + 64);
   printT(clockDateMode ? XT(X_DAY) : T(S_MIN));
 
-  // interruptor de sonido (izquierda de la fila de idioma)
-  bool snd = audioEnabled();
-  const char *sl = snd ? T(S_SND_ON) : T(S_SND_OFF);
-  uiButton(34, LANG_PILL_Y, 96, LANG_PILL_H, 8, snd ? UI_BAR_OK : UI_WHITE, UI_INK);
-  gfx->setTextColor(snd ? UI_BG_DAY : UI_INK);
-  setSize(2);
-  setCur(34 + (96 - textW(sl, 2)) / 2, LANG_PILL_Y + 8);
-  printT(sl);
-
-  // selector de idioma: una pildora que cicla los 6 idiomas al tocar
-  uiButton(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, 8, UI_WHITE, UI_INK);
-  char lp[10];
-  snprintf(lp, sizeof(lp), "%s >", LANG_CODES[gLang]);
-  gfx->setTextColor(UI_INK);
-  setSize(2);
-  setCur(LANG_PILL_X + (LANG_PILL_W - textW(lp, 2)) / 2, LANG_PILL_Y + 8);
-  printT(lp);
-
-  // fork KO: pildora WiFi (red + hora por NTP) entre sonido e idioma
-  gfx->fillRoundRect(WIFI_PILL_X, LANG_PILL_Y, WIFI_PILL_W, LANG_PILL_H, 8,
-                     netConfigured() ? 0x4C98 : UI_WHITE);
-  gfx->drawRoundRect(WIFI_PILL_X, LANG_PILL_Y, WIFI_PILL_W, LANG_PILL_H, 8, UI_INK);
-  gfx->setTextColor(netConfigured() ? UI_WHITE : UI_INK);
-  setSize(2);
-  setCur(WIFI_PILL_X + (WIFI_PILL_W - textW("WiFi", 2)) / 2, LANG_PILL_Y + 8);
-  printT("WiFi");
-
+  // ko11.26: sonido, WiFi, idioma, nuevo comienzo y la version pasaron al menu de ajustes
   uiButton(133, CLK_OK_Y, 200, 48, 14, UI_BAR_OK, lerp565(UI_BAR_OK, UI_INK, 8, 16));
   gfx->setTextColor(UI_BG_DAY);
   setSize(3);
   setCur(CX - 18, CLK_OK_Y + 12);
   printT("OK");
 
-  // fork KO (ko8): [nuevo comienzo] (abre su propia pantalla de confirmacion)
-  drawBtn(RST_PILL_X, RST_PILL_Y, RST_PILL_W, RST_PILL_H, UI_WHITE, UI_BAR_BAD, XT(X_RESET_BTN));
-
-  // version del firmware (discreta, abajo del todo)
-  // ko6.2: 20 no bastaba para "TamaPoke v1.17-ko6.1" (se veia "ko6."): que no vuelva a pasar
-  char ver[40];
-  static_assert(sizeof("TamaPoke v" FW_VERSION) <= sizeof(ver), "la version no cabe en pantalla");
-  snprintf(ver, sizeof(ver), "TamaPoke v%s", FW_VERSION);
-  gfx->setTextColor(UI_INK);
-  setSize(1);
-  setCur(centerX(ver, 1), CLK_VER_Y);
-  printT(ver);
-  // ko11.6.1: punto verde = tabla de particiones nueva (nvs2) instalada con los 3 ficheros
-  // (ko11.19.2: otra vez a la derecha; no se veia porque la placa tenia la tabla vieja)
-  if (bigPart()) gfx->fillCircle(centerX(ver, 1) + textW(ver, 1) + 10, CLK_VER_Y + 9, 5, UI_BAR_OK);
   drawBackArrow();  // ko11.6.1
   uiFlush();
 }
@@ -3477,7 +3410,7 @@ void renderClock() {
 // ko11.6: el borde de arriba (vacio) tocado dos veces seguidas = salir. Asi no
 // hace falta apuntar abajo del todo, junto a [SD] / [nuevo comienzo]
 void clockTap(int16_t x, int16_t y) {
-  if (navHit(NAV_L, x, y)) { clockOpen = false; sfxPlay(SFX_TAP); return; }  // ko11.6.1: volver sin cambiar la hora
+  if (navHit(NAV_L, x, y)) { clockClose(); sfxPlay(SFX_TAP); return; }  // ko11.6.1: volver sin cambiar la hora
   if (y >= CLK_PILL_Y - 4 && y < CLK_PILL_Y + CLK_PILL_H + 4 && x >= CLK_PILL_X && x < CLK_PILL_X + CLK_PILL_W) {
     clockDateMode = !clockDateMode;  // ko10.4: hora <-> fecha
     sfxPlay(SFX_TAP);
@@ -3501,29 +3434,7 @@ void clockTap(int16_t x, int16_t y) {
     else if (x >= 318 && x < 376) clockM = (clockM + 1) % 60;
     return;
   }
-  if (y >= LANG_PILL_Y && y <= LANG_PILL_Y + LANG_PILL_H) {
-    if (x >= 34 && x < 130) {                  // fork KO (ko4): ajustes de sonido
-      sfxPlay(SFX_TAP);
-      openSound();
-      return;
-    }
-    if (x >= WIFI_PILL_X && x < WIFI_PILL_X + WIFI_PILL_W) {  // fork KO: red / NTP
-      openNet();  // ko11.17: cierra la hora y [<] vuelve a ella
-      sfxPlay(SFX_TAP);
-      return;
-    }
-    if (x >= LANG_PILL_X && x < LANG_PILL_X + LANG_PILL_W) {  // cicla idioma
-      setLang((Lang)((gLang + 1) % LANG_COUNT));
-      applyLangFont();  // la fuente cambia con el idioma
-      sfxPlay(SFX_TAP);
-      return;
-    }
-  }
   if (y >= CLK_OK_Y && y <= CLK_OK_Y + 48 && x >= 133 && x <= 333) { applyClock(); return; }
-  if (y >= RST_PILL_Y && y < RST_PILL_Y + RST_PILL_H && x >= RST_PILL_X && x < RST_PILL_X + RST_PILL_W) {
-    openReset();
-    return;
-  }
 }
 
 // llama + numero de racha arriba a la izquierda
@@ -3657,23 +3568,19 @@ void renderCardStats() {
   setCur(centerX(T(S_BATTLE), 3), 44);
   printT(T(S_BATTLE));
 
-  drawCardStat(88, T(S_STAT_ATK), pet.atkStat(), 260, UI_BAR_BAD);
-  drawCardStat(120, T(S_STAT_DEF), pet.defStat(), 260, 0x4C98);
-  drawCardStat(152, T(S_STAT_SPE), pet.speStat(), 260, UI_BAR_WARN);
-  drawCardStat(184, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
+  // ko11.26: sin botones debajo, las barras bajan y se separan un poco
+  drawCardStat(110, T(S_STAT_ATK), pet.atkStat(), 260, UI_BAR_BAD);
+  drawCardStat(152, T(S_STAT_DEF), pet.defStat(), 260, 0x4C98);
+  drawCardStat(194, T(S_STAT_SPE), pet.speStat(), 260, UI_BAR_WARN);
+  drawCardStat(236, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
 
-  // fork KO (ko4): rejilla 2x2 (batalla, tongsin, entrenar, caja) + objetos
-  drawBtn(CARD_COL1_X, CARD_ROW1_Y, CARD_COL_W, CARD_BTN_H, C565(0x2e, 0x7d, 0x32), UI_WHITE, XT(X_WILD_BTN));
-  drawBtn(CARD_COL2_X, CARD_ROW1_Y, CARD_COL_W, CARD_BTN_H, 0x4C98, UI_WHITE, XT(X_LINK_BTN));
-  drawBtn(CARD_COL1_X, CARD_ROW2_Y, CARD_COL_W, CARD_BTN_H, UI_BAR_BAD, UI_WHITE, XT(X_TRAIN_BTN));
-  char bx[24];
-  snprintf(bx, sizeof(bx), "%s %u", XT(X_BOX_BTN), box.count());
-  drawBtn(CARD_COL2_X, CARD_ROW2_Y, CARD_COL_W, CARD_BTN_H, UI_BAR_WARN, UI_INK, bx);
+  // ko11.26: sin los botones (batalla, tongsin, entrenar, caja): la ficha solo
+  // muestra; la batalla esta en el menu de la pelota y la caja en la flecha derecha
   char it[40];
   snprintf(it, sizeof(it), XT(X_ITEMS_FMT), pet.balls, pet.potions);
   gfx->setTextColor(UI_INK);
   setSize(2);
-  setCur(centerX(it, 2), 322);
+  setCur(centerX(it, 2), 296);
   printT(it);
 }
 

@@ -15,16 +15,18 @@ enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_
                  XS_CANDY,          // ko10.11: bolsa de caramelos
                  XS_FAME, XS_BAK,
                  XS_BGM, XS_BRIGHT, XS_PARTY,
-                 XS_STORY, XS_STORYCH, XS_SCENE, XS_ROGUE };  // ko11.21: historia  // ko11.18: brillo  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
+                 XS_STORY, XS_STORYCH, XS_SCENE, XS_ROGUE,
+                 XS_SET };  // ko11.26: menu de ajustes  // ko11.21: historia  // ko11.18: brillo  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
 uint8_t xScreen = XS_NONE;
 
 // ko11.17: [<] vuelve a la pantalla DESDE LA QUE se abrio el menu (la ficha, el
 // menu de entrenamiento o la hora), no siempre a la principal. retMark() se
 // llama al abrir, ANTES de cerrar la pantalla de origen; entre pantallas extra
 // (red -> copias, gimnasios -> salon) no cambia: cada una sabe a cual volver
-enum : uint8_t { RET_MAIN = 0, RET_CARD, RET_TRAIN, RET_CLOCK };
+enum : uint8_t { RET_MAIN = 0, RET_CARD, RET_TRAIN, RET_CLOCK, RET_SET };
 uint8_t gRet = RET_MAIN, gRetPage = 0;
 void retMark() {
+  if (xScreen == XS_SET) { gRet = RET_SET; gRetPage = 0; return; }  // ko11.26: [<] vuelve a ajustes
   if (xScreen != XS_NONE) return;
   if (cardOpen) { gRet = RET_CARD; gRetPage = cardPage; }
   else if (trainMenuOpen) { gRet = RET_TRAIN; gRetPage = trainMenuPage; }
@@ -39,6 +41,7 @@ void goBack() {
   if (r == RET_CARD && !pet.isEgg()) { cardOpen = true; cardPage = gRetPage; }
   else if (r == RET_TRAIN && !pet.isEgg()) reopenTrainMenu(gRetPage);
   else if (r == RET_CLOCK) clockOpen = true;
+  else if (r == RET_SET) xScreen = XS_SET;
   navGuardUntil = millis() + 300;  // el dedo que toco [<] no pulsa lo de debajo
 }
 
@@ -123,12 +126,6 @@ void screenBase() {
 #define NET_SETUP_Y 266
 #define NET_AUTO_Y 318
 #define NET_TZ_Y 150
-#define NET_UPD_X 105   // ko6: [SD update] (la unidad USB se quito)
-#define NET_UPD_W 124   // ko11.6: la fila se parte: [SD update] | [copia]
-#define NET_BAK_X 237
-#define NET_BAK_W 124
-#define NET_UPD_Y 370
-#define NET_UPD_H 40
 
 void openNet() { retMark(); clockOpen = false; xScreen = XS_NET; }
 
@@ -290,8 +287,7 @@ void renderNet() {
           XT(netAuto() ? X_AUTO_S_ON : X_AUTO_S_OFF));
   drawBtn(NET_BTN_X + hw + 8, NET_AUTO_Y, hw, NET_BTN_H, netOpenAllowed() ? UI_WHITE : UI_TRACK, UI_INK,
           XT(netOpenAllowed() ? X_OPEN_ON : X_OPEN_OFF));
-  drawBtn(NET_UPD_X, NET_UPD_Y, NET_UPD_W, NET_UPD_H, 0xFB20, UI_WHITE, XT(X_UPD_BTN));
-  drawBtn(NET_BAK_X, NET_UPD_Y, NET_BAK_W, NET_UPD_H, 0x6B4D, UI_WHITE, XT(X_BAK_BTN));  // ko11.6
+  // ko11.26: [SD update] y [copia] pasaron al menu de ajustes
   drawBackArrow();  // ko11.6.1: flecha izquierda = volver (antes "tocar arriba", con el aviso abajo junto a [SD])
   uiFlush();
 }
@@ -302,8 +298,6 @@ void netTap(int16_t x, int16_t y) {
     return;
   }
   if (navHit(NAV_L, x, y)) { closeNet(); sfxPlay(SFX_TAP); return; }  // ko11.6.1: flecha = volver
-  if (inRect(x, y, NET_UPD_X, NET_UPD_Y, NET_UPD_W, NET_UPD_H)) { openUpdate(); return; }
-  if (inRect(x, y, NET_BAK_X, NET_UPD_Y, NET_BAK_W, NET_UPD_H)) { openBackup(); return; }  // ko11.6
   if (y >= NET_TZ_Y && y < NET_TZ_Y + 44) {
     if (x < 140) netSetTzMin(netTzMin() - 30);
     else if (x > 326) netSetTzMin(netTzMin() + 30);
@@ -3043,6 +3037,7 @@ bool extraRender() {
     case XS_STORYCH: renderStoryChapters(); return true;
     case XS_SCENE: renderStoryScene(); return true;
     case XS_ROGUE: renderRogue(); return true;
+    case XS_SET: renderSettings(); return true;  // ko11.26
     default: return false;
   }
 }
@@ -3071,6 +3066,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_STORYCH: storyChaptersTap(x, y); return true;
     case XS_SCENE: storySceneTap(x, y); return true;
     case XS_ROGUE: rogueTap(x, y); return true;
+    case XS_SET: settingsTap(x, y); return true;
     default: return false;
   }
 }
@@ -3081,10 +3077,11 @@ bool extraSwipe() {
   if (xScreen == XS_LINKMENU) { goBack(); return true; }
   if (xScreen == XS_BOX) { boxSwipe(); return true; }
   if (xScreen == XS_VOL) { goBack(); return true; }
-  if (xScreen == XS_BGM || xScreen == XS_BRIGHT) { xScreen = XS_VOL; return true; }  // ko11.8
-  if (xScreen == XS_UPD) { xScreen = XS_NET; return true; }
+  if (xScreen == XS_BGM) { xScreen = XS_VOL; return true; }  // ko11.8
+  if (xScreen == XS_BRIGHT || xScreen == XS_UPD) { xScreen = XS_SET; return true; }  // ko11.26
+  if (xScreen == XS_SET) { goBack(); return true; }
   if (xScreen == XS_RESET) { goBack(); return true; }
-  if (xScreen == XS_CANDY) { goBack(); return true; }  // ko10.11: vertical = cerrar
+  if (xScreen == XS_CANDY) { candyBagClose(); return true; }  // ko10.11: vertical = cerrar
   if (xScreen == XS_FAME) { fameClose(); return true; }       // ko11.1
   if (xScreen == XS_REGION || xScreen == XS_GYM || xScreen == XS_DAILY) { goBack(); return true; }  // ko11.17
   if (xScreen == XS_PARTY) { partyCancel(); return true; }  // ko11.20

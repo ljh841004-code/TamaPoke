@@ -16,11 +16,12 @@
 // redonda deja 92..374 de ancho arriba)
 #define BOX_TAB_Y 48      // ko10.5: pestanas [caja] [corona]
 #define BOX_TAB_H 38
-#define BOX_TAB_W 114
-#define BOX_TAB_X1 92
-#define BOX_TAB_X2 210
-#define BOX_TAB_X3 328    // ko11.16: bolsa de orbes (solo el icono)
-#define BOX_TAB_W3 46
+#define BOX_TAB_W 104
+#define BOX_TAB_X1 80
+#define BOX_TAB_X2 188
+#define BOX_TAB_X3 296    // ko11.16: bolsa de orbes (solo el icono)
+#define BOX_TAB_W3 42
+#define BOX_TAB_X4 342    // ko11.26: bolsa de caramelos (abre su pantalla)
 uint8_t boxPage = 0;
 int16_t boxSel = -1;          // indice en la caja con la ficha abierta, -1 = lista
 bool boxHall = false;         // ko10.5: pestana del salon de la fama (corona)
@@ -336,6 +337,18 @@ void renderBoxDetail() {
 }
 
 void renderOrbBag();
+// ko11.26: caramelo envuelto (icono de la pestana de la bolsa de caramelos)
+static void drawCandyIcon(int cx, int cy) {
+  uint16_t pk = C565(0xf0, 0x7a, 0xa8), dk = lerp565(pk, UI_INK, 6, 16);
+  gfx->fillTriangle(cx - 8, cy, cx - 16, cy - 7, cx - 16, cy + 7, pk);
+  gfx->fillTriangle(cx + 8, cy, cx + 16, cy - 7, cx + 16, cy + 7, pk);
+  gfx->drawTriangle(cx - 8, cy, cx - 16, cy - 7, cx - 16, cy + 7, dk);
+  gfx->drawTriangle(cx + 8, cy, cx + 16, cy - 7, cx + 16, cy + 7, dk);
+  gfx->fillCircle(cx, cy, 9, pk);
+  gfx->drawCircle(cx, cy, 9, dk);
+  gfx->drawLine(cx - 5, cy - 6, cx + 3, cy + 7, UI_WHITE);
+}
+
 static void drawBoxTabs(const char *t1, const char *t2) {
   bool box1 = !boxHall && !boxOrb;
   drawBtn(BOX_TAB_X1, BOX_TAB_Y, BOX_TAB_W, BOX_TAB_H, box1 ? UI_BAR_WARN : UI_TRACK, UI_INK, t1);
@@ -344,6 +357,8 @@ static void drawBoxTabs(const char *t1, const char *t2) {
   uiButton(BOX_TAB_X3, BOX_TAB_Y, BOX_TAB_W3, BOX_TAB_H, 12, boxOrb ? C565(0x6a, 0x4c, 0xf0) : UI_TRACK, UI_INK);
   drawOrb(BOX_TAB_X3 + BOX_TAB_W3 / 2, BOX_TAB_Y + BOX_TAB_H / 2 - 1, 9,
           orbValid(pet.orb) ? pet.orb : orbMake(PT_PSYCHIC, true, 10), millis());
+  uiButton(BOX_TAB_X4, BOX_TAB_Y, BOX_TAB_W3, BOX_TAB_H, 12, UI_TRACK, UI_INK);
+  drawCandyIcon(BOX_TAB_X4 + BOX_TAB_W3 / 2, BOX_TAB_Y + BOX_TAB_H / 2 - 1);
 }
 
 void renderBox() {
@@ -451,6 +466,7 @@ static void boxTabTap(int16_t x) {
   if (x >= BOX_TAB_X1 && x < BOX_TAB_X1 + BOX_TAB_W && (boxHall || boxOrb)) { boxHall = false; boxOrb = false; }
   else if (x >= BOX_TAB_X2 && x < BOX_TAB_X2 + BOX_TAB_W && !boxHall) { boxHall = true; boxOrb = false; }
   else if (x >= BOX_TAB_X3 && x < BOX_TAB_X3 + BOX_TAB_W3 && !boxOrb) { boxOrb = true; boxHall = false; orbSel = -1; orbPage = 0; synReset(); }
+  else if (x >= BOX_TAB_X4 && x < BOX_TAB_X4 + BOX_TAB_W3) { openCandyBag(); return; }  // ko11.26
   else return;
   boxPage = 0;
   boxSel = -1;
@@ -981,9 +997,8 @@ void renderSound() {
     uiGauge(VOL_BAR_X, y + 34, VOL_BAR_W, 16, v * 10, on ? UI_BAR_OK : 0x8410, UI_TRACK);  // ko11.12
   }
   // ko11.8: elegir que fondos suenan (la duracion de cada uno esta en esa pantalla)
-  // ko11.18: [배경음 고르기 >] [화면 밝기 >]
-  drawBtn(78, VOL_BGM_Y, 152, 34, UI_WHITE, UI_INK, XT(X_BGM_PICK_BTN));
-  drawBtn(236, VOL_BGM_Y, 152, 34, UI_WHITE, UI_INK, XT(X_BRIGHT_BTN));
+  // ko11.26: el brillo paso al menu de ajustes
+  drawBtn(133, VOL_BGM_Y, 200, 34, UI_WHITE, UI_INK, XT(X_BGM_PICK_BTN));
   drawBtn(143, VOL_DONE_Y, 180, 40, UI_BAR_OK, UI_WHITE, XT(X_VOL_DONE));
   drawNav(NAV_L, UI_INK);  // ko11.17: volver a la hora
   uiFlush();
@@ -1006,13 +1021,8 @@ void soundTap(int16_t x, int16_t y) {
     sfxPlay(SFX_TAP);
     return;
   }
-  if (y >= VOL_BGM_Y && y < VOL_BGM_Y + 36 && x >= 78 && x < 230) {  // ko11.8
+  if (y >= VOL_BGM_Y && y < VOL_BGM_Y + 36 && x >= 133 && x < 333) {  // ko11.8
     openBgmPick();
-    sfxPlay(SFX_TAP);
-    return;
-  }
-  if (y >= VOL_BGM_Y && y < VOL_BGM_Y + 36 && x >= 236 && x < 388) {  // ko11.18: brillo
-    xScreen = XS_BRIGHT;
     sfxPlay(SFX_TAP);
     return;
   }
@@ -1085,7 +1095,7 @@ void renderBright() {
 
 void brightTap(int16_t x, int16_t y) {
   if (navHit(NAV_L, x, y) || (y >= VOL_DONE_Y - 4 && x >= 133 && x < 333) || y < 60) {
-    xScreen = XS_VOL;
+    xScreen = XS_SET;  // ko11.26: el brillo se abre desde ajustes
     sfxPlay(SFX_TAP);
     return;
   }
@@ -1312,10 +1322,10 @@ void updateTap(int16_t x, int16_t y) {
       if (ok) { delay(1500); ESP.restart(); }
       return;
     }
-    if ((y >= 250 && y < 302 && x >= 238 && x < 378) || navHit(NAV_L, x, y)) { xScreen = XS_NET; return; }
+    if ((y >= 250 && y < 302 && x >= 238 && x < 378) || navHit(NAV_L, x, y)) { xScreen = XS_SET; return; }
     return;
   }
-  if (y >= 320 || y < 72 || navHit(NAV_L, x, y)) xScreen = XS_NET;  // ko11.17: [<] = a la red
+  if (y >= 320 || y < 72 || navHit(NAV_L, x, y)) xScreen = XS_SET;  // ko11.26: [<] = a ajustes
 }
 
 // ======================================================================
@@ -1435,7 +1445,9 @@ static void bagBuild() {
 }
 static uint8_t bagPages() { return bagN ? (uint8_t)((bagN + BAG_ROWS - 1) / BAG_ROWS) : 1; }
 
+static bool bagFromBox = false;  // ko11.26: abierta desde la pestana de la caja
 void openCandyBag() {
+  bagFromBox = xScreen == XS_BOX;
   retMark();
   xScreen = XS_CANDY;
   cardOpen = false;
@@ -1444,6 +1456,11 @@ void openCandyBag() {
   bagSel = -1;
   bagMsgUntil = 0;
   sfxPlay(SFX_TAP);
+}
+
+void candyBagClose() {
+  if (bagFromBox) { bagFromBox = false; xScreen = XS_BOX; navGuardUntil = millis() + 300; }
+  else goBack();
 }
 
 bool candyBagSwipe(int dir) {
@@ -1586,8 +1603,8 @@ void candyBagTap(int16_t x, int16_t y) {
     }
     return;
   }
-  if (navHit(NAV_DOWN, x, y)) { sfxPlay(SFX_TAP); goBack(); return; }
-  if (navHit(NAV_L, x, y)) { if (bagPage > 0) candyBagSwipe(1); else { sfxPlay(SFX_TAP); goBack(); } return; }  // ko11.17
+  if (navHit(NAV_DOWN, x, y)) { sfxPlay(SFX_TAP); candyBagClose(); return; }
+  if (navHit(NAV_L, x, y)) { if (bagPage > 0) candyBagSwipe(1); else { sfxPlay(SFX_TAP); candyBagClose(); } return; }  // ko11.17
   if (navHit(NAV_R, x, y)) { candyBagSwipe(-1); return; }
   if (inRect(x, y, BAG_ROW_X, BAG_RARE_Y, BAG_ROW_W, BAG_ROW_H)) { bagSel = 0; sfxPlay(SFX_TAP); return; }
   if (inRect(x, y, CX - 125, BAG_SHARD_BTN_Y, 250, 34)) {  // ko11.15.1: sobrantes -> trozos
@@ -2061,7 +2078,7 @@ void backupTap(int16_t x, int16_t y) {
     else if (inRect(x, y, 238, 288, 150, 44)) { bakSel = -1; sfxPlay(SFX_TAP); }
     return;
   }
-  if (navHit(NAV_L, x, y)) { xScreen = XS_NET; sfxPlay(SFX_TAP); return; }  // ko11.6.1: vuelve a la red
+  if (navHit(NAV_L, x, y)) { xScreen = XS_SET; sfxPlay(SFX_TAP); return; }  // ko11.26: vuelve a ajustes
   if (crashCount && inRect(x, y, BAK_CR_X, BAK_CR_Y, BAK_CR_W, BAK_CR_H)) {  // ko11.9.2
     bakCrashView = true;
     sfxPlay(SFX_TAP);
@@ -2257,4 +2274,79 @@ void partyPickTap(int16_t x, int16_t y) {
   else if (ppPick[1] < 0) ppPick[1] = bi;
   else { ppPick[0] = ppPick[1]; ppPick[1] = bi; }                        // lleno: el mas viejo sale
   sfxPlay(SFX_TAP);
+}
+
+// ======================================================================
+// ko11.26: menu de ajustes (flecha de arriba). Antes todo colgaba de la hora:
+// sonido -> brillo, WiFi -> SD update / copias, idioma y nuevo comienzo.
+// Ahora cada cosa del aparato es un boton de esta rejilla 2x4
+// ======================================================================
+#define SET_X1 66
+#define SET_X2 238
+#define SET_W 162
+#define SET_H 56
+#define SET_Y0 98
+#define SET_DY 68
+static bool gClockFromSet = false;
+
+void openSettings() {
+  retMark();
+  clockOpen = false;
+  cardOpen = false;
+  xScreen = XS_SET;
+}
+
+// cerrar la hora (OK o [<]): si se abrio desde ajustes, se vuelve ahi
+void clockClose() {
+  clockOpen = false;
+  if (gClockFromSet) { gClockFromSet = false; xScreen = XS_SET; }
+}
+
+void renderSettings() {
+  uiScreenBg();
+  drawFit(XT(X_SET_TITLE), 36, 300, UI_INK, 3);
+  char lang[24];
+  snprintf(lang, sizeof(lang), XT(X_SET_LANG_FMT), LANG_CODES[gLang]);
+  struct { const char *t; uint16_t bg, fg; } b[8] = {
+    { XT(X_SET_TIME), UI_WHITE, UI_INK },
+    { XT(X_SET_SOUND), audioEnabled() ? UI_BAR_OK : UI_WHITE, audioEnabled() ? UI_WHITE : UI_INK },
+    { XT(X_SET_SCREEN), UI_WHITE, UI_INK },
+    { "WiFi", netConfigured() ? (uint16_t)0x4C98 : UI_WHITE, netConfigured() ? UI_WHITE : UI_INK },
+    { XT(X_UPD_BTN), 0xFB20, UI_WHITE },
+    { XT(X_BAK_BTN), 0x6B4D, UI_WHITE },
+    { lang, UI_WHITE, UI_INK },
+    { XT(X_RESET_BTN), UI_WHITE, UI_BAR_BAD },
+  };
+  for (int i = 0; i < 8; i++)
+    drawBtn(i % 2 ? SET_X2 : SET_X1, SET_Y0 + (i / 2) * SET_DY, SET_W, SET_H, b[i].bg, b[i].fg, b[i].t);
+  // version del firmware (antes en la pantalla de la hora)
+  char ver[40];
+  snprintf(ver, sizeof(ver), "TamaPoke v%s", FW_VERSION);
+  int vy = SET_Y0 + 4 * SET_DY + 6;
+  gfx->setTextColor(UI_INK);
+  setSize(1);
+  setCur(centerX(ver, 1), vy);
+  printT(ver);
+  if (bigPart()) gfx->fillCircle(centerX(ver, 1) + textW(ver, 1) + 10, vy + 9, 5, UI_BAR_OK);
+  drawNav(NAV_L, UI_INK);
+  uiFlush();
+}
+
+void settingsTap(int16_t x, int16_t y) {
+  if (navHit(NAV_L, x, y) || y < 60) { sfxPlay(SFX_TAP); goBack(); return; }
+  if (y < SET_Y0 || x < SET_X1 || x >= SET_X2 + SET_W) return;
+  int row = (y - SET_Y0) / SET_DY;
+  if (row > 3 || (y - SET_Y0) % SET_DY >= SET_H) return;
+  int i = row * 2 + (x >= SET_X2 - 5 ? 1 : 0);
+  sfxPlay(SFX_TAP);
+  switch (i) {
+    case 0: xScreen = XS_NONE; gClockFromSet = true; openClock(); break;
+    case 1: openSound(); break;
+    case 2: xScreen = XS_BRIGHT; break;
+    case 3: openNet(); break;
+    case 4: openUpdate(); break;
+    case 5: openBackup(); break;
+    case 6: setLang((Lang)((gLang + 1) % LANG_COUNT)); applyLangFont(); break;
+    case 7: openReset(); break;
+  }
 }
