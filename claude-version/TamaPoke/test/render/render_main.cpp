@@ -748,6 +748,76 @@ static void navChecks() {
   closeAll(); tick(3000);
 }
 
+// ko11.21: modo historia
+static void sceneTo(int steps) {  // avanza N toques mostrando el texto entero
+  for (int i = 0; i < steps; i++) { stTypeT = millis() - 600000UL; storySceneTap(233, 330); }
+  stTypeT = millis() - 600000UL;
+}
+static bool sceneUntil(bool (*cond)()) {  // toca hasta que se cumpla (o 40 toques)
+  for (int i = 0; i < 40 && !cond(); i++) sceneTo(1);
+  return cond();
+}
+static void storyShots() {
+  setLang(LANG_KO);
+  applyLangFont();
+  closeAll(); pet.energy = 80;
+  openStory(); render(); shot("70_story_menu");
+  navCheck("historia: menu", xScreen == XS_STORY);
+  storyMenuTap(200, ST_CARD_Y + 20);
+  render(); shot("71_story_chapters_game");
+  navCheck("historia: capitulos", xScreen == XS_STORYCH && stStyle == 0);
+  storyChaptersTap(200, ST_ROW_Y + 10);  // 1장
+  navCheck("historia: escena", xScreen == XS_SCENE);
+  tick(300); render(); shot("72_scene_typing");
+  sceneTo(0); render(); shot("72b_scene_narr");
+  sceneTo(1); render(); shot("73_scene_oak");
+  sceneTo(2); render(); shot("74_scene_pet");
+  sceneTo(1); render(); shot("75_scene_rival");
+  sceneUntil([] { return stBattleWait; }); render(); shot("76_scene_battle_wait");
+  navCheck("historia: espera el combate", stBattleWait);
+  storySceneTap(233, 330);  // -> combate (o elegir ayudantes)
+  if (xScreen == XS_PARTY) partyStart(true);
+  navCheck("historia: combate", xScreen == XS_WILD && bKind == BK_STORY);
+  tick(2300); updateWild(); render(); shot("77_story_battle");
+  bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
+  finishBattle(true, false, false); afterResult();
+  navCheck("historia: vuelve a la escena", xScreen == XS_SCENE);
+  sceneTo(0); render(); shot("78_scene_after");
+  sceneUntil([] { return stChoice; }); render(); shot("79_scene_choice");
+  navCheck("historia: eleccion", stChoice);
+  storySceneTap(ST_BOX_X + 60, ST_BOX_Y + 56);
+  sceneTo(0); render(); shot("79b_scene_choice_a");
+  sceneUntil([] { return stEnd; }); render(); shot("79c_scene_clear");
+  navCheck("historia: capitulo 1 superado", stDone[0] & 1);
+  sceneTo(1); render(); shot("71b_story_chapters_after");
+  // anime: 2화 (로켓단)
+  stDone[1] = 1; stStart(1, 1);
+  sceneTo(1); render(); shot("80_anime_rocket");
+  sceneTo(2); render(); shot("80b_anime_rocket2");
+  stDone[1] = 0; stDone[0] = 0; stResStyle = 0xFF;
+  // expedicion
+  xScreen = XS_STORY; storyMenuTap(200, ST_CARD_Y + 2 * (ST_CARD_H + ST_CARD_GAP) + 20);
+  render(); shot("81_rogue_hub");
+  rogueTap(233, RG_BTN_Y + 20);
+  if (xScreen == XS_PARTY) partyStart(true);
+  navCheck("expedicion: oleada 1", xScreen == XS_WILD && bKind == BK_ROGUE);
+  tick(2300); updateWild(); render(); shot("82_rogue_wave1");
+  bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0; bMe.hp = bMe.maxHp / 2;
+  finishBattle(true, false, false); afterResult();
+  render(); shot("83_rogue_reward");
+  navCheck("expedicion: premio", xScreen == XS_ROGUE && rgPhase == RG_REWARD && rgWave == 2);
+  rogueTap(100, 240);  // curar
+  navCheck("expedicion: oleada 2 con la vida guardada", xScreen == XS_WILD && bMe.hp < bMe.maxHp);
+  bPhase = BP_MENU; bMe.hp = 0; bTeamI = 0; bFoe.hp = bFoe.maxHp;
+  finishBattle(false, false, false); afterResult();
+  render(); shot("84_rogue_over");
+  navCheck("expedicion: fin", rgPhase == RG_OVER && !rgOn);
+  rgPhase = RG_HUB;
+  closeAll(); endBattleScreen();
+  // pagina de batallas con el boton de la historia
+  closeAll(); trainMenuOpen = true; trainMenuPage = 1; render(); shot("52_battle_page"); trainMenuOpen = false;
+}
+
 int main(int argc, char **argv) {
   gSdRoot = argc > 1 ? argv[1] : "sd";
   mkdir("build/shots", 0755);
@@ -758,6 +828,7 @@ int main(int argc, char **argv) {
   pet.endHook = onPetEnd;
   sdBegin();
   thumbs.load();
+  portraits.load();  // ko11.21: retratos de la historia (story.bin en la SD de prueba)
   pet.syncClock(gMockEpoch);
   if (pet.awaitingStarter()) pet.chooseStarter(4);
   pet.eggTap(); pet.eggTap(); pet.eggTap();
@@ -770,6 +841,7 @@ int main(int argc, char **argv) {
   printf("  wifi tap: clockOpen=%d xScreen=%d (XS_NET=%d)\n", clockOpen, xScreen, XS_NET);
   xScreen = XS_NONE;
   navChecks();
+  storyShots();
   scenes(true, "");
   scenes(false, "_en");
   return 0;

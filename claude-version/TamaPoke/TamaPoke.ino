@@ -33,6 +33,7 @@
 #include "panicrec.h"   // ko11.9.3: direccion del codigo en un panic
 #include "sdupdate.h"   // fork KO (ko5): actualizar desde /update.bin de la SD
 #include "savebak.h"    // ko11.6: copia de la partida en la SD
+#include "story.h"      // ko11.21: modo historia (guiones en story_ko.cpp)
 #ifdef ESP_PLATFORM
 #include <nvs_flash.h>     // ko11.6: particion nvs2
 #include <esp_partition.h>
@@ -589,7 +590,7 @@ void setup() {
   bootStep(BS_SD);
   if (!safeMode) sdBegin();  // ko11.5: modo seguro = sin SD
   bootStep(BS_THUMBS);
-  if (!safeMode) thumbs.load();
+  if (!safeMode) { thumbs.load(); portraits.load(); }  // ko11.21: retratos de la historia
 
   // reloj real: aplica el tiempo que estuvo apagado
   bootStep(BS_RTC);
@@ -641,7 +642,7 @@ void ensureMon() {
   if (pet.speciesId == monFor && monShinyFor == pet.shiny && !sdDirty) return;
   // los ficheros recien recibidos pueden incluir un thumbs.bin nuevo, que se
   // cargaba solo en setup(): sin esto no se veia en la galeria hasta reiniciar
-  if (sdDirty) { thumbs.unload(); thumbs.load(); }
+  if (sdDirty) { thumbs.unload(); thumbs.load(); portraits.unload(); portraits.load(); }
   sdDirty = false;
   monFor = pet.speciesId;
   monShinyFor = pet.shiny;

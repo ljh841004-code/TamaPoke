@@ -14,7 +14,8 @@ enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_
                  XS_NEXTPICK,       // ko10.5: elegir el siguiente tras un ciclo
                  XS_CANDY,          // ko10.11: bolsa de caramelos
                  XS_FAME, XS_BAK,
-                 XS_BGM, XS_BRIGHT, XS_PARTY };  // ko11.18: brillo  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
+                 XS_BGM, XS_BRIGHT, XS_PARTY,
+                 XS_STORY, XS_STORYCH, XS_SCENE, XS_ROGUE };  // ko11.21: historia  // ko11.18: brillo  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
 uint8_t xScreen = XS_NONE;
 
 // ko11.17: [<] vuelve a la pantalla DESDE LA QUE se abrio el menu (la ficha, el
@@ -444,7 +445,7 @@ uint8_t bItems = 0;  // ko11.1: objetos ganados (1=bola 2=pocion)
 uint8_t bRegion = 0;
 uint8_t bGroup = WG_COMMON;  // de que grupo salio el rival (WG_RARE: brillo al aparecer)
 // ko10.4: combates contra entrenador (gimnasio / reto del dia): varios rivales seguidos
-enum : uint8_t { BK_WILD = 0, BK_GYM, BK_DAILY, BK_CHAMP };  // ko10.11: liga
+enum : uint8_t { BK_WILD = 0, BK_GYM, BK_DAILY, BK_CHAMP, BK_STORY, BK_ROGUE };  // ko11.21: historia y expedicion  // ko10.11: liga
 uint8_t bKind = BK_WILD;
 uint8_t bvOwned = 0;      // ko10.11: de esta especie en la caja
 int16_t bExpDex = 0;      // ko11: la EXP del salvaje sale de su especie y nivel ANTES de ajustarlo
@@ -453,6 +454,7 @@ uint32_t bvOwnedT = 0;
 uint8_t bGym = 0;
 Battler bTeam[CHAMP_TEAM];  // ko10.11: la liga lleva 6 (antes 3)
 uint8_t bTeamN = 0, bTeamI = 0;
+extern uint8_t stBattleWho;  // ko11.21: ui_story.ino
 // ko11.20: mi equipo contra entrenadores: [0] el que crias + hasta 2 ayudantes de la caja
 Battler pMon[PARTY_MAX];
 int8_t pBox[PARTY_MAX] = { -1, -1, -1 };  // indice en la caja (-1 = el que crias)
@@ -1712,13 +1714,20 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
     pN++;
   }
   ppArmed = false;
+  if (kind == BK_ROGUE) rogueApplyParty();  // ko11.21: la expedicion trae la vida de la oleada anterior
   bFoe = bTeam[0];
   bvSetup(bMe, bFoe, nullptr, false);
+  if (pCur) { partyMeName(); partyLoadMe(); }
   bGroup = WG_COMMON;
   bqAisMe = true;
   bLink = false;
   if (kind == BK_GYM) txFmt(bvL1, sizeof(bvL1), X_GYM_INTRO, XT((XId)(X_LEADER_0 + bGym)));
   else if (kind == BK_CHAMP) strncpy(bvL1, XT(X_CHAMP_INTRO), sizeof(bvL1) - 1);
+  else if (kind == BK_STORY || kind == BK_ROGUE) {  // ko11.21
+    const char *fn = storyFoeName();
+    if (kind == BK_STORY && stBattleWho != W_NONE) txFmtRaw(bvL1, sizeof(bvL1), STX[SX_INTRO_FMT], fn, nullptr);
+    else snprintf(bvL1, sizeof(bvL1), "%s", fn);
+  }
   else txFmt(bvL1, sizeof(bvL1), X_DAILY_INTRO, XT((XId)(X_REG_0 + bRegion)));
   battleWeatherIntro();
   bPhase = BP_INTRO;
@@ -1753,7 +1762,8 @@ static bool nextTrainerMon() {
   }
   bvSetup(bMe, bFoe, nullptr, false);
   partyMeName();  // ko11.20: puede estar luchando un ayudante
-  const char *who = bKind == BK_GYM ? XT((XId)(X_LEADER_0 + bGym)) : bKind == BK_CHAMP ? XT(X_CHAMP_NAME) : XT(X_DAILY_FOE);
+  const char *who = bKind == BK_GYM ? XT((XId)(X_LEADER_0 + bGym)) : bKind == BK_CHAMP ? XT(X_CHAMP_NAME)
+                    : (bKind == BK_STORY || bKind == BK_ROGUE) ? storyFoeName() : XT(X_DAILY_FOE);
   txFmt(bvL1, sizeof(bvL1), X_TRAINER_NEXT, who, dexName(bFoe.dex));
   bvL2[0] = 0;
   if (healed) snprintf(bvL2, sizeof(bvL2), XT(X_DAILY_HEAL_FMT), (unsigned)healed);
@@ -2336,6 +2346,7 @@ static void afterResult() {
   // ko10.11: tras un gimnasio se vuelve a la lista de gimnasios (en la pagina de
   // ese gimnasio, con la medalla nueva a la vista) y tras el reto del dia, a su
   // pantalla. Antes volvia a la principal y habia que entrar otra vez
+  if (bKind == BK_ROGUE) rogueSaveParty();  // ko11.21: antes de deshacer el equipo
   if (bKind != BK_WILD) partyEnd();
   if (bKind == BK_GYM) {
     foePmd.unload();
@@ -2344,6 +2355,8 @@ static void afterResult() {
     return;
   }
   if (bKind == BK_DAILY) { foePmd.unload(); openDaily(); return; }
+  if (bKind == BK_STORY) { foePmd.unload(); storyAfterBattle(bWon); return; }  // ko11.21
+  if (bKind == BK_ROGUE) { foePmd.unload(); rogueAfterBattle(bWon); return; }
   if (bKind == BK_CHAMP) { foePmd.unload(); openGyms(); gymPage = 2; return; }  // ko10.11
   bPhase = bJoinPending ? BP_JOIN : bDupPending ? BP_DUP : BP_NEXT;  // ko11.8
   bPhaseT = millis();
@@ -2973,6 +2986,10 @@ bool extraRender() {
     case XS_BGM: renderBgmPick(); return true;        // ko11.8
     case XS_BRIGHT: renderBright(); return true;      // ko11.18
     case XS_PARTY: renderPartyPick(); return true;    // ko11.20
+    case XS_STORY: renderStoryMenu(); return true;    // ko11.21
+    case XS_STORYCH: renderStoryChapters(); return true;
+    case XS_SCENE: renderStoryScene(); return true;
+    case XS_ROGUE: renderRogue(); return true;
     default: return false;
   }
 }
@@ -2997,6 +3014,10 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_BGM: bgmPickTap(x, y); return true;
     case XS_BRIGHT: brightTap(x, y); return true;  // ko11.18
     case XS_PARTY: partyPickTap(x, y); return true;  // ko11.20
+    case XS_STORY: storyMenuTap(x, y); return true;  // ko11.21
+    case XS_STORYCH: storyChaptersTap(x, y); return true;
+    case XS_SCENE: storySceneTap(x, y); return true;
+    case XS_ROGUE: rogueTap(x, y); return true;
     default: return false;
   }
 }
@@ -3014,6 +3035,9 @@ bool extraSwipe() {
   if (xScreen == XS_FAME) { fameClose(); return true; }       // ko11.1
   if (xScreen == XS_REGION || xScreen == XS_GYM || xScreen == XS_DAILY) { goBack(); return true; }  // ko11.17
   if (xScreen == XS_PARTY) { partyCancel(); return true; }  // ko11.20
+  if (xScreen == XS_STORY) { goBack(); return true; }         // ko11.21
+  if (xScreen == XS_STORYCH) { xScreen = XS_STORY; return true; }
+  if (xScreen == XS_SCENE || xScreen == XS_ROGUE) return true;
   if (xScreen == XS_NEXTPICK) {
     xScreen = XS_NONE;  // ko10.5: en la eleccion, cerrar = quedarse el huevo
     return true;

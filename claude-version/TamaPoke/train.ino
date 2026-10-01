@@ -122,6 +122,8 @@ static void trainMenuClose() {
 #define TRB_H 64
 #define TRB_W 154
 #define TRB_X2 (TRM_X + TRB_W + 12)
+#define TRB_Y3 256   // ko11.21: [스토리] a lo ancho
+#define TRB_H3 52
 
 static void drawTrainMenuDots() {
   for (int i = 0; i < 2; i++) {
@@ -171,9 +173,10 @@ static void renderBattlePage() {
   bool done = pet.lastSeenEpoch && pet.dailyDoneDay == pet.lastSeenEpoch / 86400u;
   drawBtn(TRB_X2, TRB_Y2, TRB_W, TRB_H, done ? UI_TRACK : C565(0x9a, 0x4c, 0xc0), done ? UI_INK : UI_WHITE,
           XT(X_DAILY_BTN));
+  drawBtn(TRM_X, TRB_Y3, TRM_W, TRB_H3, C565(0xd8, 0x30, 0x30), UI_WHITE, STX[SX_TITLE]);  // ko11.21
   char rec[48];
   snprintf(rec, sizeof(rec), XT(X_RECORD_FMT), pet.wildWins, pet.linkWins, pet.linkBattles, pet.trades);
-  drawFit(rec, 268, 320, UI_INK, 2);
+  drawFit(rec, 318, 320, UI_INK, 1);
 }
 
 void renderTrainMenu() {
@@ -200,6 +203,7 @@ bool trainMenuSwipe(int dir) {
 
 static void battlePageTap(int16_t x, int16_t y) {
   if (x < TRM_X || x >= TRM_X + TRM_W) { if (trainOutsideClose()) trainMenuClose(); return; }
+  if (y >= TRB_Y3 && y < TRB_Y3 + TRB_H3) { openStory(); return; }  // ko11.21: historia
   int row = (y >= TRB_Y1 && y < TRB_Y1 + TRB_H) ? 0 : (y >= TRB_Y2 && y < TRB_Y2 + TRB_H) ? 1 : -1;
   if (row < 0) {
     if ((y < TRB_Y1 || y > 380) && trainOutsideClose()) trainMenuClose();

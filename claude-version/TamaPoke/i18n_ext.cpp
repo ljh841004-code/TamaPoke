@@ -342,6 +342,7 @@ void txFmtRaw(char *out, size_t n, const char *tpl, const char *a1, const char *
   // particulas: {forma con batchim} -> [con batchim, sin batchim]
   static const char *const JOSA[][3] = {
     { "{은}", "은", "는" }, { "{이}", "이", "가" }, { "{을}", "을", "를" }, { "{와}", "과", "와" },
+    { "{아}", "아", "야" },  // ko11.21: vocativo (피카츄야 / 꼬부기야)
   };
   for (const char *p = tpl; *p && len + 1 < n;) {
     if (p[0] == '{' && (p[1] == '1' || p[1] == '2') && p[2] == '}') {

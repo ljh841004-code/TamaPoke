@@ -51,6 +51,7 @@ struct PmdMon {
 
 // miniaturas de la galeria (thumbs.bin entero en PSRAM)
 struct SdThumbs {
+  const char *path = "/mons/thumbs.bin";  // ko11.21: el mismo formato sirve para los retratos (story.bin)
   bool loaded = false;
   uint8_t *data = nullptr;
   uint16_t count = 0;
@@ -60,6 +61,7 @@ struct SdThumbs {
   const uint8_t *get(int16_t dex) const;  // blob: w,h,palCount,pal[],idx[]
 };
 extern SdThumbs thumbs;
+extern SdThumbs portraits;  // ko11.21: /mons/story.bin (retratos de la historia, id 1..N)
 
 bool sdBegin();                 // monta la SD (SDMMC 1-bit), true si hay tarjeta
 bool sdRemount();               // ko11.16.2: desmonta y vuelve a montar (en marcha)

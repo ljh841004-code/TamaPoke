@@ -14,6 +14,7 @@ struct BakNs { const char *ns; bool big; };
 static const BakNs BAK_NS[] = {
   { "tamapoke", false }, { "tpbox", true }, { "tphall", true }, { "tpfame", true }, { "tpdex", true },
   { "tpteam", true },  // ko11.20: ayudantes de las victorias en equipo
+  { "tpstory", false },  // ko11.21: historia y expedicion
 };
 
 static const char *partFor(bool big) { return (big && bigPart()) ? bigPart() : NVS_DEFAULT_PART_NAME; }

@@ -10,6 +10,7 @@ SemaphoreHandle_t sdMutex = nullptr;
 bool sdReady = false;
 bool sdDirty = false;
 SdThumbs thumbs;
+SdThumbs portraits = { "/mons/story.bin" };  // ko11.21
 
 bool PmdMon::load(uint8_t dexNum, bool shiny, char kind) {
   unload();
@@ -115,7 +116,7 @@ bool SdThumbs::load() {
   if (!sdReady) return false;
   SdCardLock lock;
   if (!lock) return false;
-  File f = SD_MMC.open("/mons/thumbs.bin", FILE_READ);
+  File f = SD_MMC.open(path, FILE_READ);
   if (!f) {
     Serial.println("sin thumbs.bin (galeria sin miniaturas)");
     return false;

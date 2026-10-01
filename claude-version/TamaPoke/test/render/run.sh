@@ -20,7 +20,7 @@ sed -n '/Preferences en memoria/,$p' ../shim/shim.cpp > build/prefs_impl.inc
 gcc -c -O1 -w build/fonts.c -o build/fonts.o
 g++ -std=gnu++17 -O1 -w -I shim -I ../shim -I ../.. -I "$GFX" -o build/render \
   render_main.cpp stubs.cpp ../../pet.cpp ../../box.cpp ../../battle.cpp ../../i18n.cpp \
-  ../../i18n_ext.cpp ../../sdmon.cpp "$GFX/Arduino_GFX.cpp" "$GFX/Arduino_G.cpp" \
+  ../../i18n_ext.cpp ../../story_ko.cpp ../../sdmon.cpp "$GFX/Arduino_GFX.cpp" "$GFX/Arduino_G.cpp" \
   "$GFX/canvas/Arduino_Canvas.cpp" build/fonts.o
 rm -f build/shots/*.raw
 ./build/render "$SD"
