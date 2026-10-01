@@ -125,7 +125,8 @@ enum XId : uint16_t {  // ko10.6: pasaron de 255
   X_FAME_SOLO, X_FAME_TEAM, X_FAME_SOLO_L, X_FAME_TEAM_L, X_PT_USES_FMT,
   X_FAME_BOTH, X_FAME_COUNT_FMT, X_FAME_PROMOTE,
   X_PERFECT, X_PERFECT_L,
-  X_CHG_LABEL, X_CHG_FULL, X_CHG_SAFE, X_CHG_NOTE,  // ko11.23.3: limite de carga  // ko11.21  // ko11.20: equipo  // ko11.19: combate automatico
+  X_CHG_LABEL, X_CHG_FULL, X_CHG_SAFE, X_CHG_NOTE,
+  X_VIB_ON, X_VIB_OFF,  // ko11.25: vibracion  // ko11.23.3: limite de carga  // ko11.21  // ko11.20: equipo  // ko11.19: combate automatico
   X_RG_THANKS, X_RG_BALL, X_RG_POTION, X_RG_SHARD, X_RG_EXP,  // ko11.19: regalo al soltar
   X_FW_TITLE, X_FW_FINAL, X_FW_TIME, X_FW_EVO_NEED, X_FW_TIME_FMT, X_FW_LEFT_FMT, X_FW_READY, X_FW_WAIT,  // ko11.18: despedida
   X_REG_0, X_REG_1, X_REG_2, X_REG_3, X_REG_4, X_REG_5, X_REG_6, X_REG_7,

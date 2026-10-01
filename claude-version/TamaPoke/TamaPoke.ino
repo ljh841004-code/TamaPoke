@@ -43,7 +43,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko11.24.1"
+#define FW_VERSION "1.17-ko11.25"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -496,7 +496,59 @@ static void bigStoreBegin() {
 #endif
 }
 
+// ======================================================================
+// ko11.25: motor de vibracion (IO18). Sin bloquear: n pulsos de 'on' ms separados 'gap' ms.
+// Se puede apagar como el sonido ("vib" en la NVS). Sin modulo no pasa nada (el pin en bajo)
+static bool vibOn = false;
+static uint32_t vibT = 0;
+static uint8_t vibLeft = 0;
+static uint16_t vibOnMs = 0, vibGapMs = 0;
+static int8_t gVibEn = -1;
+bool vibEnabled() {
+  if (gVibEn < 0) {
+    Preferences p;
+    p.begin("tamapoke", true);
+    gVibEn = p.getUChar("vib", 1) ? 1 : 0;
+    p.end();
+  }
+  return gVibEn == 1;
+}
+void vibSetEnabled(bool on) {
+  gVibEn = on ? 1 : 0;
+  Preferences p;
+  p.begin("tamapoke", false);
+  p.putUChar("vib", gVibEn);
+  p.end();
+  if (!on) { vibLeft = 0; vibOn = false; digitalWrite(VIB_PIN, LOW); }
+}
+void vibBegin() {
+  pinMode(VIB_PIN, OUTPUT);
+  digitalWrite(VIB_PIN, LOW);
+}
+void vibPulse(uint16_t ms, uint8_t n, uint16_t gap) {
+  if (vibOn || vibLeft || !vibEnabled()) return;  // ya vibrando: no se pisa (golpes seguidos no se alargan)
+  vibOnMs = ms; vibGapMs = gap; vibLeft = n;
+  vibT = millis();
+}
+void vibLoop(uint32_t now) {
+  if (vibOn) {
+    if ((int32_t)(now - vibT) >= 0) {
+      digitalWrite(VIB_PIN, LOW);
+      vibOn = false;
+      vibT = now + vibGapMs;
+    }
+    return;
+  }
+  if (vibLeft && (int32_t)(now - vibT) >= 0) {
+    digitalWrite(VIB_PIN, HIGH);
+    vibOn = true;
+    vibLeft--;
+    vibT = now + vibOnMs;
+  }
+}
+
 void setup() {
+  vibBegin();  // ko11.25: el motor parado desde el primer momento
   Serial.setRxBufferSize(8192);  // la transferencia a SD llega en bloques de 2 KB
   Serial.begin(115200);
   // CRITICO: sin esto, Serial.print BLOQUEA el juego cuando no hay un
@@ -639,6 +691,7 @@ void setup() {
   if (sdReady && !safeMode) audioLoadMusic();  // /mons/bgm.wav y /mons/battle_wild.wav si existen
 
   bakBootCheck();  // ko11.6: partida nueva + copia en la SD -> preguntar
+  vibPulse(180, 1, 0);  // ko11.25: encendido
   lastInteract = millis();
 }
 
@@ -702,10 +755,12 @@ void careAlert() {
     if (v[i] <= ALERT_LOW) mask |= 1 << i;
   bool quiet = pet.isEgg() || pet.ceremony != CER_NONE || pet.sleeping || screenOff;
   bool fire = init && !quiet && (pet.poops > lastPoops || (mask & ~lowMask));
+  bool newPoop = init && pet.poops > lastPoops;
   init = true;
   lastPoops = pet.poops;
   lowMask = mask;
   if (fire && audioEnabled()) sfxPlay(SFX_ALERT);
+  if (fire && newPoop && !audioEnabled()) vibPulse(250, 2, 180);  // ko11.25: sin sonido, la caca avisa vibrando
 }
 
 // ko11.3: medida en los minijuegos rapidos (se ve pequena en el resultado):
@@ -717,6 +772,7 @@ void perfReset() { perfRenderMax = perfStallMax = 0; perfFrames = 0; perfRenderS
 
 void loop() {
   uint32_t now = millis();
+  vibLoop(now);  // ko11.25
   uint32_t loopT0 = now, renderMs = 0;
   {  // ko11.9.2: en que pantalla estamos (si se reinicia, se ve al arrancar)
     uint8_t scr = vbOpen ? 1 : defOpen ? 2 : spdOpen ? 3 : gameOpen ? 4 : sackOpen ? 5 : trainMenuOpen ? 6

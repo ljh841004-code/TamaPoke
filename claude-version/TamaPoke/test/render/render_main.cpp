@@ -673,6 +673,11 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); openClock(); setBigPart("nvs2"); render(); shot("15z_clock_nvs2"); setBigPart(nullptr); render(); shot("15_clock_settings");
   clockDateMode = true; render(); shot("15b_clock_date"); clockDateMode = false;
   closeAll(); openSound(); render(); shot("16_sound");
+  { bool v0 = vibEnabled(), a0 = audioEnabled();  // ko11.25: [진동 켬/끔] junto a [소리]
+    soundTap(SND_BTN_X1 + 70, 96); render(); shot("16g_sound_vib_off");
+    navCheck("sonido: [진동] alterna la vibracion (no el sonido)", vibEnabled() != v0 && audioEnabled() == a0);
+    soundTap(SND_BTN_X1 + 70, 96);
+    navCheck("sonido: [진동] otra vez = como estaba", vibEnabled() == v0); }
   xScreen = XS_BRIGHT; render(); shot("16d_brightness");  // ko11.18
   brightTap(345, 230); render(); shot("16e_brightness_up"); setBrightLevel(7);
   brightTap(290, 338); render(); shot("16f_charge_limit");  // ko11.23.3

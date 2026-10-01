@@ -680,7 +680,10 @@ void evMessages(const BEvent &e) {
   }
   bvL1[sizeof(bvL1) - 1] = 0;
   bvL2[sizeof(bvL2) - 1] = 0;
-  if ((e.kind == EV_HIT || e.kind == EV_COUNTER) && e.dmg) sfxPlay(SFX_PLAY);
+  if ((e.kind == EV_HIT || e.kind == EV_COUNTER) && e.dmg) {
+    sfxPlay(SFX_PLAY);
+    vibPulse((e.crit || e.eff > 2) ? 140 : 70, 1, 0);  // ko11.25: golpe (critico / muy eficaz, mas largo)
+  }
   else if (e.kind == EV_FAINT) sfxPlay(SFX_DENY);
   else if (e.kind == EV_HEAL) sfxPlay(SFX_HEART);
   else if (e.kind == EV_CATCH) sfxPlay(SFX_MEDAL);
@@ -1687,7 +1690,8 @@ uint32_t wildAlertUntil = 0;   // aviso "! yasaeng !" en la pantalla principal
 #define WILD_ALERT_MS 30000UL
 uint32_t wildNextRoll = 0;
 
-void triggerWildAlert() { wildAlertUntil = millis() + WILD_ALERT_MS; }
+void vibPulse(uint16_t ms, uint8_t n, uint16_t gap);
+void triggerWildAlert() { wildAlertUntil = millis() + WILD_ALERT_MS; vibPulse(200, 3, 150); }  // ko11.25
 
 bool battleAllowed(bool toast) {
   if (!pet.canBattle()) { if (toast) showToast(XT(X_CANT_NOW)); sfxPlay(SFX_DENY); return false; }
@@ -2729,6 +2733,7 @@ void rollWildEncounter(uint32_t now) {
   if (random(100) < 3) {  // ~1 vez cada media hora-hora despierto
     wildAlertUntil = now + WILD_ALERT_MS;
     sfxPlay(SFX_HEART);
+    vibPulse(200, 3, 150);  // ko11.25: un salvaje (tres toques)
   }
 }
 

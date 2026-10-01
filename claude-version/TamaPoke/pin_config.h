@@ -32,6 +32,9 @@
 #define I2S_DO_IO 8
 #define PA 46
 
+// ko11.25: motor de vibracion (modulo Grove) en el conector de abajo: IO18 (SIG), 3V3, GND
+#define VIB_PIN 18
+
 // Ranura TF (no usada todavía)
 #define SDMMC_CLK 2
 #define SDMMC_CMD 1

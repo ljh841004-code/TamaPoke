@@ -943,6 +943,11 @@ void nextPickPoll() {
 #define VOL_DONE_Y 366
 #define VOL_BAR_X 138
 #define VOL_BAR_W 190
+#define SND_BTN_X0 80   // ko11.25
+#define SND_BTN_X1 236
+bool vibEnabled();
+void vibSetEnabled(bool on);
+void vibPulse(uint16_t ms, uint8_t n, uint16_t gap);
 
 void openSound() {
   retMark();
@@ -954,8 +959,11 @@ void renderSound() {
   uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   drawFit(XT(X_SOUND_TITLE), 40, 300, UI_INK, 3);
   bool on = audioEnabled();
-  drawBtn(133, 78, 200, 40, on ? UI_BAR_OK : UI_TRACK, on ? UI_WHITE : UI_INK,
+  // ko11.25: [소리 켬/끔] [진동 켬/끔] lado a lado
+  drawBtn(SND_BTN_X0, 78, 150, 40, on ? UI_BAR_OK : UI_TRACK, on ? UI_WHITE : UI_INK,
           XT(on ? X_SOUND_ON : X_SOUND_OFF));
+  bool vb = vibEnabled();
+  drawBtn(SND_BTN_X1, 78, 150, 40, vb ? UI_BAR_OK : UI_TRACK, vb ? UI_WHITE : UI_INK, XT(vb ? X_VIB_ON : X_VIB_OFF));
   static const XId LBL[3] = { X_VOL_BGM, X_VOL_CRY, X_VOL_SYS };
   for (int i = 0; i < 3; i++) {
     int y = VOL_ROW_Y + i * VOL_ROW_H;
@@ -987,9 +995,15 @@ static void soundPreview(int ch) {
 }
 
 void soundTap(int16_t x, int16_t y) {
-  if (y >= 78 && y < 118 && x >= 133 && x < 333) {
+  if (y >= 78 && y < 118 && x >= SND_BTN_X0 && x < SND_BTN_X0 + 150) {
     audioSetEnabled(!audioEnabled());
     if (audioEnabled()) sfxPlay(SFX_TAP);
+    return;
+  }
+  if (y >= 78 && y < 118 && x >= SND_BTN_X1 && x < SND_BTN_X1 + 150) {  // ko11.25: vibracion
+    vibSetEnabled(!vibEnabled());
+    if (vibEnabled()) vibPulse(150, 1, 0);  // asi se nota que esta encendida
+    sfxPlay(SFX_TAP);
     return;
   }
   if (y >= VOL_BGM_Y && y < VOL_BGM_Y + 36 && x >= 78 && x < 230) {  // ko11.8
