@@ -19,10 +19,13 @@
 #define ST_ROW_H 48
 #define ST_ROW_GAP 6
 #define ST_RESTART_Y 364
+#define ST_PG_LX 92
+#define ST_PG_RX 330
+#define ST_PG_W 44
 
 uint8_t stStyle = 0, stCh = 0;
 uint16_t stStep = 0;
-uint8_t stDone[STORY_STYLES] = { 0, 0 };  // bit i = capitulo i superado
+uint32_t stDone[STORY_STYLES] = { 0, 0 };  // bit i = capitulo i superado (ko11.23: 32 bits)
 uint8_t stResStyle = 0xFF, stResCh = 0;   // punto guardado (0xFF = ninguno)
 uint16_t stResStep = 0;
 uint16_t rgBest = 0;                      // expedicion: mejor oleada
@@ -30,8 +33,11 @@ uint16_t rgBest = 0;                      // expedicion: mejor oleada
 int16_t stPDex[STORY_STYLES] = { 0, 0 };
 uint32_t stPExp[STORY_STYLES] = { 0, 0 };
 PmdMon storyPmd;                          // su sprite en las escenas
-// ko11.22: los que se unen en la historia (juego: 구구, 피피; anime: 캐터피, 파이리). 0 = nadie
-int16_t stJ[STORY_STYLES][STORY_JOIN_MAX] = { { 0, 0 }, { 0, 0 } };
+// ko11.22: los que se unen en la historia (0 = nadie; | JOIN_KEEP = no evoluciona)
+int16_t stJ[STORY_STYLES][STORY_JOIN_MAX] = {};
+uint8_t stPick[STORY_STYLES] = { 0, 0 };  // ko11.23: bit i = stJ[i] va al combate (si hay mas de 2); 0x80 = ya elegido
+uint8_t stChPage = 0;                     // pagina de la lista de capitulos
+bool stPicking = false;                   // eligiendo quien va al combate
 static int16_t storyPmdDex = 0;
 static bool stLoaded = false;
 static uint32_t stRestartArm = 0, stRestartMsg = 0;  // ko11.22: [처음부터]
@@ -50,8 +56,9 @@ static void stLoad() {
   stLoaded = true;
   Preferences p;
   p.begin("tpstory", true);
-  stDone[0] = p.getUChar("g", 0);
-  stDone[1] = p.getUChar("a", 0);
+  // ko11.23: 32 bits ("g2"/"a2"); las partidas de ko11.21-22 tenian 8 bits en "g"/"a"
+  stDone[0] = p.isKey("g2") ? p.getUInt("g2", 0) : p.getUChar("g", 0);
+  stDone[1] = p.isKey("a2") ? p.getUInt("a2", 0) : p.getUChar("a", 0);
   stResStyle = p.getUChar("rs", 0xFF);
   stResCh = p.getUChar("rc", 0);
   stResStep = p.getUShort("rp", 0);
@@ -60,15 +67,22 @@ static void stLoad() {
   stPDex[1] = (int16_t)p.getShort("pd1", 0);
   stPExp[0] = p.getUInt("pe0", 0);
   stPExp[1] = p.getUInt("pe1", 0);
-  stJ[0][0] = p.getShort("j00", 0); stJ[0][1] = p.getShort("j01", 0);
-  stJ[1][0] = p.getShort("j10", 0); stJ[1][1] = p.getShort("j11", 0);
+  if (p.isKey("j0")) {  // ko11.23: la lista entera
+    p.getBytes("j0", stJ[0], sizeof(stJ[0]));
+    p.getBytes("j1", stJ[1], sizeof(stJ[1]));
+  } else {  // ko11.22: dos claves por estilo
+    stJ[0][0] = p.getShort("j00", 0); stJ[0][1] = p.getShort("j01", 0);
+    stJ[1][0] = p.getShort("j10", 0); stJ[1][1] = p.getShort("j11", 0);
+  }
+  stPick[0] = p.getUChar("k0", 0);
+  stPick[1] = p.getUChar("k1", 0);
   p.end();
 }
 static void stSave() {
   Preferences p;
   p.begin("tpstory", false);
-  p.putUChar("g", stDone[0]);
-  p.putUChar("a", stDone[1]);
+  p.putUInt("g2", stDone[0]);
+  p.putUInt("a2", stDone[1]);
   p.putUChar("rs", stResStyle);
   p.putUChar("rc", stResCh);
   p.putUShort("rp", stResStep);
@@ -77,13 +91,15 @@ static void stSave() {
   p.putShort("pd1", stPDex[1]);
   p.putUInt("pe0", stPExp[0]);
   p.putUInt("pe1", stPExp[1]);
-  p.putShort("j00", stJ[0][0]); p.putShort("j01", stJ[0][1]);
-  p.putShort("j10", stJ[1][0]); p.putShort("j11", stJ[1][1]);
+  p.putBytes("j0", stJ[0], sizeof(stJ[0]));
+  p.putBytes("j1", stJ[1], sizeof(stJ[1]));
+  p.putUChar("k0", stPick[0]);
+  p.putUChar("k1", stPick[1]);
   p.end();
 }
 static uint8_t stDoneCount(uint8_t s) {
   uint8_t n = 0;
-  for (int i = 0; i < STORY_CHAPTERS; i++) n += (stDone[s] >> i) & 1;
+  for (int i = 0; i < STORY_NCH[s]; i++) n += (stDone[s] >> i) & 1;
   return n;
 }
 static const char *stPetName() { return pet.nick[0] ? pet.nick : dexName(pet.speciesId); }
@@ -133,7 +149,8 @@ void renderStoryMenu() {
     setCur(102, y + 42);
     printT(STORY_STYLE_SUB[i]);
     char pr[32];
-    if (i < STORY_STYLES) snprintf(pr, sizeof(pr), STX[SX_PROG_FMT], stDoneCount(i));
+    if (i < STORY_STYLES && stDoneCount(i) >= STORY_NCH[i]) snprintf(pr, sizeof(pr), "%s", STX[SX_COMPLETE]);  // ko11.23: entera
+    else if (i < STORY_STYLES) snprintf(pr, sizeof(pr), STX[SX_PROG_FMT], stDoneCount(i), (unsigned)STORY_NCH[i]);
     else snprintf(pr, sizeof(pr), STX[SX_BEST_FMT], (unsigned)rgBest);
     int w = textW(pr, 1) + 16;
     drawBtn(383 - w, y + 42, w, 26, ST_STYLE_COL[i], UI_WHITE, pr);
@@ -151,6 +168,10 @@ void storyMenuTap(int16_t x, int16_t y) {
   sfxPlay(SFX_TAP);
   if (i == 2) { rogueOpen(); return; }
   stStyle = (uint8_t)i;
+  // ko11.23: la pagina del primer capitulo sin superar
+  uint8_t c = 0;
+  while (c + 1 < STORY_NCH[stStyle] && ((stDone[stStyle] >> c) & 1)) c++;
+  stChPage = c / STORY_PAGE;
   xScreen = XS_STORYCH;
 }
 
@@ -160,8 +181,12 @@ static bool stUnlocked(uint8_t s, uint8_t c) { return c == 0 || ((stDone[s] >> (
 void renderStoryChapters() {
   uiScreenBg();
   drawFit(STORY_STYLE_NAME[stStyle], 34, 300, ST_STYLE_COL[stStyle], 3);
-  for (int i = 0; i < STORY_CHAPTERS; i++) {
-    int y = ST_ROW_Y + i * (ST_ROW_H + ST_ROW_GAP);
+  uint8_t pages = (STORY_NCH[stStyle] + STORY_PAGE - 1) / STORY_PAGE;
+  if (stChPage >= pages) stChPage = 0;
+  for (int r = 0; r < STORY_PAGE; r++) {
+    int i = stChPage * STORY_PAGE + r;
+    if (i >= STORY_NCH[stStyle]) break;
+    int y = ST_ROW_Y + r * (ST_ROW_H + ST_ROW_GAP);
     bool open = stUnlocked(stStyle, i), done = (stDone[stStyle] >> i) & 1;
     bool res = stResStyle == stStyle && stResCh == i && stResStep > 0;
     uiButton(73, y, 320, ST_ROW_H, 12, open ? UI_WHITE : UI_TRACK, UI_INK);
@@ -178,6 +203,17 @@ void renderStoryChapters() {
   if (!armed) stRestartArm = 0;
   if (stRestartMsg && millis() - stRestartMsg < 2500) drawFit(STX[SX_RESTART_DONE], ST_RESTART_Y + 8, 300, UI_BAR_OK, 1);
   else stBtn(CX - 80, ST_RESTART_Y, 160, 36, armed ? UI_BAR_BAD : UI_TRACK, armed ? UI_WHITE : UI_INK, STX[armed ? SX_RESTART_SURE : SX_RESTART]);
+  // ko11.23: paginas (< 1/3 >)
+  if (pages > 1) {
+    char pg[16];
+    snprintf(pg, sizeof(pg), STX[SX_PAGE_FMT], (unsigned)(stChPage + 1), (unsigned)pages);
+    drawFit(pg, 62, 120, C565(0x60, 0x68, 0x70), 1);
+    uint16_t cl = stChPage > 0 ? ST_STYLE_COL[stStyle] : UI_TRACK, cr = stChPage + 1 < pages ? ST_STYLE_COL[stStyle] : UI_TRACK;
+    uiButton(ST_PG_LX, ST_RESTART_Y, ST_PG_W, 36, 12, cl, UI_INK);
+    gfx->fillTriangle(ST_PG_LX + 14, ST_RESTART_Y + 18, ST_PG_LX + 28, ST_RESTART_Y + 9, ST_PG_LX + 28, ST_RESTART_Y + 27, UI_WHITE);
+    uiButton(ST_PG_RX, ST_RESTART_Y, ST_PG_W, 36, 12, cr, UI_INK);
+    gfx->fillTriangle(ST_PG_RX + 30, ST_RESTART_Y + 18, ST_PG_RX + 16, ST_RESTART_Y + 9, ST_PG_RX + 16, ST_RESTART_Y + 27, UI_WHITE);
+  }
   drawNav(NAV_L, UI_INK);
   uiFlush();
 }
@@ -190,6 +226,8 @@ static void stRestartStyle(uint8_t s) {
   stPDex[s] = 0;
   stPExp[s] = 0;
   for (int i = 0; i < STORY_JOIN_MAX; i++) stJ[s][i] = 0;
+  stPick[s] = 0;
+  stChPage = 0;
   stSave();
   storyPmd.unload();
   storyPmdDex = 0;
@@ -209,9 +247,17 @@ void storyChaptersTap(int16_t x, int16_t y) {
     return;
   }
   stRestartArm = 0;
+  uint8_t pages = (STORY_NCH[stStyle] + STORY_PAGE - 1) / STORY_PAGE;
+  if (pages > 1 && y >= ST_RESTART_Y && y < ST_RESTART_Y + 36) {  // ko11.23: paginas
+    if (x >= ST_PG_LX && x < ST_PG_LX + ST_PG_W && stChPage > 0) { stChPage--; sfxPlay(SFX_TAP); }
+    else if (x >= ST_PG_RX && x < ST_PG_RX + ST_PG_W && stChPage + 1 < pages) { stChPage++; sfxPlay(SFX_TAP); }
+    return;
+  }
   if (x < 73 || x >= 393 || y < ST_ROW_Y) return;
-  int i = (y - ST_ROW_Y) / (ST_ROW_H + ST_ROW_GAP);
-  if (i >= STORY_CHAPTERS || (y - ST_ROW_Y) % (ST_ROW_H + ST_ROW_GAP) >= ST_ROW_H) return;
+  int r = (y - ST_ROW_Y) / (ST_ROW_H + ST_ROW_GAP);
+  if (r >= STORY_PAGE || (y - ST_ROW_Y) % (ST_ROW_H + ST_ROW_GAP) >= ST_ROW_H) return;
+  int i = stChPage * STORY_PAGE + r;
+  if (i >= STORY_NCH[stStyle]) return;
   if (!stUnlocked(stStyle, i)) { sfxPlay(SFX_DENY); return; }
   sfxPlay(SFX_TAP);
   stStart(stStyle, (uint8_t)i);
@@ -240,10 +286,11 @@ static int16_t stEvolveFor(int16_t d, uint16_t lv) {
 static int16_t stPartnerBase(uint8_t s) { return stPDex[s] > 0 ? stPDex[s] : STORY_PARTNER0[s]; }
 static uint16_t stPartnerLv(uint8_t s) {
   uint16_t lv = levelForExp(stPExp[s]);
-  uint8_t fl = STORY_FLOOR[s][stCh < STORY_CHAPTERS ? stCh : 0];
+  uint8_t fl = STORY_FLOOR[s][stCh < STORY_NCH[s] ? stCh : 0];
   return lv < fl ? fl : lv;
 }
-static int16_t stPartnerDex(uint8_t s) { return stEvolveFor(stPartnerBase(s), stPartnerLv(s)); }
+// ko11.23: el Pikachu del anime no evoluciona nunca (se nego a la piedra trueno)
+static int16_t stPartnerDex(uint8_t s) { return s == 1 ? stPartnerBase(s) : stEvolveFor(stPartnerBase(s), stPartnerLv(s)); }
 static const char *stPartnerName() { return dexName(stPartnerDex(stStyle)); }
 static void stLoadPartnerPmd() {
   int16_t d = stPartnerDex(stStyle);
@@ -256,6 +303,30 @@ static void stLoadPartnerPmd() {
 static int16_t stRivalStarter() {
   int16_t b = stPartnerBase(stStyle);
   return b == 1 ? 4 : b == 4 ? 7 : b == 7 ? 1 : 133;
+}
+
+// ko11.23: los que se unieron: nivel (2 por debajo del companero) y forma de ahora
+static uint16_t stJoinLv() {
+  uint16_t lv = stPartnerLv(stStyle);
+  return lv > 4 ? lv - 2 : 3;
+}
+static int16_t stJoinDex(int16_t v) {
+  int16_t d = v & ~JOIN_KEEP;
+  return (v & JOIN_KEEP) ? d : stEvolveFor(d, stJoinLv());
+}
+static uint8_t stJoinCount() {
+  uint8_t n = 0;
+  for (int i = 0; i < STORY_JOIN_MAX; i++) n += stJ[stStyle][i] > 0;
+  return n;
+}
+// quienes van al combate: todos si son 2 o menos; si no, los elegidos (como mucho 2)
+static uint8_t stTeamMask() {
+  uint8_t n = stJoinCount();
+  if (n <= STORY_PICK) return (uint8_t)((1 << n) - 1);
+  if (!(stPick[stStyle] & 0x80)) return (uint8_t)((1 << STORY_PICK) - 1);  // sin elegir aun: los 2 primeros
+  uint8_t m = stPick[stStyle] & (uint8_t)((1 << n) - 1), c = 0;
+  for (int i = 0; i < n; i++) if ((m >> i) & 1) { if (++c > STORY_PICK) m &= (uint8_t)~(1 << i); }
+  return m;
 }
 
 static void stSetResume() {
@@ -291,13 +362,30 @@ static void stRun() {
         int8_t k = -1;
         bool have = false;
         for (int8_t i = 0; i < STORY_JOIN_MAX; i++) {
-          if (stJ[stStyle][i] == s.c) have = true;
+          if (stJ[stStyle][i] > 0 && (stJ[stStyle][i] & ~JOIN_KEEP) == s.c) have = true;
           if (stJ[stStyle][i] <= 0 && k < 0) k = i;
         }
-        if (!have && k >= 0) { stJ[stStyle][k] = s.c; stSave(); }
+        if (!have && k >= 0) { stJ[stStyle][k] = (int16_t)(s.c | (s.a ? JOIN_KEEP : 0)); stSave(); }
         txFmtRaw(stText, sizeof(stText), STX[SX_JOIN_FMT], dexName(s.c), nullptr);
         stWho = W_NONE; stPage = 0; stTypeT = millis();
         sfxPlay(SFX_MEDAL);
+        return;
+      }
+      case ST_LEAVE: {  // ko11.23: se despide (con la forma que tenga ahora)
+        int16_t now = s.c;
+        for (int8_t i = 0; i < STORY_JOIN_MAX; i++) {
+          if (stJ[stStyle][i] > 0 && (stJ[stStyle][i] & ~JOIN_KEEP) == s.c) {
+            now = stJoinDex(stJ[stStyle][i]);
+            for (int8_t j = i; j + 1 < STORY_JOIN_MAX; j++) stJ[stStyle][j] = stJ[stStyle][j + 1];
+            stJ[stStyle][STORY_JOIN_MAX - 1] = 0;
+            stPick[stStyle] = 0;  // la lista cambio: se vuelve a elegir
+            stSave();
+            break;
+          }
+        }
+        txFmtRaw(stText, sizeof(stText), STX[SX_LEAVE_FMT], dexName(now), nullptr);
+        stWho = W_NONE; stPage = 0; stTypeT = millis();
+        sfxPlay(SFX_BYE);
         return;
       }
       case ST_SAY: stShow(s.t, s.who); return;
@@ -348,7 +436,7 @@ static void stRun() {
         return;
       }
       case ST_END: {
-        stDone[stStyle] |= (uint8_t)(1 << stCh);
+        stDone[stStyle] |= (uint32_t)1 << stCh;
         if (stResStyle == stStyle && stResCh == stCh) stResStyle = 0xFF;
         stSave();
         stMon = 0;
@@ -375,6 +463,7 @@ static void stStart(uint8_t s, uint8_t c) {
     if (ch.steps[k].op == ST_MON) stMon = ch.steps[k].c;
   }
   xScreen = XS_SCENE;
+  stPicking = false;
   stLoadPartnerPmd();
   stRun();
 }
@@ -440,6 +529,42 @@ static bool stTyping() {
 }
 
 // ---------------- escena ----------------
+// ko11.23: antes de un combate, si hay mas de 2 que se unieron: quienes van (como mucho 2)
+#define SP_CW 104
+#define SP_CH 92
+#define SP_X0 69
+#define SP_Y0 60
+static int stPickCard(int16_t x, int16_t y) {
+  for (int i = 0; i < stJoinCount(); i++) {
+    int cx = SP_X0 + (i % 3) * (SP_CW + 8), cy = SP_Y0 + (i / 3) * (SP_CH + 8);
+    if (inRect(x, y, cx, cy, SP_CW, SP_CH)) return i;
+  }
+  return -1;
+}
+static void stRenderPick() {
+  uint8_t m = stTeamMask();
+  uint16_t lv = stJoinLv();
+  for (int i = 0; i < stJoinCount(); i++) {
+    int cx = SP_X0 + (i % 3) * (SP_CW + 8), cy = SP_Y0 + (i / 3) * (SP_CH + 8);
+    bool on = (m >> i) & 1;
+    uiButton(cx, cy, SP_CW, SP_CH, 12, on ? C565(0xff, 0xf0, 0xb0) : UI_WHITE, on ? ST_STYLE_COL[stStyle] : UI_INK);
+    int16_t d = stJoinDex(stJ[stStyle][i]);
+    drawThumbAt(d, cx + SP_CW / 2, cy + 36, 2, false);
+    char t[40];
+    snprintf(t, sizeof(t), "%s Lv%u", dexName(d), (unsigned)lv);
+    gfx->setTextColor(UI_INK);
+    setSize(1);
+    setCur(cx + (SP_CW - textW(t, 1)) / 2, cy + SP_CH - 24);
+    printT(t);
+    if (on) drawCheckMark(cx + SP_CW - 14, cy + 14, true);
+  }
+  uiPanel(ST_BOX_X, ST_BOX_Y, ST_BOX_W, ST_BOX_H, 14, UI_WHITE, UI_INK);
+  drawFit(STX[SX_PICK], ST_BOX_Y + 14, ST_LINE_W, UI_INK, 2);
+  stBtn(CX - 70, ST_BOX_Y + 58, 140, 40, ST_STYLE_COL[stStyle], UI_WHITE, STX[SX_GO]);
+  drawNav(NAV_L, UI_INK);
+  uiFlush();
+}
+
 void renderStoryScene() {
   uint32_t now = millis();
   lastInteract = now;
@@ -457,6 +582,7 @@ void renderStoryScene() {
     if (b) drawThumb(b, 330 - b[0], 262 - b[1] * 2, 2, false);
     else gfx->fillCircle(330, 200, 40, UI_TRACK);  // sin story.bin en la SD
   }
+  if (stPicking) { stRenderPick(); return; }
   // cuadro de dialogo
   uiPanel(ST_BOX_X, ST_BOX_Y, ST_BOX_W, ST_BOX_H, 14, UI_WHITE, UI_INK);
   const char *name = stWho == W_PET ? stPartnerName() : stWho != W_NONE ? STORY_WHO_NAME[stWho] : nullptr;
@@ -500,9 +626,31 @@ void renderStoryScene() {
 static void stStartBattle();
 void storySceneTap(int16_t x, int16_t y) {
   if (navHit(NAV_L, x, y)) {  // salir: el punto se guarda
+    stPicking = false;
     if (!stEnd) { stSetResume(); }
     xScreen = XS_STORYCH;
     sfxPlay(SFX_TAP);
+    return;
+  }
+  if (stPicking) {  // ko11.23: elegir quien va
+    int k = stPickCard(x, y);
+    if (k >= 0) {
+      uint8_t m = stTeamMask(), c = 0;
+      for (int i = 0; i < STORY_JOIN_MAX; i++) c += (m >> i) & 1;
+      if ((m >> k) & 1) m &= (uint8_t)~(1 << k);
+      else if (c < STORY_PICK) m |= (uint8_t)(1 << k);
+      else { sfxPlay(SFX_DENY); return; }
+      stPick[stStyle] = m | 0x80;
+      sfxPlay(SFX_TAP);
+      return;
+    }
+    if (inRect(x, y, CX - 70, ST_BOX_Y + 58, 140, 40)) {
+      stPicking = false;
+      stPick[stStyle] = stTeamMask() | 0x80;
+      stSave();
+      sfxPlay(SFX_TAP);
+      stStartBattle();
+    }
     return;
   }
   if (stTyping()) { stTypeT = millis() - 600000UL; return; }  // mostrar todo de golpe
@@ -525,7 +673,12 @@ void storySceneTap(int16_t x, int16_t y) {
   if ((stPage + 1) * ST_LINES < stLineCount()) { stPage++; stTypeT = millis(); return; }  // siguiente trozo
   sfxPlay(SFX_TAP);
   if (stEnd) { xScreen = XS_STORYCH; return; }
-  if (stBattleWait) { stStartBattle(); return; }
+  if (stBattleWait) {
+    // ko11.23: mas de 2 companeros de viaje: primero se elige quien va
+    if (stJoinCount() > STORY_PICK && stCur().a < STORY_TEAM_COUNT) { stPicking = true; return; }
+    stStartBattle();
+    return;
+  }
   if (stTired) { xScreen = XS_STORYCH; return; }
   stStep++;
   stRun();
@@ -551,8 +704,9 @@ static void stStartBattle() {
     int lv = tm.lv[i];  // niveles fijos, como en el original
     if (lv < 3) lv = 3;
     if (lv > LEVEL_MAX) lv = LEVEL_MAX;
-    int16_t d = tm.dex[i] < 0 ? stRivalStarter() : tm.dex[i];
-    team[i] = makeTrainerMon(stEvolveFor(d, (uint16_t)lv), (uint16_t)lv);
+    // el inicial del rival evoluciona con su nivel; los demas, tal cual (ko11.23: el Bulbasaur del anime no)
+    int16_t d = tm.dex[i] < 0 ? stEvolveFor(stRivalStarter(), (uint16_t)lv) : tm.dex[i];
+    team[i] = makeTrainerMon(d, (uint16_t)lv);
   }
   stBattleWho = s.who;
   // ko11.22: sin ayudantes de la caja: luchan el companero y los que se unieron en la historia
@@ -564,12 +718,12 @@ static void stStartBattle() {
 
 // startTrainer: los que se unieron en la historia, detras del companero (un poco por debajo de su nivel)
 void storyAddParty() {
-  uint16_t lv = stPartnerLv(stStyle);
-  lv = lv > 4 ? lv - 2 : 3;
+  uint16_t lv = stJoinLv();
+  uint8_t m = stTeamMask();
   for (uint8_t i = 0; i < STORY_JOIN_MAX && pN < PARTY_MAX; i++) {
-    int16_t d = stJ[stStyle][i];
-    if (d <= 0) continue;
-    pMon[pN] = makeBoxBattler(stEvolveFor(d, lv), lv, lv, 105, 105, 105);
+    int16_t v = stJ[stStyle][i];
+    if (v <= 0 || !((m >> i) & 1)) continue;
+    pMon[pN] = makeBoxBattler(stJoinDex(v), lv, lv, 105, 105, 105);
     pBox[pN] = -1;
     pN++;
   }
@@ -594,6 +748,11 @@ void storyAfterBattle(bool won) {
     if (lv < LEVEL_MAX) stPExp[stStyle] = expForLevel(lv + 1);
     stSave();
     stLoadPartnerPmd();
+    stStep++;
+    stRun();
+    return;
+  }
+  if (stStep < STORY[stStyle][stCh].n && stCur().op == ST_BATTLE && stCur().b == 1) {  // ko11.23: sigue igual
     stStep++;
     stRun();
     return;

@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko11.22.1)
+# TamaPoke KO (v1.17-ko11.23)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko11.23: STORY_CH_MAX 15·STORY_NCH{14,15}, stDone 32bit("g2"/"a2", 옛 "g"/"a" 읽기), STORY_JOIN_MAX 6·JOIN_KEEP·ST_LEAVE·stPick(0x80=고름)·고르기 패널, BATTLE_ANY(b=1), 상대 진화는 라이벌 시작 포켓몬만, 애니 피카츄 진화 없음, 장 목록 페이지, W_LORELEI/AGATHA/GARY/RITCHIE/LEAGUE. 렌더러: 전 장 자동 통과 검사. PC 테스트 254개
 - ✅ ko11.22.1: stRestartStyle(장 목록 [처음부터], 두 번 누르기 3초), doResetGame에서 "tpstory"/"tpparty"/"tpteam"(nvs2) clear. PC 테스트 254개
 - ✅ ko11.22: ST_JOIN(stJ[2][2], NVS j00~j11, SX_JOIN_FMT), 스토리 전투는 partyOpen 없이 startTrainer + storyAddParty(동료 레벨-2, pBox -1), foeMoveRule(BK_STORY·상대 Lv<8은 BA_TYPE→BA_TACKLE). 원정은 그대로 도우미. PC 테스트 254개
 - ✅ ko11.21.1: bakNewestAuto — 하루 1번 자동 백업은 자동 칸만 보고 판단, 수동 백업은 bakKnownDay에 안 셈 (수동 하루 = 자동 건너뜀 버그). PC 테스트 254개

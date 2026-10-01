@@ -15,7 +15,9 @@ CACHE = os.path.join(HERE, 'story_cache')
 URL = 'https://play.pokemonshowdown.com/sprites/trainers/%s.png'
 # el orden es el de STORY_WHO en story.h (id 1..N)
 WHO = ['oak', 'blue', 'red', 'rocketgrunt', 'giovanni', 'brock', 'misty', 'ash', 'teamrocket',
-       'ltsurge', 'erika', 'koga', 'sabrina', 'blaine', 'bruno', 'lance']
+       'ltsurge', 'erika', 'koga', 'sabrina', 'blaine', 'bruno', 'lance',
+       # ko11.23: 칸나, 국화, 바람(애니), 리치(애니), 리그 예선 트레이너
+       'lorelei-gen3', 'agatha-gen3', 'blue-gen3', 'acetrainer', 'acetrainer-gen3']
 
 
 def rgb565(r, g, b):

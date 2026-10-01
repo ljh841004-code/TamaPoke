@@ -757,6 +757,83 @@ static bool sceneUntil(bool (*cond)()) {  // toca hasta que se cumpla (o 40 toqu
   for (int i = 0; i < 40 && !cond(); i++) sceneTo(1);
   return cond();
 }
+// ko11.23: juega un capitulo entero (elige la 1a opcion, gana los combates)
+static bool gPickShot = false;
+static bool playChapter(uint8_t st, uint8_t c) {
+  stResStyle = 0xFF;
+  stStart(st, c);
+  for (int g = 0; g < 600 && !stEnd; g++) {
+    stTypeT = millis() - 600000UL;
+    pet.energy = 100; pet.fullness = 100;
+    if (xScreen == XS_WILD && bKind == BK_STORY) {  // combate en marcha: ganarlo
+      if (pN > PARTY_MAX || pN < 1) return false;
+      bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
+      finishBattle(true, false, false); afterResult();
+      continue;
+    }
+    if (stPicking) {
+      if (!gPickShot) { gPickShot = true; render(); shot("86_story_pick"); }
+      storySceneTap(CX, ST_BOX_Y + 70);  // 출발
+      if (xScreen != XS_WILD) { printf("  capitulo %d/%d: 출발 no empieza\n", st, c); return false; }
+      if (pN != 3) { printf("  capitulo %d/%d: equipo %d\n", st, c, pN); return false; }
+      continue;
+    }
+    if (stChoice) {
+      if (stOptN == 3) storySceneTap(ST_BOX_X + 60, ST_BOX_Y + 70);
+      else storySceneTap(233, ST_BOX_Y + 56);
+      continue;
+    }
+    if (stBattleWait) {
+      storySceneTap(233, 330);
+      if (stPicking) continue;
+      if (xScreen != XS_WILD || bKind != BK_STORY) { printf("  capitulo %d/%d: no empieza el combate\n", st, c); return false; }
+      if (pN > PARTY_MAX || pN < 1) return false;
+      bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
+      finishBattle(true, false, false); afterResult();
+      continue;
+    }
+    if (stTired) { printf("  capitulo %d/%d: cansado\n", st, c); return false; }
+    storySceneTap(233, 330);
+  }
+  return stEnd && ((stDone[st] >> c) & 1);
+}
+static void storyFullRun() {
+  stRestartStyle(0); stRestartStyle(1);
+  bool ok = true;
+  for (uint8_t st = 0; st < STORY_STYLES; st++)
+    for (uint8_t c = 0; c < STORY_NCH[st]; c++)
+      if (!playChapter(st, c)) { ok = false; printf("  FALLO: estilo %d capitulo %d\n", st, c + 1); }
+  navCheck("historia: juego 14 capitulos y anime 15 hasta el final", ok && stDoneCount(0) == 14 && stDoneCount(1) == 15);
+  int nj = 0;
+  for (int i = 0; i < STORY_JOIN_MAX; i++) nj += stJ[0][i] > 0;
+  navCheck("historia: juego, 5 se unieron (구구 피피 이브이 라프라스 잠만보)", nj == 5);
+  navCheck("historia: juego, el inicial evoluciono (이상해꽃)", stPDex[0] == 1 && stPartnerDex(0) == 3);
+  nj = 0;
+  bool butterfree = false, bulbaKeep = false;
+  for (int i = 0; i < STORY_JOIN_MAX; i++) {
+    nj += stJ[1][i] > 0;
+    if ((stJ[1][i] & ~JOIN_KEEP) == 10) butterfree = true;
+    if (stJ[1][i] == (1 | JOIN_KEEP)) bulbaKeep = true;
+  }
+  navCheck("historia: anime, 버터플 se fue y quedan 3", nj == 3 && !butterfree);
+  navCheck("historia: anime, 이상해씨 no evoluciona", bulbaKeep);
+  stStyle = 1; stCh = 14;
+  int16_t cz = 0;
+  for (int i = 0; i < STORY_JOIN_MAX; i++) if ((stJ[1][i] & ~JOIN_KEEP) == 4) cz = stJoinDex(stJ[1][i]);
+  navCheck("historia: anime, 파이리 ya es 리자몽", cz == 6);
+  navCheck("historia: anime, 피카츄 sigue siendo 피카츄", stPartnerDex(1) == 25);
+  render(); shot("87_scene_ending");
+  xScreen = XS_STORY; render(); shot("70b_story_menu_complete");
+  stStyle = 0; stChPage = 2; xScreen = XS_STORYCH; render(); shot("71d_story_chapters_p3");
+  storyChaptersTap(ST_PG_LX + 20, ST_RESTART_Y + 18);
+  navCheck("historia: pagina anterior", stChPage == 1);
+  // un retrato nuevo (칸나)
+  stResStyle = 0xFF; stStart(0, 12);
+  for (int g = 0; g < 40 && stWho != W_LORELEI; g++) { stTypeT = millis() - 600000UL; storySceneTap(233, 330); }
+  stTypeT = millis() - 600000UL; render(); shot("88_scene_lorelei");
+  stRestartStyle(0); stRestartStyle(1);
+}
+
 static void storyShots() {
   setLang(LANG_KO);
   applyLangFont();
@@ -822,6 +899,8 @@ static void storyShots() {
   stDone[1] = 1; stPDex[1] = 25; stStart(1, 1);
   sceneTo(1); render(); shot("80_anime_rocket");
   sceneTo(2); render(); shot("80b_anime_rocket2");
+  stDone[1] = 0; stDone[0] = 0; stResStyle = 0xFF;
+  storyFullRun();
   stDone[1] = 0; stDone[0] = 0; stResStyle = 0xFF;
   // expedicion
   xScreen = XS_STORY; storyMenuTap(200, ST_CARD_Y + 2 * (ST_CARD_H + ST_CARD_GAP) + 20);
