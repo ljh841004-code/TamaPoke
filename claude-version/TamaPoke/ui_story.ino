@@ -18,6 +18,7 @@
 #define ST_ROW_Y 86
 #define ST_ROW_H 48
 #define ST_ROW_GAP 6
+#define ST_RESTART_Y 364
 
 uint8_t stStyle = 0, stCh = 0;
 uint16_t stStep = 0;
@@ -33,6 +34,7 @@ PmdMon storyPmd;                          // su sprite en las escenas
 int16_t stJ[STORY_STYLES][STORY_JOIN_MAX] = { { 0, 0 }, { 0, 0 } };
 static int16_t storyPmdDex = 0;
 static bool stLoaded = false;
+static uint32_t stRestartArm = 0, stRestartMsg = 0;  // ko11.22: [처음부터]
 static uint8_t stBg = 0, stWho = W_NONE;
 static int16_t stMon = 0;
 static char stText[320];
@@ -171,13 +173,42 @@ void renderStoryChapters() {
     else if (res) drawBtn(300, y + 11, 82, 26, ST_STYLE_COL[stStyle], UI_WHITE, STX[SX_RESUME]);
     else if (!open) stBtn(318, y + 11, 64, 26, UI_TRACK, C565(0x90, 0x90, 0x90), STX[SX_LOCKED]);
   }
+  // ko11.22: [처음부터] (dos toques: el 1o arma, 3 s para confirmar)
+  bool armed = stRestartArm && millis() - stRestartArm < 3000;
+  if (!armed) stRestartArm = 0;
+  if (stRestartMsg && millis() - stRestartMsg < 2500) drawFit(STX[SX_RESTART_DONE], ST_RESTART_Y + 8, 300, UI_BAR_OK, 1);
+  else stBtn(CX - 80, ST_RESTART_Y, 160, 36, armed ? UI_BAR_BAD : UI_TRACK, armed ? UI_WHITE : UI_INK, STX[armed ? SX_RESTART_SURE : SX_RESTART]);
   drawNav(NAV_L, UI_INK);
   uiFlush();
 }
 
 static void stStart(uint8_t s, uint8_t c);
+// ko11.22: un estilo desde cero (los premios ya recibidos se quedan con el que crias)
+static void stRestartStyle(uint8_t s) {
+  stDone[s] = 0;
+  if (stResStyle == s) stResStyle = 0xFF;
+  stPDex[s] = 0;
+  stPExp[s] = 0;
+  for (int i = 0; i < STORY_JOIN_MAX; i++) stJ[s][i] = 0;
+  stSave();
+  storyPmd.unload();
+  storyPmdDex = 0;
+}
 void storyChaptersTap(int16_t x, int16_t y) {
-  if (navHit(NAV_L, x, y)) { xScreen = XS_STORY; sfxPlay(SFX_TAP); return; }
+  if (navHit(NAV_L, x, y)) { stRestartArm = 0; xScreen = XS_STORY; sfxPlay(SFX_TAP); return; }
+  if (inRect(x, y, CX - 80, ST_RESTART_Y, 160, 36)) {
+    if (stRestartArm && millis() - stRestartArm < 3000) {
+      stRestartStyle(stStyle);
+      stRestartArm = 0;
+      stRestartMsg = millis() ? millis() : 1;
+      sfxPlay(SFX_BYE);
+    } else {
+      stRestartArm = millis() ? millis() : 1;
+      sfxPlay(SFX_DENY);
+    }
+    return;
+  }
+  stRestartArm = 0;
   if (x < 73 || x >= 393 || y < ST_ROW_Y) return;
   int i = (y - ST_ROW_Y) / (ST_ROW_H + ST_ROW_GAP);
   if (i >= STORY_CHAPTERS || (y - ST_ROW_Y) % (ST_ROW_H + ST_ROW_GAP) >= ST_ROW_H) return;

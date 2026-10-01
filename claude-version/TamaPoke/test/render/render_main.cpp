@@ -799,6 +799,11 @@ static void storyShots() {
   sceneUntil([] { return stEnd; }); render(); shot("79c_scene_clear");
   navCheck("historia: capitulo 1 superado", stDone[0] & 1);
   sceneTo(1); render(); shot("71b_story_chapters_after");
+  storyChaptersTap(CX, ST_RESTART_Y + 18); render(); shot("71c_story_restart_armed");
+  navCheck("historia: [처음부터] 1er toque no borra", stDone[0] & 1);
+  storyChaptersTap(CX, ST_RESTART_Y + 18);
+  navCheck("historia: [처음부터] 2o toque borra el estilo", stDone[0] == 0 && stPDex[0] == 0 && stJ[0][0] == 0);
+  stDone[0] = 1; stPDex[0] = 7; stPExp[0] = expForLevel(6);
   // ko11.22: 2장: 구구가 동료가 되고, 웅 전에는 동료와 함께 (보관함 도우미 없이)
   stJ[0][0] = stJ[0][1] = 0; stResStyle = 0xFF;
   stStart(0, 1);

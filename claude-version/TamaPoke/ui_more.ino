@@ -1321,6 +1321,10 @@ void doResetGame() {
   hall.wipe();  // ko10.5
   fame.wipe();  // ko10.11
   dexLog.wipe();
+  // ko11.22: tambien la historia/expedicion, los usos de ayudantes y las fichas del salon de la liga
+  static const char *const NS_SMALL[] = { "tpstory", "tpparty" };
+  for (const char *ns : NS_SMALL) { Preferences p; if (p.begin(ns, false)) p.clear(); p.end(); }
+  { Preferences p; if (p.begin("tpteam", false, bigPart())) p.clear(); p.end(); }
   sfxPlay(SFX_BYE);
   delay(1200);
   ESP.restart();
