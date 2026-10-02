@@ -729,7 +729,12 @@ void evMessages(const BEvent &e) {
       txFmt(bvL1, sizeof(bvL1), f, who);
       break;
     }
-    case EV_CURE: txFmt(bvL1, sizeof(bvL1), e.val == ST_SLP ? X_CURE_SLP : e.val == ST_FRZ ? X_CURE_FRZ : X_CURE_CNF, who); break;
+    case EV_CURE: {
+      XId f = e.val == ST_SLP ? X_CURE_SLP : e.val == ST_FRZ ? X_CURE_FRZ : e.val == ST_PSN ? X_CURE_PSN
+            : e.val == ST_BRN ? X_CURE_BRN : e.val == ST_PAR ? X_CURE_PAR : X_CURE_CNF;
+      txFmt(bvL1, sizeof(bvL1), f, who);
+      break;
+    }
     case EV_CONFHIT: txFmt(bvL1, sizeof(bvL1), X_CONF_HIT, who); break;
     case EV_RECOIL: txFmt(bvL1, sizeof(bvL1), X_RECOIL, who); break;
     case EV_DRAIN: txFmt(bvL1, sizeof(bvL1), X_DRAIN, who); break;

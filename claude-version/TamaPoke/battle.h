@@ -243,6 +243,7 @@ uint8_t evoLevel(int16_t dex);
 
 // ---- ko11.31: movimientos (4 por Pokemon, con PP). Ids: moves_data.h
 //   1..144 ataque de tipo (1 + tipo*9 + fase*3 + variante), 145 placaje, 146.. de estado
+#define STATUS_CURE_PCT 16  // ko11.31: % por turno de que se pase el veneno / quemadura / paralisis
 #define MOVE_TACKLE 145
 #define MOVE_STATUS0 146
 #define MOVE_STRUGGLE 255

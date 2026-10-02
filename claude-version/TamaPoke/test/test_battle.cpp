@@ -853,3 +853,21 @@ TEST(battle, movimientos_por_defecto_validos) {
       CHECK(moveIsTyped(mv[0]));
     }
 }
+
+TEST(battle, estados_se_pasan_a_veces) {
+  int cured = 0, kept = 0;
+  for (uint32_t seed = 1; seed <= 200; seed++) {
+    Battler a = withMoves(25, MOVE_TACKLE), b = makeBattler(19, 60, 60, 400, 60);
+    b.maxHp = b.hp = 60000;
+    a.st = ST_PSN;
+    BRng rng(seed);
+    BEvent ev[BATTLE_MAX_EVENTS];
+    bool c = false;
+    for (int t = 0; t < 3; t++) {
+      int n = battleTurn(a, b, BA_GUARD, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+      for (int i = 0; i < n; i++) if (ev[i].kind == EV_CURE && ev[i].val == ST_PSN) c = true;
+    }
+    if (c) { cured++; CHECK_EQ(a.st, (uint8_t)ST_NONE); } else { kept++; CHECK_EQ(a.st, (uint8_t)ST_PSN); }
+  }
+  CHECK(cured > 40 && kept > 60);  // unas se pasan, otras siguen
+}

@@ -908,12 +908,20 @@ static bool wildOnly(BAct a) { return a == BA_RUN || a == BA_POTION || a == BA_B
 static bool isAttack(BAct a) { return a == BA_TACKLE || a == BA_TYPE || (a >= BA_M0 && a <= BA_M3); }
 
 // fin del turno: veneno y quemadura
-static void endOfTurn(Battler &a, Battler &b, BEvent *ev, int maxEv, int &n) {
+static void endOfTurn(Battler &a, Battler &b, BRng &rng, BEvent *ev, int maxEv, int &n) {
   Battler *side[2] = { &a, &b };
   for (uint8_t s = 0; s < 2; s++) {
     Battler &me = *side[s];
     me.flinch = false;
-    if (!me.hp || !a.hp || !b.hp || (me.st != ST_PSN && me.st != ST_BRN)) continue;
+    if (!me.hp || !a.hp || !b.hp) continue;
+    // ko11.31: el veneno, la quemadura y la paralisis pueden pasarse solos (1 de cada 6 turnos)
+    if ((me.st == ST_PSN || me.st == ST_BRN || me.st == ST_PAR) && rng.below(100) < STATUS_CURE_PCT) {
+      uint8_t was = me.st;
+      me.st = ST_NONE;
+      push(ev, maxEv, n, s, EV_CURE, BA_M0, 2, false, 0, a, b, 0, (int8_t)was);
+      continue;
+    }
+    if (me.st != ST_PSN && me.st != ST_BRN) continue;
     uint32_t d = me.maxHp / (me.st == ST_PSN ? 8 : 16);
     if (d < 1) d = 1;
     if (d > me.hp) d = me.hp;
@@ -1001,7 +1009,7 @@ int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
       }
     }
   }
-  if (!over && a.hp && b.hp) endOfTurn(a, b, ev, maxEv, n);
+  if (!over && a.hp && b.hp) endOfTurn(a, b, rng, ev, maxEv, n);
   a.flinch = b.flinch = false;
   a.guard = b.guard = false;
   return n < maxEv ? n : maxEv;
