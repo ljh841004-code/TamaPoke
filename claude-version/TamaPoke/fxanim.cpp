@@ -4,6 +4,7 @@
 #include "sd_lock.h"
 #include <FS.h>
 #include <SD_MMC.h>
+#include "battle.h"
 
 FxAnim fxMove[2];
 
@@ -20,6 +21,37 @@ void FxAnim::unload() {
   data = nullptr;
   size = 0;
   key = 0xFFFF;
+  mid = 0;
+}
+
+static bool fxParse(FxAnim &a, File &f);
+
+// ko11.31: los de tipo como siempre (fTTSV); placaje y los de estado, mNNN.bin
+bool FxAnim::loadId(uint8_t id) {
+  uint8_t t, s, v;
+  if (moveDecode(id, &t, &s, &v)) {
+    bool ok = load(t, s, v);
+    if (ok) mid = id;
+    return ok;
+  }
+  uint16_t k = (uint16_t)(1000 + id);
+  if (data && key == k) return true;
+  unload();
+  if (!sdReady || !id) return false;
+  SdCardLock lock;
+  if (!lock) return false;
+  char path[28];
+  snprintf(path, sizeof(path), "/mons/fx/m%03u.bin", id);
+  File f = SD_MMC.open(path, FILE_READ);
+  if (!f) {
+    snprintf(path, sizeof(path), "/mons/m%03u.bin", id);
+    f = SD_MMC.open(path, FILE_READ);
+  }
+  if (!f) return false;
+  if (!fxParse(*this, f)) return false;
+  key = k;
+  mid = id;
+  return true;
 }
 
 bool FxAnim::load(uint8_t type, uint8_t tier, uint8_t var) {
@@ -37,35 +69,40 @@ bool FxAnim::load(uint8_t type, uint8_t tier, uint8_t var) {
     f = SD_MMC.open(path, FILE_READ);
   }
   if (!f) return false;
+  if (!fxParse(*this, f)) return false;
+  key = k;
+  return true;
+}
+
+static bool fxParse(FxAnim &a, File &f) {
   uint32_t sz = f.size();
   if (sz < FX_HDR + 4 || sz > 3UL * 1024 * 1024) { f.close(); return false; }
-  data = (uint8_t *)ps_malloc(sz);
-  if (!data || f.read(data, sz) != sz || memcmp(data, "TFX2", 4) != 0 || data[4] < 1 || data[4] > 2) {
+  a.data = (uint8_t *)ps_malloc(sz);
+  if (!a.data || f.read(a.data, sz) != sz || memcmp(a.data, "TFX2", 4) != 0 || a.data[4] < 1 || a.data[4] > 2) {
     f.close();
-    unload();
+    a.unload();
     return false;
   }
   f.close();
-  size = sz;
-  frameMs = rd16(data + 5);
-  if (frameMs < 10) frameMs = 10;
+  a.size = sz;
+  a.frameMs = rd16(a.data + 5);
+  if (a.frameMs < 10) a.frameMs = 10;
   // valida los fondos y las tablas de los lados
-  const uint8_t *p = data + FX_HDR, *end = data + sz;
-  for (uint8_t i = 0; i < data[7]; i++) {
-    if (p + 6 > end) { unload(); return false; }
+  const uint8_t *p = a.data + FX_HDR, *end = a.data + sz;
+  for (uint8_t i = 0; i < a.data[7]; i++) {
+    if (p + 6 > end) { a.unload(); return false; }
     uint32_t w = rd16(p), h = rd16(p + 2), np = rd16(p + 4);
-    if (!w || !h || np > 256) { unload(); return false; }
+    if (!w || !h || np > 256) { a.unload(); return false; }
     p += 6 + np * 3 + w * h;
   }
-  for (uint8_t s = 0; s < data[4]; s++) {
-    if (p + 2 > end) { unload(); return false; }
+  for (uint8_t s = 0; s < a.data[4]; s++) {
+    if (p + 2 > end) { a.unload(); return false; }
     uint16_t n = rd16(p);
-    if (p + 2 + 4UL * n > end) { unload(); return false; }
+    if (p + 2 + 4UL * n > end) { a.unload(); return false; }
     for (uint16_t i = 0; i < n; i++)
-      if (rd32(p + 2 + 4 * i) + FX_BGHDR + 13 > sz) { unload(); return false; }
+      if (rd32(p + 2 + 4 * i) + FX_BGHDR + 13 > sz) { a.unload(); return false; }
     p += 2 + 4UL * n;
   }
-  key = k;
   return true;
 }
 

@@ -1,4 +1,5 @@
 #include "i18n_ext.h"
+#include "moves_data.h"
 #include "dex.h"  // PT_*
 #include "battle.h"
 #include <string.h>
@@ -133,6 +134,14 @@ static const char *const XS[2][X_COUNT] = {
     "Favorite food", "Fills more, raises joy and bond", "Try different foods to find out",
     "Day %lu together", "(since %04u.%02u.%02u)",
     "Learn {1}?", "(forgets {1})", "LEARN", "KEEP OLD", "Learned {1}!",
+    "FIGHT", "BACK", "{1} wants to learn {2}!", "Only 4 moves. Forget which?", "NEW: {1}", "DON'T LEARN", "PP %u/%u", "No moves left!",
+    "ATTACK", "DEFENSE", "SPEED", "{1}'s {2} rose!", "{1}'s {2} rose a lot!", "{1}'s {2} fell!", "{1}'s {2} fell a lot!", "{1}'s {2} won't go higher", "{1}'s {2} won't go lower",
+    "{1} was poisoned!", "{1} was burned!", "{1} is paralyzed!", "{1} fell asleep!", "{1} was frozen!", "{1} became confused!",
+    "PSN", "BRN", "PAR", "SLP", "FRZ", "CNF",
+    "But it didn't work!", "{1} is hurt by poison!", "{1} is hurt by its burn!", "{1} is too numb to move!", "{1} is fast asleep", "{1} is frozen solid!", "{1} flinched!", "{1} must recharge",
+    "{1} woke up!", "{1} thawed out!", "{1} snapped out of it!", "{1} hurt itself in confusion!", "{1} is hit by recoil!", "{1} drained energy!", "No moves left!",
+    "POKE CENTER", "HEAL", "Healing... %u s", "PP restored!", "Healing now", "PP is full", "Low PP: visit the center",
+    "POW %u  ACC %u  PP %u", "STATUS MOVE", "MOVES",
     "{1} left happily!", "Poke Ball +1", "Potion +1", "Shard +1", "EXP +{2}",
     "FAREWELL", "Final form", "3 days together", "Evolve", "%ud %uh", "%uh left to 3 days", "Ready! Farewell button on the main screen", "Evolve to say goodbye",
     "MEADOW", "BEACH", "FOREST", "VOLCANO", "MOUNTAIN", "SNOWFIELD", "POWER PLANT", "DOJO",
@@ -265,6 +274,14 @@ static const char *const XS[2][X_COUNT] = {
     "좋아하는 먹이", "주면 배가 더 차고 기분과 유대가 올라요", "여러 먹이를 줘 보면 알게 돼요",
     "함께한 지 %lu일째", "(%04u.%02u.%02u부터)",
     "{1}{을} 배울까요?", "(지금 기술 {1}{은} 잊어요)", "배운다", "그만둔다", "새 기술 {1}{을} 배웠다!",
+    "싸운다", "뒤로", "{1}{은} {2}{을} 배우고 싶다!", "기술은 4개까지. 어떤 기술을 잊을까?", "새 기술: {1}", "배우지 않는다", "PP %u/%u", "쓸 수 있는 기술이 없다!",
+    "공격", "방어", "스피드", "{1}의 {2}{이} 올랐다!", "{1}의 {2}{이} 크게 올랐다!", "{1}의 {2}{이} 내려갔다!", "{1}의 {2}{이} 크게 내려갔다!", "{1}의 {2}{은} 더는 오르지 않는다", "{1}의 {2}{은} 더는 내려가지 않는다",
+    "{1}{은} 독에 걸렸다!", "{1}{은} 화상을 입었다!", "{1}{은} 마비됐다!", "{1}{은} 잠들었다!", "{1}{은} 얼어붙었다!", "{1}{은} 혼란스러워한다!",
+    "독", "화상", "마비", "잠듦", "얼음", "혼란",
+    "하지만 통하지 않았다!", "{1}{은} 독 때문에 아프다!", "{1}{은} 화상 때문에 아프다!", "{1}{은} 몸이 저려 움직이지 못한다!", "{1}{은} 쿨쿨 자고 있다", "{1}{은} 얼어서 움직이지 못한다!", "{1}{은} 움찔해서 움직이지 못한다!", "{1}{은} 숨을 고르고 있다",
+    "{1}{은} 잠에서 깼다!", "{1}의 얼음이 녹았다!", "{1}{은} 정신을 차렸다!", "{1}{은} 혼란스러워 스스로를 때렸다!", "{1}{은} 반동을 받았다!", "{1}{은} 체력을 빨아들였다!", "쓸 수 있는 기술이 없다!",
+    "포켓몬센터", "회복하기", "회복 중... %u초", "PP가 모두 찼어요!", "회복 중이에요", "PP가 가득해요", "PP가 얼마 없어요: 포켓몬센터로",
+    "위력 %u  명중 %u  PP %u", "변화 기술", "기술",
     "{1}{이} 고마워하며 떠났어요!", "포켓볼 +1", "물약 +1", "조각 +1", "경험치 +{2}",
     "이별 조건", "최종 진화형", "함께한 시간 3일", "진화 필요", "%u일 %u시간", "3일까지 %u시간 남음", "모두 충족! 기본 화면에 이별 버튼", "진화하면 이별할 수 있어요",
     "초원", "바닷가", "숲", "화산", "산", "설원", "발전소", "도장",
@@ -439,6 +456,15 @@ const char *moveName(uint8_t move, uint8_t type, uint8_t tier, uint8_t var) {
   if (move == BA_TYPE && type < PT_COUNT && var >= 1 && var <= 2)  // ko11.31
     return isKo() ? MOVES2_KO[tier][type][var - 1] : MOVES2_EN[tier][type][var - 1];
   if (move == BA_TYPE && type < PT_COUNT) return isKo() ? MOVES_KO[tier][type] : MOVES_EN[tier][type];
+  return XT(X_M_TACKLE);
+}
+
+// ko11.31: nombre por id (battle.h): de tipo, placaje, de estado y forcejeo
+const char *moveNameId(uint8_t id) {
+  uint8_t t, s, v;
+  if (moveDecode(id, &t, &s, &v)) return moveName(BA_TYPE, t, s, v);
+  if (id == MOVE_STRUGGLE) return isKo() ? "발버둥" : "STRUGGLE";
+  if (id >= MOVE_TACKLE && id < MOVE_N) return isKo() ? MOVE_X_KO[id - MOVE_TACKLE] : MOVE_X_EN[id - MOVE_TACKLE];
   return XT(X_M_TACKLE);
 }
 

@@ -32,6 +32,7 @@ public:
   int32_t getInt(const char *k, int32_t def = 0);
   uint32_t getUInt(const char *k, uint32_t def = 0);
   size_t getBytes(const char *k, void *buf, size_t maxLen);
+  size_t getBytesLength(const char *k);
   size_t getString(const char *k, char *buf, size_t maxLen);
 
 private:

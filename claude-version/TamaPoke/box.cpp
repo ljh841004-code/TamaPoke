@@ -1,4 +1,5 @@
 #include "box.h"
+#include "battle.h"
 #include <string.h>
 
 // ---------------------------------------------------------------- caja
@@ -19,7 +20,8 @@ void Box::begin() {
     old.begin(ns_, false);
     if (old.isKey("n")) {
       uint8_t oc = old.getUChar("n", 0);
-      size_t len = sizeof(BoxMon) * (oc <= cap_ ? oc : 0);
+      size_t len = old.getBytesLength("mons");  // tal cual (puede ser el formato de antes)
+      if (oc > cap_ || len > sizeof(mons)) len = 0;
       bool ok = true;
       if (len) ok = old.getBytes("mons", mons, len) == len && prefs.putBytes("mons", mons, len) == len;
       if (ok) ok = prefs.putUChar("n", len ? oc : 0) == 1;
@@ -30,11 +32,27 @@ void Box::begin() {
   }
   uint8_t c = prefs.getUChar("n", 0);
   if (c > cap_) c = 0;
-  if (c && prefs.getBytes("mons", mons, sizeof(BoxMon) * c) != sizeof(BoxMon) * c) c = 0;
-  // nada invalido entra en juego aunque la NVS venga danada
   bool fixed = false;
+  size_t have = c ? prefs.getBytesLength("mons") : 0;
+  if (c && have == (size_t)BOXMON_OLD_SIZE * c) {
+    // ko11.31: fichas sin movimientos: se leen tal cual y cada uno recibe los de su especie
+    static uint8_t raw[BOX_CAP_MAX * BOXMON_OLD_SIZE];
+    if (prefs.getBytes("mons", raw, have) != have) c = 0;
+    for (uint8_t i = 0; i < c; i++) {
+      memcpy(&mons[i], raw + (size_t)i * BOXMON_OLD_SIZE, BOXMON_OLD_SIZE);
+      movesDefault(mons[i].dex, mons[i].lvl, mons[i].mv);
+    }
+    fixed = c > 0;
+  } else if (c && (have != sizeof(BoxMon) * c ||
+                   prefs.getBytes("mons", mons, sizeof(BoxMon) * c) != sizeof(BoxMon) * c)) {
+    c = 0;
+  }
+  // nada invalido entra en juego aunque la NVS venga danada
   for (uint8_t i = 0; i < c; i++) {
     if (mons[i].dex < 1 || mons[i].dex > DexLog::N) continue;
+    for (uint8_t k = 0; k < 4; k++)
+      if (mons[i].mv[k] && !moveValid(mons[i].mv[k])) { mons[i].mv[k] = 0; fixed = true; }
+    if (!moveCount(mons[i].mv)) { movesDefault(mons[i].dex, mons[i].lvl, mons[i].mv); fixed = true; }
     // fork KO (ko7): tope nivel 100. Los de ko6 (nivel por horas, Lv300+)
     // vuelven a empezar en Lv5
     if (mons[i].lvl > 100) { mons[i].lvl = 5; fixed = true; }
@@ -59,12 +77,13 @@ bool Box::add(int16_t dex, uint16_t lvl, bool shiny, bool caught, uint32_t epoch
   m.geneDef = 90 + random(21);
   m.geneSpe = 90 + random(21);
   m.epoch = epoch;
+  movesDefault(dex, m.lvl, m.mv);  // ko11.31
   save();
   return true;
 }
 
 bool Box::addRaised(int16_t dex, uint16_t lvl, bool shiny, uint8_t gA, uint8_t gD, uint8_t gS,
-                    uint32_t epoch) {
+                    uint32_t epoch, const uint8_t *mv) {
   if (full() || dex < 1 || dex > DexLog::N) return false;
   BoxMon &m = mons[n++];
   m.dex = dex;
@@ -72,6 +91,8 @@ bool Box::addRaised(int16_t dex, uint16_t lvl, bool shiny, uint8_t gA, uint8_t g
   m.flags = (shiny ? BOXF_SHINY : 0) | BOXF_RAISED;
   m.geneAtk = gA; m.geneDef = gD; m.geneSpe = gS;
   m.epoch = epoch;
+  if (mv && moveCount(mv)) memcpy(m.mv, mv, 4);  // ko11.31: los que sabia
+  else movesDefault(dex, m.lvl, m.mv);
   save();
   return true;
 }
@@ -85,6 +106,7 @@ bool Box::take(uint8_t i, BoxMon &out) {
 bool Box::put(const BoxMon &m) {
   if (full() || m.dex < 1 || m.dex > DexLog::N) return false;
   mons[n++] = m;
+  if (!moveCount(mons[n - 1].mv)) movesDefault(m.dex, m.lvl, mons[n - 1].mv);  // ko11.31
   save();
   return true;
 }
@@ -160,10 +182,20 @@ void DexLog::begin() {
   load("first", first, sizeof(first[0]), sizeof(first));
   load("seen", seenN, sizeof(seenN[0]), sizeof(seenN));
   load("caught", caughtN, sizeof(caughtN[0]), sizeof(caughtN));
+  memset(lrn, 0, sizeof(lrn));
+  if (prefs.getBytesLength("lrn") == sizeof(lrn)) prefs.getBytes("lrn", lrn, sizeof(lrn));
+}
+
+bool DexLog::learned(int16_t dex, uint8_t id) {
+  if (!ok(dex) || !id || id / 8 >= LRN_BYTES || hasLearned(dex, id)) return false;
+  lrn[dex - 1][id / 8] |= (uint8_t)(1 << (id % 8));
+  prefs.putBytes("lrn", lrn, sizeof(lrn));
+  return true;
 }
 
 void DexLog::wipe() {
   prefs.clear();
+  memset(lrn, 0, sizeof(lrn));
   memset(first, 0, sizeof(first));
   memset(seenN, 0, sizeof(seenN));
   memset(caughtN, 0, sizeof(caughtN));

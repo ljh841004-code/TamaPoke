@@ -24,7 +24,9 @@ struct __attribute__((packed)) BoxMon {
   uint8_t flags;
   uint8_t geneAtk, geneDef, geneSpe;
   uint32_t epoch;  // cuando llego a la caja (0 = sin reloj)
+  uint8_t mv[4];   // ko11.31: sus 4 movimientos (los PP se llenan al sacarlo)
 };
+#define BOXMON_OLD_SIZE 12  // ko11.31: la ficha antes de los movimientos
 
 // ko11.6: particion NVS grande ("nvs2", 256 KB) para la caja, el salon, la
 // liga y la pokedex. nullptr = la NVS de siempre (tabla de particiones vieja).
@@ -45,7 +47,8 @@ public:
   // false si esta llena o el dex no es valido; los genes se sortean (90-110)
   bool add(int16_t dex, uint16_t lvl, bool shiny, bool caught, uint32_t epoch);
   // ko10.5: el que se acaba de criar, con sus genes y la marca de criado
-  bool addRaised(int16_t dex, uint16_t lvl, bool shiny, uint8_t gA, uint8_t gD, uint8_t gS, uint32_t epoch);
+  bool addRaised(int16_t dex, uint16_t lvl, bool shiny, uint8_t gA, uint8_t gD, uint8_t gS, uint32_t epoch,
+                 const uint8_t *mv = nullptr);
   bool take(uint8_t i, BoxMon &out);  // saca el i-esimo (para criarlo)
   bool put(const BoxMon &m);          // ko11.7: vuelve tal cual (de una expedicion)
   bool release(uint8_t i);            // lo suelta
@@ -86,7 +89,15 @@ public:
   uint16_t caughtCount(int16_t dex) const { return ok(dex) ? caughtN[dex - 1] : 0; }
   bool wasSeen(int16_t dex) const { return seenCount(dex) > 0 || caughtCount(dex) > 0; }
   void wipe();   // fork KO (ko8): [nuevo comienzo]
+  // ko11.31: movimientos que llego a saber algun Pokemon mio de esa especie (la ficha del
+  // Pokedex solo ensena esos). Devuelve true si es nuevo (y lo guarda)
+  bool learned(int16_t dex, uint8_t id);
+  bool hasLearned(int16_t dex, uint8_t id) const {
+    return ok(dex) && id && (lrn[dex - 1][id / 8] >> (id % 8)) & 1;
+  }
 private:
+  static const int LRN_BYTES = 24;  // ids 0..191
+  uint8_t lrn[N][LRN_BYTES];
   Preferences prefs;
   uint32_t first[N];
   uint16_t seenN[N], caughtN[N];

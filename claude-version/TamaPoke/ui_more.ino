@@ -857,7 +857,7 @@ void onPetEnd(Pet &p, uint8_t how) {
     gNextPickPending = true;   // soltarlo lo decidimos nosotros: sin corona
     return;
   }
-  bool added = hall.addRaised(p.speciesId, p.level(), p.shiny, p.geneAtk, p.geneDef, p.geneSpe, clockEpoch());  // salon
+  bool added = hall.addRaised(p.speciesId, p.level(), p.shiny, p.geneAtk, p.geneDef, p.geneSpe, clockEpoch(), p.mv);  // salon
   // ko11.21: con las 8 medallas = crianza perfecta (brilla en la cinta)
   const uint16_t all = (uint16_t)((1u << MED_COUNT) - 1);
   if (added && (p.medals & all) == all) hall.markFlag((uint8_t)(hall.count() - 1), BOXF_PERFECT);

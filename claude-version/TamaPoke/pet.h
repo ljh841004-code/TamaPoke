@@ -169,16 +169,23 @@ public:
   uint16_t orbBag[ORB_BAG_MAX] = { 0 };
   uint8_t orbN = 0;
   uint8_t sleptOffline = 0;  // ko11.19: con la placa apagada paso la noche durmiendo (aviso "잘 잤어요!")
-  // ko11.31: el ataque de tipo de ESTE individuo: variante 0..2 dentro de los 3 de su tipo y fase
-  // (0 = el de siempre). Al nacer y al evolucionar se sortea; cada 5 niveles le ofrecen otro
-  uint8_t moveK = 0;
+  // ko11.31: sus 4 movimientos (ids de battle.h, 0 = hueco) y los PP que les quedan.
+  // Al nacer: los de su especie y nivel. Al evolucionar y cada 5 niveles le ofrecen uno
+  // que aun no sabe: con hueco lo aprende ya; con 4, elige cual olvidar o no lo aprende
+  uint8_t mv[4] = { 0, 0, 0, 0 };
+  uint8_t pp[4] = { 0, 0, 0, 0 };
   uint8_t moveLv = 0;          // ultimo multiplo de 5 en que se ofrecio
-  uint8_t moveOffer = 0xFF;    // variante ofrecida pendiente de respuesta (0xFF = ninguna)
-  bool moveLearned = false;    // aviso "새 기술 X을 배웠다!" (tras evolucionar)
-  uint8_t moveVar() const { return moveK < 3 ? moveK : 0; }
-  void moveAccept() { if (moveOffer < 3) moveK = moveOffer; moveOffer = 0xFF; pendingSave = true; }
-  void moveDecline() { moveOffer = 0xFF; pendingSave = true; }
-  void moveReroll() { moveK = (uint8_t)random(3); moveLv = (uint8_t)(level() / 5 * 5); moveOffer = 0xFF; }
+  uint8_t moveOffer = 0;       // movimiento ofrecido pendiente de respuesta (0 = ninguno)
+  uint8_t moveLearned = 0;     // aviso "새 기술 X을 배웠다!" (id, 0 = nada)
+  uint8_t moveMain() const;    // su ataque de tipo (el de los dibujos de "su ataque")
+  uint8_t moveVar() const;     // variante 0..2 de ese ataque
+  void movesNew();             // los de su especie y nivel, PP llenos
+  void moveOfferNew(uint8_t id);   // con hueco lo aprende ya (moveLearned); si no, queda ofrecido
+  void moveAccept(uint8_t slot);   // el ofrecido sustituye a esa casilla (0..3)
+  void moveDecline() { moveOffer = 0; pendingSave = true; }
+  void ppRefill();
+  bool ppFull() const;
+  uint8_t moveRandomNew() const;   // uno que puede aprender y aun no sabe (0 = ninguno)
   uint8_t orbEvoNote = 0;   // 1 = al evolucionar el orbe se volvio caramelos, 2 = caramelo raro (aviso)
   bool candyTrade(int16_t famDex, uint16_t times);
   // ko11.16: orbes. gainOrb: 1 nuevo a la bolsa, 2 mejoro uno igual (el viejo -> 1

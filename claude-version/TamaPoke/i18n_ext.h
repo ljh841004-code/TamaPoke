@@ -129,7 +129,16 @@ enum XId : uint16_t {  // ko10.6: pasaron de 255
   X_VIB_ON, X_VIB_OFF, X_VIB_MID, X_VIB_WEAK,
   X_SET_TITLE, X_SET_TIME, X_SET_SOUND, X_SET_SCREEN, X_SET_LANG_FMT, X_CANDY_TAB,  // ko11.26: menu de ajustes
   X_FAV_FOOD, X_FAV_HINT_KNOWN, X_FAV_HINT_UNK, X_DAYS_WITH_FMT, X_SINCE_FMT,  // ko11.27: ficha
-  X_MV_Q_FMT, X_MV_FORGET_FMT, X_MV_LEARN, X_MV_SKIP, X_MV_GOT_FMT,  // ko11.31: ataques  // ko11.25: vibracion  // ko11.23.3: limite de carga  // ko11.21  // ko11.20: equipo  // ko11.19: combate automatico
+  X_MV_Q_FMT, X_MV_FORGET_FMT, X_MV_LEARN, X_MV_SKIP, X_MV_GOT_FMT,
+  // ko11.31: 4 movimientos, PP, estados y centro pokemon
+  X_FIGHT, X_MV_BACK, X_MV_WANT_FMT, X_MV_WHICH, X_MV_NEW_FMT, X_MV_NOLEARN, X_PP_FMT, X_NO_PP,
+  X_STAT_ATK, X_STAT_DEF, X_STAT_SPE, X_STAT_UP, X_STAT_UP2, X_STAT_DN, X_STAT_DN2, X_STAT_MAX, X_STAT_MIN,
+  X_ST_PSN, X_ST_BRN, X_ST_PAR, X_ST_SLP, X_ST_FRZ, X_ST_CNF,
+  X_STB_PSN, X_STB_BRN, X_STB_PAR, X_STB_SLP, X_STB_FRZ, X_STB_CNF,
+  X_ST_FAIL, X_STD_PSN, X_STD_BRN, X_CANT_PAR, X_CANT_SLP, X_CANT_FRZ, X_CANT_FLINCH, X_CANT_RECHARGE,
+  X_CURE_SLP, X_CURE_FRZ, X_CURE_CNF, X_CONF_HIT, X_RECOIL, X_DRAIN, X_STRUGGLE_NOTE,
+  X_CENTER, X_CENTER_HEAL, X_CENTER_LEFT_FMT, X_CENTER_DONE, X_CENTER_BUSY, X_CENTER_FULL, X_PP_LOW,
+  X_MV_POW_FMT, X_MV_STATUS, X_DEX_MOVES,  // ko11.31: ataques  // ko11.25: vibracion  // ko11.23.3: limite de carga  // ko11.21  // ko11.20: equipo  // ko11.19: combate automatico
   X_RG_THANKS, X_RG_BALL, X_RG_POTION, X_RG_SHARD, X_RG_EXP,  // ko11.19: regalo al soltar
   X_FW_TITLE, X_FW_FINAL, X_FW_TIME, X_FW_EVO_NEED, X_FW_TIME_FMT, X_FW_LEFT_FMT, X_FW_READY, X_FW_WAIT,  // ko11.18: despedida
   X_REG_0, X_REG_1, X_REG_2, X_REG_3, X_REG_4, X_REG_5, X_REG_6, X_REG_7,
@@ -141,7 +150,8 @@ const char *XT(XId id);
 // nombre del tipo PT_* (fork KO, ko4: ficha de la pokedex)
 const char *typeName(uint8_t type);
 // nombre del movimiento: BA_TACKLE / BA_TYPE (este segun el tipo PT_*)
-const char *moveName(uint8_t move, uint8_t type, uint8_t tier = 0, uint8_t var = 0);  // ko10.4: tier = moveTier(dex); ko11.31: var 0..2
+const char *moveName(uint8_t move, uint8_t type, uint8_t tier = 0, uint8_t var = 0);
+const char *moveNameId(uint8_t id);  // ko11.31: por id de movimiento (battle.h)  // ko10.4: tier = moveTier(dex); ko11.31: var 0..2
 // rellena out con la plantilla id, sustituyendo {1}/{2} y las particulas
 void txFmt(char *out, size_t n, XId id, const char *a1, const char *a2 = nullptr);
 // lo mismo con una plantilla cualquiera (para los tests)

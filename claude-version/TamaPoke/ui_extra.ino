@@ -59,13 +59,15 @@ void showToast(const char *s) {
 // ko11.31: "새 기술 X을 배웠다!" y, cada 5 niveles, la pregunta de cambiar de ataque
 void moveLearnedToast() {
   char t[96];
-  txFmt(t, sizeof(t), X_MV_GOT_FMT, moveName(BA_TYPE, DEX_TBL[pet.speciesId].ptype, moveTier(pet.speciesId), pet.moveVar()), nullptr);
+  txFmt(t, sizeof(t), X_MV_GOT_FMT, moveNameId(pet.moveLearned ? pet.moveLearned : pet.moveMain()), nullptr);
   showToast(t);
+  dexRecordMoves(pet.speciesId, pet.mv);  // ko11.31: el Pokedex lo recuerda
+  pet.moveLearned = 0;
 }
 void moveLearnLoop() {
   if (xScreen != XS_NONE || cardOpen || trainMenuOpen || galleryOpen || clockOpen || pet.isEgg() || pet.evolving()) return;
-  if (pet.moveLearned) { pet.moveLearned = false; moveLearnedToast(); return; }  // tras evolucionar
-  if (pet.moveOffer < 3 && !choiceKind && !pet.sleeping && mainNavAllowed()) {
+  if (pet.moveLearned) { moveLearnedToast(); return; }  // con hueco: lo aprendio solo
+  if (pet.moveOffer && !choiceKind && !pet.sleeping && mainNavAllowed()) {
     choiceKind = 3;
     choiceUntil = millis() + 30000;
   }
@@ -103,6 +105,15 @@ void drawFit(const char *s, int y, int maxW, uint16_t col, uint8_t size) {
   if (textW(s, size) > maxW && size > 1) { size = (size > 2) ? 2 : 1; setSize(size); }
   if (textW(s, size) > maxW && size > 1) { size = 1; setSize(1); }
   setCur(centerX(s, size), y);
+  printT(s);
+}
+
+// ko11.31: como drawFit pero centrado en [x, x+w) en vez de en la pantalla
+void drawFitIn(const char *s, int x, int y, int w, uint16_t col, uint8_t size) {
+  gfx->setTextColor(col);
+  setSize(size);
+  if (textW(s, size) > w && size > 1) { size = 1; setSize(1); }
+  setCur(x + (w - textW(s, size)) / 2, y);
   printT(s);
 }
 
@@ -463,7 +474,20 @@ uint8_t bKind = BK_WILD;
 #define STORY_TYPED_LV 8
 extern Battler bFoe;
 static BAct foeMoveRule(BAct a) {
-  return (a == BA_TYPE && bKind == BK_STORY && bFoe.lvl < STORY_TYPED_LV) ? BA_TACKLE : a;
+  // ko11.31: con 4 movimientos: cualquier ataque suyo pasa a ser placaje (sin gastar PP)
+  bool atk = a == BA_TYPE || (a >= BA_M0 && a <= BA_M3);
+  return (atk && bKind == BK_STORY && bFoe.lvl < STORY_TYPED_LV) ? BA_TACKLE : a;
+}
+bool bMoveMenu = false;  // ko11.31: [싸운다] abierto: los 4 movimientos en lugar del menu
+// el que crias: sus movimientos y PP (los demas traen los de su especie)
+static void petMovesInto(Battler &b) {
+  if (!moveCount(pet.mv)) return;
+  memcpy(b.mv, pet.mv, 4);
+  memcpy(b.pp, pet.pp, 4);
+}
+// ko11.31: lo que sabe cada especie mia queda en el Pokedex (la ficha ensena esos)
+void dexRecordMoves(int16_t dex, const uint8_t *mv) {
+  for (uint8_t i = 0; i < 4; i++) if (mv[i]) dexLog.learned(dex, mv[i]);
 }
 uint8_t bvOwned = 0;      // ko10.11: de esta especie en la caja
 int16_t bExpDex = 0;      // ko11: la EXP del salvaje sale de su especie y nivel ANTES de ajustarlo
@@ -650,6 +674,8 @@ uint32_t evDur(const BEvent &e) {
     case EV_HIT: return (e.eff != 2 || e.crit) ? 1900 : 1400;
     case EV_COUNTER: return 1500;  // ko11.8
     case EV_FAINT: return 1500;
+    case EV_USE: return 1300;   // ko11.31: el efecto del movimiento de estado
+    case EV_STAT: case EV_STATUS: case EV_NOEFFECT: return 1100;
     default: return 1200;
   }
 }
@@ -660,11 +686,41 @@ void evMessages(const BEvent &e) {
   bool me = evIsMe(e.side);
   const char *who = me ? bvMeName : bvFoeName;
   bvL2[0] = 0;
+  // ko11.31: el efecto de un movimiento de estado va en la 2a linea, bajo "X의 Y!"
+  bool afterUse = bqI > 0 && bq[bqI - 1].kind == EV_USE;
+  if (!afterUse && (e.kind == EV_STATUS || e.kind == EV_NOEFFECT)) bvL1[0] = 0;
   switch (e.kind) {
+    case EV_USE:
+      txFmt(bvL1, sizeof(bvL1), X_USED, who, moveNameId(e.mid));
+      break;
+    case EV_STAT: {
+      static const XId SN[3] = { X_STAT_ATK, X_STAT_DEF, X_STAT_SPE };
+      XId f = e.val >= 2 ? X_STAT_UP2 : e.val == 1 ? X_STAT_UP : e.val <= -2 ? X_STAT_DN2 : e.val == -1 ? X_STAT_DN
+            : (moveDef(e.mid).stD > 0 ? X_STAT_MAX : X_STAT_MIN);
+      txFmt(bvL2, sizeof(bvL2), f, who, XT(SN[e.eff < 3 ? e.eff : 0]));
+      if (!bvL1[0] || bqI == 0 || bq[bqI - 1].kind != EV_USE) { strncpy(bvL1, bvL2, sizeof(bvL1) - 1); bvL2[0] = 0; }
+      break;
+    }
+    case EV_STATUS:
+      txFmt(bvL2, sizeof(bvL2), (XId)(X_ST_PSN + (e.val >= ST_PSN && e.val <= ST_CNF ? e.val - ST_PSN : 0)), who);
+      break;
+    case EV_NOEFFECT: strncpy(bvL2, XT(X_ST_FAIL), sizeof(bvL2) - 1); break;
+    case EV_STDMG: txFmt(bvL1, sizeof(bvL1), e.val == ST_BRN ? X_STD_BRN : X_STD_PSN, who); break;
+    case EV_CANT: {
+      XId f = e.val == ST_PAR ? X_CANT_PAR : e.val == ST_SLP ? X_CANT_SLP : e.val == ST_FRZ ? X_CANT_FRZ
+            : e.val == ST_RECHARGE ? X_CANT_RECHARGE : X_CANT_FLINCH;
+      txFmt(bvL1, sizeof(bvL1), f, who);
+      break;
+    }
+    case EV_CURE: txFmt(bvL1, sizeof(bvL1), e.val == ST_SLP ? X_CURE_SLP : e.val == ST_FRZ ? X_CURE_FRZ : X_CURE_CNF, who); break;
+    case EV_CONFHIT: txFmt(bvL1, sizeof(bvL1), X_CONF_HIT, who); break;
+    case EV_RECOIL: txFmt(bvL1, sizeof(bvL1), X_RECOIL, who); break;
+    case EV_DRAIN: txFmt(bvL1, sizeof(bvL1), X_DRAIN, who); break;
     case EV_HIT:
     case EV_MISS:
-      txFmt(bvL1, sizeof(bvL1), X_USED, who, moveName(e.move, me ? bvMeType : bvFoeType, me ? bvMeTier : bvFoeTier, me ? bvMeVar : bvFoeVar));
-      if (e.kind == EV_MISS) strncpy(bvL2, XT(X_MISSED), sizeof(bvL2) - 1);
+      txFmt(bvL1, sizeof(bvL1), X_USED, who, moveNameId(e.mid));
+      if (e.mid == MOVE_STRUGGLE) strncpy(bvL2, XT(X_STRUGGLE_NOTE), sizeof(bvL2) - 1);
+      else if (e.kind == EV_MISS) strncpy(bvL2, XT(X_MISSED), sizeof(bvL2) - 1);
       else if (e.eff == 0) strncpy(bvL2, XT(X_NOEFFECT), sizeof(bvL2) - 1);
       else if (e.eff == 4) strncpy(bvL2, XT(X_SUPER), sizeof(bvL2) - 1);
       else if (e.eff == 1) strncpy(bvL2, XT(X_NOTVERY), sizeof(bvL2) - 1);
@@ -689,8 +745,10 @@ void evMessages(const BEvent &e) {
       txFmt(bvL2, sizeof(bvL2), X_BROKE, bvFoeName);
       break;
   }
+  if (!bvL1[0] && bvL2[0]) { strncpy(bvL1, bvL2, sizeof(bvL1) - 1); bvL2[0] = 0; }
   bvL1[sizeof(bvL1) - 1] = 0;
   bvL2[sizeof(bvL2) - 1] = 0;
+  if (e.kind == EV_STATUS || e.kind == EV_STDMG || e.kind == EV_CONFHIT) sfxPlay(SFX_DENY);
   if ((e.kind == EV_HIT || e.kind == EV_COUNTER) && e.dmg) {
     sfxPlay(SFX_PLAY);
     vibBattle(e.kind, e.eff, e.crit, evIsMe(e.side));  // ko11.28: patron segun el golpe (antes un solo pulso)
@@ -713,6 +771,9 @@ void startEvent(int i) {
     const BEvent &e = bq[i];
     bvMeTgt = bqAisMe ? e.hpA : e.hpB;
     bvFoeTgt = bqAisMe ? e.hpB : e.hpA;
+    // ko11.31: el efecto de la SD de ESTE movimiento (se lee al empezar; si ya esta, nada)
+    if ((e.kind == EV_HIT || e.kind == EV_MISS || e.kind == EV_USE) && e.mid && e.mid != MOVE_STRUGGLE)
+      fxMove[evIsMe(e.side) ? 0 : 1].loadId(e.mid);
     evMessages(e);
   }
 }
@@ -820,6 +881,111 @@ static const uint16_t FX_COL[PT_COUNT] = {
 static const bool FX_BEAM[PT_COUNT] = {
   true, true, true, true, false, true, false, true, false, true, false, false, true, true, false, true,
 };
+
+// ---- ko11.31: estados alterados y cambios de caracteristicas
+static const uint16_t ST_COL[8] = { 0, C565(0xa0, 0x40, 0xc0), C565(0xf0, 0x60, 0x20), C565(0xf0, 0xd0, 0x30),
+                                    C565(0x90, 0x90, 0xb8), C565(0x80, 0xd8, 0xf0), C565(0xf0, 0x70, 0xb0), 0 };
+static const uint16_t STAT_COL[3] = { C565(0xe8, 0x50, 0x40), C565(0x40, 0x80, 0xe0), C565(0xf0, 0xc0, 0x20) };
+
+// flechas que suben (mejora) o bajan (empeora) alrededor de (cx, cy)
+static void fxArrows(int cx, int cy, uint32_t t, bool up, uint16_t c) {
+  for (int i = 0; i < 6; i++) {
+    int x = cx - 50 + i * 20 + (i & 1) * 6;
+    int ph = (int)((t / 3 + i * 37) % 90);
+    int y = up ? cy + 40 - ph : cy - 40 + ph;
+    int d = up ? -1 : 1;
+    gfx->fillTriangle(x - 7, y, x + 7, y, x, y + d * 10, c);
+    gfx->fillRect(x - 2, y - d * 10 + (up ? 0 : -0), 5, 10, c);
+  }
+}
+
+// lo que le pasa a uno: subir/bajar, quedar con un estado, el dano del estado...
+void drawStateFx(const BEvent &e, int cx, int cy, uint32_t t) {
+  if (t > 1100) return;
+  switch (e.kind) {
+    case EV_STAT:
+      if (e.val) fxArrows(cx, cy, t, e.val > 0, STAT_COL[e.eff < 3 ? e.eff : 0]);
+      break;
+    case EV_STATUS:
+    case EV_STDMG: {
+      uint8_t st = (uint8_t)e.val;
+      uint16_t c = ST_COL[st < 8 ? st : 0];
+      for (int i = 0; i < 8; i++) {
+        float a = i * 0.785f + t * 0.004f;
+        int r = 20 + (int)(t / 12) % 40;
+        int x = cx + (int)(cosf(a) * r), y = cy + (int)(sinf(a) * r * 0.7f) - (int)(t / 25);
+        if (st == ST_PSN) gfx->fillCircle(x, y, 5, c), gfx->drawCircle(x, y, 6, UI_WHITE);
+        else if (st == ST_BRN) gfx->fillTriangle(x - 5, y + 5, x + 5, y + 5, x, y - 9, c);
+        else if (st == ST_PAR) fxLine(x - 6, y - 6, x + 6, y + 6, 2, c);
+        else if (st == ST_SLP) { gfx->setTextColor(c); setSize(1); setCur(x, y); printT("z"); }
+        else if (st == ST_FRZ) fxStar(x, y, 2, 8, 6, 0, 2, c);
+        else fxStar(x, y, 3, 8, 5, t * 0.01f, 2, c);
+      }
+      break;
+    }
+    case EV_CANT:
+      if (e.val == ST_SLP) { gfx->setTextColor(ST_COL[ST_SLP]); setSize(2); setCur(cx + 20, cy - 30 - (int)(t / 30)); printT("Z z"); }
+      else if (e.val == ST_PAR) for (int i = 0; i < 5; i++) fxLine(cx - 40 + i * 20, cy - 20, cx - 30 + i * 20, cy + 10, 3, ST_COL[ST_PAR]);
+      else if (e.val == ST_FRZ) for (int i = 0; i < 6; i++) fxStar(cx - 40 + i * 16, cy + ((i * 13) % 30) - 15, 3, 10, 6, 0, 2, ST_COL[ST_FRZ]);
+      else { gfx->setTextColor(UI_BAR_BAD); setSize(4); setCur(cx + 30, cy - 50); printT("!"); }
+      break;
+    case EV_CONFHIT:
+      for (int i = 0; i < 3; i++) {
+        float a = t * 0.01f + i * 2.09f;
+        fxStar(cx + (int)(cosf(a) * 30), cy - 40 + (int)(sinf(a) * 10), 3, 9, 5, a, 2, C565(0xf0, 0xd0, 0x30));
+      }
+      break;
+    case EV_DRAIN:
+      for (int i = 0; i < 6; i++) {
+        float q = fmodf(t / 600.0f + i / 6.0f, 1.0f);
+        gfx->fillCircle(cx + (int)((1 - q) * (i % 2 ? 60 : -60)), cy - 60 + (int)(q * 50), 5, UI_BAR_OK);
+      }
+      break;
+  }
+}
+
+// un movimiento de estado (sin archivo de la SD): ondas, polvo, chispas... hacia el objetivo
+void drawStatusMoveFx(uint8_t id, int ax, int ay, int tx, int ty, uint32_t t) {
+  const MoveDef &m = moveDef(id);
+  float p = fxClamp01(((float)t - 150) / 600.0f);
+  if (m.stSelf && m.stD > 0) {  // se mejora a si mismo: brillo que sube
+    for (int i = 0; i < 8; i++) {
+      float a = i * 0.785f + t * 0.006f;
+      int r = 36 + (int)(10 * sinf(t * 0.01f + i));
+      fxStar(ax + (int)(cosf(a) * r), ay - (int)(p * 40) + (int)(sinf(a) * r * 0.6f), 2, 7, 4, a, 2, STAT_COL[m.st]);
+    }
+    return;
+  }
+  if (!m.ail) {  // baja algo al rival: ondas que van hacia el
+    for (int i = 0; i < 3; i++) {
+      float q = fxClamp01(p - i * 0.15f);
+      int x = ax + (int)((tx - ax) * q), y = ay + (int)((ty - ay) * q);
+      gfx->drawCircle(x, y, 10 + i * 6, STAT_COL[m.st]);
+      gfx->drawCircle(x, y, 11 + i * 6, STAT_COL[m.st]);
+    }
+    return;
+  }
+  uint16_t c = ST_COL[m.ail < 8 ? m.ail : 0];
+  for (int i = 0; i < 10; i++) {  // particulas del color del estado
+    float q = fxClamp01(p - i * 0.05f);
+    int x = ax + (int)((tx - ax) * q) + (int)(12 * sinf(t * 0.02f + i)), y = ay + (int)((ty - ay) * q) - (int)(18 * sinf(q * 3.1416f));
+    gfx->fillCircle(x, y, 3 + (i & 1), c);
+  }
+}
+
+// la etiqueta del estado junto a la caja de vida (독 / 화상 / 마비 / 잠듦 / 얼음 / 혼란)
+void drawStatusBadge(int x, int y, const Battler &b) {
+  uint8_t st = b.st ? b.st : (b.cnf ? (uint8_t)ST_CNF : 0);
+  if (!st || st > ST_CNF) return;
+  const char *s = XT((XId)(X_STB_PSN + st - ST_PSN));
+  int w = textW(s, 1) + 16;
+  gfx->fillRoundRect(x, y, w, 22, 9, ST_COL[st]);
+  gfx->drawRoundRect(x, y, w, 22, 9, UI_INK);
+  gfx->setTextColor(UI_WHITE);
+  setSize(1);
+  setCur(x + 8, gCjkFont ? y + 1 : y + 7);
+  printT(s);
+}
 
 static bool drawMoveFxVar(uint8_t fx, uint8_t var, int ax, int ay, int tx, int ty, uint32_t t, bool hit, uint8_t tier);
 void drawMoveFx(uint8_t fx, int ax, int ay, int tx, int ty, uint32_t t, bool hit, uint8_t eff, uint8_t tier, uint8_t var) {
@@ -1570,7 +1736,8 @@ void updateShake(uint32_t now) {
   if (bPhase != BP_PLAY || bqI >= bqN) return;
   const BEvent &e = bq[bqI];
   // ko10.4: tambien tiembla con los ataques definitivos (fase final)
-  bool fin = e.move == BA_TYPE && (evIsMe(e.side) ? bvMeTier : bvFoeTier) == 2;
+  uint8_t mtier = 0;
+  bool fin = moveDecode(e.mid, nullptr, &mtier, nullptr) && mtier == 2;
   if (e.kind != EV_HIT || !(e.crit || fin) || !e.eff) return;
   int k = (int)(now - bqT) - 350;
   if (k < 0 || k >= 360) return;
@@ -1612,9 +1779,9 @@ static void drawPrgBattler(PmdMon &m, uint8_t act, int cx, int groundY, uint32_t
 static FxAnim *bvFxNow(uint8_t &side) {
   if (bPhase != BP_PLAY || bqI >= bqN) return nullptr;
   const BEvent &e = bq[bqI];
-  if ((e.kind != EV_HIT && e.kind != EV_MISS) || e.move != BA_TYPE) return nullptr;
+  if ((e.kind != EV_HIT && e.kind != EV_MISS && e.kind != EV_USE) || !e.mid) return nullptr;
   side = evIsMe(e.side) ? 0 : 1;
-  return fxMove[side].ok() ? &fxMove[side] : nullptr;
+  return fxMove[side].ok() && fxMove[side].isId(e.mid) ? &fxMove[side] : nullptr;
 }
 
 // dibuja los dos Pokemon; anima al que actua segun el evento en curso
@@ -1717,14 +1884,20 @@ void drawBattlers() {
   // fork KO (ko7): efecto del ataque encima de los dos
   if (bPhase == BP_PLAY && bqI < bqN) {
     const BEvent &e = bq[bqI];
-    if (e.kind == EV_HIT || e.kind == EV_MISS || e.kind == EV_COUNTER) {
+    if (e.kind == EV_HIT || e.kind == EV_MISS || e.kind == EV_COUNTER || e.kind == EV_USE) {
       bool me = evIsMe(e.side);
-      uint8_t fx = e.move == BA_TYPE ? (me ? bvMeType : bvFoeType) : 0xFF;
+      uint8_t mt = 0, mtier = 0, mvar = 0;
+      bool typed = moveDecode(e.mid, &mt, &mtier, &mvar);
+      uint8_t fx = typed ? mt : 0xFF;
       int ax = me ? 140 : 316, ay = me ? 200 : 116, tx = me ? 316 : 140, ty = me ? 116 : 200;
       if (fxa) fxa->drawFg(gfx->getFramebuffer(), fxSide, t, bvShakeX, bvShakeY);
+      else if (e.kind == EV_USE) drawStatusMoveFx(e.mid, ax + bvShakeX, ay + bvShakeY, tx + bvShakeX, ty + bvShakeY, t);
       else drawMoveFx(fx, ax + bvShakeX, ay + bvShakeY, tx + bvShakeX, ty + bvShakeY, t,
-                 (e.kind == EV_HIT || e.kind == EV_COUNTER) && e.eff, e.eff, e.move == BA_TYPE ? (me ? bvMeTier : bvFoeTier) : 0,
-                 e.move == BA_TYPE ? (me ? bvMeVar : bvFoeVar) : 0);
+                 (e.kind == EV_HIT || e.kind == EV_COUNTER) && e.eff, e.eff, typed ? mtier : 0, typed ? mvar : 0);
+    } else if (e.kind == EV_STAT || e.kind == EV_STATUS || e.kind == EV_STDMG || e.kind == EV_CANT ||
+               e.kind == EV_CONFHIT || e.kind == EV_DRAIN) {
+      bool me = evIsMe(e.side);
+      drawStateFx(e, me ? meX : foeX, me ? meG - 60 : foeG - 50, t);
     }
   }
 }
@@ -1755,8 +1928,8 @@ static const uint8_t BM_ACT[2][3] = { { BA_TACKLE, BA_TYPE, BA_GUARD }, { BA_POT
 uint8_t autoCount = 1, autoLeft = 0, autoPotions = 0;
 static uint32_t autoMenuT = 0;
 static void battleDoAction(int a);
-static bool autoAllowed() { return bKind != BK_WILD && !bLink; }
-static uint8_t autoRemaining() { return bTeamN > bTeamI ? (uint8_t)(bTeamN - bTeamI) : 1; }
+static bool autoAllowed() { return !bLink; }  // ko11.31: tambien en salvaje
+static uint8_t autoRemaining() { return bKind != BK_WILD && bTeamN > bTeamI ? (uint8_t)(bTeamN - bTeamI) : 1; }
 static bool autoHardFoe() {
   return bKind == BK_CHAMP || bFoe.lvl > bMe.lvl + 2 || typeEff(bFoe.type, bMe.type) > 2 ||
          bFoe.maxHp > bMe.maxHp + bMe.maxHp / 4;
@@ -1775,21 +1948,65 @@ static uint8_t autoPick() {
   return battleAi(bMe, bFoe, bRng, 0);
 }
 
+// ko11.31: color de cada tipo para los botones de movimientos
+uint16_t typeColor(uint8_t t) {
+  static const uint16_t TC[PT_COUNT] = {
+    C565(0xa8, 0xa8, 0x78), C565(0xf0, 0x80, 0x30), C565(0x68, 0x90, 0xf0), C565(0x78, 0xc8, 0x50),
+    C565(0xe8, 0xc0, 0x28), C565(0x70, 0xc8, 0xd0), C565(0xc0, 0x30, 0x28), C565(0xa0, 0x40, 0xa0),
+    C565(0xd0, 0xa8, 0x58), C565(0xf8, 0x58, 0x88), C565(0xa8, 0xb8, 0x20), C565(0xb8, 0xa0, 0x38),
+    C565(0x70, 0x58, 0x98), C565(0x70, 0x38, 0xf8), C565(0x70, 0x58, 0x48), C565(0x98, 0x98, 0xb8),
+  };
+  return t < PT_COUNT ? TC[t] : UI_TRACK;
+}
+#define MV_X0 70
+#define MV_X1 238
+#define MV_W 160
+#define MV_H 50
+#define MV_Y0 270
+#define MV_Y1 328
+#define MV_BACK_X 30
+#define MV_BACK_W 32
+enum : int { BMH_FIGHT = 100, BMH_AUTO, BMH_COUNT, BMH_BACK };
+
+// boton de un movimiento: nombre, y debajo tipo + PP (en rojo si quedan pocos)
+void drawMoveBtn(int x, int y, int w, int h, uint8_t id, uint8_t pp, bool star) {
+  if (!id) { uiButton(x, y, w, h, 12, UI_TRACK, UI_INK); return; }
+  uint8_t t = moveType(id);
+  bool empty = pp == 0;
+  uint16_t bg = empty ? UI_TRACK : typeColor(t);
+  uiButton(x, y, w, h, 12, bg, UI_INK);
+  uint16_t ink = empty ? 0x8410 : UI_WHITE;
+  drawFitIn(moveNameId(id), x + 6, y + 4, w - 12, ink, 2);
+  char sub[32];
+  snprintf(sub, sizeof(sub), "%s  %u/%u%s", moveIsStatus(id) ? XT(X_MV_STATUS) : typeName(t), pp, movePP(id), star ? " *" : "");
+  drawFitIn(sub, x + 6, y + h - 20, w - 12, pp * 4 <= movePP(id) ? C565(0xff, 0xe0, 0xe0) : ink, 1);
+}
+
 void drawBattleMenu() {
-  const DexEntry &me = DEX_TBL[bvMeDex];
   char pot[16], ball[16];
   snprintf(pot, sizeof(pot), XT(X_POTION_FMT), pet.potions);
   snprintf(ball, sizeof(ball), XT(X_BALL_FMT), pet.balls);
   int x0 = BM_X, x1 = BM_X + BM_W + BM_GAP, x2 = BM_X + 2 * (BM_W + BM_GAP);
-  drawBtn(x0, BM_Y1, BM_W, BM_H, UI_WHITE, UI_INK, moveName(BA_TACKLE, bvMeType));
-  drawBtn(x1, BM_Y1, BM_W, BM_H, me.accent, UI_WHITE, moveName(BA_TYPE, bvMeType, bvMeTier, bvMeVar));
-  drawBtn(x2, BM_Y1, BM_W, BM_H, 0x4C98, UI_WHITE, XT(X_GUARD));
+  if (bMoveMenu) {  // ko11.31: los 4 movimientos (2x2) y [◀]
+    uiButton(MV_BACK_X, MV_Y0 + 6, MV_BACK_W, MV_Y1 + MV_H - MV_Y0 - 12, 10, UI_TRACK, UI_INK);
+    drawFitIn("<", MV_BACK_X, MV_Y0 + (MV_Y1 + MV_H - MV_Y0) / 2 - 10, MV_BACK_W, UI_INK, 2);
+    for (uint8_t i = 0; i < 4; i++) {
+      uint8_t id = bMe.mv[i];
+      bool star = id && !moveIsStatus(id) && moveEffAgainst(id, bFoe) >= 4;
+      drawMoveBtn(i & 1 ? MV_X1 : MV_X0, i & 2 ? MV_Y1 : MV_Y0, MV_W, MV_H, id, bMe.pp[i], star);
+    }
+    if (!battleHasPP(bMe)) drawFit(XT(X_NO_PP), MV_Y1 + MV_H + 8, 300, UI_BAR_BAD, 1);
+    return;
+  }
+  drawBtn(x0, BM_Y1, BM_W, BM_H, C565(0xe8, 0x48, 0x38), UI_WHITE, XT(X_FIGHT));
+  drawBtn(x1, BM_Y1, BM_W, BM_H, 0x4C98, UI_WHITE, XT(X_GUARD));
+  drawBtn(x2, BM_Y1, BM_W, BM_H, autoAllowed() ? C565(0x6a, 0x4c, 0xf0) : UI_TRACK, autoAllowed() ? UI_WHITE : 0x8410,
+          XT(X_AUTO_BTN));
   drawBtn(x0, BM_Y2, BM_W, BM_H, pet.potions ? UI_BAR_OK : UI_TRACK, pet.potions ? UI_WHITE : UI_INK, pot);
-  if (autoAllowed()) {  // ko11.19: entrenadores: [자동] [N마리] en vez de ball / huir
+  if (bKind != BK_WILD) {  // ko11.19: entrenadores: [N마리] (cuantos en automatico) en vez de ball / huir
     char cnt[16];
     snprintf(cnt, sizeof(cnt), XT(X_AUTO_CNT_FMT), (unsigned)autoCount);
-    drawBtn(x1, BM_Y2, BM_W, BM_H, C565(0x6a, 0x4c, 0xf0), UI_WHITE, XT(X_AUTO_BTN));
-    drawBtn(x2, BM_Y2, BM_W, BM_H, UI_WHITE, UI_INK, cnt);
+    drawBtn(x1, BM_Y2, BM_W, BM_H, UI_WHITE, UI_INK, cnt);
     return;
   }
   drawBtn(x1, BM_Y2, BM_W, BM_H, pet.balls ? UI_BAR_BAD : UI_TRACK, pet.balls ? UI_WHITE : UI_INK, ball);
@@ -1797,10 +2014,18 @@ void drawBattleMenu() {
 }
 
 int battleMenuHit(int16_t x, int16_t y) {
+  if (bMoveMenu) {
+    if (inRect(x, y, MV_BACK_X - 8, MV_Y0, MV_BACK_W + 14, MV_Y1 + MV_H - MV_Y0)) return BMH_BACK;
+    for (uint8_t i = 0; i < 4; i++)
+      if (inRect(x, y, i & 1 ? MV_X1 : MV_X0, i & 2 ? MV_Y1 : MV_Y0, MV_W, MV_H)) return BA_M0 + i;
+    return -1;
+  }
   int row = (y >= BM_Y1 && y < BM_Y1 + BM_H) ? 0 : (y >= BM_Y2 && y < BM_Y2 + BM_H) ? 1 : -1;
   if (row < 0 || x < BM_X) return -1;
   int col = (x - BM_X) / (BM_W + BM_GAP);
   if (col > 2 || (x - BM_X) % (BM_W + BM_GAP) >= BM_W) return -1;
+  if (row == 0) return col == 0 ? BMH_FIGHT : col == 1 ? BA_GUARD : BMH_AUTO;
+  if (bKind != BK_WILD) return col == 0 ? BA_POTION : col == 1 ? BMH_COUNT : -1;
   return BM_ACT[row][col];
 }
 
@@ -1859,7 +2084,6 @@ static void partySwitchTo(uint8_t j) {
   bvMeType = bMe.type;
   bvMeTier = moveTier(bMe.dex);
   bvMeVar = (j == 0 && pSlot0Pet && bMe.dex == pet.speciesId) ? pet.moveVar() : moveVarFor(bMe.dex, bMe.lvl);  // ko11.31
-  fxMove[0].load(bvMeType, bvMeTier, bvMeVar);
   bvMeLvl = bMe.lvl;
   bvMeMax = bMe.maxHp;
   bvMeHp = bvMeTgt = bMe.hp;
@@ -1991,6 +2215,8 @@ void renderBattleView() {
   drawBattlers();
   drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true, nameInkFor(bvFoeDex));  // ko9: rival con numeros
   drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true, nameInkFor(bvMeDex));
+  if (!bvFoeFainted) drawStatusBadge(206, 112, bFoe);  // ko11.31
+  if (!bvMeFainted) drawStatusBadge(350, 150, bMe);
   drawPartyBalls();  // ko11.20
   // ko10.11: ya lo tengo: "en la caja: N" bajo la caja del rival (5 s al aparecer)
   if (bKind == BK_WILD && !bLink && bvOwned && now - bvOwnedT < 5000) {
@@ -2111,8 +2337,6 @@ void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool fo
   // ko11.31: el que crias usa el ataque que aprendio; los demas, uno fijo por especie y tramo de 5 niveles
   bvMeVar = (pSlot0Pet && pCur == 0 && me.dex == pet.speciesId) ? pet.moveVar() : moveVarFor(me.dex, me.lvl);
   bvFoeVar = moveVarFor(foe.dex, foe.lvl);
-  fxMove[0].load(bvMeType, bvMeTier, bvMeVar);  // ko11.30: efectos de la SD (si estan)
-  fxMove[1].load(bvFoeType, bvFoeTier, bvFoeVar);
   bvMeLvl = me.lvl; bvFoeLvl = foe.lvl;
   bvMeMax = me.maxHp; bvFoeMax = foe.maxHp;
   bvMeHp = bvMeTgt = me.hp;
@@ -2182,6 +2406,7 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
   for (uint8_t i = 0; i < n; i++) bTeam[i] = team[i];
   bRng = BRng(esp_random());
   bMe = makeBattler(pet.speciesId, pet.level(), pet.atkStat(), pet.defStat(), pet.speStat());
+  petMovesInto(bMe);  // ko11.31
   pSlot0Pet = true;
   // ko11.21: en la historia y la expedicion lucha su companero; los premios, para el que crias
   if (kind == BK_STORY || kind == BK_ROGUE) { bMe = storyPartnerBattler(); pSlot0Pet = false; }
@@ -2194,6 +2419,7 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
     if (bi < 0 || bi >= box.count()) continue;
     const BoxMon &m = box.at((uint8_t)bi);
     pMon[pN] = makeBoxBattler(m.dex, m.lvl, pSlot0Pet ? pet.level() : bMe.lvl, m.geneAtk, m.geneDef, m.geneSpe);
+    if (moveCount(m.mv)) { memcpy(pMon[pN].mv, m.mv, 4); movesFillPP(pMon[pN]); }  // ko11.31: los suyos, PP llenos
     pBox[pN] = bi;
     if (m.flags & BOXF_SHINY) pShiny |= (uint8_t)(1 << pN);
     pN++;
@@ -2269,6 +2495,7 @@ void startWildIn(uint8_t region) {
   bRegion = region < REGION_COUNT ? region : 0;
   bRng = BRng(esp_random());
   bMe = makeBattler(pet.speciesId, pet.level(), pet.atkStat(), pet.defStat(), pet.speStat());
+  petMovesInto(bMe);  // ko11.31
   uint32_t ep = pet.lastSeenEpoch;
   // ko10.11: hasta 3 tiradas; una especie ya vista/capturada se queda solo al 45 %
   // (asi salen mas nuevas). Los raros se quedan siempre
@@ -2791,18 +3018,24 @@ void wildTap(int16_t x, int16_t y) {
   }
   int a = battleMenuHit(x, y);
   if (a < 0) return;
-  if (autoAllowed() && a == BA_BALL) {  // ko11.19: [자동]
+  if (a == BMH_FIGHT) { bMoveMenu = true; sfxPlay(SFX_TAP); return; }  // ko11.31
+  if (a == BMH_BACK) { bMoveMenu = false; sfxPlay(SFX_TAP); return; }
+  if (a >= BA_M0 && a <= BA_M3 && battleHasPP(bMe) && !bMe.pp[a - BA_M0]) { sfxPlay(SFX_DENY); return; }  // sin PP
+  if (a == BMH_AUTO) {  // ko11.19: [자동]
+    if (!autoAllowed()) { sfxPlay(SFX_DENY); return; }
     if (autoCount > autoRemaining() || autoCount < 1) autoCount = autoRemaining();
     autoLeft = autoCount;
     autoMenuT = millis();
+    bMoveMenu = false;
     sfxPlay(SFX_MEDAL);
     return;
   }
-  if (autoAllowed() && a == BA_RUN) {  // ko11.19: [N마리] 1 -> 2 -> ... -> los que quedan
+  if (a == BMH_COUNT) {  // ko11.19: [N마리] 1 -> 2 -> ... -> los que quedan
     autoCount = autoCount >= autoRemaining() ? 1 : autoCount + 1;
     sfxPlay(SFX_TAP);
     return;
   }
+  bMoveMenu = false;
   battleDoAction(a);
 }
 
@@ -2938,8 +3171,20 @@ static void wildJoinTap(int16_t x, int16_t y) {
 }
 
 void vibBattle(uint8_t kind, uint8_t eff, bool crit, bool mine);
+// ko11.31: los PP del que crias tras el combate: si gana se llenan; si no, se quedan como acabaron
+static void petPPAfter(bool won) {
+  if (bLink || !pSlot0Pet) return;  // historia / expedicion: lucha el companero
+  const Battler &b = pCur == 0 ? bMe : pMon[0];
+  if (won) pet.ppRefill();
+  else for (uint8_t i = 0; i < 4; i++) if (b.mv[i] == pet.mv[i]) pet.pp[i] = b.pp[i];
+  dexRecordMoves(pet.speciesId, pet.mv);
+  pet.saveNow();
+}
+
 void finishBattle(bool won, bool fled, bool caught) {
   autoLeft = 0;  // ko11.19
+  bMoveMenu = false;
+  if (!bRewarded) petPPAfter(won);
   if (won && !bRewarded) vibBattle(255, 0, false, true);  // ko11.28: victoria "ba-bam ba-bam-"
   bWon = won;
   bFled = fled;
@@ -3011,7 +3256,7 @@ void finishBattle(bool won, bool fled, bool caught) {
           pet.fameStreak[sizeof(pet.fameStreak) - 1] = 0;
         }
         // ko11.1: con sus genes (la ficha del salon los ensena)
-        fame.addRaised(pet.speciesId, pet.level(), pet.shiny, pet.geneAtk, pet.geneDef, pet.geneSpe, clockEpoch());
+        fame.addRaised(pet.speciesId, pet.level(), pet.shiny, pet.geneAtk, pet.geneDef, pet.geneSpe, clockEpoch(), pet.mv);
         ci = fame.count() - 1;
         FameRec *r = frGetOrAdd(fame.at((uint8_t)ci));
         r->solo = r->team = 0;

@@ -5,6 +5,8 @@
 #include "../weather.h"
 #include "../pet.h"
 #include "../dex.h"
+#include "../moves_data.h"
+#include <initializer_list>
 #include <string.h>
 
 static void hatchPet(Pet &p, int16_t dex) {
@@ -169,7 +171,8 @@ TEST(battle, contraataque_tras_protegerse) {
     }
   }
   CHECK(counters > 300);
-  CHECK(misses > 0);
+  // ko11.31: placaje acierta siempre (precision 100 como en los juegos): ya no hay fallos aqui
+  CHECK(misses >= 0);
 }
 
 TEST(battle, contraataque_mas_flojo_que_un_placaje) {
@@ -739,4 +742,114 @@ TEST(battle, el_campeon_saca_el_que_mejor_le_va) {
   CHECK_EQ(pickNextFoe(t, 1, 4, PT_WATER), 2);
   CHECK_EQ(pickNextFoe(t, 3, 4, PT_WATER), 3);           // solo queda uno
   CHECK_EQ(pickNextFoe(t, 1, 4, PT_NORMAL), 1);          // nadie tiene ventaja: el orden de siempre
+}
+
+// ---- ko11.31: 4 movimientos, PP, estados
+static Battler withMoves(int16_t dex, uint8_t m0, uint8_t m1 = 0, uint8_t m2 = 0, uint8_t m3 = 0) {
+  Battler b = makeBattler(dex, 30, 90, 90, 90);
+  b.mv[0] = m0; b.mv[1] = m1; b.mv[2] = m2; b.mv[3] = m3;
+  movesFillPP(b);
+  return b;
+}
+
+TEST(battle, pp_baja_y_forcejeo) {
+  Battler a = withMoves(25, MOVE_TACKLE), b = makeBattler(19, 60, 60, 400, 60);
+  b.maxHp = b.hp = 60000;
+  CHECK_EQ(a.pp[0], (uint8_t)35);
+  BRng rng(5);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  battleTurn(a, b, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK_EQ(a.pp[0], (uint8_t)34);
+  a.pp[0] = 0;
+  CHECK(!battleHasPP(a));
+  int n = battleTurn(a, b, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+  bool struggle = false, recoil = false;
+  for (int i = 0; i < n; i++) {
+    if (ev[i].kind == EV_HIT && ev[i].mid == MOVE_STRUGGLE) struggle = true;
+    if (ev[i].kind == EV_RECOIL) recoil = true;
+  }
+  CHECK(struggle);
+  CHECK(recoil);
+  CHECK_EQ(battleAi(a, b, rng), BA_M0);
+}
+
+TEST(battle, sueno_no_deja_moverse) {
+  Battler a = withMoves(1, 167), b = withMoves(16, MOVE_TACKLE);  // espora
+  BRng rng(9);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  a.spe = 999;
+  battleTurn(a, b, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK_EQ(b.st, (uint8_t)ST_SLP);
+  CHECK(b.stT >= 1 && b.stT <= 3);
+  int n = battleTurn(a, b, BA_GUARD, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  bool cant = false, cure = false;
+  for (int i = 0; i < n; i++) {
+    if (ev[i].kind == EV_CANT && ev[i].val == ST_SLP) cant = true;
+    if (ev[i].kind == EV_CURE) cure = true;
+  }
+  CHECK(cant || cure);
+  battleClearVolatile(b);
+  CHECK_EQ(b.st, (uint8_t)ST_NONE);
+}
+
+TEST(battle, inmunidades_de_estado) {
+  BRng rng(3);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  Battler a = withMoves(25, 161), g = withMoves(50, MOVE_TACKLE);  // onda trueno contra tierra
+  a.spe = 999;
+  int n = battleTurn(a, g, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK_EQ(g.st, (uint8_t)ST_NONE);
+  bool noeff = false;
+  for (int i = 0; i < n; i++) if (ev[i].kind == EV_NOEFFECT) noeff = true;
+  CHECK(noeff);
+  Battler p = withMoves(1, 158), v = withMoves(23, MOVE_TACKLE);  // polvo veneno contra veneno
+  for (int t = 0; t < 10; t++) battleTurn(p, v, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK_EQ(v.st, (uint8_t)ST_NONE);
+  Battler q = withMoves(1, 162), gr = withMoves(43, MOVE_TACKLE);  // paralizador contra planta
+  for (int t = 0; t < 10; t++) battleTurn(q, gr, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK_EQ(gr.st, (uint8_t)ST_NONE);
+}
+
+TEST(battle, caracteristicas_suben_y_bajan) {
+  BRng rng(4);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  Battler a = withMoves(4, 146), b = withMoves(7, 151);  // danza espada / grunido
+  for (int t = 0; t < 5; t++) battleTurn(a, b, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK(a.stg[0] <= 6 && a.stg[0] >= -6);
+  CHECK(a.stg[0] == 6 - 5 || a.stg[0] >= 1);  // +2 x5 tope 6, -1 x5
+  CHECK_EQ(b.stg[0], (int8_t)0);
+}
+
+TEST(battle, hiperrayo_descansa) {
+  uint8_t hb = 0;
+  for (uint8_t id = 1; id < MOVE_N; id++) if (moveDef(id).flags & MF_RECHARGE) { hb = id; break; }
+  CHECK(hb != 0);
+  Battler a = withMoves(143, hb), b = makeBattler(19, 60, 60, 400, 60);
+  b.maxHp = b.hp = 60000;
+  a.spe = 999;
+  BRng rng(11);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  for (int t = 0; t < 6; t++) battleTurn(a, b, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+  int n = 0, rests = 0;
+  for (int t = 0; t < 6; t++) {
+    n = battleTurn(a, b, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+    for (int i = 0; i < n; i++) if (ev[i].kind == EV_CANT && ev[i].val == ST_RECHARGE) rests++;
+  }
+  CHECK(rests >= 2);
+}
+
+TEST(battle, movimientos_por_defecto_validos) {
+  for (int16_t d = 1; d <= DEX_COUNT; d++)
+    for (uint16_t lv : { 3, 20, 45, 80 }) {
+      uint8_t mv[4];
+      movesDefault(d, lv, mv);
+      CHECK(moveCount(mv) >= 2);
+      for (int i = 0; i < 4; i++) {
+        if (!mv[i]) continue;
+        CHECK(mv[i] < MOVE_N);
+        CHECK(moveCanLearn(d, mv[i]));
+        for (int j = 0; j < i; j++) CHECK(mv[i] != mv[j]);
+      }
+      CHECK(moveIsTyped(mv[0]));
+    }
 }

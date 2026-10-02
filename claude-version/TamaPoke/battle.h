@@ -10,7 +10,10 @@
 // acciones de un turno
 // fork KO (ko4): BA_POTION y BA_BALL solo en batallas salvajes (canRun); en
 // tongsin se tratan como placaje, igual que huir
-enum BAct : uint8_t { BA_TACKLE = 0, BA_TYPE, BA_GUARD, BA_RUN, BA_POTION, BA_BALL, BA_COUNT };
+// ko11.31: BA_M0..BA_M3 = el movimiento de esa casilla (Battler::mv). BA_TACKLE y BA_TYPE
+// quedan como atajos (placaje / el ataque de su tipo) para el codigo y los tests de antes
+enum BAct : uint8_t { BA_TACKLE = 0, BA_TYPE, BA_GUARD, BA_RUN, BA_POTION, BA_BALL,
+                      BA_M0, BA_M1, BA_M2, BA_M3, BA_COUNT };
 
 // eventos que la UI reproduce en orden
 enum BEvKind : uint8_t {
@@ -24,7 +27,21 @@ enum BEvKind : uint8_t {
   EV_CATCH,      // la pokeball atrapa al rival (fin de la batalla)
   EV_BREAK,      // el rival se escapa de la pokeball
   EV_COUNTER,    // ko11.8: se protegio, le dieron y devuelve el golpe (dmg, eff; nunca falla ni es critico)
+  // ko11.31: movimientos de estado y estados alterados. side = a quien le pasa
+  EV_USE,        // usa un movimiento de estado (mid): solo el mensaje y el efecto
+  EV_STAT,       // cambia una caracteristica: eff = 0 atq / 1 def / 2 vel, val = cambio (0 = ya no puede mas)
+  EV_STATUS,     // queda con un estado: val = ST_*
+  EV_NOEFFECT,   // el movimiento de estado no hace nada (inmune, ya tenia estado, se protegia)
+  EV_STDMG,      // le hace dano su estado (veneno / quemadura): dmg, val = ST_*
+  EV_CANT,       // no puede moverse: val = ST_PAR / ST_SLP / ST_FRZ / ST_FLINCH
+  EV_CURE,       // se le pasa: val = ST_SLP (despierta), ST_FRZ (se descongela), ST_CNF
+  EV_CONFHIT,    // confuso: se golpea a si mismo (dmg)
+  EV_RECOIL,     // dano de retroceso (dmg)
+  EV_DRAIN,      // recupera vida al drenar (dmg = curado)
 };
+
+// ko11.31: estados alterados (val de los eventos). Los de batalla se quitan al terminar
+enum : uint8_t { ST_NONE = 0, ST_PSN, ST_BRN, ST_PAR, ST_SLP, ST_FRZ, ST_CNF, ST_FLINCH, ST_RECHARGE };
 
 struct Battler {
   int16_t dex = 1;
@@ -33,12 +50,22 @@ struct Battler {
   uint16_t atk = 1, def = 1, spe = 1;
   uint8_t type = 0;   // PT_*
   bool guard = false; // protegido este turno
+  // ko11.31: sus 4 movimientos (0 = hueco) y los PP que les quedan
+  uint8_t mv[4] = { 0, 0, 0, 0 };
+  uint8_t pp[4] = { 0, 0, 0, 0 };
+  int8_t stg[3] = { 0, 0, 0 };  // atq, def, vel: -6..+6
+  uint8_t st = 0, stT = 0;      // estado (ST_PSN..ST_FRZ) y turnos de sueno
+  uint8_t cnf = 0;              // turnos de confusion
+  bool flinch = false;
+  bool recharge = false;        // tras hiperrayo y similares: pierde el turno siguiente
 };
 
 struct BEvent {
   uint8_t side;     // 0 = a, 1 = b (quien actua)
   uint8_t kind;     // BEvKind
   uint8_t move;     // BA_* usado
+  uint8_t mid;      // ko11.31: id del movimiento (0 = ninguno)
+  int8_t val;       // ko11.31: ver cada evento
   uint8_t eff;      // eficacia x2 (0,1,2,4)
   bool crit;
   uint16_t dmg;     // dano hecho (o curado en EV_GUARD)
@@ -52,7 +79,7 @@ struct BRng {
   uint32_t below(uint32_t n) { return n ? next() % n : 0; }
 };
 
-#define BATTLE_MAX_EVENTS 8   // por turno (2 acciones + desmayo + margen)
+#define BATTLE_MAX_EVENTS 16  // por turno (2 acciones con efectos + estados + desmayo)
 #define BATTLE_AUTO_TURNS 40  // tope de la batalla automatica (tongsin)
 
 // eficacia del tipo atacante contra el defensor, en mitades: 0, 1, 2 o 4
@@ -207,8 +234,53 @@ uint32_t careMinutesForLevel(uint16_t lvl);
 // fases: el nivel original.
 uint8_t evoLevel(int16_t dex);
 
-// potencia y precision de cada movimiento
+// potencia y precision de cada movimiento (ko11.31: solo el contraataque usa estos;
+// el resto sale de MOVE_TBL)
 #define MOVE_TACKLE_POW 40
 #define MOVE_TACKLE_ACC 95
 #define MOVE_TYPE_POW 65
 #define MOVE_TYPE_ACC 88
+
+// ---- ko11.31: movimientos (4 por Pokemon, con PP). Ids: moves_data.h
+//   1..144 ataque de tipo (1 + tipo*9 + fase*3 + variante), 145 placaje, 146.. de estado
+#define MOVE_TACKLE 145
+#define MOVE_STATUS0 146
+#define MOVE_STRUGGLE 255
+// banderas de MoveDef::flags
+enum : uint8_t { MF_HICRIT = 1, MF_DRAIN = 2, MF_RECOIL = 4, MF_FIXLVL = 8, MF_FIX = 16, MF_STATUS = 32, MF_RECHARGE = 64 };
+// estado alterado (ail): 1 veneno, 2 quemadura, 3 paralisis, 4 sueno, 5 congelado, 6 confusion
+struct MoveDef {
+  uint8_t type, pow, acc, pp;
+  int8_t prio;
+  uint8_t flags;
+  uint8_t ail, ailCh;      // estado y su % (0 = siempre si es de estado)
+  uint8_t st; int8_t stD;  // caracteristica (0 atq, 1 def, 2 vel) y cambio
+  uint8_t stSelf, stCh;    // 1 = a si mismo; % (0 = siempre si es de estado)
+  uint8_t flinch, drain;   // % de retroceso; % drenado (MF_DRAIN) o de retroceso (MF_RECOIL)
+};
+const MoveDef &moveDef(uint8_t id);
+uint8_t moveIdTyped(uint8_t type, uint8_t tier, uint8_t var);
+bool moveValid(uint8_t id);                         // 1..MOVE_N-1
+bool moveIsTyped(uint8_t id);                       // 1..144
+bool moveIsStatus(uint8_t id);
+uint8_t moveType(uint8_t id);
+uint8_t movePP(uint8_t id);                         // PP maximos
+// tipo, fase y variante de un ataque de tipo (para nombre y efecto); false si no lo es
+bool moveDecode(uint8_t id, uint8_t *type, uint8_t *tier, uint8_t *var);
+// lo que puede aprender: placaje + los de su tipo hasta su fase + los que aprende en los juegos
+bool moveCanLearn(int16_t dex, uint8_t id);
+uint8_t movePool(int16_t dex, uint8_t *out, uint8_t max);
+// los 4 de un Pokemon que no es el que crias (rivales, ayudantes, historia): fijos por
+// especie y tramo de 5 niveles. Huecos = 0
+void movesDefault(int16_t dex, uint16_t lvl, uint8_t out[4]);
+uint8_t moveCount(const uint8_t mv[4]);
+void movesFillPP(Battler &b);                       // PP llenos
+bool movesHas(const uint8_t mv[4], uint8_t id);
+// el que se ve en los dibujos de "su ataque" (el primero de su tipo; si no, el de su fase)
+uint8_t movesMain(const Battler &b);
+// accion -> casilla (0..3) o -1; BA_TYPE/BA_TACKLE buscan ese movimiento entre los suyos
+int8_t battleSlot(const Battler &b, BAct a);
+bool battleHasPP(const Battler &b);                 // false: solo puede forcejear
+// dano esperado de un movimiento (para la IA y para marcar "muy eficaz" en el menu)
+uint8_t moveEffAgainst(uint8_t id, const Battler &df);
+void battleClearVolatile(Battler &b);  // al terminar: fuera estados y cambios

@@ -719,7 +719,7 @@ void setup() {
     if (box.at((uint8_t)i).flags & BOXF_RAISED) {
       BoxMon m;
       if (box.take((uint8_t)i, m))
-        hall.addRaised(m.dex, m.lvl, m.flags & BOXF_SHINY, m.geneAtk, m.geneDef, m.geneSpe, m.epoch);
+        hall.addRaised(m.dex, m.lvl, m.flags & BOXF_SHINY, m.geneAtk, m.geneDef, m.geneSpe, m.epoch, m.mv);
     }
   bootStep(BS_DEX);
   dexLog.begin();
@@ -1595,9 +1595,10 @@ void onTap(int16_t x, int16_t y) {
     } else if (choiceKind == 2) {          // despedida
       if (b1) pet.startFarewell();
       else if (b2) pet.declineFarewell();
-    } else if (choiceKind == 3) {          // ko11.31: nuevo ataque cada 5 niveles
-      if (!b1 && !b2) return;              // fuera de los botones: el dialogo sigue
-      if (b1) { pet.moveAccept(); moveLearnedToast(); sfxPlay(SFX_MEDAL); }
+    } else if (choiceKind == 3) {          // ko11.31: movimiento nuevo con los 4 ocupados
+      int slot = learnDlgHit(x, y);
+      if (slot == -1) return;              // fuera de los botones: el dialogo sigue
+      if (slot >= 0) { pet.moveAccept((uint8_t)slot); moveLearnedToast(); sfxPlay(SFX_MEDAL); }
       else { pet.moveDecline(); sfxPlay(SFX_TAP); }
     }
     choiceKind = 0;
@@ -4539,6 +4540,49 @@ void drawCeremony() {
     drawMap(SPR_HEART, 32, x + 50, y - 190, 2, false);
 }
 
+// ko11.31: "X은 Y을 배우고 싶다! 기술은 4개까지. 어떤 기술을 잊을까?" + sus 4 + el nuevo + [배우지 않는다]
+#define LD_X0 58
+#define LD_X1 236
+#define LD_W 172
+#define LD_H 52
+#define LD_Y0 182
+#define LD_Y1 240
+#define LD_NEW_Y 300
+#define LD_NO_Y 360
+void drawLearnDialog() {
+  uiShade(0, 0, LCD_WIDTH, LCD_HEIGHT, 0, 5);
+  uiPanel(40, 112, 386, 304, 16, UI_WHITE, UI_INK);
+  const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
+  char q[96];
+  txFmt(q, sizeof(q), X_MV_WANT_FMT, nm, moveNameId(pet.moveOffer));
+  drawFit(q, 124, 350, UI_INK, 2);
+  drawFit(XT(X_MV_WHICH), 154, 350, 0x8410, 1);
+  for (uint8_t i = 0; i < 4; i++)
+    drawMoveBtn(i & 1 ? LD_X1 : LD_X0, i & 2 ? LD_Y1 : LD_Y0, LD_W, LD_H, pet.mv[i], pet.pp[i], false);
+  uint8_t id = pet.moveOffer;
+  uint16_t nc = typeColor(moveType(id));
+  uiButton(LD_X0, LD_NEW_Y, LD_X1 + LD_W - LD_X0, LD_H, 12, lerp565(nc, UI_WHITE, 9, 16), nc);
+  char nb[64], sb[64];
+  txFmt(nb, sizeof(nb), X_MV_NEW_FMT, moveNameId(id));
+  drawFitIn(nb, LD_X0 + 6, LD_NEW_Y + 4, LD_X1 + LD_W - LD_X0 - 12, UI_INK, 2);
+  const MoveDef &m = moveDef(id);
+  if (moveIsStatus(id)) snprintf(sb, sizeof(sb), "%s  %s  PP %u", typeName(m.type), XT(X_MV_STATUS), m.pp);
+  else {
+    char pw[40];
+    snprintf(pw, sizeof(pw), XT(X_MV_POW_FMT), m.pow, m.acc, m.pp);
+    snprintf(sb, sizeof(sb), "%s  %s", typeName(m.type), pw);
+  }
+  drawFitIn(sb, LD_X0 + 6, LD_NEW_Y + LD_H - 20, LD_X1 + LD_W - LD_X0 - 12, UI_INK, 1);
+  drawBtn(133, LD_NO_Y, 200, 44, UI_TRACK, UI_INK, XT(X_MV_NOLEARN));
+}
+// casilla 0..3 a olvidar, -2 = [배우지 않는다], -1 = nada
+int learnDlgHit(int16_t x, int16_t y) {
+  for (uint8_t i = 0; i < 4; i++)
+    if (inRect(x, y, i & 1 ? LD_X1 : LD_X0, i & 2 ? LD_Y1 : LD_Y0, LD_W, LD_H)) return i;
+  if (inRect(x, y, 133, LD_NO_Y, 200, 44)) return -2;
+  return -1;
+}
+
 // dialogo de decision (2 botones apilados): evolucionar/mantener o despedirse/quedaros
 void drawChoiceDialog() {
   const char *q, *o1, *o2;
@@ -4548,12 +4592,9 @@ void drawChoiceDialog() {
   if (choiceKind == 1) {  // evolucion
     q = T(S_EVO_Q); o1 = T(S_EVO_TAP); o2 = T(S_EVO_KEEP);
     c1 = UI_BAR_BAD; t1 = UI_WHITE; c2 = UI_TRACK; t2 = UI_INK;
-  } else if (choiceKind == 3) {  // ko11.31: "X을 배울까요? (지금 기술 Y는 잊어요)"
-    uint8_t ty = DEX_TBL[pet.speciesId].ptype, tr = moveTier(pet.speciesId);
-    txFmt(qb, sizeof(qb), X_MV_Q_FMT, moveName(BA_TYPE, ty, tr, pet.moveOffer < 3 ? pet.moveOffer : 0), nullptr);
-    txFmt(fb, sizeof(fb), X_MV_FORGET_FMT, moveName(BA_TYPE, ty, tr, pet.moveVar()), nullptr);
-    q = qb; o1 = XT(X_MV_LEARN); o2 = XT(X_MV_SKIP);
-    c1 = DEX_TBL[pet.speciesId].accent; t1 = UI_WHITE; c2 = UI_TRACK; t2 = UI_INK;
+  } else if (choiceKind == 3) {  // ko11.31: 4 ocupados: cual olvidar (o no aprenderlo)
+    drawLearnDialog();
+    return;
   } else {                // despedida
     q = T(S_FAR_Q); o1 = T(S_FAR_GO); o2 = T(S_FAR_STAY);
     c1 = UI_BAR_WARN; t1 = UI_INK; c2 = UI_BAR_OK; t2 = UI_WHITE;

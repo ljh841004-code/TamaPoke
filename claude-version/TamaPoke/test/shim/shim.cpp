@@ -152,6 +152,13 @@ size_t Preferences::getBytes(const char *k, void *buf, size_t maxLen) {
   return n;
 }
 
+size_t Preferences::getBytesLength(const char *k) {
+  if (!open_) return 0;
+  KV &kv = gStore[ns_];
+  KV::iterator it = kv.find(k);
+  return it == kv.end() ? 0 : it->second.size();
+}
+
 size_t Preferences::getString(const char *k, char *buf, size_t maxLen) {
   if (!open_ || maxLen == 0) return 0;
   KV &kv = gStore[ns_];

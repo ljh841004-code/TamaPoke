@@ -15,6 +15,7 @@ tools/demo_compare.js
 tools/pmd_cache/
 tools/prg_cache/
 tools/fx_cache/
+tools/moves_cache/
 tools/story_cache/
 test/build/
 

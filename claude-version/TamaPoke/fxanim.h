@@ -11,6 +11,9 @@ struct FxAnim {
   uint16_t key = 0xFFFF;   // tipo*9 + fase*3 + variante del archivo cargado
   uint16_t frameMs = 50;
   bool load(uint8_t type, uint8_t tier, uint8_t var);
+  bool loadId(uint8_t id);   // ko11.31: por id de movimiento (los que no son de tipo: mNNN.bin)
+  bool isId(uint8_t id) const { return data && mid == id; }
+  uint8_t mid = 0;
   void unload();
   bool ok() const { return data != nullptr; }
   uint16_t frames(uint8_t side) const;

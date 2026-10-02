@@ -974,3 +974,75 @@ TEST(save, racha_de_liga_persiste) {
   CHECK_EQ(q.fameStreak[0], (uint8_t)2);
   CHECK_EQ(q.fameStreak[59], (uint8_t)7);
 }
+
+// ---- ko11.31: movimientos en la caja, migracion y lo aprendido por especie
+TEST(box, fichas_viejas_reciben_movimientos) {
+  mockNvsReset();
+  {
+    Preferences p;
+    p.begin("tpbox", false);
+    uint8_t raw[2 * BOXMON_OLD_SIZE];
+    memset(raw, 0, sizeof(raw));
+    int16_t d0 = 7, d1 = 25;
+    uint16_t l0 = 20, l1 = 40;
+    memcpy(raw, &d0, 2); memcpy(raw + 2, &l0, 2); raw[5] = raw[6] = raw[7] = 100;
+    memcpy(raw + 12, &d1, 2); memcpy(raw + 14, &l1, 2); raw[17] = raw[18] = raw[19] = 100;
+    p.putBytes("mons", raw, sizeof(raw));
+    p.putUChar("n", 2);
+    p.end();
+  }
+  Box b;
+  b.begin();
+  CHECK_EQ(b.count(), (uint8_t)2);
+  CHECK_EQ(b.at(0).dex, (int16_t)7);
+  CHECK_EQ(b.at(1).lvl, (uint16_t)40);
+  CHECK(moveCount(b.at(0).mv) >= 2);
+  CHECK(moveCanLearn(25, b.at(1).mv[0]));
+  Box c;  // ya en el formato nuevo
+  c.begin();
+  CHECK_EQ(c.count(), (uint8_t)2);
+  CHECK_EQ(c.at(1).mv[0], b.at(1).mv[0]);
+}
+
+TEST(box, dex_recuerda_lo_aprendido) {
+  mockNvsReset();
+  DexLog d;
+  d.begin();
+  CHECK(!d.hasLearned(6, 17));
+  CHECK(d.learned(6, 17));
+  CHECK(!d.learned(6, 17));
+  CHECK(!d.learned(0, 17));
+  DexLog e;
+  e.begin();
+  CHECK(e.hasLearned(6, 17));
+  CHECK(!e.hasLearned(5, 17));
+}
+
+TEST(box, mascota_movimientos_y_oferta) {
+  Pet p;
+  freshPet(p, 4);
+  CHECK(moveCount(p.mv) >= 2);
+  for (int i = 0; i < 4; i++) if (p.mv[i]) CHECK_EQ(p.pp[i], movePP(p.mv[i]));
+  // con 4 sabidos, la oferta queda pendiente; aceptarla cambia esa casilla
+  uint8_t id = 0;
+  for (uint8_t k = 1; k < 200 && !id; k++) if (moveCanLearn(4, k) && !movesHas(p.mv, k)) id = k;
+  CHECK(id != 0);
+  while (moveCount(p.mv) < 4) { uint8_t x = p.moveRandomNew(); if (!x) break; p.moveOfferNew(x); }
+  p.moveLearned = 0;
+  if (!movesHas(p.mv, id)) {
+    p.moveOfferNew(id);
+    CHECK_EQ(p.moveOffer, id);
+    p.moveAccept(2);
+    CHECK_EQ(p.mv[2], id);
+    CHECK_EQ(p.moveOffer, (uint8_t)0);
+    CHECK_EQ(p.moveLearned, id);
+  }
+  p.pp[2] = 0;
+  CHECK(!p.ppFull());
+  p.ppRefill();
+  CHECK(p.ppFull());
+  p.saveNow();
+  Pet q;
+  q.begin();
+  for (int i = 0; i < 4; i++) CHECK_EQ(q.mv[i], p.mv[i]);
+}
