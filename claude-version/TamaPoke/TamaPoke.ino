@@ -4361,8 +4361,16 @@ void galleryTap(int16_t x, int16_t y) {
 void drawBattery() {
   int pc = batPercent();
   if (pc < 0) return;  // sin bateria conectada
-  int x = CX + 22, y = 20, w = 24, h = 11;  // ko11.15.1: a la derecha de la flecha de arriba
+  int x = CX + 22, y = 25, w = 24, h = 11;  // ko11.15.1: a la derecha de la flecha de arriba (ko11.27: 20 -> 25, la placa cabe en el circulo)
   bool charging = batCharging();
+  // ko11.27: placa de fondo (blanca de dia, oscura de noche) con borde: sobre el cielo
+  // despejado el numero con contorno fino casi no se leia
+  char t[6];
+  snprintf(t, sizeof(t), "%d%%", pc);
+  uint16_t plate = gNight ? INK_K : UI_WHITE;
+  int pw = 4 + w + 3 + 6 + textW(t, 1) + 5;
+  gfx->fillRoundRect(x - 4, y - 5, pw, h + 10, 8, plate);
+  gfx->drawRoundRect(x - 4, y - 5, pw, h + 10, 8, inkColor());
   uint16_t col = charging ? UI_BAR_OK
                  : (pc >= 40) ? inkColor()
                  : (pc >= 15) ? UI_BAR_WARN
@@ -4380,9 +4388,10 @@ void drawBattery() {
     if (fw > 0) gfx->fillRect(x + 2, y + 2, fw, h - 4, col);
   }
   // ko11.18: tambien el numero (cargando por USB tambien)
-  char t[6];
-  snprintf(t, sizeof(t), "%d%%", pc);
-  printOutlined(x + w + 7, y - 3, t, 1, charging ? UI_BAR_OK : col, gNight ? INK_K : UI_WHITE, 1);
+  setSize(1);
+  gfx->setTextColor(charging ? UI_BAR_OK : col);
+  setCur(x + w + 9, y - 3);
+  printT(t);
 }
 
 // ko10.4: texto con contorno de 1-2 px (se lee sobre cielo nublado, nieve o nubes)

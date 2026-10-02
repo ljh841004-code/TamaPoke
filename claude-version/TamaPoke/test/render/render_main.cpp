@@ -680,6 +680,7 @@ static void scenes(bool ko, const char *sfx) {
   // sonido y hora
   closeAll(); openClock(); setBigPart("nvs2"); render(); shot("15z_clock_nvs2"); setBigPart(nullptr); render(); shot("15_clock_settings");
   clockDateMode = true; render(); shot("15b_clock_date"); clockDateMode = false;
+  { extern int gMockBatPct; closeAll(); gMockBatPct = 100; render(); shot("01m_main_bat100"); gMockBatPct = 78; }  // ko11.27: placa de la bateria
   closeAll(); openSettings(); setBigPart("nvs2"); render(); shot("14_settings"); setBigPart(nullptr);  // ko11.26
   closeAll(); openSound(); render(); shot("16_sound");
   { bool a0 = audioEnabled();  // ko11.25: [진동] junto a [소리]; ko11.26: 꺼짐 -> 약 -> 중 -> 강

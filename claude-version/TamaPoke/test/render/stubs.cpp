@@ -159,7 +159,8 @@ void rtcSetEpoch(uint32_t e) { gMockEpoch = e; }
 bool batBegin() { return true; }
 void batSetChargeLimit(bool) {}
 void pmuEnablePanel() {}
-int batPercent() { return 78; }
+int gMockBatPct = 78;
+int batPercent() { return gMockBatPct; }
 bool batCharging() { return false; }
 int batMillivolts() { return 3900; }
 bool usbPresent() { return false; }
