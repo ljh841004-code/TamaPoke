@@ -186,12 +186,13 @@ void DexLog::begin() {
   if (prefs.getBytesLength("lrn") == sizeof(lrn)) prefs.getBytes("lrn", lrn, sizeof(lrn));
 }
 
-bool DexLog::learned(int16_t dex, uint8_t id) {
+bool DexLog::learned(int16_t dex, uint8_t id, bool save) {
   if (!ok(dex) || !id || id / 8 >= LRN_BYTES || hasLearned(dex, id)) return false;
   lrn[dex - 1][id / 8] |= (uint8_t)(1 << (id % 8));
-  prefs.putBytes("lrn", lrn, sizeof(lrn));
+  if (save) saveLearned();
   return true;
 }
+void DexLog::saveLearned() { prefs.putBytes("lrn", lrn, sizeof(lrn)); }
 
 void DexLog::wipe() {
   prefs.clear();

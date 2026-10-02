@@ -91,7 +91,8 @@ public:
   void wipe();   // fork KO (ko8): [nuevo comienzo]
   // ko11.31: movimientos que llego a saber algun Pokemon mio de esa especie (la ficha del
   // Pokedex solo ensena esos). Devuelve true si es nuevo (y lo guarda)
-  bool learned(int16_t dex, uint8_t id);
+  bool learned(int16_t dex, uint8_t id, bool save = true);
+  void saveLearned();
   bool hasLearned(int16_t dex, uint8_t id) const {
     return ok(dex) && id && (lrn[dex - 1][id / 8] >> (id % 8)) & 1;
   }

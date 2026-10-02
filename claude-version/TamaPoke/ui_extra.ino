@@ -17,7 +17,8 @@ enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_
                  XS_BGM, XS_BRIGHT, XS_PARTY,
                  XS_STORY, XS_STORYCH, XS_SCENE, XS_ROGUE,
                  XS_SET,     // ko11.26: menu de ajustes
-                 XS_STRAIN };  // ko11.28: combates de entrenamiento de la historia  // ko11.21: historia  // ko11.18: brillo  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
+                 XS_STRAIN,
+                 XS_CENTER };  // ko11.31: centro pokemon (PP)  // ko11.28: combates de entrenamiento de la historia  // ko11.21: historia  // ko11.18: brillo  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
 uint8_t xScreen = XS_NONE;
 
 // ko11.17: [<] vuelve a la pantalla DESDE LA QUE se abrio el menu (la ficha, el
@@ -61,7 +62,7 @@ void moveLearnedToast() {
   char t[96];
   txFmt(t, sizeof(t), X_MV_GOT_FMT, moveNameId(pet.moveLearned ? pet.moveLearned : pet.moveMain()), nullptr);
   showToast(t);
-  dexRecordMoves(pet.speciesId, pet.mv);  // ko11.31: el Pokedex lo recuerda
+  dexRecordMoves(pet.speciesId, pet.mv, true);  // ko11.31: el Pokedex lo recuerda
   pet.moveLearned = 0;
 }
 void moveLearnLoop() {
@@ -486,8 +487,24 @@ static void petMovesInto(Battler &b) {
   memcpy(b.pp, pet.pp, 4);
 }
 // ko11.31: lo que sabe cada especie mia queda en el Pokedex (la ficha ensena esos)
-void dexRecordMoves(int16_t dex, const uint8_t *mv) {
-  for (uint8_t i = 0; i < 4; i++) if (mv[i]) dexLog.learned(dex, mv[i]);
+bool dexRecordMoves(int16_t dex, const uint8_t *mv, bool save) {
+  bool any = false;
+  for (uint8_t i = 0; i < 4; i++) if (mv[i] && dexLog.learned(dex, mv[i], false)) any = true;
+  if (any && save) dexLog.saveLearned();
+  return any;
+}
+// el ultimo que entro en la caja (capturado, se unio, repetido que se queda)
+void dexRecordBoxLast() {
+  if (box.count()) dexRecordMoves(box.at(box.count() - 1).dex, box.at(box.count() - 1).mv, true);
+}
+// al arrancar: lo que saben el que crias y los de la caja, el salon y la liga
+void dexSeedMoves() {
+  bool any = false;
+  if (!pet.isEgg()) any |= dexRecordMoves(pet.speciesId, pet.mv, false);
+  for (uint8_t i = 0; i < box.count(); i++) any |= dexRecordMoves(box.at(i).dex, box.at(i).mv, false);
+  for (uint8_t i = 0; i < hall.count(); i++) any |= dexRecordMoves(hall.at(i).dex, hall.at(i).mv, false);
+  for (uint8_t i = 0; i < fame.count(); i++) any |= dexRecordMoves(fame.at(i).dex, fame.at(i).mv, false);
+  if (any) dexLog.saveLearned();
 }
 uint8_t bvOwned = 0;      // ko10.11: de esta especie en la caja
 int16_t bExpDex = 0;      // ko11: la EXP del salvaje sale de su especie y nivel ANTES de ajustarlo
@@ -2312,7 +2329,7 @@ void renderBattleView() {
     }
   } else {
     if (bPhase == BP_SWAP) drawSwapPanel();  // ko11.20
-    else drawBattleMsg();
+    else if (!(bPhase == BP_MENU && bMoveMenu && !autoLeft)) drawBattleMsg();  // ko11.31: los 4 movimientos ocupan su sitio
     if (bPhase == BP_MENU && !autoLeft) { drawBattleMenu(); if (xScreen == XS_WILD) drawBattleArtChip(); }  // ko11.16
     if (autoLeft && bPhase != BP_RESULT && bPhase != BP_SWAP) drawAutoBanner();  // ko11.19
     if (bPhase == BP_MENU && !autoLeft && xScreen == XS_WILD && (bKind == BK_STORY || bKind == BK_ROGUE)) {  // ko11.23.1: salir
@@ -2374,8 +2391,10 @@ uint32_t wildNextRoll = 0;
 void vibPulse(uint16_t ms, uint8_t n, uint16_t gap);
 void triggerWildAlert() { wildAlertUntil = millis() + WILD_ALERT_MS; vibPulse(200, 3, 150); }  // ko11.25
 
+uint32_t centerUntil = 0;  // ko11.31: el centro pokemon esta curando hasta (millis; 0 = no)
 bool battleAllowed(bool toast) {
   if (!pet.canBattle()) { if (toast) showToast(XT(X_CANT_NOW)); sfxPlay(SFX_DENY); return false; }
+  if (centerUntil) { if (toast) showToast(XT(X_CENTER_BUSY)); sfxPlay(SFX_DENY); return false; }  // ko11.31
   if (pet.tooTiredToBattle()) { if (toast) showToast(XT(X_TOO_TIRED)); sfxPlay(SFX_DENY); return false; }
   return true;
 }
@@ -2546,9 +2565,10 @@ void startWild() { startWildIn(petRegion()); }
 #define RG_ARROW_Y 222
 #define RG_DOTS_Y 356
 #define RG_BACK_Y 372
-#define RG_ART_X 92     // ko11.16.1: [그림: PMD/포케로그] [뒤로]
-#define RG_BACK_X 238
-#define RG_ART_W 136
+#define RG_ART_X 90     // ko11.16.1: [그림: PMD/포케로그] [포켓몬센터] [뒤로] (ko11.31)
+#define RG_CTR_X 186
+#define RG_BACK_X 282
+#define RG_ART_W 92
 uint8_t regionPage = 0;
 uint32_t regionMsgUntil = 0;
 // ko10.4: abierta si hay medallas suficientes; la region de mi Pokemon, siempre
@@ -2619,6 +2639,7 @@ void renderRegionPick() {
   bool prg = battleArt();
   drawBtn(RG_ART_X, RG_BACK_Y, RG_ART_W, 44, prg ? C565(0x6a, 0x4c, 0xf0) : UI_WHITE, prg ? UI_WHITE : UI_INK,
           XT(prg ? X_BART_PRG : X_BART_PMD));
+  drawBtn(RG_CTR_X, RG_BACK_Y, RG_ART_W, 44, C565(0xf0, 0x60, 0x80), UI_WHITE, XT(X_CENTER));  // ko11.31
   drawBtn(RG_BACK_X, RG_BACK_Y, RG_ART_W, 44, UI_TRACK, UI_INK, T(S_BACK));
   uiFlush();
 }
@@ -2643,6 +2664,7 @@ void regionTap(int16_t x, int16_t y) {
     return;
   }
   if (inRect(x, y, RG_ART_X, RG_BACK_Y, RG_ART_W, 44)) { battleArtToggle(); return; }  // ko11.16.1
+  if (inRect(x, y, RG_CTR_X, RG_BACK_Y, RG_ART_W, 44)) { sfxPlay(SFX_TAP); xScreen = XS_CENTER; return; }  // ko11.31
   if (y >= RG_ARROW_Y - 40 && y < RG_ARROW_Y + 40) {  // flechas (zona amplia)
     if (x < RG_X - 4) { regionTurn(regionPage - 1); return; }
     if (x >= RG_X + 2 * RG_W + RG_GAPX + 4) { regionTurn(regionPage + 1); return; }
@@ -2655,6 +2677,101 @@ void regionTap(int16_t x, int16_t y) {
   if (!regionOpen(r)) { sfxPlay(SFX_DENY); regionMsgUntil = millis() + 1800; return; }
   xScreen = XS_NONE;
   startWildIn(r);
+}
+
+
+// ======================================================================
+// ko11.31: centro pokemon. Rellena los PP del que crias en 30 s (el combate
+// ganado tambien los rellena; perder no). Mientras cura no se puede luchar.
+// ======================================================================
+#define CTR_MS 30000UL
+#define CTR_BTN_Y 372
+static uint32_t centerMsgUntil = 0;
+static const char *centerMsg = nullptr;
+
+void centerPoll() {
+  if (!centerUntil || (int32_t)(millis() - centerUntil) < 0) return;
+  centerUntil = 0;
+  pet.ppRefill();
+  pet.saveNow();
+  sfxPlay(SFX_MEDAL);
+  if (xScreen == XS_CENTER) { centerMsg = XT(X_CENTER_DONE); centerMsgUntil = millis() + 3000; }
+  else showToast(XT(X_CENTER_DONE));
+}
+
+void renderCenter() {
+  screenBase();
+  uint32_t now = millis();
+  drawFit(XT(X_CENTER), 40, 300, C565(0xd8, 0x3c, 0x64), 3);
+  bool healing = centerUntil != 0;
+  int cx = CX, cy = 216, r = healing ? 104 : 96;
+  if (healing) {  // la bola brilla y late
+    float pulse = 0.5f + 0.5f * sinf(now * 0.008f);
+    uint16_t glow = lerp565(C565(0xff, 0xf0, 0x90), C565(0xff, 0xff, 0xff), (int)(pulse * 8), 16);
+    for (int k = 0; k < 4; k++) gfx->drawCircle(cx, cy, r + 8 + k * 3 + (int)(pulse * 4), glow);
+    for (int i = 0; i < 12; i++) {
+      float a = i * 0.5236f + now * 0.002f;
+      int r0 = r + 18, r1 = r + 30 + (int)(pulse * 8);
+      fxLine(cx + (int)(cosf(a) * r0), cy + (int)(sinf(a) * r0), cx + (int)(cosf(a) * r1), cy + (int)(sinf(a) * r1), 3,
+             C565(0xff, 0xd8, 0x50));
+    }
+  }
+  // la pokeball: mitad roja, mitad blanca, banda y boton
+  gfx->fillCircle(cx, cy, r, UI_INK);
+  gfx->fillCircle(cx, cy, r - 5, UI_WHITE);
+  for (int y = cy - r + 5; y < cy; y++) {
+    int dy = cy - y, hw = (int)sqrtf((float)((r - 5) * (r - 5) - dy * dy));
+    gfx->drawFastHLine(cx - hw, y, 2 * hw, C565(0xe8, 0x3c, 0x40));
+  }
+  gfx->fillRect(cx - r + 3, cy - 6, 2 * r - 6, 12, UI_INK);
+  // el Pokemon dentro (en una ventana redonda)
+  gfx->fillCircle(cx, cy, r * 3 / 5, healing ? C565(0xff, 0xf8, 0xd8) : C565(0xf4, 0xf0, 0xf0));
+  gfx->drawCircle(cx, cy, r * 3 / 5, UI_INK);
+  if (!pet.isEgg() && pmd.loaded) drawPmdActM(pmd, healing ? PMD_SLEEP : PMD_IDLE, cx, cy + r * 3 / 5 - 10, now, true, false, 3, r);
+  gfx->fillCircle(cx, cy + r - 20, 12, UI_WHITE);
+  gfx->drawCircle(cx, cy + r - 20, 12, UI_INK);
+  if (healing) {
+    uint32_t left = (uint32_t)(centerUntil - now);
+    char t[40];
+    snprintf(t, sizeof(t), XT(X_CENTER_LEFT_FMT), (unsigned)((left + 999) / 1000));
+    drawFit(t, 334, 300, UI_INK, 2);
+    int w = 220, fill = (int)((uint32_t)w * (CTR_MS - (left > CTR_MS ? CTR_MS : left)) / CTR_MS);
+    gfx->fillRoundRect(CX - w / 2, 362, w, 12, 6, UI_TRACK);
+    gfx->fillRoundRect(CX - w / 2, 362, fill < 12 ? 12 : fill, 12, 6, UI_BAR_OK);
+  } else {
+    // los PP de cada movimiento
+    for (uint8_t i = 0; i < 4; i++) {
+      if (!pet.mv[i]) continue;
+      char l[48];
+      snprintf(l, sizeof(l), "%s %u/%u", moveNameId(pet.mv[i]), pet.pp[i], movePP(pet.mv[i]));
+      int x = i & 1 ? 236 : 68, y = 326 + (i / 2) * 20;
+      gfx->setTextColor(pet.pp[i] * 4 <= movePP(pet.mv[i]) ? UI_BAR_BAD : UI_INK);
+      setSize(1);
+      setCur(x + (164 - textW(l, 1)) / 2, y);
+      printT(l);
+    }
+    bool full = pet.ppFull();
+    drawBtn(110, CTR_BTN_Y, 120, 44, full ? UI_TRACK : C565(0xf0, 0x60, 0x80), full ? 0x8410 : UI_WHITE, XT(X_CENTER_HEAL));
+    drawBtn(238, CTR_BTN_Y, 120, 44, UI_TRACK, UI_INK, T(S_BACK));
+  }
+  if (timeLeft(centerMsgUntil) && centerMsg) drawFit(centerMsg, 92, 320, UI_BAR_OK, 2);
+  uiFlush();
+}
+
+void centerTap(int16_t x, int16_t y) {
+  if (centerUntil) return;  // curando: hay que esperar (o salir deslizando)
+  if (inRect(x, y, 238, CTR_BTN_Y, 120, 44)) { sfxPlay(SFX_TAP); xScreen = XS_REGION; return; }
+  if (inRect(x, y, 110, CTR_BTN_Y, 120, 44)) {
+    if (pet.isEgg() || pet.ppFull()) {
+      sfxPlay(SFX_DENY);
+      centerMsg = XT(X_CENTER_FULL);
+      centerMsgUntil = millis() + 2000;
+      return;
+    }
+    centerUntil = millis() + CTR_MS;
+    if (!centerUntil) centerUntil = 1;
+    sfxPlay(SFX_HEART);
+  }
 }
 
 // ======================================================================
@@ -3108,6 +3225,7 @@ static void dupDecide(bool keep) {
   if (keep) {
     if (box.full()) { sfxPlay(SFX_DENY); return; }  // caja llena: solo caramelos
     box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, bDupCaught, bDupEpoch);
+    dexRecordBoxLast();  // ko11.31
     got = CANDY_KEEP;
   } else {
     got = Pet::dupCandy(bvFoeShiny, bFoe.lvl);
@@ -3153,6 +3271,7 @@ static void joinDecide(bool take) {
     return;
   }
   if (box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, false, bDupEpoch)) {
+    dexRecordBoxLast();  // ko11.31
     txFmt(bNote, sizeof(bNote), X_JOIN_OK, dexName(bFoe.dex));
     sfxPlay(SFX_MEDAL);
   } else {
@@ -3177,7 +3296,7 @@ static void petPPAfter(bool won) {
   const Battler &b = pCur == 0 ? bMe : pMon[0];
   if (won) pet.ppRefill();
   else for (uint8_t i = 0; i < 4; i++) if (b.mv[i] == pet.mv[i]) pet.pp[i] = b.pp[i];
-  dexRecordMoves(pet.speciesId, pet.mv);
+  dexRecordMoves(pet.speciesId, pet.mv, true);
   pet.saveNow();
 }
 
@@ -3321,6 +3440,7 @@ void finishBattle(bool won, bool fled, bool caught) {
       } else {
         bBoxMsg = !box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, caught, e) ? X_BOX_FULL
                   : caught ? X_TO_BOX : X_JOINED;
+        if (bBoxMsg != X_BOX_FULL) dexRecordBoxLast();  // ko11.31
       }
     }
   }
@@ -3751,6 +3871,7 @@ bool extraRender() {
     case XS_ROGUE: renderRogue(); return true;
     case XS_SET: renderSettings(); return true;  // ko11.26
     case XS_STRAIN: renderStoryTrain(); return true;  // ko11.28
+    case XS_CENTER: renderCenter(); return true;      // ko11.31
     default: return false;
   }
 }
@@ -3781,6 +3902,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_ROGUE: rogueTap(x, y); return true;
     case XS_SET: settingsTap(x, y); return true;
     case XS_STRAIN: storyTrainTap(x, y); return true;
+    case XS_CENTER: centerTap(x, y); return true;
     default: return false;
   }
 }
@@ -3795,6 +3917,7 @@ bool extraSwipe() {
   if (xScreen == XS_BRIGHT || xScreen == XS_UPD) { xScreen = XS_SET; return true; }  // ko11.26
   if (xScreen == XS_SET) { goBack(); return true; }
   if (xScreen == XS_STRAIN) { xScreen = XS_STORY; return true; }  // ko11.28
+  if (xScreen == XS_CENTER) { xScreen = XS_REGION; return true; }  // ko11.31
   if (xScreen == XS_RESET) { goBack(); return true; }
   if (xScreen == XS_CANDY) { candyBagClose(); return true; }  // ko10.11: vertical = cerrar
   if (xScreen == XS_FAME) { fameClose(); return true; }       // ko11.1

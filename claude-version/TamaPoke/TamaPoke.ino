@@ -723,6 +723,7 @@ void setup() {
     }
   bootStep(BS_DEX);
   dexLog.begin();
+  dexSeedMoves();  // ko11.31: lo que ya saben los mios, al Pokedex
   pet.endHook = onPetEnd;  // ko10.5: el que se va a la caja; luego se elige el siguiente
   bootStep(BS_SD);
   if (!safeMode) sdBegin();  // ko11.5: modo seguro = sin SD
@@ -855,6 +856,7 @@ void loop() {
   uint32_t now = millis();
   vibLoop(now);  // ko11.25
   moveLearnLoop();  // ko11.31
+  centerPoll();     // ko11.31: el centro pokemon termina aunque no se mire
   uint32_t loopT0 = now, renderMs = 0;
   {  // ko11.9.2: en que pantalla estamos (si se reinicia, se ve al arrancar)
     uint8_t scr = vbOpen ? 1 : defOpen ? 2 : spdOpen ? 3 : gameOpen ? 4 : sackOpen ? 5 : trainMenuOpen ? 6
@@ -4239,6 +4241,34 @@ uint16_t dexDiscoveredCount() {
   return n;
 }
 
+// ko11.31: los 4 movimientos que ensena la ficha: los de la fase mas alta que aprende
+// (de tipo de mayor fase y potencia primero; los de estado al final)
+#define DEXMV_R 28
+static const int16_t DEXMV_XY[4][2] = { { 64, 98 }, { 56, 184 }, { 402, 98 }, { 410, 184 } };
+static uint8_t dexMvFx = 0;      // el que se esta ensenando (0 = ninguno)
+static uint32_t dexMvT0 = 0;
+uint8_t dexTopMoves(int16_t dex, uint8_t out[4]) {
+  uint8_t pool[200];
+  uint8_t n = movePool(dex, pool, sizeof(pool));
+  auto score = [](uint8_t id) -> int {
+    uint8_t s = 0;
+    if (moveIsStatus(id)) return 0;
+    moveDecode(id, nullptr, &s, nullptr);
+    return 1000 + s * 300 + moveDef(id).pow;
+  };
+  memset(out, 0, 4);
+  for (uint8_t k = 0; k < 4; k++) {
+    int best = -1;
+    for (uint8_t i = 0; i < n; i++) {
+      if (!pool[i] || movesHas(out, pool[i])) continue;
+      if (best < 0 || score(pool[i]) > score(pool[best])) best = i;
+    }
+    if (best < 0) break;
+    out[k] = pool[best];
+  }
+  return moveCount(out);
+}
+
 // ficha de la pokedex (fork KO, ko4): datos basicos + historial
 void renderDexDetail() {
   uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
@@ -4249,9 +4279,15 @@ void renderDexDetail() {
   snprintf(head, sizeof(head), "No.%03d %s%s", dx, pet.isShinyRegistered(dx) ? "*" : "",
            disc ? dexName(dx) : "???");
   drawFit(head, 36, 300, disc ? d.accent : UI_INK, 3);
+  uint32_t mvT = dexMvFx ? millis() - dexMvT0 : 0;
+  if (dexMvFx && mvT > 1500) dexMvFx = 0;
   if (galleryPmd.loaded) {
     // animado y a color si se conoce; silueta estatica si no (estilo "?")
-    drawPmdActM(galleryPmd, PMD_IDLE, CX, 196, disc ? millis() : 0, true, !disc, 4, 170);
+    // ko11.31: ensenando un movimiento: hace su animacion de ataque
+    uint8_t act = PMD_IDLE;
+    if (dexMvFx && mvT < 900) act = galleryPmd.has(PMD_SHOOT) && !moveIsStatus(dexMvFx) ? PMD_SHOOT : PMD_ATTACK;
+    if (!galleryPmd.has(act)) act = PMD_IDLE;
+    drawPmdActM(galleryPmd, act, CX, 196, disc ? millis() : 0, true, !disc, 4, 170);
   } else {
     const uint8_t *t = thumbs.get(dx);
     if (t) drawThumb(t, CX - GAL_CELL / 2, 96, 2, !disc);
@@ -4286,6 +4322,41 @@ void renderDexDetail() {
     snprintf(l, sizeof(l), XT(X_SEEN_FMT), dexLog.seenCount(dx), dexLog.caughtCount(dx));
     drawFit(l, 316, 340, UI_INK, 2);
     if (pet.isRegistered(dx)) drawFit(XT(X_RAISED), 342, 300, C565(0x2e, 0x7d, 0x32), 2);
+    if (dexLog.caughtCount(dx)) {  // ko11.31: capturado alguna vez: sus 4 movimientos fuertes (los aprendidos)
+      uint8_t mv[4];
+      dexTopMoves(dx, mv);
+      for (uint8_t i = 0; i < 4; i++) {
+        if (!mv[i]) continue;
+        int bx = DEXMV_XY[i][0], by = DEXMV_XY[i][1];
+        bool known = dexLog.hasLearned(dx, mv[i]);
+        uint16_t c = known ? typeColor(moveType(mv[i])) : UI_TRACK;
+        gfx->fillCircle(bx, by, DEXMV_R, c);
+        gfx->drawCircle(bx, by, DEXMV_R, UI_INK);
+        gfx->drawCircle(bx, by, DEXMV_R - 1, UI_INK);
+        if (dexMvFx == mv[i]) gfx->drawCircle(bx, by, DEXMV_R + 4, UI_BAR_WARN);
+        const char *nm = known ? moveNameId(mv[i]) : "???";
+        gfx->setTextColor(known ? UI_WHITE : 0x8410);
+        setSize(2);
+        const char *ic = known ? (moveIsStatus(mv[i]) ? "+" : ">") : "?";
+        setCur(bx - textW(ic, 2) / 2, by - textH(2) / 2 - 2);
+        printT(ic);
+        gfx->setTextColor(UI_INK);
+        setSize(1);
+        setCur(bx - textW(nm, 1) / 2, by + DEXMV_R + 2);
+        printT(nm);
+      }
+      // el efecto: el de la SD si esta; si no, el dibujado
+      if (dexMvFx) {
+        int ax = CX + 30, ay = 140, tx = CX + 150, ty = 70;
+        if (fxMove[0].isId(dexMvFx)) fxMove[0].drawFg(gfx->getFramebuffer(), 0, mvT, ax - 140, ay - 200);
+        else if (moveIsStatus(dexMvFx)) drawStatusMoveFx(dexMvFx, CX, 150, tx, ty, mvT);
+        else {
+          uint8_t t, tr, v;
+          moveDecode(dexMvFx, &t, &tr, &v);
+          drawMoveFx(moveIsTyped(dexMvFx) ? t : 0xFF, ax, ay, tx, ty, mvT, true, 2, tr, v);
+        }
+      }
+    }
   }
   drawFit(T(S_DETAIL_BACK), 386, 260, UI_INK, 2);
   drawFit(XT(X_DEX_EXIT), 412, 220, UI_INK, 1);  // ko5
@@ -4326,6 +4397,10 @@ void renderGallery() {
       const uint8_t *t = thumbs.get(dex);
       if (t) {
         drawThumb(t, x, y, 2, !dexDiscovered(dex));
+        if (dexLog.caughtCount(dex)) {  // ko11.31: capturado alguna vez: circulo
+          gfx->drawCircle(x + GAL_CELL / 2, y + GAL_CELL / 2, GAL_CELL / 2 - 2, C565(0xe0, 0x40, 0x38));
+          gfx->drawCircle(x + GAL_CELL / 2, y + GAL_CELL / 2, GAL_CELL / 2 - 3, C565(0xe0, 0x40, 0x38));
+        }
         if (pet.isShinyRegistered(dex)) {
           gfx->setTextColor(UI_BAR_WARN);
           setSize(2);
@@ -4386,6 +4461,22 @@ void galleryTap(int16_t x, int16_t y) {
   }
   lastTap = now;
   if (galleryDetail) {
+    // ko11.31: los botones de movimientos (capturado alguna vez)
+    if (dexLog.caughtCount(galleryDetail)) {
+      uint8_t mv[4];
+      dexTopMoves(galleryDetail, mv);
+      for (uint8_t i = 0; i < 4; i++) {
+        int ddx = x - DEXMV_XY[i][0], ddy = y - DEXMV_XY[i][1];
+        if (!mv[i] || ddx * ddx + ddy * ddy > (DEXMV_R + 8) * (DEXMV_R + 8)) continue;
+        lastTap = 0;
+        if (!dexLog.hasLearned(galleryDetail, mv[i])) { sfxPlay(SFX_DENY); return; }
+        fxMove[0].loadId(mv[i]);
+        dexMvFx = mv[i];
+        dexMvT0 = millis();
+        sfxPlay(SFX_PLAY);
+        return;
+      }
+    }
     // ko9.1: tocar al Pokemon repite su grito (solo si ya se conoce)
     if (y >= 100 && y < 230 && x >= 120 && x < 346 && dexDiscovered(galleryDetail)) {
       audioCry(galleryDetail);

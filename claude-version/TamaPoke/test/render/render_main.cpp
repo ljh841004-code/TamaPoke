@@ -120,20 +120,24 @@ static void scenes(bool ko, const char *sfx) {
   pet.careMistakes = 0;
   pet.berryKnown = true; pet.ageMinutes = 2 * 1440 + 300; pet.bond = 46; pet.streak = 3; pet.bestStreak = 5;
   cardPage = 0; render(); shot("03c_card_profile");
-  {  // ko11.31: cada 5 niveles: aprender otro ataque
+  {  // ko11.31: con 4 movimientos llega uno nuevo: cual olvidar (o no aprenderlo)
     closeAll(); tick(3000);
-    pet.moveK = 0; pet.moveOffer = 1; moveLearnLoop();
-    navCheck("ataques: oferta -> dialogo", choiceKind == 3);
+    while (moveCount(pet.mv) < 4) { uint8_t x = pet.moveRandomNew(); if (!x) break; pet.moveOfferNew(x); }
+    pet.moveLearned = 0;
+    uint8_t nw = pet.moveRandomNew();
+    pet.moveOffer = nw; moveLearnLoop();
+    navCheck("movimientos: oferta con 4 -> dialogo", choiceKind == 3);
     render(); shot("03u_move_offer");
-    onTap(233, 230);  // [배운다]
-    navCheck("ataques: [배운다] cambia el ataque", choiceKind == 0 && pet.moveK == 1 && pet.moveOffer == 0xFF);
+    onTap(LD_X0 + 30, LD_Y1 + 20);  // casilla 3 (abajo izquierda)
+    navCheck("movimientos: olvida la casilla tocada", choiceKind == 0 && pet.mv[2] == nw && !pet.moveOffer);
     render(); shot("03v_move_learned");
-    pet.moveOffer = 2; moveLearnLoop(); onTap(233, 292);  // [그만둔다]
-    navCheck("ataques: [그만둔다] se queda el suyo", choiceKind == 0 && pet.moveK == 1 && pet.moveOffer == 0xFF);
-    uint16_t L = pet.level(); pet.moveLv = (uint8_t)(L / 5 * 5); pet.moveOffer = 0xFF;
+    uint8_t nw2 = pet.moveRandomNew();
+    pet.moveOffer = nw2; moveLearnLoop(); onTap(233, LD_NO_Y + 20);  // [배우지 않는다]
+    navCheck("movimientos: [배우지 않는다] no cambia nada", choiceKind == 0 && !pet.moveOffer && !movesHas(pet.mv, nw2));
+    uint16_t L = pet.level(); pet.moveLv = (uint8_t)(L / 5 * 5); pet.moveOffer = 0;
     pet.addExp(expForLevel(L / 5 * 5 + 5) - pet.exp);
-    navCheck("ataques: al llegar al siguiente multiplo de 5 se ofrece otro", pet.moveOffer < 3 && pet.moveOffer != pet.moveK);
-    pet.moveOffer = 0xFF; pet.moveK = 0; toastUntil = 0; closeAll();
+    navCheck("movimientos: al siguiente multiplo de 5 se ofrece otro", pet.moveOffer != 0 || pet.moveLearned != 0);
+    pet.moveOffer = 0; pet.moveLearned = 0; toastUntil = 0; closeAll();
     cardOpen = true; cardPage = 0;  // sigue la ficha (comida favorita)
   }
   {  // ko11.27: comida favorita (desconocida / conocida + toque = que significa) y dias juntos
@@ -298,6 +302,34 @@ static void scenes(bool ko, const char *sfx) {
   render(); shot("08_battle_menu");
   battleArtTap(BART_X + 10, BART_Y + 10); render(); shot("08q_battle_art_prg");  // ko11.16: PMD <-> PokeRogue
   battleArtTap(BART_X + 10, BART_Y + 10);
+  {  // ko11.31: [싸운다] -> los 4 movimientos; estados junto a las cajas de vida
+    onTap(BM_X + 20, BM_Y1 + 20);
+    navCheck("batalla: [싸운다] abre los movimientos", bMoveMenu);
+    bMe.pp[1] = 2;
+    render(); shot("08m_fight_moves");
+    onTap(MV_BACK_X + 10, MV_Y0 + 40);
+    navCheck("batalla: [<] vuelve al menu", !bMoveMenu);
+    bFoe.st = ST_PAR; bMe.st = ST_PSN;
+    render(); shot("08n_status_badges");
+    bFoe.st = bMe.st = 0;
+    movesFillPP(bMe);
+    // un movimiento de estado (grunido) y lo que pasa despues
+    bPhase = BP_PLAY; bqAisMe = true; bqN = 3; bqI = 0;
+    memset(bq, 0, sizeof(BEvent) * 3);
+    bq[0].side = 0; bq[0].kind = EV_USE; bq[0].mid = 151;
+    bq[1].side = 1; bq[1].kind = EV_STAT; bq[1].mid = 151; bq[1].eff = 0; bq[1].val = -1;
+    bq[2].side = 1; bq[2].kind = EV_STATUS; bq[2].mid = 161; bq[2].val = ST_PAR;
+    for (int i = 0; i < 3; i++) { bq[i].hpA = bMe.hp; bq[i].hpB = bFoe.hp; }
+    for (int i = 0; i < 3; i++) {
+      startEvent(i);
+      gMockMillis = bqT + 400;
+      render();
+      snprintf(n, sizeof(n), "08o_status_ev%d", i);
+      shot(n);
+    }
+    bPhase = BP_MENU; bqN = bqI = 0;
+    txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName); bvL2[0] = 0;
+  }
   bvMeFainted = bvFoeFainted = true; render(); shot("08z_battle_empty");  // fondo sin Pokemon (comparar sprites)
   bvMeFainted = bvFoeFainted = false;
   box.add(bFoe.dex, 5, false, true, 0); box.add(bFoe.dex, 7, false, true, 0); bvOwned = 2; bvOwnedT = gMockMillis;
@@ -340,39 +372,31 @@ static void scenes(bool ko, const char *sfx) {
         pmd.load((uint8_t)d, false);
         bMe = makeBattler(d, 30, 60, 60, 60);
         bvSetup(bMe, bFoe, nullptr, false);
-        bPhase = BP_PLAY; bqAisMe = true; bqN = 1; bqI = 0;
-        memset(&bq[0], 0, sizeof(bq[0]));
-        bq[0].side = 0; bq[0].kind = EV_HIT; bq[0].move = BA_TYPE;
-        bq[0].eff = 2; bq[0].dmg = 5; bq[0].hpA = bMe.hp; bq[0].hpB = bFoe.hp;
-        txFmt(bvL1, sizeof(bvL1), X_USED, bvMeName, moveName(BA_TYPE, bvMeType, bvMeTier));
-        bvL2[0] = 0;
-        bqT = gMockMillis;
-        for (uint32_t at : { 250u, 500u, 750u, 1000u }) {  // ko11.30: 4 momentos (efectos de la SD)
-          gMockMillis = bqT + at;
-          render();
-          snprintf(n, sizeof(n), "tier_%03d_%u", d, at);
-          shot(n);
-        }
-        // ko11.30: los otros dos ataques de la misma fase (efecto propio)
-        for (uint8_t v = 1; v <= 2; v++) {
-          pet.moveK = v;
-          bvSetup(bMe, bFoe, nullptr, false);
-          bPhase = BP_PLAY; bqN = 1; bqI = 0;
-          txFmt(bvL1, sizeof(bvL1), X_USED, bvMeName, moveName(BA_TYPE, bvMeType, bvMeTier, bvMeVar));
+        // ko11.31: los 3 ataques de su tipo en esa fase (id 1 + tipo*9 + fase*3 + variante)
+        for (uint8_t v = 0; v < 3; v++) {
+          uint8_t id = moveIdTyped(DEX_TBL[d].ptype, moveTier(d), v);
+          bPhase = BP_PLAY; bqAisMe = true; bqN = 1; bqI = 0;
+          memset(&bq[0], 0, sizeof(bq[0]));
+          bq[0].side = 0; bq[0].kind = EV_HIT; bq[0].move = BA_M0; bq[0].mid = id;
+          bq[0].eff = 2; bq[0].dmg = 5; bq[0].hpA = bMe.hp; bq[0].hpB = bFoe.hp;
+          fxMove[0].loadId(id);
+          txFmt(bvL1, sizeof(bvL1), X_USED, bvMeName, moveNameId(id));
+          bvL2[0] = 0;
           bqT = gMockMillis;
-          for (uint32_t at : { 250u, 500u, 750u, 1000u }) {
+          for (uint32_t at : { 250u, 500u, 750u, 1000u }) {  // ko11.30: 4 momentos (efectos de la SD)
             gMockMillis = bqT + at;
             render();
-            snprintf(n, sizeof(n), "mv_%03d_v%u_%u", d, v, at);
+            if (v == 0) snprintf(n, sizeof(n), "tier_%03d_%u", d, at);
+            else snprintf(n, sizeof(n), "mv_%03d_v%u_%u", d, v, at);
             shot(n);
           }
         }
-        pet.moveK = 0;
       }
     }
     // ko11.30: el rival ataca con el efecto de la SD (lado 1: de arriba a abajo)
-    bPhase = BP_PLAY; bqN = 1; bqI = 0; bq[0].side = 1;
-    txFmt(bvL1, sizeof(bvL1), X_USED, bvFoeName, moveName(BA_TYPE, bvFoeType, bvFoeTier, bvFoeVar));
+    bPhase = BP_PLAY; bqN = 1; bqI = 0; bq[0].side = 1; bq[0].mid = movesMain(bFoe);
+    fxMove[1].loadId(bq[0].mid);
+    txFmt(bvL1, sizeof(bvL1), X_USED, bvFoeName, moveNameId(bq[0].mid));
     bqT = gMockMillis;
     for (uint32_t at : { 250u, 500u, 750u, 1000u }) {
       gMockMillis = bqT + at;
@@ -478,11 +502,11 @@ static void scenes(bool ko, const char *sfx) {
     render(); shot("54_gym_intro");
     // ko11.19: [자동] [N마리] y el combate automatico
     tick(2300); updateWild(); render(); shot("54b_gym_auto_menu");
-    wildTap(BM_X + 2 * (BM_W + BM_GAP) + 10, BM_Y2 + 10);  // N -> 1
+    wildTap(BM_X + BM_W + BM_GAP + 10, BM_Y2 + 10);  // N -> 1 (ko11.31: [N마리] abajo en el centro)
     render(); shot("54c_gym_auto_count");
     navCheck("auto: N마리 1..restantes", autoCount == 1);
-    wildTap(BM_X + 2 * (BM_W + BM_GAP) + 10, BM_Y2 + 10);
-    wildTap(BM_X + BM_W + BM_GAP + 10, BM_Y2 + 10);  // [자동]
+    wildTap(BM_X + BM_W + BM_GAP + 10, BM_Y2 + 10);
+    wildTap(BM_X + 2 * (BM_W + BM_GAP) + 10, BM_Y1 + 10);  // [자동] (ko11.31: arriba a la derecha)
     navCheck("auto: en marcha", autoLeft == 2);
     render(); shot("54d_gym_auto_on");
     { uint16_t hp0 = bMe.hp; uint8_t p0 = pet.potions; pet.potions = 5;
@@ -705,12 +729,45 @@ static void scenes(bool ko, const char *sfx) {
   closeAll();
   for (int d : { 16, 19, 25, 129, 133, 143 }) dexLog.seen(d, gMockEpoch - 86400 * 3);
   dexLog.caught(25, gMockEpoch);
+  dexLog.caught(4, gMockEpoch);  // ko11.31: circulo en la rejilla
   galleryOpen = true; galleryPage = 0; galleryDetail = 0; galleryDirty = true;
   render(); shot("12_dex_grid");
   galleryDetail = 25; galleryPmd.load(25, false);
+  {  // ko11.31: sus movimientos fuertes (2 aprendidos)
+    uint8_t mv[4];
+    dexTopMoves(25, mv);
+    dexLog.learned(25, mv[0]); dexLog.learned(25, mv[2]);
+  }
   render(); shot("13_dex_detail");
+  {
+    uint8_t mv[4];
+    dexTopMoves(25, mv);
+    onTap(DEXMV_XY[0][0], DEXMV_XY[0][1]);
+    navCheck("pokedex: tocar un movimiento aprendido lo ensena", dexMvFx == mv[0]);
+    tick(500); render(); shot("13b_dex_move_fx");
+    tick(1200); dexMvFx = 0;
+    onTap(DEXMV_XY[1][0], DEXMV_XY[1][1]);
+    navCheck("pokedex: uno sin aprender no se ensena", dexMvFx == 0);
+  }
   galleryDetail = 52; galleryPmd.load(52, false);
   render(); shot("14_dex_unknown");
+  {  // ko11.31: centro pokemon (30 s)
+    galleryOpen = false; galleryDetail = 0; galleryPmd.unload();
+    closeAll();
+    openRegionPick(); render(); shot("15c_region_center_btn");
+    onTap(RG_CTR_X + 20, RG_BACK_Y + 20);
+    navCheck("region: [포켓몬센터] abre el centro", xScreen == XS_CENTER);
+    pet.pp[0] = 0; pet.pp[1] = 3;
+    render(); shot("50_center");
+    onTap(110 + 20, CTR_BTN_Y + 20);
+    navCheck("centro: [회복하기] empieza a curar", centerUntil != 0);
+    navCheck("centro: mientras cura no se lucha", !battleAllowed(false));
+    tick(9000); render(); shot("50b_center_healing");
+    tick(22000); centerPoll();
+    navCheck("centro: a los 30 s, PP llenos", centerUntil == 0 && pet.ppFull());
+    render(); shot("50c_center_done");
+    closeAll();
+  }
   // ko10: gen 2 en la pokedex
   galleryDetail = 0; galleryPage = 10; galleryDirty = true;
   for (int16_t d : { 172, 175, 176, 179, 181, 196, 197, 208, 212 }) dexLog.seen(d, gMockEpoch);
