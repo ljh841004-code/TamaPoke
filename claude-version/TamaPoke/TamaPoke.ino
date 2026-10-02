@@ -4371,15 +4371,17 @@ void drawBattery() {
   int pw = 4 + w + 3 + 6 + textW(t, 1) + 5;
   gfx->fillRoundRect(x - 4, y - 5, pw, h + 10, 8, plate);
   gfx->drawRoundRect(x - 4, y - 5, pw, h + 10, 8, inkColor());
-  uint16_t col = charging ? UI_BAR_OK
+  // ko11.28: sobre la placa blanca el verde/amarillo claro no se leian: de dia, tonos oscuros
+  uint16_t col = charging ? (gNight ? UI_BAR_OK : C565(0x1e, 0x7a, 0x44))
                  : (pc >= 40) ? inkColor()
-                 : (pc >= 15) ? UI_BAR_WARN
+                 : (pc >= 15) ? (gNight ? UI_BAR_WARN : C565(0xc0, 0x5a, 0x00))
                               : UI_BAR_BAD;
   gfx->drawRoundRect(x, y, w, h, 2, col);
   gfx->fillRect(x + w, y + 3, 3, 5, col);  // borne
   if (charging) {
     // rayo de carga (zigzag) en vez de la barra de nivel
     uint16_t bolt = C565(0xff, 0xd9, 0x4a);
+    gfx->fillRect(x + 2, y + 2, w - 4, h - 4, col);  // ko11.28: rayo amarillo sobre el verde (se ve en blanco y en negro)
     int bx = x + w / 2;
     gfx->fillTriangle(bx + 3, y + 1, bx - 4, y + 6, bx + 1, y + 6, bolt);
     gfx->fillTriangle(bx - 1, y + 5, bx + 4, y + 5, bx - 3, y + 10, bolt);
@@ -4389,7 +4391,7 @@ void drawBattery() {
   }
   // ko11.18: tambien el numero (cargando por USB tambien)
   setSize(1);
-  gfx->setTextColor(charging ? UI_BAR_OK : col);
+  gfx->setTextColor(col);
   setCur(x + w + 9, y - 3);
   printT(t);
 }

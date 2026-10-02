@@ -161,7 +161,8 @@ void batSetChargeLimit(bool) {}
 void pmuEnablePanel() {}
 int gMockBatPct = 78;
 int batPercent() { return gMockBatPct; }
-bool batCharging() { return false; }
+bool gMockCharging = false;
+bool batCharging() { return gMockCharging; }
 int batMillivolts() { return 3900; }
 bool usbPresent() { return false; }
 void pwrSetup() {}
