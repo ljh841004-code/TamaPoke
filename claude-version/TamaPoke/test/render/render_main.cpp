@@ -859,6 +859,51 @@ static bool playChapter(uint8_t st, uint8_t c) {
   }
   return stEnd && ((stDone[st] >> c) & 1);
 }
+// ko11.28: 수련 전투 (companero de la historia / inicial de la expedicion)
+static void trainWin(bool won) {
+  pet.energy = 100; pet.fullness = 100;
+  storyTrainTap(233, TR_GO_Y + 20);
+  if (xScreen != XS_WILD) return;
+  bPhase = BP_MENU; bTeamI = bTeamN - 1;
+  if (won) bFoe.hp = 0; else bMe.hp = 0;
+  finishBattle(won, false, false); afterResult();
+}
+static void storyTrainShots() {
+  setLang(LANG_KO); applyLangFont();
+  closeAll(); pet.energy = 100;
+  int16_t pd0 = stPDex[0]; uint32_t pe0 = stPExp[0];
+  if (stPDex[0] <= 0) stPDex[0] = 7;  // ya eligio companero (꼬부기)
+  openStory(); render(); shot("70b_story_menu_train");
+  storyMenuTap(200, ST_CARD_Y + 3 * (ST_CARD_H + ST_CARD_GAP) + 20);
+  navCheck("수련: menu -> pantalla", xScreen == XS_STRAIN);
+  storyTrainTap(200, TR_ROW_Y + 20);  // juego
+  uint16_t lv0 = stTrainLv(0);
+  render(); shot("88_story_train");
+  pet.energy = 100;
+  storyTrainTap(233, TR_GO_Y + 20);
+  navCheck("수련: empieza un combate solo con el companero", xScreen == XS_WILD && bKind == BK_STORY && stTraining == 1 &&
+           pN == 1 && bMe.dex == stTrainDex(0) && bMe.lvl == lv0);
+  render(); shot("88b_story_train_battle");
+  bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0; finishBattle(true, false, false); afterResult();
+  navCheck("수련: ganar vuelve a la pantalla", xScreen == XS_STRAIN && stTraining == 0 && stTrainPct(0) > 0);
+  render(); shot("88c_story_train_win");
+  trainWin(true); trainWin(true);
+  navCheck("수련: 3 victorias = +1 nivel", stTrainLv(0) == lv0 + 1);
+  render(); shot("88d_story_train_lvup");
+  uint16_t lv1 = stTrainLv(0); uint8_t pc = stTrainPct(0);
+  trainWin(false);
+  navCheck("수련: perder no cambia nada", xScreen == XS_STRAIN && stTrainLv(0) == lv1 && stTrainPct(0) == pc);
+  // expedicion: el entrenado sube el inicial, no a los rivales
+  storyTrainTap(200, TR_ROW_Y + 2 * (TR_ROW_H + TR_ROW_GAP) + 20);
+  uint16_t r0 = stTrainLv(2), w0 = rgWaveLv();
+  trainWin(true); trainWin(true); trainWin(true);
+  navCheck("수련: expedicion +1 nivel", stTrainLv(2) == r0 + 1 && rgWaveLv() == w0 && rgPartnerLv() >= stTrainLv(2) - 1);
+  storyTrainTap(20, 200);
+  navCheck("수련: [<] = menu de la historia", xScreen == XS_STORY);
+  stPDex[0] = pd0; stPExp[0] = pe0; rgTrainExp = 0; stTraining = 0;
+  closeAll();
+}
+
 static void storyFullRun() {
   stRestartStyle(0); stRestartStyle(1);
   bool ok = true;
@@ -976,6 +1021,7 @@ static void storyShots() {
   sceneTo(2); render(); shot("80b_anime_rocket2");
   stDone[1] = 0; stDone[0] = 0; stResStyle = 0xFF;
   storyFullRun();
+  storyTrainShots();  // ko11.28
   stDone[1] = 0; stDone[0] = 0; stResStyle = 0xFF;
   // expedicion
   xScreen = XS_STORY; storyMenuTap(200, ST_CARD_Y + 2 * (ST_CARD_H + ST_CARD_GAP) + 20);

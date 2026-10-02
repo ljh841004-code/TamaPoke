@@ -12,9 +12,9 @@
 #define ST_LINE_W 336
 #define ST_LINES 3
 #define ST_TYPE_MS 28          // un caracter cada 28 ms (efecto maquina de escribir)
-#define ST_CARD_Y 84
-#define ST_CARD_H 80
-#define ST_CARD_GAP 8
+#define ST_CARD_Y 82
+#define ST_CARD_H 66   // ko11.28: 4 tarjetas (antes 80: 3)
+#define ST_CARD_GAP 6
 #define ST_ROW_Y 86
 #define ST_ROW_H 48
 #define ST_ROW_GAP 6
@@ -34,6 +34,7 @@ uint16_t rgBest = 0;                      // expedicion: mejor oleada
 // ko11.21: el companero de cada estilo (juego: el elegido con Oak, anime: Pikachu) y su exp
 int16_t stPDex[STORY_STYLES] = { 0, 0 };
 uint32_t stPExp[STORY_STYLES] = { 0, 0 };
+uint8_t stTraining = 0;  // ko11.28: combate de entrenamiento en marcha (1 juego, 2 anime, 3 expedicion)
 PmdMon storyPmd;                          // su sprite en las escenas
 // ko11.22: los que se unen en la historia (0 = nadie; | JOIN_KEEP = no evoluciona)
 int16_t stJ[STORY_STYLES][STORY_JOIN_MAX] = {};
@@ -133,42 +134,46 @@ void openStory() {
   sfxPlay(SFX_TAP);
 }
 
-static const uint16_t ST_STYLE_COL[3] = { C565(0xd8, 0x30, 0x30), C565(0xf0, 0xa8, 0x20), C565(0x5a, 0x4c, 0xd0) };
+static const uint16_t ST_STYLE_COL[4] = { C565(0xd8, 0x30, 0x30), C565(0xf0, 0xa8, 0x20), C565(0x5a, 0x4c, 0xd0),
+                                           C565(0x2e, 0x9a, 0x5a) };  // ko11.28: 수련
 
 void renderStoryMenu() {
   uiScreenBg();
   drawFit(STX[SX_TITLE], 34, 300, UI_INK, 3);
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 4; i++) {
     int y = ST_CARD_Y + i * (ST_CARD_H + ST_CARD_GAP);
     uiButton(73, y, 320, ST_CARD_H, 14, UI_WHITE, UI_INK);
-    gfx->fillRoundRect(81, y + 10, 10, ST_CARD_H - 20, 5, ST_STYLE_COL[i]);
+    gfx->fillRoundRect(81, y + 9, 10, ST_CARD_H - 18, 5, ST_STYLE_COL[i]);
     gfx->setTextColor(UI_INK);
     setSize(2);
-    setCur(102, y + 10);
-    printT(STORY_STYLE_NAME[i]);
+    setCur(102, y + 7);
+    printT(i < 3 ? STORY_STYLE_NAME[i] : STX[SX_TR_TITLE]);
     setSize(1);
     gfx->setTextColor(C565(0x60, 0x68, 0x70));
-    setCur(102, y + 42);
-    printT(STORY_STYLE_SUB[i]);
+    setCur(102, y + 38);
+    printT(i < 3 ? STORY_STYLE_SUB[i] : STX[SX_TR_SUB]);
+    if (i == 3) continue;  // ko11.28: 수련 (sin progreso)
     char pr[32];
     if (i < STORY_STYLES && stDoneCount(i) >= STORY_NCH[i]) snprintf(pr, sizeof(pr), "%s", STX[SX_COMPLETE]);  // ko11.23: entera
     else if (i < STORY_STYLES) snprintf(pr, sizeof(pr), STX[SX_PROG_FMT], stDoneCount(i), (unsigned)STORY_NCH[i]);
     else snprintf(pr, sizeof(pr), STX[SX_BEST_FMT], (unsigned)rgBest);
     int w = textW(pr, 1) + 16;
-    drawBtn(383 - w, y + 42, w, 26, ST_STYLE_COL[i], UI_WHITE, pr);
+    drawBtn(383 - w, y + 36, w, 24, ST_STYLE_COL[i], UI_WHITE, pr);
   }
   drawNav(NAV_L, UI_INK);
   uiFlush();
 }
 
 void rogueOpen();
+void storyTrainOpen();
 void storyMenuTap(int16_t x, int16_t y) {
   if (navHit(NAV_L, x, y)) { sfxPlay(SFX_TAP); goBack(); return; }
   if (x < 73 || x >= 393 || y < ST_CARD_Y) return;
   int i = (y - ST_CARD_Y) / (ST_CARD_H + ST_CARD_GAP);
-  if (i > 2 || (y - ST_CARD_Y) % (ST_CARD_H + ST_CARD_GAP) >= ST_CARD_H) return;
+  if (i > 3 || (y - ST_CARD_Y) % (ST_CARD_H + ST_CARD_GAP) >= ST_CARD_H) return;
   sfxPlay(SFX_TAP);
   if (i == 2) { rogueOpen(); return; }
+  if (i == 3) { storyTrainOpen(); return; }  // ko11.28
   stStyle = (uint8_t)i;
   // ko11.23: la pagina del primer capitulo sin superar
   uint8_t c = 0;
@@ -719,6 +724,7 @@ static void stStartBattle() {
     b.spe = (uint16_t)(b.spe * (100 - STORY_FOE_EASE) / 100 > 0 ? b.spe * (100 - STORY_FOE_EASE) / 100 : 1);
   }
   stBattleWho = s.who;
+  stTraining = 0;  // ko11.28: un combate de la historia nunca es de entrenamiento
   // ko11.22: sin ayudantes de la caja: luchan el companero y los que se unieron en la historia
   ppArmed = false;
   xScreen = XS_NONE;
@@ -728,6 +734,7 @@ static void stStartBattle() {
 
 // startTrainer: los que se unieron en la historia, detras del companero (un poco por debajo de su nivel)
 void storyAddParty() {
+  if (stTraining) return;  // ko11.28: el entrenamiento es solo del companero
   uint16_t lv = stJoinLv();
   uint8_t m = stTeamMask();
   for (uint8_t i = 0; i < STORY_JOIN_MAX && pN < PARTY_MAX; i++) {
@@ -742,16 +749,21 @@ void storyAddParty() {
 // startTrainer: quien lucha en primer lugar (historia: el companero; expedicion: el inicial elegido)
 static uint16_t rgPartnerLv();
 static int16_t rgPartnerDex();
+static int16_t stTrainDex(uint8_t sel);
+static uint16_t stTrainLv(uint8_t sel);
 Battler storyPartnerBattler() {
   int16_t d;
   uint16_t lv;
-  if (bKind == BK_ROGUE) { d = rgPartnerDex(); lv = rgPartnerLv(); }
+  if (stTraining) { d = stTrainDex(stTraining - 1); lv = stTrainLv(stTraining - 1); }
+  else if (bKind == BK_ROGUE) { d = rgPartnerDex(); lv = rgPartnerLv(); }
   else { d = stPartnerDex(stStyle); lv = stPartnerLv(stStyle); }
   return makeBoxBattler(d, lv, lv, 110, 110, 110);
 }
 
 // vuelta del combate (afterResult): ganado -> sigue; perdido -> se puede repetir
+static void stTrainAfter(bool won);
 void storyAfterBattle(bool won) {
+  if (stTraining) { stTrainAfter(won); return; }  // ko11.28
   xScreen = XS_SCENE;
   if (won) {  // el companero sube un nivel (los premios del combate ya fueron al que crias)
     uint16_t lv = stPartnerLv(stStyle);
@@ -774,7 +786,7 @@ void storyAfterBattle(bool won) {
 // la presentacion del combate (startTrainer / nextTrainerMon)
 const char *rogueFoeLabel();
 const char *storyFoeName() {
-  if (bKind == BK_ROGUE) return rogueFoeLabel();
+  if (bKind == BK_ROGUE || stTraining) return rogueFoeLabel();  // ko11.28: "야생 X가 나타났다!"
   return stBattleWho != W_NONE ? STORY_WHO_NAME[stBattleWho] : STX[SX_WILD_GROUP];
 }
 
@@ -796,6 +808,7 @@ uint16_t rgHp[PARTY_MAX];     // vida guardada de cada miembro (0 = debilitado)
 uint16_t rgMax[PARTY_MAX];    // y su maximo
 uint8_t rgHpOk = 0;           // bit i = rgHp[i] valido
 static char rgLabel[64];
+static uint32_t rgTrainExp = 0;  // ko11.28: entrenamiento (nivel minimo del inicial de la expedicion)
 static char rgResult[96];
 static bool rgNewBest = false;
 
@@ -809,6 +822,7 @@ static void rgSave() {
   p.putUChar("rk", rgHpOk);
   p.putUShort("rb", rgBest);
   p.putShort("rd", rgStarter);
+  p.putUInt("rx", rgTrainExp);  // ko11.28
   p.end();
 }
 static void rgLoad() {
@@ -824,10 +838,14 @@ static void rgLoad() {
   if (p.isKey("rm")) p.getBytes("rm", rgMax, sizeof(rgMax));
   rgHpOk = p.getUChar("rk", 0);
   rgStarter = (int16_t)p.getShort("rd", 1);
+  rgTrainExp = p.getUInt("rx", 0);  // ko11.28
   p.end();
 }
 static uint8_t rgRegion(uint16_t w) { return RG_ROUTE[((w - 1) / 5) % 8]; }
-static uint16_t rgPartnerLv() { uint16_t lv = 4 + rgWave; return lv > LEVEL_MAX ? LEVEL_MAX : lv; }
+static uint16_t rgWaveLv() { uint16_t lv = 4 + rgWave; return lv > LEVEL_MAX ? LEVEL_MAX : lv; }
+static uint16_t rgTrainLvNow() { uint16_t t = levelForExp(rgTrainExp); return t < 5 ? 5 : t; }
+// el inicial lucha a su nivel de oleada o al entrenado, el que sea mayor (los rivales siguen a la oleada)
+static uint16_t rgPartnerLv() { uint16_t w = rgWaveLv(), t = levelForExp(rgTrainExp); return t > w ? t : w; }
 static int16_t rgPartnerDex() { return stEvolveFor(rgStarter > 0 ? rgStarter : 1, rgPartnerLv()); }
 
 void rogueOpen() {
@@ -839,7 +857,7 @@ void rogueOpen() {
 // la oleada w: salvaje (1), entrenador cada 5 (2) o jefe cada 10 (3, mas fuerte)
 static uint8_t rgMakeTeam(uint16_t w, Battler *team) {
   uint8_t reg = rgRegion(w);
-  int lv = (int)rgPartnerLv() - 1;  // un poco por debajo del inicial
+  int lv = (int)rgWaveLv() - 1;  // un poco por debajo del inicial (ko11.28: de la oleada, no del entrenado)
   bool boss = w % 10 == 0, trainer = !boss && w % 5 == 0;
   if (boss) lv += 3;
   else if (trainer) lv += 1;
@@ -869,6 +887,7 @@ static bool rgCheckTired() {
 
 static void rgStartWave(bool first) {
   rgResult[0] = 0;
+  stTraining = 0;  // ko11.28
   if (rgCheckTired()) return;
   Battler team[3];
   uint8_t n = rgMakeTeam(rgWave, team);
@@ -1038,8 +1057,17 @@ void rogueTap(int16_t x, int16_t y) {
 }
 
 // ko11.23.1: se salio del combate con [◀] (endBattleScreen ya deshizo el equipo): como antes de empezarlo
+static char stTrainMsg[96] = "";
+static bool stTrainBad = false;  // ko11.28: aviso en rojo (perder, cansado) o verde (premio)
 void storyBattleQuit(uint8_t kind) {
   sfxPlay(SFX_TAP);
+  if (stTraining) {  // ko11.28: vuelve a la pantalla del entrenamiento
+    stTraining = 0;
+    snprintf(stTrainMsg, sizeof(stTrainMsg), "%s", STX[SX_TR_QUIT]);
+    stTrainBad = true;
+    xScreen = XS_STRAIN;
+    return;
+  }
   if (kind == BK_ROGUE) {  // la vida de la oleada anterior sigue guardada (rogueSaveParty no se llamo)
     rgPhase = RG_HUB;
     rgResult[0] = 0;
@@ -1074,4 +1102,154 @@ uint8_t storySceneTrack() {
     if (!battleLeft) return MT_STORY_END;
   }
   return stStyle == 1 && xScreen != XS_STORY ? MT_STORY_A : MT_STORY;
+}
+
+// ======================================================================
+// ko11.28: 수련 전투. Un combate salvaje solo con el companero de la historia (juego o
+// anime) o con el inicial de la expedicion. Su nivel es solo de la historia (no el del que
+// crias). Ganar = 1/3 de nivel; perder no quita nada. Los premios y el cansancio, como en
+// la historia: para el que crias
+// ======================================================================
+static uint8_t stTrainSel = 0;  // 0 juego, 1 anime, 2 expedicion
+static uint8_t stFirstOpenCh(uint8_t s) {
+  uint8_t c = 0;
+  while (c + 1 < STORY_NCH[s] && ((stDone[s] >> c) & 1)) c++;
+  return c;
+}
+static bool stTrainReady(uint8_t sel) { return sel == 2 || stPDex[sel] > 0; }
+static uint16_t stTrainLv(uint8_t sel) {
+  if (sel == 2) return rgTrainLvNow();
+  uint16_t lv = levelForExp(stPExp[sel]);
+  uint8_t fl = STORY_FLOOR[sel][stFirstOpenCh(sel)];
+  return lv < fl ? fl : lv;
+}
+static int16_t stTrainDex(uint8_t sel) {
+  if (sel == 2) return stEvolveFor(rgStarter > 0 ? rgStarter : 1, stTrainLv(sel));
+  return sel == 1 ? stPartnerBase(sel) : stEvolveFor(stPartnerBase(sel), stTrainLv(sel));
+}
+static uint32_t &stTrainExpRef(uint8_t sel) { return sel == 2 ? rgTrainExp : stPExp[sel]; }
+// avance hacia el siguiente nivel, 0..100
+static uint8_t stTrainPct(uint8_t sel) {
+  uint16_t lv = stTrainLv(sel);
+  if (lv >= LEVEL_MAX) return 100;
+  uint32_t a = expForLevel(lv), b = expForLevel(lv + 1), e = stTrainExpRef(sel);
+  if (e <= a) return 0;
+  return (uint8_t)((e - a) * 100 / (b - a));
+}
+
+void storyTrainOpen() {
+  rgLoad();  // tambien carga la historia
+  stTrainMsg[0] = 0;
+  if (!stTrainReady(stTrainSel)) stTrainSel = 2;
+  xScreen = XS_STRAIN;
+}
+
+#define TR_ROW_Y 96
+#define TR_ROW_H 58
+#define TR_ROW_GAP 8
+#define TR_GO_Y 330
+void renderStoryTrain() {
+  uiScreenBg();
+  drawFit(STX[SX_TR_TITLE], 34, 300, UI_INK, 3);
+  drawFit(STX[SX_TR_NOTE], 68, 330, C565(0x60, 0x68, 0x70), 1);
+  static const uint8_t LBL[3] = { SX_TR_GAME, SX_TR_ANIME, SX_TR_ROGUE };
+  for (uint8_t i = 0; i < 3; i++) {
+    int y = TR_ROW_Y + i * (TR_ROW_H + TR_ROW_GAP);
+    bool ok = stTrainReady(i), sel = i == stTrainSel;
+    uiButton(73, y, 320, TR_ROW_H, 12, sel ? C565(0xe2, 0xf4, 0xe6) : ok ? UI_WHITE : UI_TRACK, sel ? ST_STYLE_COL[3] : UI_INK);
+    gfx->fillRoundRect(81, y + 9, 8, TR_ROW_H - 18, 4, ST_STYLE_COL[i]);
+    gfx->setTextColor(C565(0x60, 0x68, 0x70));
+    setSize(1);
+    setCur(98, y + 6);
+    printT(STX[LBL[i]]);
+    if (!ok) {
+      gfx->setTextColor(C565(0x90, 0x90, 0x90));
+      setSize(2);
+      setCur(98, y + 26);
+      printT(STX[SX_TR_LOCK]);
+      continue;
+    }
+    char nm[40];
+    snprintf(nm, sizeof(nm), "%s  Lv.%u", dexName(stTrainDex(i)), (unsigned)stTrainLv(i));
+    gfx->setTextColor(UI_INK);
+    setSize(2);
+    setCur(98, y + 24);
+    printT(nm);
+    uiGauge(290, y + 32, 90, 10, stTrainPct(i) * 10, ST_STYLE_COL[3], UI_TRACK);
+  }
+  const char *msg = stTrainMsg[0] ? stTrainMsg : STX[SX_TR_PICK];
+  drawFit(msg, TR_ROW_Y + 3 * (TR_ROW_H + TR_ROW_GAP) + 4, 330,
+          !stTrainMsg[0] ? UI_INK : stTrainBad ? UI_BAR_BAD : C565(0x1e, 0x7a, 0x44), 1);
+  drawBtn(143, TR_GO_Y, 180, 46, ST_STYLE_COL[3], UI_WHITE, STX[SX_TR_GO]);
+  drawNav(NAV_L, UI_INK);
+  uiFlush();
+}
+
+static void stTrainStart() {
+  uint8_t sel = stTrainSel;
+  if (!stTrainReady(sel)) { sfxPlay(SFX_DENY); return; }
+  if (stTrainLv(sel) >= LEVEL_MAX) { snprintf(stTrainMsg, sizeof(stTrainMsg), "%s", STX[SX_TR_MAX]); stTrainBad = true; sfxPlay(SFX_DENY); return; }
+  if (!pet.canBattle() || pet.tooTiredToBattle()) {  // el cansado es el que crias, como en la historia
+    txFmtRaw(stTrainMsg, sizeof(stTrainMsg), STX[SX_TIRED], stPetName(), nullptr);
+    stTrainBad = true;
+    sfxPlay(SFX_DENY);
+    return;
+  }
+  uint16_t lv = stTrainLv(sel);
+  int flv = (int)lv - 1 + (int)random(2);  // un nivel por debajo o el mismo
+  if (flv < 3) flv = 3;
+  uint8_t reg = RG_ROUTE[random(8)];
+  BRng rng(esp_random() | 1);
+  uint8_t g;
+  Battler b = makeWildIn(reg, (uint16_t)flv, sceneHour(), WX_CLEAR, 0, rng, &g);
+  Battler team[1] = { makeTrainerMon(b.dex, (uint16_t)flv) };
+  txFmtRaw(rgLabel, sizeof(rgLabel), RGX[RX_WILD_FMT], dexName(team[0].dex), nullptr);
+  stTraining = sel + 1;
+  if (sel < 2) stStyle = sel;
+  stBattleWho = W_NONE;
+  stTrainMsg[0] = 0;
+  ppArmed = false;
+  xScreen = XS_NONE;
+  startTrainer(BK_STORY, reg, team, 1);
+  if (xScreen != XS_WILD) { stTraining = 0; xScreen = XS_STRAIN; }
+}
+
+static void stTrainAfter(bool won) {
+  uint8_t sel = stTraining - 1;
+  stTraining = 0;
+  xScreen = XS_STRAIN;
+  stTrainBad = !won;
+  if (!won) { snprintf(stTrainMsg, sizeof(stTrainMsg), "%s", STX[SX_TR_LOST]); return; }
+  uint16_t lv0 = stTrainLv(sel);
+  if (lv0 >= LEVEL_MAX) return;
+  uint32_t &e = stTrainExpRef(sel);
+  uint32_t a = expForLevel(lv0), step = (expForLevel(lv0 + 1) - a) / 3 + 1;  // 3 victorias = 1 nivel
+  if (e < a) e = a;  // desde el minimo del capitulo
+  e += step;
+  uint16_t lv1 = stTrainLv(sel);
+  const char *nm = dexName(stTrainDex(sel));
+  if (lv1 > lv0) {
+    char t[96];
+    snprintf(t, sizeof(t), STX[SX_TR_UP_FMT], (unsigned)lv1);
+    txFmtRaw(stTrainMsg, sizeof(stTrainMsg), t, nm, nullptr);
+    sfxPlay(SFX_LEVEL);
+  } else {
+    unsigned left = (unsigned)((expForLevel(lv1 + 1) - e + step - 1) / step);
+    char t[96];
+    snprintf(t, sizeof(t), STX[SX_TR_EXP_FMT], 33u, left);  // cada victoria, un tercio de nivel
+    txFmtRaw(stTrainMsg, sizeof(stTrainMsg), t, nm, nullptr);
+  }
+  if (sel == 2) rgSave(); else stSave();
+}
+
+void storyTrainTap(int16_t x, int16_t y) {
+  if (navHit(NAV_L, x, y)) { sfxPlay(SFX_TAP); xScreen = XS_STORY; return; }
+  if (y >= TR_GO_Y - 4 && y < TR_GO_Y + 50 && x >= 133 && x < 333) { sfxPlay(SFX_TAP); stTrainStart(); return; }
+  if (x < 73 || x >= 393 || y < TR_ROW_Y) return;
+  int i = (y - TR_ROW_Y) / (TR_ROW_H + TR_ROW_GAP);
+  if (i > 2 || (y - TR_ROW_Y) % (TR_ROW_H + TR_ROW_GAP) >= TR_ROW_H) return;
+  if (!stTrainReady((uint8_t)i)) { sfxPlay(SFX_DENY); return; }
+  stTrainSel = (uint8_t)i;
+  stTrainMsg[0] = 0;
+  sfxPlay(SFX_TAP);
 }

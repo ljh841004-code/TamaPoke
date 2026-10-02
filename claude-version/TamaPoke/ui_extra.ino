@@ -16,7 +16,8 @@ enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_
                  XS_FAME, XS_BAK,
                  XS_BGM, XS_BRIGHT, XS_PARTY,
                  XS_STORY, XS_STORYCH, XS_SCENE, XS_ROGUE,
-                 XS_SET };  // ko11.26: menu de ajustes  // ko11.21: historia  // ko11.18: brillo  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
+                 XS_SET,     // ko11.26: menu de ajustes
+                 XS_STRAIN };  // ko11.28: combates de entrenamiento de la historia  // ko11.21: historia  // ko11.18: brillo  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
 uint8_t xScreen = XS_NONE;
 
 // ko11.17: [<] vuelve a la pantalla DESDE LA QUE se abrio el menu (la ficha, el
@@ -3040,6 +3041,7 @@ bool extraRender() {
     case XS_SCENE: renderStoryScene(); return true;
     case XS_ROGUE: renderRogue(); return true;
     case XS_SET: renderSettings(); return true;  // ko11.26
+    case XS_STRAIN: renderStoryTrain(); return true;  // ko11.28
     default: return false;
   }
 }
@@ -3069,6 +3071,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_SCENE: storySceneTap(x, y); return true;
     case XS_ROGUE: rogueTap(x, y); return true;
     case XS_SET: settingsTap(x, y); return true;
+    case XS_STRAIN: storyTrainTap(x, y); return true;
     default: return false;
   }
 }
@@ -3082,6 +3085,7 @@ bool extraSwipe() {
   if (xScreen == XS_BGM) { xScreen = XS_VOL; return true; }  // ko11.8
   if (xScreen == XS_BRIGHT || xScreen == XS_UPD) { xScreen = XS_SET; return true; }  // ko11.26
   if (xScreen == XS_SET) { goBack(); return true; }
+  if (xScreen == XS_STRAIN) { xScreen = XS_STORY; return true; }  // ko11.28
   if (xScreen == XS_RESET) { goBack(); return true; }
   if (xScreen == XS_CANDY) { candyBagClose(); return true; }  // ko10.11: vertical = cerrar
   if (xScreen == XS_FAME) { fameClose(); return true; }       // ko11.1
