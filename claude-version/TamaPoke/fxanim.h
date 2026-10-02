@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-// ko11.30: efectos de ataque de la SD (mons/fx/fTTSV.bin, tools/pack_fx.py).
+// ko11.30: efectos de ataque de la SD (mons/fx/fTTSV.bin o suelto en mons/, tools/pack_fx.py).
 // Los fotogramas ya vienen compuestos en coordenadas de pantalla para los dos
 // sentidos (lado 0 = ataca el mio, lado 1 = ataca el rival); aqui solo se pegan
 // con mezcla alfa. Si no hay archivo, el firmware usa su propio efecto.

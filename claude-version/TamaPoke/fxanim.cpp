@@ -32,6 +32,10 @@ bool FxAnim::load(uint8_t type, uint8_t tier, uint8_t var) {
   char path[28];
   snprintf(path, sizeof(path), "/mons/fx/f%02u%u%u.bin", type, tier, var);
   File f = SD_MMC.open(path, FILE_READ);
+  if (!f) {  // el instalador web solo escribe archivos sueltos en /mons/
+    snprintf(path, sizeof(path), "/mons/f%02u%u%u.bin", type, tier, var);
+    f = SD_MMC.open(path, FILE_READ);
+  }
   if (!f) return false;
   uint32_t sz = f.size();
   if (sz < FX_HDR + 4 || sz > 3UL * 1024 * 1024) { f.close(); return false; }
