@@ -353,7 +353,7 @@ static void scenes(bool ko, const char *sfx) {
           snprintf(n, sizeof(n), "tier_%03d_%u", d, at);
           shot(n);
         }
-        // ko11.31: los otros dos ataques de la misma fase (efecto propio)
+        // ko11.30: los otros dos ataques de la misma fase (efecto propio)
         for (uint8_t v = 1; v <= 2; v++) {
           pet.moveK = v;
           bvSetup(bMe, bFoe, nullptr, false);

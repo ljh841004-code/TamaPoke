@@ -833,8 +833,8 @@ void drawMoveFx(uint8_t fx, int ax, int ay, int tx, int ty, uint32_t t, bool hit
   int px = ax + (int)((tx - ax) * p), py = ay + (int)((ty - ay) * p);
   uint32_t sd = (uint32_t)bqI * 7919u + (uint32_t)bqT;  // variacion por golpe
 
-  // ko11.31: los ataques 2 y 3 de fuego, agua, planta y electrico tienen su propio efecto
-  bool own = var && drawMoveFxVar(fx, var, ax, ay, tx, ty, t, hit, tier);
+  // ko11.30: cada uno de los 9 ataques de fuego, agua, planta y electrico tiene su propio efecto
+  bool own = drawMoveFxVar(fx, var, ax, ay, tx, ty, t, hit, tier);
   if (!own) switch (fx) {
     case PT_FIRE:
       if (travel)
@@ -1106,7 +1106,7 @@ void drawMoveFx(uint8_t fx, int ax, int ay, int tx, int ty, uint32_t t, bool hit
   }
 
   // ko10.4: fase media (aura al cargar + estallido) y final (ademas rayo y estrella grande)
-  if (tier >= 1 && fx < PT_COUNT) {
+  if (tier >= 1 && fx < PT_COUNT && !own) {  // ko11.31: los ataques con efecto propio ya tienen su tamano
     uint16_t c = FX_COL[fx], cl = lerp565(c, WHITE, 8, 16);
     if (t < 380) {  // aura de carga alrededor del atacante
       int r = 30 + (int)(6 * sinf(t * 0.04f)) + tier * 6;
@@ -1145,8 +1145,8 @@ void drawMoveFx(uint8_t fx, int ax, int ay, int tx, int ty, uint32_t t, bool hit
 }
 
 // ======================================================================
-// ko11.31: efectos propios de los ataques 2 y 3 (var 1, 2) de fuego, agua, planta y
-// electrico. Mismo reloj que drawMoveFx: viaje t 120..380, impacto desde t 350 (600 ms).
+// ko11.31: un efecto propio para CADA ataque de fuego, agua, planta y electrico (9 por tipo:
+// 3 fases x 3 variantes; el primero de la 1a fase sigue con el de siempre). Mismo reloj que drawMoveFx: viaje t 120..380, impacto desde t 350 (600 ms).
 // La fase (tier) los hace mas grandes. Devuelve false si el tipo aun no tiene efecto propio
 // ======================================================================
 static void fxZig(int x0, int y0, int x1, int y1, int segs, int amp, uint32_t seed, uint16_t c, int w) {
@@ -1161,211 +1161,407 @@ static void fxZig(int x0, int y0, int x1, int y1, int segs, int amp, uint32_t se
 
 static bool drawMoveFxVar(uint8_t fx, uint8_t var, int ax, int ay, int tx, int ty, uint32_t t, bool hit, uint8_t tier) {
   const uint16_t WHITE = UI_WHITE, YEL = C565(0xff, 0xe0, 0x40), ORA = C565(0xff, 0x8c, 0x1a), RED = C565(0xe8, 0x38, 0x20);
+  if (fx != PT_FIRE && fx != PT_WATER && fx != PT_GRASS && fx != PT_ELECTRIC) return false;
+  int T = tier > 2 ? 2 : tier, id = T * 3 + (var > 2 ? 0 : var);
+  if (id == 0) return false;  // el primero de la 1a fase: el efecto de siempre del tipo
   float p = fxClamp01(((float)t - 120) / 260.0f);
   bool travel = t >= 120 && t < 380;
   int k = (int)t - 350;
   bool impact = hit && k >= 0 && k < 600;
   float f = impact ? k / 600.0f : 0;
   int px = ax + (int)((tx - ax) * p), py = ay + (int)((ty - ay) * p);
-  uint32_t sd = (uint32_t)bqI * 7919u + (uint32_t)bqT + var * 131u;
-  int T = tier > 2 ? 2 : tier;
+  uint32_t sd = (uint32_t)bqI * 7919u + (uint32_t)bqT + id * 131u;
   float ang = atan2f((float)(ty - ay), (float)(tx - ax));
+  float ux = cosf(ang), uy = sinf(ang), nx = -uy, ny = ux;  // direccion y su normal
   int angD = (int)(ang * 57.3f);
 
-  switch (fx) {
-    case PT_FIRE:
-      if (var == 1) {  // 회오리불꽃 / 열풍 / 블래스트번: ondas de calor y torbellino de llamas
-        if (travel)
-          for (int i = 0; i < 3 + T; i++) {
-            float q = fxClamp01(p - i * 0.12f);
+  if (fx == PT_FIRE) {
+    switch (id) {
+      case 3: {  // 화염방사: chorro continuo de llamas que crece hasta el rival
+        if (t >= 120 && t < 560) {
+          float L = fxClamp01((t - 120) / 200.0f);
+          for (int i = 0; i < 16; i++) {
+            float q = L * i / 15.0f;
+            int x = ax + (int)((tx - ax) * q) + (int)(nx * fxRnd(sd + i + t / 60, 5)), y = ay + (int)((ty - ay) * q) + (int)(ny * fxRnd(sd + 3 * i + t / 60, 5));
+            int r = 4 + (int)(q * 11);
+            gfx->fillCircle(x, y, r, i % 3 == 0 ? RED : ORA);
+            gfx->fillCircle(x, y, r / 2, YEL);
+          }
+        }
+        if (impact && k < 480) for (int i = 0; i < 6; i++) gfx->fillCircle(tx + fxRnd(sd + i, 26), ty + 20 - (k + i * 70) % 300 / 5, 6, i & 1 ? ORA : YEL);
+        return true;
+      }
+      case 6: {  // 불대문자: bola que vuela y estalla en un "大" de fuego
+        if (travel) { gfx->fillCircle(px, py, 12, ORA); gfx->fillCircle(px, py, 6, YEL); }
+        if (impact && k < 580) {
+          int L = (int)(46 * fxClamp01(k / 160.0f));
+          static const int8_t ARM[5][2] = { { 0, -10 }, { -10, -2 }, { 10, -2 }, { -8, 10 }, { 8, 10 } };
+          for (int a = 0; a < 5; a++) {
+            int ex = tx + ARM[a][0] * L / 10, ey = ty + ARM[a][1] * L / 10;
+            fxLine(tx, ty, ex, ey, 14, RED);
+            fxLine(tx, ty, ex, ey, 8, ORA);
+            fxLine(tx, ty, ex, ey, 3, YEL);
+          }
+          gfx->fillCircle(tx, ty, 10, YEL);
+        }
+        return true;
+      }
+      case 1: {  // 회오리불꽃: anillo de llamas girando alrededor del rival
+        if (travel) gfx->fillCircle(px, py, 6, ORA);
+        if (impact) for (int i = 0; i < 12; i++) {
+          float a = i * 0.5236f + k * 0.015f;
+          int x = tx + (int)(cosf(a) * 32), y = ty + (int)(sinf(a) * 14) - (i % 4) * 7 - (int)(f * 20);
+          gfx->fillCircle(x, y, 6 - (int)(f * 3), i % 3 == 0 ? YEL : i % 3 == 1 ? ORA : RED);
+        }
+        return true;
+      }
+      case 4: {  // 열풍: medialunas de calor que barren hasta el rival
+        if (t >= 100 && t < 520)
+          for (int i = 0; i < 4; i++) {
+            float q = fxClamp01((t - 100) / 300.0f - i * 0.12f);
             int x = ax + (int)((tx - ax) * q), y = ay + (int)((ty - ay) * q);
-            int r = 16 + i * 4 + T * 4;
-            gfx->fillArc(x, y, r, r - 4, (angD - 50 + 360) % 360, (angD + 50 + 360) % 360, i & 1 ? YEL : ORA);
+            int r = 26 + i * 6;
+            gfx->fillArc(x, y, r, r - 5, (float)(angD - 60), (float)(angD + 60), i & 1 ? YEL : ORA);
           }
-        if (impact) {
-          if (T == 2 && k < 180) { gfx->fillCircle(tx, ty, 46 - k / 5, ORA); gfx->fillCircle(tx, ty, 26 - k / 8, YEL); }
-          int n = 10 + 4 * T, rx = 30 + T * 10;
-          for (int i = 0; i < n; i++) {
-            float a = i * 6.2832f / n + k * 0.012f;
-            int y = ty + (int)(sinf(a) * rx * 0.45f) - (int)(f * 34) - (i % 3) * 6;
-            int x = tx + (int)(cosf(a) * rx);
-            int r = (int)((5 + T * 2) * (1 - f * 0.5f)) + 1;
-            gfx->fillCircle(x, y, r, i % 3 == 0 ? YEL : i % 3 == 1 ? ORA : RED);
-          }
+        if (impact && k < 520) for (int i = 0; i < 5; i++) {  // calima
+          int y = ty - 30 + i * 14;
+          for (int x = tx - 40; x < tx + 40; x += 6) gfx->drawPixel(x, y + (int)(3 * sinf(x * 0.3f + k * 0.03f)), ORA);
         }
         return true;
       }
-      // 불꽃펀치 / 화염자동차 / 오버히트: bola de fuego con estela y estallido
-      if (travel) {
-        int R = 10 + T * 4;
-        for (int i = 5; i >= 1; i--) {
-          float q = fxClamp01(p - i * 0.05f);
+      case 7: {  // 블래스트번: columnas de fuego que salen del suelo y gran estallido
+        if (t >= 150 && t < 400) gfx->fillCircle(ax, ay, 18 + (int)(p * 8), ORA);
+        if (impact && k < 600) {
+          for (int i = 0; i < 6; i++) {
+            int x = tx - 60 + i * 24, h = (int)(90 * fxClamp01((k - i * 25) / 180.0f)) * (k < 440 ? 1 : 0);
+            if (h > 0) { gfx->fillRect(x - 7, ty + 40 - h, 14, h, RED); gfx->fillRect(x - 3, ty + 40 - h, 6, h, YEL); }
+          }
+          if (k > 120 && k < 420) { int R = (k - 120) / 4; gfx->fillCircle(tx, ty, R, ORA); gfx->fillCircle(tx, ty, R / 2, WHITE); }
+        }
+        return true;
+      }
+      case 2: {  // 불꽃펀치: puno de fuego (circulo con nudillos) y golpe en estrella
+        if (travel) {
+          gfx->fillCircle(px, py, 11, ORA);
+          for (int i = 0; i < 3; i++) gfx->fillCircle(px + (int)(ux * 8 + nx * (i - 1) * 6), py + (int)(uy * 8 + ny * (i - 1) * 6), 4, YEL);
+          gfx->fillCircle(px - (int)(ux * 12), py - (int)(uy * 12), 6, RED);
+        }
+        if (impact && k < 300) { fxStar(tx, ty, 6, 30 + k / 8, 8, 0.4f, 4, ORA); fxStar(tx, ty, 4, 20 + k / 10, 8, 0.0f, 2, YEL); }
+        return true;
+      }
+      case 5: {  // 화염자동차: rueda de fuego que rueda hasta el rival
+        if (t >= 120 && t < 420) {
+          float q = fxClamp01((t - 120) / 280.0f);
           int x = ax + (int)((tx - ax) * q), y = ay + (int)((ty - ay) * q);
-          gfx->fillCircle(x, y, R * (6 - i) / 7, i > 3 ? RED : ORA);
-        }
-        gfx->fillCircle(px, py, R, ORA);
-        gfx->fillCircle(px, py, R / 2 + 1, T == 2 ? WHITE : YEL);
-      }
-      if (impact && k < 520) {
-        int R = (int)((26 + 18 * T) * fxClamp01(k / 220.0f)) + 6;
-        fxStar(tx, ty, R / 3, R, 10 + 2 * T, 0.2f, 3 + T, ORA);
-        fxStar(tx, ty, R / 4, R * 2 / 3, 10 + 2 * T, 0.5f, 2, YEL);
-        if (k < 140) gfx->fillCircle(tx, ty, 18 + 6 * T - k / 10, T == 2 ? WHITE : YEL);
-      }
-      return true;
-
-    case PT_WATER: {
-      const uint16_t BLU = C565(0x40, 0x90, 0xf0), LBL = C565(0xb0, 0xe0, 0xff), DBL = C565(0x20, 0x58, 0xb8);
-      if (var == 1) {  // 거품 / 파도타기 / 하이드로캐논
-        if (travel) {
-          if (T == 0)  // burbujas que flotan
-            for (int i = 0; i < 7; i++) {
-              float q = fxClamp01(p - i * 0.07f);
-              int x = ax + (int)((tx - ax) * q) + fxRnd(sd + i, 6), y = ay + (int)((ty - ay) * q) + (int)(8 * sinf(q * 12 + i));
-              gfx->drawCircle(x, y, 5 + (i % 3), LBL);
-              gfx->drawCircle(x, y, 6 + (i % 3), BLU);
-            }
-          else {  // una ola: cresta curva que avanza hacia el rival
-            float nx = -sinf(ang), ny = cosf(ang);
-            for (int j = -5; j <= 5; j++) {
-              int o = j * (8 + T * 2);
-              int x = px + (int)(nx * o) - (int)(cosf(ang) * abs(j) * 3), y = py + (int)(ny * o) - (int)(sinf(ang) * abs(j) * 3);
-              gfx->fillCircle(x, y, 9 + T * 3, BLU);
-              gfx->fillCircle(x, y - 4, 4 + T, LBL);
-            }
-            if (T == 2) fxLine(ax, ay, px, py, 10, DBL);
+          for (int w = 0; w < 3; w++) gfx->drawCircle(x, y, 16 + w, w == 1 ? YEL : ORA);
+          for (int s2 = 0; s2 < 6; s2++) {
+            float a = s2 * 1.047f + t * 0.03f;
+            fxLine(x, y, x + (int)(cosf(a) * 15), y + (int)(sinf(a) * 15), 3, ORA);
+            gfx->fillCircle(x + (int)(cosf(a) * 19), y + (int)(sinf(a) * 19), 4, RED);
           }
         }
-        if (impact && k < 560) {
-          for (int i = 0; i < 8 + 3 * T; i++) {
-            int x = tx + fxRnd(sd + i * 7, 36 + 8 * T), y = ty + 20 - (int)(((k + i * 60) % 420) * 0.22f);
-            gfx->drawCircle(x, y, 4 + (i % 4) + T, LBL);
-          }
-          gfx->drawCircle(tx, ty, 14 + k / 7, BLU);
-          if (T) gfx->drawCircle(tx, ty, 16 + k / 6, LBL);
+        if (impact && k < 400) for (int i = 0; i < 10; i++) {
+          float a = i * 0.628f;
+          int d = 8 + k / 5;
+          gfx->fillCircle(tx + (int)(cosf(a) * d), ty + (int)(sinf(a) * d), 5 - k / 100, ORA);
         }
         return true;
       }
-      // 아쿠아제트 / 아쿠아테일 / 폭포오르기: estela de agua y columna (cascada)
-      if (travel) {
-        fxLine(ax, ay, px, py, 10 + 2 * T, BLU);
-        fxLine(ax, ay, px, py, 4, LBL);
-        gfx->fillCircle(px, py, 10 + 2 * T, BLU);
-        gfx->drawCircle(px, py, 13 + 2 * T, LBL);
-      }
-      if (impact && k < 560) {
-        int h = (int)((70 + 30 * T) * fxClamp01(k / 180.0f)), w = 12 + 6 * T;
-        if (T == 2) fxLine(tx, ty - 130, tx, ty + 20, w + 6, BLU);  // cascada desde arriba
-        gfx->fillRect(tx - w / 2, ty + 30 - h, w, h, BLU);
-        gfx->fillRect(tx - w / 6, ty + 30 - h, w / 3, h, LBL);
-        for (int i = 0; i < 8; i++) {
-          float a = 3.1416f + i * 0.39f;
-          int d = k / 5;
-          gfx->fillCircle(tx + (int)(cosf(a) * d), ty + 30 - h + (int)(sinf(a) * d * 0.5f) + d * d / 120, 4, LBL);
+      case 8: {  // 오버히트: el atacante al rojo blanco y un rayo blanco-naranja enorme
+        if (t < 380) { int r = 22 + (int)(t / 25); gfx->drawCircle(ax, ay, r, WHITE); gfx->drawCircle(ax, ay, r + 2, ORA); }
+        if (t >= 200 && t < 520) {
+          fxLine(ax, ay, tx, ty, 30, RED);
+          fxLine(ax, ay, tx, ty, 20, ORA);
+          fxLine(ax, ay, tx, ty, 10, WHITE);
         }
-      }
-      return true;
-    }
-
-    case PT_GRASS: {
-      const uint16_t GRN = C565(0x3c, 0xa8, 0x48), LGR = C565(0x9c, 0xe0, 0x6c), DGR = C565(0x24, 0x70, 0x30),
-                     PNK = C565(0xf4, 0x9c, 0xc4);
-      if (var == 1) {  // 흡수 / 기가드레인 / 하드플랜트: espinas del suelo y esferas que vuelven
-        if (impact) {
-          if (T >= 1) {
-            int n = 4 + T * 2;
-            for (int i = 0; i < n; i++) {
-              int x = tx - (n - 1) * 9 + i * 18;
-              int h = (int)((26 + 18 * T) * fxClamp01((k - i * 20) / 160.0f) * (k < 420 ? 1.0f : fxClamp01((600 - k) / 180.0f)));
-              if (h > 0) {
-                gfx->fillTriangle(x - 7, ty + 34, x + 7, ty + 34, x, ty + 34 - h, i & 1 ? GRN : DGR);
-                gfx->drawLine(x, ty + 34, x, ty + 34 - h, LGR);
-              }
-            }
-          }
-          for (int i = 0; i < 6 + 2 * T; i++) {  // la energia vuelve al atacante
-            float q = fxClamp01((k - 120 - i * 40) / 360.0f);
-            if (q <= 0 || q >= 1) continue;
-            int x = tx + (int)((ax - tx) * q) + (int)(10 * sinf(q * 9 + i)), y = ty + (int)((ay - ty) * q) + (int)(8 * cosf(q * 7 + i));
-            gfx->fillCircle(x, y, 4 + T, LGR);
-            gfx->drawCircle(x, y, 5 + T, GRN);
-          }
-        } else if (t < 350) {
-          gfx->drawCircle(tx, ty, 34 - (int)(p * 10), LGR);
-        }
+        if (impact && k < 300) gfx->fillCircle(tx, ty, 50 - k / 8, WHITE);
         return true;
       }
-      // 씨기관총 / 꽃잎댄스 / 리프스톰: rafaga de semillas, petalos u hojas
-      uint16_t c1 = T == 1 ? PNK : GRN, c2 = T == 1 ? WHITE : LGR;
-      if (travel)
-        for (int i = 0; i < 6 + 4 * T; i++) {
-          float q = fxClamp01(p * 1.2f - i * 0.06f);
-          if (q <= 0) continue;
-          float sw = (T == 0) ? 3 : 14 + 6 * T;
-          int x = ax + (int)((tx - ax) * q) + (int)(sw * sinf(q * 10 + i * 1.7f)), y = ay + (int)((ty - ay) * q) + (int)(sw * cosf(q * 10 + i));
-          if (T == 0) gfx->fillCircle(x, y, 3, i & 1 ? DGR : GRN);
-          else gfx->fillEllipse(x, y, 6, 3, i & 1 ? c1 : c2);
-        }
-      if (impact && k < 560)
-        for (int i = 0; i < 8 + 4 * T; i++) {
-          float a = i * 6.2832f / (8 + 4 * T) + k * (0.01f + 0.004f * T);
-          int d = 18 + k / 10 + T * 6;
-          int x = tx + (int)(cosf(a) * d), y = ty + (int)(sinf(a) * d * 0.7f);
-          gfx->fillEllipse(x, y, 6 + T, 3, i & 1 ? c1 : c2);
-        }
-      return true;
-    }
-
-    case PT_ELECTRIC: {
-      const uint16_t LYE = C565(0xff, 0xf6, 0xa0);
-      if (var == 1) {  // 스파크 / 와일드볼트 / 볼트태클: carga envuelta en rayos
-        if (travel) {
-          int R = 12 + 4 * T;
-          gfx->fillCircle(px, py, R, YEL);
-          gfx->fillCircle(px, py, R / 2, WHITE);
-          for (int b = 0; b < 4 + 2 * T; b++) {
-            float a = b * 6.2832f / (4 + 2 * T) + t * 0.02f;
-            fxZig(px, py, px + (int)(cosf(a) * (R + 14)), py + (int)(sinf(a) * (R + 14)), 3, 5, sd + b + t / 40, YEL, 2);
-          }
-          if (T >= 1) fxLine(ax, ay, px, py, 3, LYE);
-        }
-        if (impact && k < 500 && ((k / 40) % 3) != 2)
-          for (int b = 0; b < 6 + 2 * T; b++) {
-            float a = b * 6.2832f / (6 + 2 * T) + 0.3f;
-            int L = 30 + 14 * T + (k / 10);
-            fxZig(tx, ty, tx + (int)(cosf(a) * L), ty + (int)(sinf(a) * L), 4, 7, sd + b * 13 + k / 40, YEL, 3);
-            fxZig(tx, ty, tx + (int)(cosf(a) * L), ty + (int)(sinf(a) * L), 4, 7, sd + b * 13 + k / 40, WHITE, 1);
-          }
-        return true;
-      }
-      // 번개펀치 / 방전 / 전자포: esfera electrica lenta y descarga en anillo
-      if (travel) {
-        float q = p * p;  // acelera al final
-        int x = ax + (int)((tx - ax) * q), y = ay + (int)((ty - ay) * q);
-        int R = 9 + 5 * T;
-        gfx->fillCircle(x, y, R + 4, LYE);
-        gfx->fillCircle(x, y, R, YEL);
-        gfx->fillCircle(x, y, R / 3 + 1, WHITE);
-        for (int b = 0; b < 3; b++) fxZig(x - R - 6, y + fxRnd(sd + b + t / 50, R), x + R + 6, y + fxRnd(sd + 7 * b + t / 50, R), 4, 4, sd + b * 5 + t / 50, WHITE, 1);
-      }
-      if (impact && k < 560) {
-        int R = 20 + k / 5 + 10 * T;
-        gfx->drawCircle(tx, ty, R, YEL);
-        gfx->drawCircle(tx, ty, R + 1, YEL);
-        gfx->drawCircle(tx, ty, R + 3, LYE);
-        if ((k / 40) % 3 != 2)
-          for (int b = 0; b < 8 + 2 * T; b++) {
-            float a = b * 6.2832f / (8 + 2 * T) + k * 0.004f;
-            int x0 = tx + (int)(cosf(a) * (R - 12)), y0 = ty + (int)(sinf(a) * (R - 12));
-            int x1 = tx + (int)(cosf(a) * (R + 12)), y1 = ty + (int)(sinf(a) * (R + 12));
-            fxZig(x0, y0, x1, y1, 3, 5, sd + b * 11 + k / 40, YEL, 2);
-          }
-        if (T == 2 && k < 120) gfx->fillCircle(tx, ty, 40 - k / 4, WHITE);
-      }
-      return true;
     }
   }
-  return false;  // aun sin efecto propio: el de su tipo
+
+  if (fx == PT_WATER) {
+    const uint16_t BLU = C565(0x40, 0x90, 0xf0), LBL = C565(0xb0, 0xe0, 0xff), DBL = C565(0x20, 0x58, 0xb8);
+    switch (id) {
+      case 3: {  // 물의파동: anillos de agua que viajan
+        if (t >= 120 && t < 420)
+          for (int i = 0; i < 3; i++) {
+            float q = fxClamp01((t - 120) / 260.0f - i * 0.15f);
+            if (q <= 0) continue;
+            int x = ax + (int)((tx - ax) * q), y = ay + (int)((ty - ay) * q);
+            gfx->drawCircle(x, y, 10 + i * 3, BLU); gfx->drawCircle(x, y, 11 + i * 3, LBL);
+          }
+        if (impact && k < 500) for (int r = 0; r < 3; r++) gfx->drawCircle(tx, ty, 10 + k / 6 + r * 9, r == 1 ? LBL : BLU);
+        return true;
+      }
+      case 6: {  // 하이드로펌프: dos chorros gruesos paralelos
+        if (t >= 120 && t < 520) {
+          float L = fxClamp01((t - 120) / 150.0f);
+          int ex = ax + (int)((tx - ax) * L), ey = ay + (int)((ty - ay) * L);
+          for (int s2 = -1; s2 <= 1; s2 += 2) {
+            int ox = (int)(nx * 9 * s2), oy = (int)(ny * 9 * s2);
+            fxLine(ax + ox, ay + oy, ex + ox, ey + oy, 11, BLU);
+            fxLine(ax + ox, ay + oy, ex + ox, ey + oy, 4, LBL);
+          }
+        }
+        if (impact && k < 480) for (int i = 0; i < 12; i++) {
+          float a = i * 0.524f; int d = k / 4;
+          gfx->fillCircle(tx + (int)(cosf(a) * d), ty + (int)(sinf(a) * d * 0.6f) + d * d / 160, 5, i & 1 ? LBL : BLU);
+        }
+        return true;
+      }
+      case 1: {  // 거품: burbujas que flotan hacia el rival
+        if (t >= 120 && t < 520)
+          for (int i = 0; i < 8; i++) {
+            float q = fxClamp01((t - 120) / 320.0f - i * 0.06f);
+            int x = ax + (int)((tx - ax) * q) + (int)(nx * 10 * sinf(q * 9 + i)), y = ay + (int)((ty - ay) * q) + (int)(ny * 10 * sinf(q * 9 + i)) - (int)(q * 6);
+            gfx->drawCircle(x, y, 4 + i % 3, LBL); gfx->drawCircle(x, y, 5 + i % 3, BLU);
+            gfx->drawPixel(x - 2, y - 2, WHITE);
+          }
+        if (impact && k < 300) for (int i = 0; i < 6; i++) gfx->drawCircle(tx + fxRnd(sd + i, 24), ty + fxRnd(sd + 9 * i, 18), 3 + k / 60, LBL);
+        return true;
+      }
+      case 4: {  // 파도타기: una ola grande que cruza toda la pantalla
+        if (t >= 120 && t < 640) {
+          int x = 40 + (int)((t - 120) * 0.85f);
+          for (int y = 60; y < 300; y += 10) {
+            int xx = x - (int)(20 * sinf(y * 0.04f));
+            gfx->fillCircle(xx, y, 14, BLU);
+            gfx->fillCircle(xx + 6, y - 4, 6, LBL);
+          }
+          for (int y = 60; y < 300; y += 24) gfx->fillCircle(x + 12 - (int)(20 * sinf(y * 0.04f)), y, 4, WHITE);
+        }
+        return true;
+      }
+      case 7: {  // 하이드로캐논: bala de agua gigante y onda al chocar
+        if (t < 200) gfx->fillCircle(ax, ay, (int)(t / 8), DBL);
+        if (travel) { gfx->fillCircle(px, py, 24, DBL); gfx->fillCircle(px, py, 16, BLU); gfx->fillCircle(px - 6, py - 6, 5, LBL); }
+        if (impact && k < 520) {
+          for (int w = 0; w < 3; w++) gfx->drawCircle(tx, ty, 20 + k / 4 + w * 2, w == 1 ? LBL : BLU);
+          if (k < 160) gfx->fillCircle(tx, ty, 28 - k / 8, BLU);
+        }
+        return true;
+      }
+      case 2: {  // 아쿠아제트: estela de agua veloz
+        if (travel) {
+          for (int i = 0; i < 8; i++) {
+            float q = fxClamp01(p - i * 0.04f);
+            gfx->fillCircle(ax + (int)((tx - ax) * q), ay + (int)((ty - ay) * q), 9 - i, i < 3 ? BLU : LBL);
+          }
+        }
+        if (impact && k < 300) for (int i = 0; i < 8; i++) {
+          float a = i * 0.785f; int d = 6 + k / 6;
+          fxLine(tx, ty, tx + (int)(cosf(a) * d), ty + (int)(sinf(a) * d), 3, LBL);
+        }
+        return true;
+      }
+      case 5: {  // 아쿠아테일: cola de agua que barre en arco
+        if (impact && k < 420) {
+          float a0 = -2.4f + k * 0.009f;
+          for (int s2 = 0; s2 < 10; s2++) {
+            float a = a0 + s2 * 0.12f;
+            int r = 44 - s2;
+            gfx->fillCircle(tx + (int)(cosf(a) * r), ty + (int)(sinf(a) * r), 9 - s2 / 2, s2 < 5 ? BLU : LBL);
+          }
+        } else if (travel) gfx->fillCircle(px, py, 7, BLU);
+        return true;
+      }
+      case 8: {  // 폭포오르기: cascada que cae desde arriba sobre el rival
+        if (t >= 200 && t < 760) {
+          int top = 0, bot = ty + 30;
+          int w = 26;
+          gfx->fillRect(tx - w / 2, top, w, bot - top, BLU);
+          for (int y = top; y < bot; y += 12) fxLine(tx - 8, y + (int)(t / 8) % 12, tx - 8, y + 6 + (int)(t / 8) % 12, 3, LBL);
+          for (int i = 0; i < 6; i++) gfx->fillCircle(tx + fxRnd(sd + i + t / 80, 26), bot + fxRnd(sd + 7 * i + t / 80, 5), 4, LBL);
+        }
+        return true;
+      }
+    }
+  }
+
+  if (fx == PT_GRASS) {
+    const uint16_t GRN = C565(0x3c, 0xa8, 0x48), LGR = C565(0x9c, 0xe0, 0x6c), DGR = C565(0x24, 0x70, 0x30),
+                   PNK = C565(0xf4, 0x9c, 0xc4), SUN = C565(0xff, 0xf0, 0x80);
+    switch (id) {
+      case 3: {  // 잎날가르기: hojas cortantes en linea recta, girando
+        if (t >= 120 && t < 460)
+          for (int i = 0; i < 4; i++) {
+            float q = fxClamp01((t - 120) / 260.0f - i * 0.1f);
+            if (q <= 0 || q >= 1) continue;
+            int x = ax + (int)((tx - ax) * q) + (int)(nx * (i - 1.5f) * 14), y = ay + (int)((ty - ay) * q) + (int)(ny * (i - 1.5f) * 14);
+            float a = t * 0.05f + i;
+            fxLine(x - (int)(cosf(a) * 8), y - (int)(sinf(a) * 8), x + (int)(cosf(a) * 8), y + (int)(sinf(a) * 8), 4, GRN);
+          }
+        if (impact && k < 260) for (int i = 0; i < 4; i++) fxLine(tx - 26, ty - 20 + i * 12, tx + 26, ty - 8 + i * 12, 2, LGR);
+        return true;
+      }
+      case 6: {  // 솔라빔: carga de sol y rayo dorado
+        if (t < 300) { int r = 6 + (int)(t / 18); gfx->fillCircle(ax, ay - 30, r, SUN); gfx->drawCircle(ax, ay - 30, r + 3, YEL); }
+        if (t >= 300 && t < 600) { fxLine(ax, ay - 30, tx, ty, 24, YEL); fxLine(ax, ay - 30, tx, ty, 12, SUN); fxLine(ax, ay - 30, tx, ty, 4, WHITE); }
+        if (impact && k > 0 && k < 400) gfx->fillCircle(tx, ty, 30 - k / 14, SUN);
+        return true;
+      }
+      case 1: {  // 흡수: pequenas esferas que vuelven al atacante
+        if (impact) for (int i = 0; i < 5; i++) {
+          float q = fxClamp01((k - i * 50) / 360.0f);
+          if (q <= 0 || q >= 1) continue;
+          gfx->fillCircle(tx + (int)((ax - tx) * q), ty + (int)((ay - ty) * q) + (int)(8 * sinf(q * 8 + i)), 4, LGR);
+        }
+        return true;
+      }
+      case 4: {  // 기가드레인: espiral verde alrededor del rival que se va al atacante
+        if (impact) {
+          for (int i = 0; i < 10; i++) {
+            float a = i * 0.628f + k * 0.02f; int r = 40 - k / 15;
+            if (r > 4) gfx->fillCircle(tx + (int)(cosf(a) * r), ty + (int)(sinf(a) * r * 0.7f), 4, i & 1 ? GRN : LGR);
+          }
+          if (k > 200) for (int i = 0; i < 6; i++) {
+            float q = fxClamp01((k - 200 - i * 30) / 300.0f);
+            if (q > 0 && q < 1) gfx->fillCircle(tx + (int)((ax - tx) * q), ty + (int)((ay - ty) * q), 6, LGR);
+          }
+        }
+        return true;
+      }
+      case 7: {  // 하드플랜트: enredaderas con espinas que salen del suelo
+        if (impact && k < 600)
+          for (int i = 0; i < 7; i++) {
+            int x = tx - 66 + i * 22;
+            int h = (int)(80 * fxClamp01((k - i * 25) / 200.0f)) * (k < 460 ? 1 : 0);
+            if (h <= 0) continue;
+            for (int s2 = 0; s2 < h; s2 += 8) {
+              int xx = x + (int)(6 * sinf(s2 * 0.15f + i));
+              gfx->fillCircle(xx, ty + 40 - s2, 5, i & 1 ? DGR : GRN);
+              if (s2 % 16 == 0) gfx->fillTriangle(xx + 4, ty + 40 - s2, xx + 12, ty + 36 - s2, xx + 4, ty + 34 - s2, LGR);
+            }
+          }
+        return true;
+      }
+      case 2: {  // 씨기관총: rafaga de semillas en linea
+        if (t >= 120 && t < 500)
+          for (int i = 0; i < 8; i++) {
+            float q = fxClamp01((t - 120) / 200.0f - i * 0.1f);
+            if (q <= 0 || q >= 1) continue;
+            int x = ax + (int)((tx - ax) * q), y = ay + (int)((ty - ay) * q);
+            gfx->fillEllipse(x, y, 4, 3, DGR);
+            gfx->drawPixel(x - 1, y - 1, LGR);
+          }
+        if (impact && k < 300) for (int i = 0; i < 5; i++) fxStar(tx + fxRnd(sd + i, 20), ty + fxRnd(sd + 5 * i, 16), 1, 6, 4, 0.3f, 1, LGR);
+        return true;
+      }
+      case 5: {  // 꽃잎댄스: petalos rosas girando alrededor del atacante y luego al rival
+        for (int i = 0; i < 12; i++) {
+          float a = i * 0.524f + t * 0.012f;
+          float q = fxClamp01((t - 200) / 360.0f);
+          int cx = ax + (int)((tx - ax) * q), cy = ay + (int)((ty - ay) * q);
+          int r = 30 + (int)(10 * sinf(t * 0.01f + i));
+          if (t < 700) gfx->fillEllipse(cx + (int)(cosf(a) * r), cy + (int)(sinf(a) * r * 0.7f), 6, 3, i & 1 ? PNK : WHITE);
+        }
+        return true;
+      }
+      case 8: {  // 리프스톰: tornado de hojas sobre el rival
+        if (t >= 150 && t < 760)
+          for (int i = 0; i < 24; i++) {
+            float h = (i * 7 + t / 6) % 120;
+            float a = i * 0.9f + t * 0.02f;
+            int r = 8 + (int)(h * 0.3f);
+            gfx->fillEllipse(tx + (int)(cosf(a) * r), ty + 40 - (int)h, 6, 3, i % 3 == 0 ? LGR : i % 3 == 1 ? GRN : DGR);
+          }
+        return true;
+      }
+    }
+  }
+
+  if (fx == PT_ELECTRIC) {
+    const uint16_t LYE = C565(0xff, 0xf6, 0xa0);
+    switch (id) {
+      case 3: {  // 10만볼트: un rayo grueso en zigzag del atacante al rival
+        if (t >= 150 && t < 560 && ((t / 50) % 3) != 2) {
+          fxZig(ax, ay, tx, ty, 8, 14, sd + t / 50, YEL, 7);
+          fxZig(ax, ay, tx, ty, 8, 14, sd + t / 50, WHITE, 2);
+        }
+        if (impact && k < 400) fxStar(tx, ty, 6, 28, 10, k * 0.01f, 2, YEL);
+        return true;
+      }
+      case 6: {  // 번개: rayo enorme desde el cielo y destello
+        if (t >= 250 && t < 650 && ((t / 45) % 3) != 2) {
+          fxZig(tx + fxRnd(sd, 10), 0, tx, ty, 9, 18, sd + t / 45, YEL, 12);
+          fxZig(tx + fxRnd(sd, 10), 0, tx, ty, 9, 18, sd + t / 45, WHITE, 4);
+        }
+        if (impact && k < 140) gfx->fillCircle(tx, ty, 60 - k / 3, LYE);
+        return true;
+      }
+      case 1: {  // 스파크: chispas alrededor del atacante que salta al rival
+        if (travel) {
+          gfx->fillCircle(px, py, 9, YEL);
+          for (int b = 0; b < 5; b++) fxStar(px + fxRnd(sd + b + t / 40, 16), py + fxRnd(sd + 3 * b + t / 40, 16), 1, 5, 4, 0.0f, 1, WHITE);
+        }
+        if (impact && k < 300) for (int b = 0; b < 6; b++) fxStar(tx + fxRnd(sd + b + k / 50, 22), ty + fxRnd(sd + 5 * b + k / 50, 22), 2, 8, 4, 0.4f, 1, YEL);
+        return true;
+      }
+      case 4: {  // 와일드볼트: el atacante envuelto en rayos con estela dentada
+        if (travel) {
+          fxZig(ax, ay, px, py, 6, 10, sd + t / 40, YEL, 4);
+          gfx->fillCircle(px, py, 16, YEL);
+          for (int b = 0; b < 6; b++) {
+            float a = b * 1.047f + t * 0.02f;
+            fxZig(px, py, px + (int)(cosf(a) * 26), py + (int)(sinf(a) * 26), 3, 6, sd + b + t / 40, WHITE, 2);
+          }
+        }
+        if (impact && k < 360) for (int b = 0; b < 6; b++) {
+          float a = b * 1.047f + 0.4f;
+          fxZig(tx, ty, tx + (int)(cosf(a) * (30 + k / 8)), ty + (int)(sinf(a) * (30 + k / 8)), 4, 8, sd + b + k / 40, YEL, 3);
+        }
+        return true;
+      }
+      case 7: {  // 볼트태클: carga dorada enorme y explosion electrica
+        if (t < 380) { int r = 20 + (int)(t / 30); gfx->drawCircle(ax, ay, r, YEL); gfx->drawCircle(ax, ay, r + 2, LYE); }
+        if (travel) { gfx->fillCircle(px, py, 24, YEL); gfx->fillCircle(px, py, 12, WHITE); fxLine(ax, ay, px, py, 16, LYE); }
+        if (impact && k < 480) {
+          if (k < 200) gfx->fillCircle(tx, ty, 50 - k / 5, WHITE);
+          for (int b = 0; b < 10; b++) {
+            float a = b * 0.628f;
+            fxZig(tx, ty, tx + (int)(cosf(a) * (50 + k / 6)), ty + (int)(sinf(a) * (50 + k / 6)), 5, 10, sd + b + k / 40, YEL, 3);
+          }
+        }
+        return true;
+      }
+      case 2: {  // 번개펀치: puno electrico y estrella de chispas
+        if (travel) {
+          gfx->fillCircle(px, py, 10, YEL);
+          for (int i = 0; i < 3; i++) gfx->fillCircle(px + (int)(ux * 7 + nx * (i - 1) * 6), py + (int)(uy * 7 + ny * (i - 1) * 6), 3, WHITE);
+          fxZig(px - (int)(ux * 22), py - (int)(uy * 22), px, py, 3, 5, sd + t / 40, YEL, 2);
+        }
+        if (impact && k < 300) { fxStar(tx, ty, 5, 32 + k / 10, 6, 0.2f, 3, YEL); fxStar(tx, ty, 3, 18, 6, 0.7f, 1, WHITE); }
+        return true;
+      }
+      case 5: {  // 방전: anillo de descarga que se abre desde el atacante
+        if (t >= 120 && t < 600) {
+          int R = 20 + (int)((t - 120) * 0.45f);
+          gfx->drawCircle(ax, ay, R, YEL); gfx->drawCircle(ax, ay, R + 2, LYE);
+          if ((t / 40) % 3 != 2)
+            for (int b = 0; b < 10; b++) {
+              float a = b * 0.628f + t * 0.003f;
+              fxZig(ax + (int)(cosf(a) * (R - 10)), ay + (int)(sinf(a) * (R - 10)), ax + (int)(cosf(a) * (R + 10)), ay + (int)(sinf(a) * (R + 10)), 3, 4, sd + b + t / 40, YEL, 2);
+            }
+        }
+        return true;
+      }
+      case 8: {  // 전자포: esfera lenta y enorme, estallido con anillos
+        if (t >= 120 && t < 420) {
+          float q = p * p;
+          int x = ax + (int)((tx - ax) * q), y = ay + (int)((ty - ay) * q);
+          gfx->fillCircle(x, y, 26, LYE); gfx->fillCircle(x, y, 18, YEL); gfx->fillCircle(x, y, 7, WHITE);
+          for (int b = 0; b < 4; b++) fxZig(x - 30, y + fxRnd(sd + b + t / 50, 20), x + 30, y + fxRnd(sd + 5 * b + t / 50, 20), 5, 6, sd + b + t / 50, WHITE, 1);
+        }
+        if (impact && k < 560) {
+          for (int r = 0; r < 3; r++) gfx->drawCircle(tx, ty, 24 + k / 4 + r * 10, r == 1 ? LYE : YEL);
+          if (k < 160) gfx->fillCircle(tx, ty, 40 - k / 5, WHITE);
+        }
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 // temblor de la escena durante el impacto de un critico
