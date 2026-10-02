@@ -247,7 +247,8 @@ uint8_t evoLevel(int16_t dex);
 #define MOVE_STATUS0 146
 #define MOVE_STRUGGLE 255
 // banderas de MoveDef::flags
-enum : uint8_t { MF_HICRIT = 1, MF_DRAIN = 2, MF_RECOIL = 4, MF_FIXLVL = 8, MF_FIX = 16, MF_STATUS = 32, MF_RECHARGE = 64 };
+enum : uint8_t { MF_HICRIT = 1, MF_DRAIN = 2, MF_RECOIL = 4, MF_FIXLVL = 8, MF_FIX = 16, MF_STATUS = 32, MF_RECHARGE = 64,
+                 MF_SELFCNF = 128 };
 // estado alterado (ail): 1 veneno, 2 quemadura, 3 paralisis, 4 sueno, 5 congelado, 6 confusion
 struct MoveDef {
   uint8_t type, pow, acc, pp;

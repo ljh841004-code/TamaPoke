@@ -642,8 +642,12 @@ static uint8_t actMove(const Battler &b, BAct a, int8_t *slot) {
 
 static uint32_t aiDamage(const Battler &self, const Battler &foe, uint8_t id) {
   const MoveDef &m = moveDef(id);
-  uint32_t d = rawDamageId(self, foe, id, nullptr) * m.acc;
-  if (rawDamageId(self, foe, id, nullptr) >= foe.hp) d *= 2;  // lo deja fuera de combate
+  uint32_t raw = rawDamageId(self, foe, id, nullptr);
+  uint32_t d = raw * m.acc;
+  if (raw >= foe.hp) return d * 2;  // lo deja fuera de combate: sin pegas que valgan
+  if (m.flags & MF_RECHARGE) d = d * 55 / 100;   // pierde el turno siguiente
+  if (m.flags & MF_SELFCNF) d = d * 80 / 100;    // acaba confuso
+  if (m.stSelf && m.stD < 0 && m.stCh >= 100) d = d * 85 / 100;  // se baja algo a si mismo
   return d;
 }
 
@@ -870,6 +874,7 @@ static bool doMove(Battler &at, Battler &df, BAct act, uint8_t side, bool first,
     }
     if (first && m.flinch && rng.below(100) < m.flinch) df.flinch = true;
   }
+  if ((m.flags & MF_SELFCNF) && !at.cnf && at.hp) afflict(at, side, ST_CNF, rng, ev, maxEv, n, a, b, mid);
   return false;
 }
 

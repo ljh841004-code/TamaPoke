@@ -56,8 +56,13 @@ POW_FIX = {'magnitude': 70, 'rollout': 60, 'fury-cutter': 60, 'present': 60, 're
            'heavy-slam': 80, 'fissure': 110}
 ACC_FIX = {'fissure': 55}   # un golpe KO no encaja: fuerte y poco preciso
 
-F_HICRIT, F_DRAIN, F_RECOIL, F_FIXLVL, F_FIX, F_RECHARGE = 1, 2, 4, 8, 16, 64
-RECHARGE = {'hyper-beam', 'giga-impact', 'blast-burn', 'hydro-cannon', 'frenzy-plant', 'rock-wrecker'}
+F_HICRIT, F_DRAIN, F_RECOIL, F_FIXLVL, F_FIX, F_RECHARGE, F_SELFCNF = 1, 2, 4, 8, 16, 64, 128
+# pierden un turno: recargar despues (hiperrayo...) o cargar antes / golpe retardado (aqui: despues)
+RECHARGE = {'hyper-beam', 'giga-impact', 'blast-burn', 'hydro-cannon', 'frenzy-plant', 'rock-wrecker',
+            'solar-beam', 'future-sight', 'shadow-force', 'sky-attack', 'skull-bash', 'razor-wind', 'fly',
+            'dig', 'dive', 'bounce'}
+# se descontrolan unos turnos y acaban confusos (aqui: confusos al momento)
+SELFCNF = {'petal-dance', 'outrage', 'thrash'}
 
 
 def slug(n):
@@ -120,6 +125,8 @@ def mdef(d, our_type=None):
         pow_ = POW_FIX[s]
     if s in RECHARGE:
         flags |= F_RECHARGE
+    if s in SELFCNF:
+        flags |= F_SELFCNF
     hits = 1
     if meta.get('min_hits'):
         lo, hi = meta['min_hits'], meta['max_hits']
@@ -142,7 +149,8 @@ def mdef(d, our_type=None):
         sc = d['stat_changes'][0]
         if sc['stat']['name'] in STAT:
             st_idx, st_d = STAT[sc['stat']['name']], sc['change']
-            st_self = 1 if d['target']['name'] in ('user', 'users-field', 'user-and-allies') else 0
+            st_self = 1 if (d['target']['name'] in ('user', 'users-field', 'user-and-allies') or
+                            (meta.get('category') or {}).get('name') == 'damage-raise') else 0
             st_ch = meta.get('stat_chance') or 0
             if cat == 'status':
                 st_ch = 0

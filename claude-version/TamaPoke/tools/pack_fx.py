@@ -314,7 +314,7 @@ def bg_track(anim, nfr):
     return out
 
 
-def pack(t, s, v, name):
+def pack(t, s, v, name, fname=None):
     sl = slug(name)
     dest = os.path.join(CACHE, 'anims', sl + '.json')
     if not fetch(BASE + '/battle-anims/' + sl + '.json', dest):
@@ -371,15 +371,34 @@ def pack(t, s, v, name):
             off += len(fr)
     body = b''.join(b''.join(f) for f in sides)
     os.makedirs(OUT, exist_ok=True)
-    path = os.path.join(OUT, 'f%02d%d%d.bin' % (t, s, v))
+    path = os.path.join(OUT, fname or 'f%02d%d%d.bin' % (t, s, v))
     open(path, 'wb').write(hdr + tables + body)
     return path, nfr, ms, os.path.getsize(path)
 
 
+# ko11.31: placaje y los de estado (ids 145.. de tools/gen_moves.py): mNNN.bin
+EXTRA = ['tackle'] + ['swords-dance', 'iron-defense', 'agility', 'growth', 'harden', 'growl', 'tail-whip',
+                      'leer', 'string-shot', 'scary-face', 'screech', 'metal-sound', 'poison-powder', 'toxic',
+                      'poison-gas', 'thunder-wave', 'stun-spore', 'glare', 'sleep-powder', 'hypnosis', 'sing',
+                      'spore', 'will-o-wisp', 'confuse-ray', 'supersonic', 'sweet-kiss']
+
+
 def main():
-    types = {int(a) for a in sys.argv[1:]} if len(sys.argv) > 1 else None
+    types = {int(a) for a in sys.argv[1:] if a.isdigit()} if len(sys.argv) > 1 else None
     miss = []
     total = 0
+    if types is None or 'extra' in sys.argv:
+        for k, sl in enumerate(EXTRA):
+            mid = 145 + k
+            r = pack(0, 0, 0, sl, 'm%03d.bin' % mid)
+            if r is None or r == 'empty':
+                miss.append(sl)
+                print('  -- sin animacion:', sl)
+                continue
+            total += r[3]
+            print('  %-14s m%03d.bin  %2d fot. x %d ms  %4d KB' % (sl, mid, r[1], r[2], r[3] // 1024))
+        if types is None:
+            types = set(range(16))
     for t, s, v, name in move_names():
         if types is not None and t not in types:
             continue
