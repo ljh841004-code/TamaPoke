@@ -1,4 +1,5 @@
 #pragma once
+#include <stdint.h>
 
 // Pines oficiales de la Waveshare ESP32-S3-Touch-AMOLED-1.75
 // Fuente: github.com/waveshareteam/ESP32-S3-Touch-AMOLED-1.75 (libraries/Mylibrary/pin_config.h)
@@ -34,6 +35,9 @@
 
 // ko11.25: motor de vibracion (modulo Grove) en el conector de abajo: IO18 (SIG), 3V3, GND
 #define VIB_PIN 18
+// ko11.28: paso de un patron de vibracion (fuerza 0..100 % de la elegida, 0 = pausa; duracion en ms).
+// Aqui y no en el .ino: el preprocesador de Arduino declara vibPlay() antes que el resto del sketch
+struct VibStep { uint8_t pct; uint16_t ms; };
 
 // Ranura TF (no usada todavía)
 #define SDMMC_CLK 2

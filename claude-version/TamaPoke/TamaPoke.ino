@@ -43,7 +43,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko11.28"
+#define FW_VERSION "1.17-ko11.29"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -500,13 +500,13 @@ static void bigStoreBegin() {
 #define VIB_PWM_HZ 20000
 #define VIB_KICK_MS 30
 static const uint8_t VIB_DUTY[3] = { 115, 180, 255 };  // ~45 / 70 / 100 %
-static bool vibOn = false;
-static bool vibKick = false;
 static int8_t gVibLv = -1;
-static uint32_t vibT = 0;
-static uint8_t vibLeft = 0;
-static uint16_t vibOnMs = 0, vibGapMs = 0;
-static uint32_t vibKickEnd = 0;
+// ko11.28: patrones. Cada paso = fuerza (0..100 % de la elegida; 0 = pausa) y duracion
+#define VIB_Q 12
+static VibStep vq[VIB_Q];
+static uint8_t vqN = 0, vqI = 0;
+static uint32_t vqEnd = 0, vibKickEnd = 0;
+static uint8_t vibDutyNow = 0, vibDutyAfterKick = 0;
 static int8_t gVibEn = -1;
 bool vibEnabled() {
   if (gVibEn < 0) {
@@ -523,7 +523,7 @@ void vibSetEnabled(bool on) {
   p.begin("tamapoke", false);
   p.putUChar("vib", gVibEn);
   p.end();
-  if (!on) { vibLeft = 0; vibOn = false; vibKick = false; ledcWrite(VIB_PIN, 0); }
+  if (!on) { vqN = 0; vibKickEnd = 0; vibDutyNow = 0; ledcWrite(VIB_PIN, 0); }
 }
 // 0 = debil, 1 = media, 2 = fuerte (la de ko11.25)
 uint8_t vibLevel() {
@@ -549,32 +549,81 @@ void vibBegin() {
   ledcAttach(VIB_PIN, VIB_PWM_HZ, 8);
   ledcWrite(VIB_PIN, 0);
 }
+static void vibApply(uint32_t now) {
+  const VibStep &st = vq[vqI];
+  uint8_t d = st.pct ? (uint8_t)max(1, (int)VIB_DUTY[vibLevel()] * st.pct / 100) : 0;
+  // parado -> en marcha con poca fuerza: el motor no arranca; los primeros ms a tope
+  if (d && !vibDutyNow && d < 230) {
+    ledcWrite(VIB_PIN, 255);
+    vibDutyAfterKick = d;
+    vibKickEnd = now + (st.ms < 2 * VIB_KICK_MS ? st.ms / 2 : VIB_KICK_MS);
+  } else {
+    ledcWrite(VIB_PIN, d);
+    vibKickEnd = 0;
+  }
+  vibDutyNow = d;
+  vqEnd = now + st.ms;
+}
+// cut = corta el patron en marcha (golpes); si no, se ignora mientras vibra
+void vibPlay(const VibStep *steps, uint8_t n, bool cut) {
+  if (!vibEnabled() || !n) return;
+  if (vqN && !cut) return;
+  if (n > VIB_Q) n = VIB_Q;
+  memcpy(vq, steps, n * sizeof(VibStep));
+  vqN = n;
+  vqI = 0;
+  vibApply(millis());
+}
 void vibPulse(uint16_t ms, uint8_t n, uint16_t gap) {
-  if (vibOn || vibLeft || !vibEnabled()) return;  // ya vibrando: no se pisa (golpes seguidos no se alargan)
-  vibOnMs = ms; vibGapMs = gap; vibLeft = n;
-  vibT = millis();
+  VibStep st[VIB_Q];
+  uint8_t k = 0;
+  for (uint8_t i = 0; i < n && k + 1 < VIB_Q; i++) {
+    st[k++] = { 100, ms };
+    if (i + 1 < n) st[k++] = { 0, gap };
+  }
+  vibPlay(st, k, false);  // como antes: no pisa una vibracion en marcha
 }
 void vibLoop(uint32_t now) {
-  if (vibOn) {
-    if (vibKick && (int32_t)(now - vibKickEnd) >= 0) {  // ya gira: a la fuerza elegida
-      vibKick = false;
-      ledcWrite(VIB_PIN, VIB_DUTY[vibLevel()]);
-    }
-    if ((int32_t)(now - vibT) >= 0) {
-      ledcWrite(VIB_PIN, 0);
-      vibOn = false;
-      vibKick = false;
-      vibT = now + vibGapMs;
-    }
+  if (!vqN) return;
+  if (vibKickEnd && (int32_t)(now - vibKickEnd) >= 0) {  // ya gira: a la fuerza del paso
+    vibKickEnd = 0;
+    ledcWrite(VIB_PIN, vibDutyAfterKick);
+  }
+  if ((int32_t)(now - vqEnd) < 0) return;
+  if (++vqI >= vqN) {
+    vqN = 0;
+    vibDutyNow = 0;
+    vibKickEnd = 0;
+    ledcWrite(VIB_PIN, 0);
     return;
   }
-  if (vibLeft && (int32_t)(now - vibT) >= 0) {
-    ledcWrite(VIB_PIN, 255);  // arranque a tope
-    vibKick = vibLevel() < 2;
-    vibKickEnd = now + VIB_KICK_MS;
-    vibOn = true;
-    vibLeft--;
-    vibT = now + vibOnMs;
+  vibApply(now);
+}
+
+// ko11.28: el tacto del combate
+static const VibStep VP_HIT_OUT[] = { { 100, 40 }, { 60, 40 }, { 30, 40 } };                 // yo golpeo: "tum"
+static const VibStep VP_HIT_IN[] = { { 100, 80 }, { 0, 50 }, { 60, 70 } };                   // me golpean: dos sacudidas
+static const VibStep VP_CRIT[] = { { 100, 60 }, { 0, 40 }, { 100, 60 }, { 35, 110 } };        // critico: "pum pum-"
+static const VibStep VP_SUPER[] = { { 100, 40 }, { 0, 40 }, { 100, 40 }, { 0, 40 }, { 100, 40 } };  // muy eficaz: "ra-ta-ta"
+static const VibStep VP_WEAK[] = { { 35, 60 } };                                            // poco eficaz: "toc"
+static const VibStep VP_COUNTER[] = { { 30, 30 }, { 0, 40 }, { 100, 70 } };                   // defensa + contra: "tic-pum"
+static const VibStep VP_FAINT[] = { { 100, 120 }, { 65, 120 }, { 35, 160 } };                 // se debilita: se apaga
+static const VibStep VP_WIN[] = { { 100, 50 }, { 0, 60 }, { 100, 50 }, { 0, 60 }, { 100, 50 }, { 0, 80 }, { 100, 240 } };
+#define VIB_PLAY(p) vibPlay(p, sizeof(p) / sizeof(p[0]), true)
+#define VIB_EV_WIN 255
+// tipo de evento de combate -> patron (quien = true si actua mi Pokemon)
+void vibBattle(uint8_t kind, uint8_t eff, bool crit, bool mine) {
+  switch (kind) {
+    case EV_HIT:
+      if (crit) VIB_PLAY(VP_CRIT);
+      else if (eff >= 4) VIB_PLAY(VP_SUPER);
+      else if (eff == 1) VIB_PLAY(VP_WEAK);
+      else if (mine) VIB_PLAY(VP_HIT_OUT);
+      else VIB_PLAY(VP_HIT_IN);
+      break;
+    case EV_COUNTER: VIB_PLAY(VP_COUNTER); break;
+    case EV_FAINT: VIB_PLAY(VP_FAINT); break;
+    case VIB_EV_WIN: VIB_PLAY(VP_WIN); break;
   }
 }
 

@@ -677,9 +677,9 @@ void evMessages(const BEvent &e) {
   bvL2[sizeof(bvL2) - 1] = 0;
   if ((e.kind == EV_HIT || e.kind == EV_COUNTER) && e.dmg) {
     sfxPlay(SFX_PLAY);
-    vibPulse((e.crit || e.eff > 2) ? 140 : 70, 1, 0);  // ko11.25: golpe (critico / muy eficaz, mas largo)
+    vibBattle(e.kind, e.eff, e.crit, evIsMe(e.side));  // ko11.28: patron segun el golpe (antes un solo pulso)
   }
-  else if (e.kind == EV_FAINT) sfxPlay(SFX_DENY);
+  else if (e.kind == EV_FAINT) { sfxPlay(SFX_DENY); vibBattle(EV_FAINT, 0, false, evIsMe(e.side)); }
   else if (e.kind == EV_HEAL) sfxPlay(SFX_HEART);
   else if (e.kind == EV_CATCH) sfxPlay(SFX_MEDAL);
   else if (e.kind == EV_BREAK) sfxPlay(SFX_DENY);
@@ -2475,8 +2475,10 @@ static void wildJoinTap(int16_t x, int16_t y) {
   else if (x >= BDUP_CANDY_X && x < BDUP_CANDY_X + BDUP_W) joinDecide(false);
 }
 
+void vibBattle(uint8_t kind, uint8_t eff, bool crit, bool mine);
 void finishBattle(bool won, bool fled, bool caught) {
   autoLeft = 0;  // ko11.19
+  if (won && !bRewarded) vibBattle(255, 0, false, true);  // ko11.28: victoria "ba-bam ba-bam-"
   bWon = won;
   bFled = fled;
   bCaught = caught;
