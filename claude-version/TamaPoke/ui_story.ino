@@ -34,7 +34,10 @@ uint16_t rgBest = 0;                      // expedicion: mejor oleada
 // ko11.21: el companero de cada estilo (juego: el elegido con Oak, anime: Pikachu) y su exp
 int16_t stPDex[STORY_STYLES] = { 0, 0 };
 uint32_t stPExp[STORY_STYLES] = { 0, 0 };
-uint8_t stTraining = 0;  // ko11.28: combate de entrenamiento en marcha (1 juego, 2 anime, 3 expedicion)
+uint8_t stTraining = 0;
+// ko11.30: la ultima forma que se VIO de cada uno (companero y los que se unieron): si cambia, escena de evolucion
+int16_t stSeenP[STORY_STYLES] = { 0, 0 };
+int16_t stSeenJ[STORY_STYLES][STORY_JOIN_MAX] = {};  // ko11.28: combate de entrenamiento en marcha (1 juego, 2 anime, 3 expedicion)
 PmdMon storyPmd;                          // su sprite en las escenas
 // ko11.22: los que se unen en la historia (0 = nadie; | JOIN_KEEP = no evoluciona)
 int16_t stJ[STORY_STYLES][STORY_JOIN_MAX] = {};
@@ -79,6 +82,12 @@ static void stLoad() {
   }
   stPick[0] = p.getUChar("k0", 0);
   stPick[1] = p.getUChar("k1", 0);
+  // ko11.30: 삐삐와 이브이는 돌로 진화 (게임): los que ya se unieron, tambien sin evolucionar por nivel
+  for (int i = 0; i < STORY_JOIN_MAX; i++)
+    if (stJ[0][i] == 35 || stJ[0][i] == 133) stJ[0][i] |= JOIN_KEEP;
+  stSeenP[0] = (int16_t)p.getShort("sp0", 0);  // ko11.30
+  stSeenP[1] = (int16_t)p.getShort("sp1", 0);
+  if (p.isKey("sj0")) { p.getBytes("sj0", stSeenJ[0], sizeof(stSeenJ[0])); p.getBytes("sj1", stSeenJ[1], sizeof(stSeenJ[1])); }
   p.end();
 }
 static void stSave() {
@@ -98,6 +107,10 @@ static void stSave() {
   p.putBytes("j1", stJ[1], sizeof(stJ[1]));
   p.putUChar("k0", stPick[0]);
   p.putUChar("k1", stPick[1]);
+  p.putShort("sp0", stSeenP[0]);  // ko11.30
+  p.putShort("sp1", stSeenP[1]);
+  p.putBytes("sj0", stSeenJ[0], sizeof(stSeenJ[0]));
+  p.putBytes("sj1", stSeenJ[1], sizeof(stSeenJ[1]));
   p.end();
 }
 static uint8_t stDoneCount(uint8_t s) {
@@ -459,6 +472,87 @@ static void stRun() {
   stEnd = true;
 }
 
+// ---------------- ko11.30: escena de evolucion ----------------
+// Las formas salen del nivel (que salta con el minimo de cada capitulo o con el entrenamiento):
+// antes cambiaban sin avisar (어니부기 -> 거북왕 al empezar el capitulo). Ahora, al empezar un
+// capitulo o tras ganar, si alguno cambio de forma se ve: "어...? X의 모습이...!" y
+// "축하해요! X는 Y로 진화했다!" (una etapa cada vez: 캐터피 -> 단데기 -> 버터플)
+#define STEVO_MAX 6
+static int16_t stEvoFrom[STEVO_MAX], stEvoTo[STEVO_MAX];
+static uint8_t stEvoN = 0, stEvoI = 0, stEvoPhase = 0;
+static bool stEvoP[STEVO_MAX];  // es el companero (se dibuja en su sitio)
+static uint32_t stEvoT = 0;
+static bool stIsAncestor(int16_t a, int16_t b) {  // a evoluciona (por etapas) hasta b
+  for (int g = 0; g < 3 && a > 0; g++) {
+    a = DEX_TBL[a].evolvesTo;
+    if (a == b) return true;
+  }
+  return false;
+}
+static void stEvoAdd(int16_t from, int16_t to, bool partner) {
+  int16_t d = from;
+  for (int g = 0; g < 3 && d != to && stEvoN < STEVO_MAX; g++) {
+    int16_t nx = DEX_TBL[d].evolvesTo;
+    if (!nx) break;
+    stEvoFrom[stEvoN] = d; stEvoTo[stEvoN] = nx; stEvoP[stEvoN] = partner; stEvoN++;
+    d = nx;
+  }
+}
+// compara con lo ultimo visto y lo actualiza; la primera vez (o otro Pokemon) solo se apunta
+static void stEvoCollect() {
+  stEvoN = 0;
+  uint8_t s = stStyle;
+  if (stPDex[s] > 0) {
+    int16_t now = stPartnerDex(s), seen = stSeenP[s];
+    if (seen > 0 && seen != now && stIsAncestor(seen, now)) stEvoAdd(seen, now, true);
+    stSeenP[s] = now;
+  }
+  for (int i = 0; i < STORY_JOIN_MAX; i++) {
+    int16_t v = stJ[s][i];
+    if (v <= 0) { stSeenJ[s][i] = 0; continue; }
+    int16_t now = stJoinDex(v), seen = stSeenJ[s][i];
+    if (seen > 0 && seen != now && stIsAncestor(seen, now)) stEvoAdd(seen, now, false);
+    stSeenJ[s][i] = now;
+  }
+  stSave();
+}
+static void stEvoShowCur() {
+  uint8_t i = stEvoI;
+  if (stEvoPhase == 0) txFmtRaw(stText, sizeof(stText), STX[SX_EVO_1], dexName(stEvoFrom[i]), nullptr);
+  else txFmtRaw(stText, sizeof(stText), STX[SX_EVO_2], dexName(stEvoFrom[i]), dexName(stEvoTo[i]));
+  stWho = W_NONE; stPage = 0; stTypeT = millis(); stEvoT = millis();
+  stChoice = stBattleWait = stEnd = stTired = false;
+  sfxPlay(stEvoPhase == 0 ? SFX_TAP : SFX_EVOLVE);
+}
+// true = hay escena (stRun() se llama al acabarla)
+static bool stEvoBegin() {
+  stEvoCollect();
+  if (!stEvoN) return false;
+  stEvoI = 0; stEvoPhase = 0;
+  stEvoShowCur();
+  return true;
+}
+// toque durante la escena: siguiente frase / siguiente evolucion / seguir con el capitulo
+static void stEvoTap() {
+  if (stEvoPhase == 0) { stEvoPhase = 1; stEvoShowCur(); return; }
+  if (++stEvoI < stEvoN) { stEvoPhase = 0; stEvoShowCur(); return; }
+  stEvoN = 0;
+  stLoadPartnerPmd();
+  stRun();
+}
+// el Pokemon que evoluciona: destellos blancos (silueta) en la 1a frase, la forma nueva en la 2a
+static void stEvoDraw(uint32_t now) {
+  uint8_t i = stEvoI;
+  bool flash = stEvoPhase == 0 && ((now - stEvoT) / 140) % 2 == 1;
+  int16_t d = stEvoPhase == 0 ? stEvoFrom[i] : stEvoTo[i];
+  int x = stEvoP[i] ? 132 : 250, y = stEvoP[i] ? 220 : 214;
+  if (stEvoPhase == 1) {  // brillo detras de la forma nueva
+    int r = 46 + (int)((now - stEvoT) / 40 % 10);
+    gfx->fillCircle(x, y, r, C565(0xff, 0xf4, 0xc0));
+  }
+  drawThumbAt(d, x, y, 3, flash);
+}
+
 static void stStart(uint8_t s, uint8_t c) {
   stStyle = s; stCh = c;
   stStep = (stResStyle == s && stResCh == c) ? stResStep : 0;
@@ -472,7 +566,7 @@ static void stStart(uint8_t s, uint8_t c) {
   xScreen = XS_SCENE;
   stPicking = false;
   stLoadPartnerPmd();
-  stRun();
+  if (!stEvoBegin()) stRun();  // ko11.30: antes, si alguien evoluciono, su escena
 }
 
 // ---------------- texto: lineas que caben (palabras; si una no cabe, por letras) ----------------
@@ -579,13 +673,15 @@ void renderStoryScene() {
   bvShakeX = bvShakeY = 0;
   drawBattleBg();
   // el companero de la historia a la izquierda (aun no, antes de recibirlo)
-  if (stPDex[stStyle] <= 0) {
+  bool evoP = stEvoN && stEvoP[stEvoI];
+  if (stPDex[stStyle] <= 0 || evoP) {
   } else if (storyPmd.loaded && storyPmd.has(PMD_IDLE)) drawPmdActM(storyPmd, PMD_IDLE, 132, 258, now, true, false, 4, 170);
   else drawThumbAt(stPartnerDex(stStyle), 132, 220, 3, false);
   // el Pokemon de la escena (si hay) y quien habla a la derecha
   // el Pokemon de la escena, salvo que sea el propio companero (ya esta a la izquierda; ko11.23.1)
   bool monIsPartner = stPDex[stStyle] > 0 && (stMon == stPartnerDex(stStyle) || stMon == stPartnerBase(stStyle));
-  if (stMon > 0 && !monIsPartner) drawThumbAt(stMon, 250, 214, 2, false);
+  if (stEvoN) stEvoDraw(now);  // ko11.30
+  else if (stMon > 0 && !monIsPartner) drawThumbAt(stMon, 250, 214, 2, false);
   if (stWho != W_NONE && stWho != W_PET) {
     const uint8_t *b = portraits.get(stWho);
     if (b) drawThumb(b, 330 - b[0], 262 - b[1] * 2, 2, false);
@@ -663,6 +759,7 @@ void storySceneTap(int16_t x, int16_t y) {
     return;
   }
   if (stTyping()) { stTypeT = millis() - 600000UL; return; }  // mostrar todo de golpe
+  if (stEvoN) { sfxPlay(SFX_TAP); stEvoTap(); return; }  // ko11.30
   if (stChoice) {
     if (y < ST_BOX_Y + 40 || y > ST_BOX_Y + 112) return;
     int k;
@@ -771,7 +868,7 @@ void storyAfterBattle(bool won) {
     stSave();
     stLoadPartnerPmd();
     stStep++;
-    stRun();
+    if (!stEvoBegin()) stRun();  // ko11.30
     return;
   }
   if (stStep < STORY[stStyle][stCh].n && stCur().op == ST_BATTLE && stCur().b == 1) {  // ko11.23: sigue igual

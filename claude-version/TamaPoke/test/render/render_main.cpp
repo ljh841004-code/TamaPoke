@@ -906,6 +906,26 @@ static void storyTrainShots() {
   closeAll();
 }
 
+// ko11.30: escena de evolucion del companero al empezar un capitulo
+static void storyEvoShots() {
+  setLang(LANG_KO); applyLangFont();
+  closeAll(); pet.energy = 100;
+  int16_t pd = stPDex[0], sp = stSeenP[0]; uint32_t pe = stPExp[0]; uint8_t rs = stResStyle;
+  stPDex[0] = 7; stPExp[0] = 0; stSeenP[0] = 8; stResStyle = 0xFF;  // visto: 어니부기
+  stStart(0, 8);  // 9장: minimo Lv.38 -> 거북왕
+  navCheck("evolucion: al empezar el capitulo, escena 어니부기 -> 거북왕", stEvoN == 1 && stEvoFrom[0] == 8 && stEvoTo[0] == 9);
+  stTypeT = millis() - 600000UL; render(); shot("89_story_evo_1");
+  storySceneTap(233, 330);
+  stTypeT = millis() - 600000UL; render(); shot("89b_story_evo_2");
+  navCheck("evolucion: 2a frase = 진화했다", stEvoN == 1 && stEvoPhase == 1 && strstr(stText, "거북왕으로 진화했다"));
+  storySceneTap(233, 330);
+  navCheck("evolucion: luego sigue el capitulo", stEvoN == 0 && xScreen == XS_SCENE && stSeenP[0] == 9);
+  stStart(0, 8);
+  navCheck("evolucion: no se repite", stEvoN == 0);
+  stPDex[0] = pd; stSeenP[0] = sp; stPExp[0] = pe; stResStyle = rs;
+  closeAll();
+}
+
 static void storyFullRun() {
   stRestartStyle(0); stRestartStyle(1);
   bool ok = true;
@@ -1024,6 +1044,7 @@ static void storyShots() {
   stDone[1] = 0; stDone[0] = 0; stResStyle = 0xFF;
   storyFullRun();
   storyTrainShots();  // ko11.28
+  storyEvoShots();  // ko11.30
   stDone[1] = 0; stDone[0] = 0; stResStyle = 0xFF;
   // expedicion
   xScreen = XS_STORY; storyMenuTap(200, ST_CARD_Y + 2 * (ST_CARD_H + ST_CARD_GAP) + 20);

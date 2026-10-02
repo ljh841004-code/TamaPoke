@@ -331,7 +331,7 @@ static int lastBatchim(const char *s, size_t len) {
   if ((p[0] & 0xF0) != 0xE0 || (p[1] & 0xC0) != 0x80 || (p[2] & 0xC0) != 0x80) return -1;
   uint32_t cp = ((uint32_t)(p[0] & 0x0F) << 12) | ((uint32_t)(p[1] & 0x3F) << 6) | (p[2] & 0x3F);
   if (cp < 0xAC00 || cp > 0xD7A3) return -1;
-  return ((cp - 0xAC00) % 28) ? 1 : 0;
+  return ((cp - 0xAC00) % 28) ? (((cp - 0xAC00) % 28) == 8 ? 2 : 1) : 0;  // ko11.30: 2 = batchim ㄹ (para {로})
 }
 
 static void append(char *out, size_t n, size_t &len, const char *s) {
@@ -365,13 +365,19 @@ void txFmtRaw(char *out, size_t n, const char *tpl, const char *a1, const char *
       size_t tl = strlen(j[0]);
       if (strncmp(p, j[0], tl) == 0) {
         int b = lastBatchim(out, len);
-        append(out, n, len, b == 1 ? j[1] : j[2]);  // latino o sin hangul: forma vocal
+        append(out, n, len, b >= 1 ? j[1] : j[2]);  // latino o sin hangul: forma vocal
         p += tl;
         done = true;
         break;
       }
     }
     if (done) continue;
+    if (strncmp(p, "{로}", strlen("{로}")) == 0) {  // ko11.30: 으로 / 로 (sin batchim o con ㄹ: 로)
+      int b = lastBatchim(out, len);
+      append(out, n, len, b == 1 ? "으로" : "로");
+      p += strlen("{로}");
+      continue;
+    }
     char one[2] = { *p++, 0 };
     append(out, n, len, one);
   }
