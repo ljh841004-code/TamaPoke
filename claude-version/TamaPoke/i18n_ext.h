@@ -128,7 +128,8 @@ enum XId : uint16_t {  // ko10.6: pasaron de 255
   X_CHG_LABEL, X_CHG_FULL, X_CHG_SAFE, X_CHG_NOTE,
   X_VIB_ON, X_VIB_OFF, X_VIB_MID, X_VIB_WEAK,
   X_SET_TITLE, X_SET_TIME, X_SET_SOUND, X_SET_SCREEN, X_SET_LANG_FMT, X_CANDY_TAB,  // ko11.26: menu de ajustes
-  X_FAV_FOOD, X_FAV_HINT_KNOWN, X_FAV_HINT_UNK, X_DAYS_WITH_FMT, X_SINCE_FMT,  // ko11.27: ficha  // ko11.25: vibracion  // ko11.23.3: limite de carga  // ko11.21  // ko11.20: equipo  // ko11.19: combate automatico
+  X_FAV_FOOD, X_FAV_HINT_KNOWN, X_FAV_HINT_UNK, X_DAYS_WITH_FMT, X_SINCE_FMT,  // ko11.27: ficha
+  X_MV_Q_FMT, X_MV_FORGET_FMT, X_MV_LEARN, X_MV_SKIP, X_MV_GOT_FMT,  // ko11.31: ataques  // ko11.25: vibracion  // ko11.23.3: limite de carga  // ko11.21  // ko11.20: equipo  // ko11.19: combate automatico
   X_RG_THANKS, X_RG_BALL, X_RG_POTION, X_RG_SHARD, X_RG_EXP,  // ko11.19: regalo al soltar
   X_FW_TITLE, X_FW_FINAL, X_FW_TIME, X_FW_EVO_NEED, X_FW_TIME_FMT, X_FW_LEFT_FMT, X_FW_READY, X_FW_WAIT,  // ko11.18: despedida
   X_REG_0, X_REG_1, X_REG_2, X_REG_3, X_REG_4, X_REG_5, X_REG_6, X_REG_7,
@@ -140,7 +141,7 @@ const char *XT(XId id);
 // nombre del tipo PT_* (fork KO, ko4: ficha de la pokedex)
 const char *typeName(uint8_t type);
 // nombre del movimiento: BA_TACKLE / BA_TYPE (este segun el tipo PT_*)
-const char *moveName(uint8_t move, uint8_t type, uint8_t tier = 0);  // ko10.4: tier = moveTier(dex)
+const char *moveName(uint8_t move, uint8_t type, uint8_t tier = 0, uint8_t var = 0);  // ko10.4: tier = moveTier(dex); ko11.31: var 0..2
 // rellena out con la plantilla id, sustituyendo {1}/{2} y las particulas
 void txFmt(char *out, size_t n, XId id, const char *a1, const char *a2 = nullptr);
 // lo mismo con una plantilla cualquiera (para los tests)

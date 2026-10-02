@@ -545,6 +545,7 @@ void Pet::hatch() {
   resetTrainRecords();  // ko11.9.2
   evolvedHere = false;
   berryKnown = false;
+  moveReroll();      // ko11.31: su ataque de tipo, al azar entre los 3
   bond = 0;          // vinculo, medallas y nombre son del individuo
   bondToday = 0;
   medals = 0;
@@ -645,6 +646,12 @@ uint16_t Pet::addExp(uint32_t x) {
   exp = (exp >= top || x >= top - exp) ? top : exp + x;
   uint16_t up = level() - before;
   if (up) {
+    // ko11.31: cada 5 niveles le ofrecen otro ataque de su tipo (uno de los otros 2)
+    uint16_t L = level();
+    if (L / 5 > moveLv / 5 && moveOffer == 0xFF) {
+      moveOffer = (uint8_t)((moveVar() + 1 + random(2)) % 3);
+      moveLv = (uint8_t)(L / 5 * 5);
+    }
     if (!sleeping) sfxPlay(SFX_LEVEL);
     checkMedals();
     pendingSave = true;
@@ -679,6 +686,8 @@ void Pet::evolve() {
   else if (n > 1) next = opts[random(n)];
   speciesId = next;
   evolvedHere = true;  // ko11.9.2
+  moveReroll();        // ko11.31: con la forma nueva aprende uno de los 3 de su nueva fase
+  moveLearned = true;
   // ko11.16: si cambia de tipo, el orbe ya no le sirve: 3 caramelos (o, a veces, 1 raro)
   orbEvoNote = 0;
   if (orbValid(orb) && !orbFits(orb)) {
@@ -1052,6 +1061,9 @@ void Pet::save() {
   prefs.putUShort("rcandy", rareCandy);
   prefs.putUShort("rshd", rareShards);  // ko11.15.1
   prefs.putUShort("orb", orb);           // ko11.16
+  prefs.putUChar("mvk", moveK);          // ko11.31
+  prefs.putUChar("mvl", moveLv);
+  prefs.putUChar("mvo", moveOffer);
   prefs.putUChar("orbn", orbN);
   if (orbN) prefs.putBytes("orbs", orbBag, orbN * sizeof(uint16_t));
   else prefs.remove("orbs");
@@ -1143,6 +1155,12 @@ void Pet::load(bool *migrated) {
   rareCandy = prefs.getUShort("rcandy", 0);
   rareShards = prefs.getUShort("rshd", 0);
   orb = prefs.getUShort("orb", 0);  // ko11.16
+  // ko11.31: partidas de antes: sigue con el ataque de siempre (0) y sin oferta hasta el proximo multiplo de 5
+  moveK = prefs.getUChar("mvk", 0);
+  moveLv = prefs.isKey("mvl") ? prefs.getUChar("mvl", 0) : (uint8_t)(level() / 5 * 5);
+  moveOffer = prefs.getUChar("mvo", 0xFF);
+  if (moveK > 2) moveK = 0;
+  if (moveOffer != 0xFF && moveOffer > 2) moveOffer = 0xFF;
   orbN = prefs.getUChar("orbn", 0);
   if (orbN > ORB_BAG_MAX) orbN = 0;
   if (orbN && prefs.getBytes("orbs", orbBag, orbN * sizeof(uint16_t)) != orbN * sizeof(uint16_t)) orbN = 0;
@@ -1423,6 +1441,7 @@ void Pet::adoptMon(int16_t dex, uint16_t lvl, bool isShiny, uint8_t gA, uint8_t 
   if (lvl < 1) lvl = 1;
   if (lvl > LEVEL_MAX) lvl = LEVEL_MAX;
   exp = expForLevel(lvl);
+  moveReroll();  // ko11.31
   ageMinutes = 0;
   geneAtk = clampGene(gA);
   geneDef = clampGene(gD);
@@ -1472,6 +1491,7 @@ bool Pet::importTrade(const TradePet &t, uint16_t lvl) {
   shiny = t.shiny != 0;
   ageMinutes = t.ageMinutes > 999UL * 60 ? 999UL * 60 : t.ageMinutes;
   exp = expForLevel(lvl > LEVEL_MAX ? LEVEL_MAX : (lvl ? lvl : 1));  // fork KO (ko7)
+  moveReroll();  // ko11.31
   geneAtk = clampGene(t.geneAtk);
   geneDef = clampGene(t.geneDef);
   geneSpe = clampGene(t.geneSpe);
@@ -1525,6 +1545,8 @@ bool Pet::importTrade(const TradePet &t, uint16_t lvl) {
   if (tradeEvolves(speciesId)) {
     prevSpeciesId = speciesId;
     speciesId = tradeTarget(speciesId);
+    moveReroll();  // ko11.31
+    moveLearned = true;
     registerSpecies(speciesId);
     sfxPlay(SFX_EVOLVE);
     evolveUntil = millis() + EVOLVE_ANIM_MS;

@@ -120,6 +120,22 @@ static void scenes(bool ko, const char *sfx) {
   pet.careMistakes = 0;
   pet.berryKnown = true; pet.ageMinutes = 2 * 1440 + 300; pet.bond = 46; pet.streak = 3; pet.bestStreak = 5;
   cardPage = 0; render(); shot("03c_card_profile");
+  {  // ko11.31: cada 5 niveles: aprender otro ataque
+    closeAll(); tick(3000);
+    pet.moveK = 0; pet.moveOffer = 1; moveLearnLoop();
+    navCheck("ataques: oferta -> dialogo", choiceKind == 3);
+    render(); shot("03u_move_offer");
+    onTap(233, 230);  // [배운다]
+    navCheck("ataques: [배운다] cambia el ataque", choiceKind == 0 && pet.moveK == 1 && pet.moveOffer == 0xFF);
+    render(); shot("03v_move_learned");
+    pet.moveOffer = 2; moveLearnLoop(); onTap(233, 292);  // [그만둔다]
+    navCheck("ataques: [그만둔다] se queda el suyo", choiceKind == 0 && pet.moveK == 1 && pet.moveOffer == 0xFF);
+    uint16_t L = pet.level(); pet.moveLv = (uint8_t)(L / 5 * 5); pet.moveOffer = 0xFF;
+    pet.addExp(expForLevel(L / 5 * 5 + 5) - pet.exp);
+    navCheck("ataques: al llegar al siguiente multiplo de 5 se ofrece otro", pet.moveOffer < 3 && pet.moveOffer != pet.moveK);
+    pet.moveOffer = 0xFF; pet.moveK = 0; toastUntil = 0; closeAll();
+    cardOpen = true; cardPage = 0;  // sigue la ficha (comida favorita)
+  }
   {  // ko11.27: comida favorita (desconocida / conocida + toque = que significa) y dias juntos
     bool bk = pet.berryKnown;
     pet.berryKnown = false; render(); shot("03r_profile_fav_unknown");
@@ -337,6 +353,21 @@ static void scenes(bool ko, const char *sfx) {
           snprintf(n, sizeof(n), "tier_%03d_%u", d, at);
           shot(n);
         }
+        // ko11.31: los otros dos ataques de la misma fase (efecto propio)
+        for (uint8_t v = 1; v <= 2; v++) {
+          pet.moveK = v;
+          bvSetup(bMe, bFoe, nullptr, false);
+          bPhase = BP_PLAY; bqN = 1; bqI = 0;
+          txFmt(bvL1, sizeof(bvL1), X_USED, bvMeName, moveName(BA_TYPE, bvMeType, bvMeTier, bvMeVar));
+          bqT = gMockMillis;
+          for (uint32_t at : { 300u, 560u }) {
+            gMockMillis = bqT + at;
+            render();
+            snprintf(n, sizeof(n), "mv_%03d_v%u_%u", d, v, at);
+            shot(n);
+          }
+        }
+        pet.moveK = 0;
       }
     }
     pet.speciesId = keepSp;

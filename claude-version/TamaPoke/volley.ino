@@ -103,7 +103,7 @@ static void vbDrawBall(int x, int y, uint32_t now) {
   drawMapQ(SPR_ICON_PLAY, 16, x - VB_BALL_DRAW / 2, y - VB_BALL_DRAW / 2, VB_BALL_DRAW / 4, false);  // pokeball (ko11.12: mas grande)
   if (vb.b.spiked && vb.b.power) {  // ko11.9.4: 강스파이크: el efecto de la tecnica de su tipo va con la pelota
     int16_t d = vb.b.spikeSide ? vbFoeDex : pet.speciesId;
-    drawMoveFx(DEX_TBL[d].ptype, x, y, x, y, 350 + (now % 600), true, 2, moveTier(d));
+    drawMoveFx(DEX_TBL[d].ptype, x, y, x, y, 350 + (now % 600), true, 2, moveTier(d), d == pet.speciesId ? pet.moveVar() : 0);
   }
 }
 

@@ -169,6 +169,16 @@ public:
   uint16_t orbBag[ORB_BAG_MAX] = { 0 };
   uint8_t orbN = 0;
   uint8_t sleptOffline = 0;  // ko11.19: con la placa apagada paso la noche durmiendo (aviso "잘 잤어요!")
+  // ko11.31: el ataque de tipo de ESTE individuo: variante 0..2 dentro de los 3 de su tipo y fase
+  // (0 = el de siempre). Al nacer y al evolucionar se sortea; cada 5 niveles le ofrecen otro
+  uint8_t moveK = 0;
+  uint8_t moveLv = 0;          // ultimo multiplo de 5 en que se ofrecio
+  uint8_t moveOffer = 0xFF;    // variante ofrecida pendiente de respuesta (0xFF = ninguna)
+  bool moveLearned = false;    // aviso "새 기술 X을 배웠다!" (tras evolucionar)
+  uint8_t moveVar() const { return moveK < 3 ? moveK : 0; }
+  void moveAccept() { if (moveOffer < 3) moveK = moveOffer; moveOffer = 0xFF; pendingSave = true; }
+  void moveDecline() { moveOffer = 0xFF; pendingSave = true; }
+  void moveReroll() { moveK = (uint8_t)random(3); moveLv = (uint8_t)(level() / 5 * 5); moveOffer = 0xFF; }
   uint8_t orbEvoNote = 0;   // 1 = al evolucionar el orbe se volvio caramelos, 2 = caramelo raro (aviso)
   bool candyTrade(int16_t famDex, uint16_t times);
   // ko11.16: orbes. gainOrb: 1 nuevo a la bolsa, 2 mejoro uno igual (el viejo -> 1

@@ -268,7 +268,7 @@ uint8_t dimStage = 0;        // 0 despierto, 1 atenuado (90s), 2 casi apagado (5
 bool swallowGesture = false; // el toque que despierta no acciona nada
 uint32_t holdStart = 0;     // pulsacion larga sobre el bicho
 uint32_t confirmUntil = 0;  // dialogo "soltar?" activo hasta este millis
-uint8_t choiceKind = 0;     // dialogo de decision: 0 ninguno, 1 evolucion, 2 despedida
+uint8_t choiceKind = 0;     // dialogo de decision: 0 ninguno, 1 evolucion, 2 despedida, 3 nuevo ataque (ko11.31)
 uint32_t choiceUntil = 0;   // se cierra solo a este millis
 uint32_t navGuardUntil = 0;  // ko10.11: tras cambiar de pantalla, el siguiente toque inmediato se ignora
 uint32_t mistWhyUntil = 0;  // ko10.9: mostrar la causa del ultimo descuido (ficha)
@@ -853,6 +853,7 @@ void perfReset() { perfRenderMax = perfStallMax = 0; perfFrames = 0; perfRenderS
 void loop() {
   uint32_t now = millis();
   vibLoop(now);  // ko11.25
+  moveLearnLoop();  // ko11.31
   uint32_t loopT0 = now, renderMs = 0;
   {  // ko11.9.2: en que pantalla estamos (si se reinicia, se ve al arrancar)
     uint8_t scr = vbOpen ? 1 : defOpen ? 2 : spdOpen ? 3 : gameOpen ? 4 : sackOpen ? 5 : trainMenuOpen ? 6
@@ -1593,6 +1594,10 @@ void onTap(int16_t x, int16_t y) {
     } else if (choiceKind == 2) {          // despedida
       if (b1) pet.startFarewell();
       else if (b2) pet.declineFarewell();
+    } else if (choiceKind == 3) {          // ko11.31: nuevo ataque cada 5 niveles
+      if (!b1 && !b2) return;              // fuera de los botones: el dialogo sigue
+      if (b1) { pet.moveAccept(); moveLearnedToast(); sfxPlay(SFX_MEDAL); }
+      else { pet.moveDecline(); sfxPlay(SFX_TAP); }
     }
     choiceKind = 0;
     return;
@@ -2924,7 +2929,7 @@ void render() {
 
   // dialogo de decision (evolucionar/mantener, despedirse/quedaros)
   if (choiceKind) {
-    if (!timeLeft(choiceUntil)) choiceKind = 0;
+    if (!timeLeft(choiceUntil)) { if (choiceKind == 3) pet.moveDecline(); choiceKind = 0; }  // ko11.31: sin respuesta = se queda el suyo
     else drawChoiceDialog();
   }
 
@@ -3227,7 +3232,7 @@ void renderSack() {
     int fh = gh * sackEnergy / 100;
     if (fh > 4) uiGradRRect(gx + 3, gy + gh - fh, gw - 6, fh, 6, lerp565(acc, UI_WHITE, 6, 16), acc);
     gfx->drawRoundRect(gx, gy, gw, gh, 8, ink);
-    const char *mv = moveName(BA_TYPE, DEX_TBL[pet.speciesId].ptype, moveTier(pet.speciesId));
+    const char *mv = moveName(BA_TYPE, DEX_TBL[pet.speciesId].ptype, moveTier(pet.speciesId), pet.moveVar());
     if (sackEnergy >= 100) {
       int p = (int)(3 * sinf(now * 0.012f));  // late
       uiButton(SACK_BTN_X - p, SACK_BTN_Y - p, SACK_BTN_W + 2 * p, SACK_BTN_H + 2 * p, 16, acc, UI_WHITE);
@@ -3243,7 +3248,7 @@ void renderSack() {
         drawFit(XT(sackEff >= 4 ? X_SUPER : sackEff == 1 ? X_NOTVERY : X_NOEFFECT), 250, 330,
                 sackEff >= 4 ? UI_BAR_BAD : ink, 2);
       drawMoveFx(DEX_TBL[pet.speciesId].ptype, CX, 420, CX, 138, 120 + t * 560 / SACK_SPECIAL_MS, true, sackEff,
-                 moveTier(pet.speciesId));
+                 moveTier(pet.speciesId), pet.moveVar());
     }
   }
 
@@ -4537,9 +4542,17 @@ void drawCeremony() {
 void drawChoiceDialog() {
   const char *q, *o1, *o2;
   uint16_t c1, c2, t1, t2;
+  char qb[96], fb[96];
+  fb[0] = 0;
   if (choiceKind == 1) {  // evolucion
     q = T(S_EVO_Q); o1 = T(S_EVO_TAP); o2 = T(S_EVO_KEEP);
     c1 = UI_BAR_BAD; t1 = UI_WHITE; c2 = UI_TRACK; t2 = UI_INK;
+  } else if (choiceKind == 3) {  // ko11.31: "X을 배울까요? (지금 기술 Y는 잊어요)"
+    uint8_t ty = DEX_TBL[pet.speciesId].ptype, tr = moveTier(pet.speciesId);
+    txFmt(qb, sizeof(qb), X_MV_Q_FMT, moveName(BA_TYPE, ty, tr, pet.moveOffer < 3 ? pet.moveOffer : 0), nullptr);
+    txFmt(fb, sizeof(fb), X_MV_FORGET_FMT, moveName(BA_TYPE, ty, tr, pet.moveVar()), nullptr);
+    q = qb; o1 = XT(X_MV_LEARN); o2 = XT(X_MV_SKIP);
+    c1 = DEX_TBL[pet.speciesId].accent; t1 = UI_WHITE; c2 = UI_TRACK; t2 = UI_INK;
   } else {                // despedida
     q = T(S_FAR_Q); o1 = T(S_FAR_GO); o2 = T(S_FAR_STAY);
     c1 = UI_BAR_WARN; t1 = UI_INK; c2 = UI_BAR_OK; t2 = UI_WHITE;
@@ -4548,8 +4561,13 @@ void drawChoiceDialog() {
   uiPanel(73, 156, 320, 188, 16, UI_WHITE, UI_INK);
   gfx->setTextColor(UI_INK);
   setSize(2);
-  setCur(centerX(q, 2), 176);
-  printT(q);
+  if (fb[0]) {  // ko11.31: pregunta + una linea pequena
+    drawFit(q, 163, 290, UI_INK, 2);
+    drawFit(fb, 187, 290, 0x8410, 1);
+  } else {
+    setCur(centerX(q, 2), 176);
+    printT(q);
+  }
   uiButton(93, 206, 280, 52, 12, c1, lerp565(c1, UI_INK, 8, 16));  // boton accion
   gfx->setTextColor(t1);
   setCur(centerX(o1, 2), 224);
@@ -5084,7 +5102,7 @@ void drawPetPMD() {
   if (m == MOOD_HAPPY && beh.mode == 3 && petFxT != 0xFFFFFFFFu) {
     int px = (int)beh.x, dir = px < CX ? 1 : -1;
     drawMoveFx(petFxType, px + dir * 40, PET_GROUND - 70, px + dir * 175, PET_GROUND - 80, petFxT, true, 2,
-               moveTier(pet.speciesId));
+               moveTier(pet.speciesId), pet.moveVar());
   }
   petFxT = 0xFFFFFFFFu;
   if (m == MOOD_HAPPY) drawPetBubble((int)beh.x);

@@ -165,6 +165,8 @@ BAct battleAi(const Battler &self, const Battler &foe, BRng &rng, uint8_t whim =
 // evoluciones: 1 (legendarios 2). Ej.: Squirtle 0 (Pistola Agua), Wartortle 1
 // (Hidropulso), Blastoise 2 (Hidrobomba). Solo cambia nombre y efecto, no el dano
 uint8_t moveTier(int16_t dex);
+// ko11.31: variante del ataque de tipo (0..2) de un Pokemon que no es el que crias: cambia cada 5 niveles
+uint8_t moveVarFor(int16_t dex, uint16_t lvl);
 // ko10.5: primera forma de su linea (siguiendo las preevoluciones: Raichu ->
 // Pichu, Hitmonchan -> Tyrogue, Blastoise -> Squirtle)
 int16_t dexFirstForm(int16_t dex);

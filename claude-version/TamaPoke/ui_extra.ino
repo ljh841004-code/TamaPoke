@@ -56,6 +56,21 @@ void showToast(const char *s) {
   toastUntil = millis() + 2600;
 }
 
+// ko11.31: "새 기술 X을 배웠다!" y, cada 5 niveles, la pregunta de cambiar de ataque
+void moveLearnedToast() {
+  char t[96];
+  txFmt(t, sizeof(t), X_MV_GOT_FMT, moveName(BA_TYPE, DEX_TBL[pet.speciesId].ptype, moveTier(pet.speciesId), pet.moveVar()), nullptr);
+  showToast(t);
+}
+void moveLearnLoop() {
+  if (xScreen != XS_NONE || cardOpen || trainMenuOpen || galleryOpen || clockOpen || pet.isEgg() || pet.evolving()) return;
+  if (pet.moveLearned) { pet.moveLearned = false; moveLearnedToast(); return; }  // tras evolucionar
+  if (pet.moveOffer < 3 && !choiceKind && !pet.sleeping && mainNavAllowed()) {
+    choiceKind = 3;
+    choiceUntil = millis() + 30000;
+  }
+}
+
 // ko11.16: "<tipo> 공격구슬" / "<tipo> 방어구슬"
 void orbName(uint16_t o, char *out, size_t n) {
   snprintf(out, n, XT(orbDef(o) ? X_ORB_DEF_FMT : X_ORB_ATK_FMT), typeName(orbType(o)));
@@ -334,6 +349,7 @@ bool bqAisMe = true;   // el lado "a" de los eventos es mi Pokemon
 int16_t bvMeDex, bvFoeDex;
 uint8_t bvMeType, bvFoeType;
 uint8_t bvMeTier = 0, bvFoeTier = 0;  // ko10.4: fase del ataque de tipo (moveTier)
+uint8_t bvMeVar = 0, bvFoeVar = 0;    // ko11.31: cual de los 3 ataques de su tipo y fase
 uint16_t bvMeLvl, bvFoeLvl, bvMeMax, bvFoeMax;
 float bvMeHp, bvFoeHp;        // animado
 uint16_t bvMeTgt, bvFoeTgt;   // objetivo
@@ -647,7 +663,7 @@ void evMessages(const BEvent &e) {
   switch (e.kind) {
     case EV_HIT:
     case EV_MISS:
-      txFmt(bvL1, sizeof(bvL1), X_USED, who, moveName(e.move, me ? bvMeType : bvFoeType, me ? bvMeTier : bvFoeTier));
+      txFmt(bvL1, sizeof(bvL1), X_USED, who, moveName(e.move, me ? bvMeType : bvFoeType, me ? bvMeTier : bvFoeTier, me ? bvMeVar : bvFoeVar));
       if (e.kind == EV_MISS) strncpy(bvL2, XT(X_MISSED), sizeof(bvL2) - 1);
       else if (e.eff == 0) strncpy(bvL2, XT(X_NOEFFECT), sizeof(bvL2) - 1);
       else if (e.eff == 4) strncpy(bvL2, XT(X_SUPER), sizeof(bvL2) - 1);
@@ -805,7 +821,8 @@ static const bool FX_BEAM[PT_COUNT] = {
   true, true, true, true, false, true, false, true, false, true, false, false, true, true, false, true,
 };
 
-void drawMoveFx(uint8_t fx, int ax, int ay, int tx, int ty, uint32_t t, bool hit, uint8_t eff, uint8_t tier) {
+static bool drawMoveFxVar(uint8_t fx, uint8_t var, int ax, int ay, int tx, int ty, uint32_t t, bool hit, uint8_t tier);
+void drawMoveFx(uint8_t fx, int ax, int ay, int tx, int ty, uint32_t t, bool hit, uint8_t eff, uint8_t tier, uint8_t var) {
   const uint16_t WHITE = UI_WHITE, YEL = C565(0xff, 0xe0, 0x40), ORA = C565(0xff, 0x8c, 0x1a),
                  RED = C565(0xe8, 0x38, 0x20);
   float p = fxClamp01(((float)t - 120) / 260.0f);  // viaje del proyectil
@@ -816,7 +833,9 @@ void drawMoveFx(uint8_t fx, int ax, int ay, int tx, int ty, uint32_t t, bool hit
   int px = ax + (int)((tx - ax) * p), py = ay + (int)((ty - ay) * p);
   uint32_t sd = (uint32_t)bqI * 7919u + (uint32_t)bqT;  // variacion por golpe
 
-  switch (fx) {
+  // ko11.31: los ataques 2 y 3 de fuego, agua, planta y electrico tienen su propio efecto
+  bool own = var && drawMoveFxVar(fx, var, ax, ay, tx, ty, t, hit, tier);
+  if (!own) switch (fx) {
     case PT_FIRE:
       if (travel)
         for (int i = 0; i < 3; i++) {
@@ -1095,7 +1114,7 @@ void drawMoveFx(uint8_t fx, int ax, int ay, int tx, int ty, uint32_t t, bool hit
       gfx->drawCircle(ax, ay, r + 1, cl);
       if (tier == 2) { gfx->drawCircle(ax, ay, r + 7, c); gfx->drawCircle(ax, ay, r + 8, c); }
     }
-    if (tier == 2 && FX_BEAM[fx] && t >= 120 && t < 470) {  // rayo del definitivo
+    if (tier == 2 && FX_BEAM[fx] && !own && t >= 120 && t < 470) {  // rayo del definitivo (solo el ataque 1)
       float L = fxClamp01((t - 120) / 150.0f);
       int ex = ax + (int)((tx - ax) * L), ey = ay + (int)((ty - ay) * L);
       int w = 14 + (int)(4 * sinf(t * 0.08f));
@@ -1123,6 +1142,230 @@ void drawMoveFx(uint8_t fx, int ax, int ay, int tx, int ty, uint32_t t, bool hit
     for (int w = 0; w < 3; w++) gfx->drawCircle(tx, ty, r + w, WHITE);
     if (k > 60) gfx->drawCircle(tx, ty, r - 22, WHITE);
   }
+}
+
+// ======================================================================
+// ko11.31: efectos propios de los ataques 2 y 3 (var 1, 2) de fuego, agua, planta y
+// electrico. Mismo reloj que drawMoveFx: viaje t 120..380, impacto desde t 350 (600 ms).
+// La fase (tier) los hace mas grandes. Devuelve false si el tipo aun no tiene efecto propio
+// ======================================================================
+static void fxZig(int x0, int y0, int x1, int y1, int segs, int amp, uint32_t seed, uint16_t c, int w) {
+  int px = x0, py = y0;
+  for (int i = 1; i <= segs; i++) {
+    int x = x0 + (x1 - x0) * i / segs, y = y0 + (y1 - y0) * i / segs;
+    if (i < segs) { x += fxRnd(seed + i * 17, amp); y += fxRnd(seed + i * 29, amp); }
+    fxLine(px, py, x, y, w, c);
+    px = x; py = y;
+  }
+}
+
+static bool drawMoveFxVar(uint8_t fx, uint8_t var, int ax, int ay, int tx, int ty, uint32_t t, bool hit, uint8_t tier) {
+  const uint16_t WHITE = UI_WHITE, YEL = C565(0xff, 0xe0, 0x40), ORA = C565(0xff, 0x8c, 0x1a), RED = C565(0xe8, 0x38, 0x20);
+  float p = fxClamp01(((float)t - 120) / 260.0f);
+  bool travel = t >= 120 && t < 380;
+  int k = (int)t - 350;
+  bool impact = hit && k >= 0 && k < 600;
+  float f = impact ? k / 600.0f : 0;
+  int px = ax + (int)((tx - ax) * p), py = ay + (int)((ty - ay) * p);
+  uint32_t sd = (uint32_t)bqI * 7919u + (uint32_t)bqT + var * 131u;
+  int T = tier > 2 ? 2 : tier;
+  float ang = atan2f((float)(ty - ay), (float)(tx - ax));
+  int angD = (int)(ang * 57.3f);
+
+  switch (fx) {
+    case PT_FIRE:
+      if (var == 1) {  // 회오리불꽃 / 열풍 / 블래스트번: ondas de calor y torbellino de llamas
+        if (travel)
+          for (int i = 0; i < 3 + T; i++) {
+            float q = fxClamp01(p - i * 0.12f);
+            int x = ax + (int)((tx - ax) * q), y = ay + (int)((ty - ay) * q);
+            int r = 16 + i * 4 + T * 4;
+            gfx->fillArc(x, y, r, r - 4, (angD - 50 + 360) % 360, (angD + 50 + 360) % 360, i & 1 ? YEL : ORA);
+          }
+        if (impact) {
+          if (T == 2 && k < 180) { gfx->fillCircle(tx, ty, 46 - k / 5, ORA); gfx->fillCircle(tx, ty, 26 - k / 8, YEL); }
+          int n = 10 + 4 * T, rx = 30 + T * 10;
+          for (int i = 0; i < n; i++) {
+            float a = i * 6.2832f / n + k * 0.012f;
+            int y = ty + (int)(sinf(a) * rx * 0.45f) - (int)(f * 34) - (i % 3) * 6;
+            int x = tx + (int)(cosf(a) * rx);
+            int r = (int)((5 + T * 2) * (1 - f * 0.5f)) + 1;
+            gfx->fillCircle(x, y, r, i % 3 == 0 ? YEL : i % 3 == 1 ? ORA : RED);
+          }
+        }
+        return true;
+      }
+      // 불꽃펀치 / 화염자동차 / 오버히트: bola de fuego con estela y estallido
+      if (travel) {
+        int R = 10 + T * 4;
+        for (int i = 5; i >= 1; i--) {
+          float q = fxClamp01(p - i * 0.05f);
+          int x = ax + (int)((tx - ax) * q), y = ay + (int)((ty - ay) * q);
+          gfx->fillCircle(x, y, R * (6 - i) / 7, i > 3 ? RED : ORA);
+        }
+        gfx->fillCircle(px, py, R, ORA);
+        gfx->fillCircle(px, py, R / 2 + 1, T == 2 ? WHITE : YEL);
+      }
+      if (impact && k < 520) {
+        int R = (int)((26 + 18 * T) * fxClamp01(k / 220.0f)) + 6;
+        fxStar(tx, ty, R / 3, R, 10 + 2 * T, 0.2f, 3 + T, ORA);
+        fxStar(tx, ty, R / 4, R * 2 / 3, 10 + 2 * T, 0.5f, 2, YEL);
+        if (k < 140) gfx->fillCircle(tx, ty, 18 + 6 * T - k / 10, T == 2 ? WHITE : YEL);
+      }
+      return true;
+
+    case PT_WATER: {
+      const uint16_t BLU = C565(0x40, 0x90, 0xf0), LBL = C565(0xb0, 0xe0, 0xff), DBL = C565(0x20, 0x58, 0xb8);
+      if (var == 1) {  // 거품 / 파도타기 / 하이드로캐논
+        if (travel) {
+          if (T == 0)  // burbujas que flotan
+            for (int i = 0; i < 7; i++) {
+              float q = fxClamp01(p - i * 0.07f);
+              int x = ax + (int)((tx - ax) * q) + fxRnd(sd + i, 6), y = ay + (int)((ty - ay) * q) + (int)(8 * sinf(q * 12 + i));
+              gfx->drawCircle(x, y, 5 + (i % 3), LBL);
+              gfx->drawCircle(x, y, 6 + (i % 3), BLU);
+            }
+          else {  // una ola: cresta curva que avanza hacia el rival
+            float nx = -sinf(ang), ny = cosf(ang);
+            for (int j = -5; j <= 5; j++) {
+              int o = j * (8 + T * 2);
+              int x = px + (int)(nx * o) - (int)(cosf(ang) * abs(j) * 3), y = py + (int)(ny * o) - (int)(sinf(ang) * abs(j) * 3);
+              gfx->fillCircle(x, y, 9 + T * 3, BLU);
+              gfx->fillCircle(x, y - 4, 4 + T, LBL);
+            }
+            if (T == 2) fxLine(ax, ay, px, py, 10, DBL);
+          }
+        }
+        if (impact && k < 560) {
+          for (int i = 0; i < 8 + 3 * T; i++) {
+            int x = tx + fxRnd(sd + i * 7, 36 + 8 * T), y = ty + 20 - (int)(((k + i * 60) % 420) * 0.22f);
+            gfx->drawCircle(x, y, 4 + (i % 4) + T, LBL);
+          }
+          gfx->drawCircle(tx, ty, 14 + k / 7, BLU);
+          if (T) gfx->drawCircle(tx, ty, 16 + k / 6, LBL);
+        }
+        return true;
+      }
+      // 아쿠아제트 / 아쿠아테일 / 폭포오르기: estela de agua y columna (cascada)
+      if (travel) {
+        fxLine(ax, ay, px, py, 10 + 2 * T, BLU);
+        fxLine(ax, ay, px, py, 4, LBL);
+        gfx->fillCircle(px, py, 10 + 2 * T, BLU);
+        gfx->drawCircle(px, py, 13 + 2 * T, LBL);
+      }
+      if (impact && k < 560) {
+        int h = (int)((70 + 30 * T) * fxClamp01(k / 180.0f)), w = 12 + 6 * T;
+        if (T == 2) fxLine(tx, ty - 130, tx, ty + 20, w + 6, BLU);  // cascada desde arriba
+        gfx->fillRect(tx - w / 2, ty + 30 - h, w, h, BLU);
+        gfx->fillRect(tx - w / 6, ty + 30 - h, w / 3, h, LBL);
+        for (int i = 0; i < 8; i++) {
+          float a = 3.1416f + i * 0.39f;
+          int d = k / 5;
+          gfx->fillCircle(tx + (int)(cosf(a) * d), ty + 30 - h + (int)(sinf(a) * d * 0.5f) + d * d / 120, 4, LBL);
+        }
+      }
+      return true;
+    }
+
+    case PT_GRASS: {
+      const uint16_t GRN = C565(0x3c, 0xa8, 0x48), LGR = C565(0x9c, 0xe0, 0x6c), DGR = C565(0x24, 0x70, 0x30),
+                     PNK = C565(0xf4, 0x9c, 0xc4);
+      if (var == 1) {  // 흡수 / 기가드레인 / 하드플랜트: espinas del suelo y esferas que vuelven
+        if (impact) {
+          if (T >= 1) {
+            int n = 4 + T * 2;
+            for (int i = 0; i < n; i++) {
+              int x = tx - (n - 1) * 9 + i * 18;
+              int h = (int)((26 + 18 * T) * fxClamp01((k - i * 20) / 160.0f) * (k < 420 ? 1.0f : fxClamp01((600 - k) / 180.0f)));
+              if (h > 0) {
+                gfx->fillTriangle(x - 7, ty + 34, x + 7, ty + 34, x, ty + 34 - h, i & 1 ? GRN : DGR);
+                gfx->drawLine(x, ty + 34, x, ty + 34 - h, LGR);
+              }
+            }
+          }
+          for (int i = 0; i < 6 + 2 * T; i++) {  // la energia vuelve al atacante
+            float q = fxClamp01((k - 120 - i * 40) / 360.0f);
+            if (q <= 0 || q >= 1) continue;
+            int x = tx + (int)((ax - tx) * q) + (int)(10 * sinf(q * 9 + i)), y = ty + (int)((ay - ty) * q) + (int)(8 * cosf(q * 7 + i));
+            gfx->fillCircle(x, y, 4 + T, LGR);
+            gfx->drawCircle(x, y, 5 + T, GRN);
+          }
+        } else if (t < 350) {
+          gfx->drawCircle(tx, ty, 34 - (int)(p * 10), LGR);
+        }
+        return true;
+      }
+      // 씨기관총 / 꽃잎댄스 / 리프스톰: rafaga de semillas, petalos u hojas
+      uint16_t c1 = T == 1 ? PNK : GRN, c2 = T == 1 ? WHITE : LGR;
+      if (travel)
+        for (int i = 0; i < 6 + 4 * T; i++) {
+          float q = fxClamp01(p * 1.2f - i * 0.06f);
+          if (q <= 0) continue;
+          float sw = (T == 0) ? 3 : 14 + 6 * T;
+          int x = ax + (int)((tx - ax) * q) + (int)(sw * sinf(q * 10 + i * 1.7f)), y = ay + (int)((ty - ay) * q) + (int)(sw * cosf(q * 10 + i));
+          if (T == 0) gfx->fillCircle(x, y, 3, i & 1 ? DGR : GRN);
+          else gfx->fillEllipse(x, y, 6, 3, i & 1 ? c1 : c2);
+        }
+      if (impact && k < 560)
+        for (int i = 0; i < 8 + 4 * T; i++) {
+          float a = i * 6.2832f / (8 + 4 * T) + k * (0.01f + 0.004f * T);
+          int d = 18 + k / 10 + T * 6;
+          int x = tx + (int)(cosf(a) * d), y = ty + (int)(sinf(a) * d * 0.7f);
+          gfx->fillEllipse(x, y, 6 + T, 3, i & 1 ? c1 : c2);
+        }
+      return true;
+    }
+
+    case PT_ELECTRIC: {
+      const uint16_t LYE = C565(0xff, 0xf6, 0xa0);
+      if (var == 1) {  // 스파크 / 와일드볼트 / 볼트태클: carga envuelta en rayos
+        if (travel) {
+          int R = 12 + 4 * T;
+          gfx->fillCircle(px, py, R, YEL);
+          gfx->fillCircle(px, py, R / 2, WHITE);
+          for (int b = 0; b < 4 + 2 * T; b++) {
+            float a = b * 6.2832f / (4 + 2 * T) + t * 0.02f;
+            fxZig(px, py, px + (int)(cosf(a) * (R + 14)), py + (int)(sinf(a) * (R + 14)), 3, 5, sd + b + t / 40, YEL, 2);
+          }
+          if (T >= 1) fxLine(ax, ay, px, py, 3, LYE);
+        }
+        if (impact && k < 500 && ((k / 40) % 3) != 2)
+          for (int b = 0; b < 6 + 2 * T; b++) {
+            float a = b * 6.2832f / (6 + 2 * T) + 0.3f;
+            int L = 30 + 14 * T + (k / 10);
+            fxZig(tx, ty, tx + (int)(cosf(a) * L), ty + (int)(sinf(a) * L), 4, 7, sd + b * 13 + k / 40, YEL, 3);
+            fxZig(tx, ty, tx + (int)(cosf(a) * L), ty + (int)(sinf(a) * L), 4, 7, sd + b * 13 + k / 40, WHITE, 1);
+          }
+        return true;
+      }
+      // 번개펀치 / 방전 / 전자포: esfera electrica lenta y descarga en anillo
+      if (travel) {
+        float q = p * p;  // acelera al final
+        int x = ax + (int)((tx - ax) * q), y = ay + (int)((ty - ay) * q);
+        int R = 9 + 5 * T;
+        gfx->fillCircle(x, y, R + 4, LYE);
+        gfx->fillCircle(x, y, R, YEL);
+        gfx->fillCircle(x, y, R / 3 + 1, WHITE);
+        for (int b = 0; b < 3; b++) fxZig(x - R - 6, y + fxRnd(sd + b + t / 50, R), x + R + 6, y + fxRnd(sd + 7 * b + t / 50, R), 4, 4, sd + b * 5 + t / 50, WHITE, 1);
+      }
+      if (impact && k < 560) {
+        int R = 20 + k / 5 + 10 * T;
+        gfx->drawCircle(tx, ty, R, YEL);
+        gfx->drawCircle(tx, ty, R + 1, YEL);
+        gfx->drawCircle(tx, ty, R + 3, LYE);
+        if ((k / 40) % 3 != 2)
+          for (int b = 0; b < 8 + 2 * T; b++) {
+            float a = b * 6.2832f / (8 + 2 * T) + k * 0.004f;
+            int x0 = tx + (int)(cosf(a) * (R - 12)), y0 = ty + (int)(sinf(a) * (R - 12));
+            int x1 = tx + (int)(cosf(a) * (R + 12)), y1 = ty + (int)(sinf(a) * (R + 12));
+            fxZig(x0, y0, x1, y1, 3, 5, sd + b * 11 + k / 40, YEL, 2);
+          }
+        if (T == 2 && k < 120) gfx->fillCircle(tx, ty, 40 - k / 4, WHITE);
+      }
+      return true;
+    }
+  }
+  return false;  // aun sin efecto propio: el de su tipo
 }
 
 // temblor de la escena durante el impacto de un critico
@@ -1269,7 +1512,8 @@ void drawBattlers() {
       uint8_t fx = e.move == BA_TYPE ? (me ? bvMeType : bvFoeType) : 0xFF;
       int ax = me ? 140 : 316, ay = me ? 200 : 116, tx = me ? 316 : 140, ty = me ? 116 : 200;
       drawMoveFx(fx, ax + bvShakeX, ay + bvShakeY, tx + bvShakeX, ty + bvShakeY, t,
-                 (e.kind == EV_HIT || e.kind == EV_COUNTER) && e.eff, e.eff, e.move == BA_TYPE ? (me ? bvMeTier : bvFoeTier) : 0);
+                 (e.kind == EV_HIT || e.kind == EV_COUNTER) && e.eff, e.eff, e.move == BA_TYPE ? (me ? bvMeTier : bvFoeTier) : 0,
+                 e.move == BA_TYPE ? (me ? bvMeVar : bvFoeVar) : 0);
     }
   }
 }
@@ -1327,7 +1571,7 @@ void drawBattleMenu() {
   snprintf(ball, sizeof(ball), XT(X_BALL_FMT), pet.balls);
   int x0 = BM_X, x1 = BM_X + BM_W + BM_GAP, x2 = BM_X + 2 * (BM_W + BM_GAP);
   drawBtn(x0, BM_Y1, BM_W, BM_H, UI_WHITE, UI_INK, moveName(BA_TACKLE, bvMeType));
-  drawBtn(x1, BM_Y1, BM_W, BM_H, me.accent, UI_WHITE, moveName(BA_TYPE, bvMeType, bvMeTier));
+  drawBtn(x1, BM_Y1, BM_W, BM_H, me.accent, UI_WHITE, moveName(BA_TYPE, bvMeType, bvMeTier, bvMeVar));
   drawBtn(x2, BM_Y1, BM_W, BM_H, 0x4C98, UI_WHITE, XT(X_GUARD));
   drawBtn(x0, BM_Y2, BM_W, BM_H, pet.potions ? UI_BAR_OK : UI_TRACK, pet.potions ? UI_WHITE : UI_INK, pot);
   if (autoAllowed()) {  // ko11.19: entrenadores: [자동] [N마리] en vez de ball / huir
@@ -1403,6 +1647,7 @@ static void partySwitchTo(uint8_t j) {
   bvMeDex = bMe.dex;
   bvMeType = bMe.type;
   bvMeTier = moveTier(bMe.dex);
+  bvMeVar = (j == 0 && pSlot0Pet && bMe.dex == pet.speciesId) ? pet.moveVar() : moveVarFor(bMe.dex, bMe.lvl);  // ko11.31
   bvMeLvl = bMe.lvl;
   bvMeMax = bMe.maxHp;
   bvMeHp = bvMeTgt = bMe.hp;
@@ -1651,6 +1896,9 @@ void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool fo
   bvMeDex = me.dex; bvFoeDex = foe.dex;
   bvMeType = me.type; bvFoeType = foe.type;
   bvMeTier = moveTier(me.dex); bvFoeTier = moveTier(foe.dex);
+  // ko11.31: el que crias usa el ataque que aprendio; los demas, uno fijo por especie y tramo de 5 niveles
+  bvMeVar = (pSlot0Pet && pCur == 0 && me.dex == pet.speciesId) ? pet.moveVar() : moveVarFor(me.dex, me.lvl);
+  bvFoeVar = moveVarFor(foe.dex, foe.lvl);
   bvMeLvl = me.lvl; bvFoeLvl = foe.lvl;
   bvMeMax = me.maxHp; bvFoeMax = foe.maxHp;
   bvMeHp = bvMeTgt = me.hp;

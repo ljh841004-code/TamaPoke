@@ -1714,7 +1714,7 @@ static void fameDetail() {
     gfx->drawCircle(acx, acy, 61 + ph / 2, c);
   }
   uint32_t cyc = now % 2000;
-  if (cyc < 1000) drawMoveFx(pt, acx, acy, acx, acy, 350 + cyc * 650 / 1000, true, 2, moveTier(m.dex));
+  if (cyc < 1000) drawMoveFx(pt, acx, acy, acx, acy, 350 + cyc * 650 / 1000, true, 2, moveTier(m.dex), moveVarFor(m.dex, m.lvl));
   FameRec fr = fameRecOf(m);
   if (fr.team && fr.help[0]) {  // ko11.20: los ayudantes (de la ultima en equipo) a los lados, algo mas pequenos, con su luz
     const FameRec *t = &fr;

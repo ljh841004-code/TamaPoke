@@ -93,6 +93,12 @@ int16_t dexFirstForm(int16_t dex) {
   return dex;
 }
 
+uint8_t moveVarFor(int16_t dex, uint16_t lvl) {
+  uint32_t a = (uint32_t)dex * 2654435761u ^ (uint32_t)(lvl / 5) * 40503u;
+  a ^= a >> 15; a *= 0x2c1b3c6dU; a ^= a >> 12;
+  return (uint8_t)(a % 3);
+}
+
 uint8_t moveTier(int16_t dex) {
   if (dex < 1 || dex > DEX_COUNT) return 0;
   bool pre = hasPreEvo(dex), post = DEX_TBL[dex].evolvesTo != 0;

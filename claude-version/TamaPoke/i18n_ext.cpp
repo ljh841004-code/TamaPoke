@@ -132,6 +132,7 @@ static const char *const XS[2][X_COUNT] = {
     "SETTINGS", "TIME & DATE", "SOUND & VIBE", "SCREEN & BATTERY", "LANGUAGE %s >", "CANDY",
     "Favorite food", "Fills more, raises joy and bond", "Try different foods to find out",
     "Day %lu together", "(since %04u.%02u.%02u)",
+    "Learn {1}?", "(forgets {1})", "LEARN", "KEEP OLD", "Learned {1}!",
     "{1} left happily!", "Poke Ball +1", "Potion +1", "Shard +1", "EXP +{2}",
     "FAREWELL", "Final form", "3 days together", "Evolve", "%ud %uh", "%uh left to 3 days", "Ready! Farewell button on the main screen", "Evolve to say goodbye",
     "MEADOW", "BEACH", "FOREST", "VOLCANO", "MOUNTAIN", "SNOWFIELD", "POWER PLANT", "DOJO",
@@ -263,6 +264,7 @@ static const char *const XS[2][X_COUNT] = {
     "설정", "시간/날짜", "소리/진동", "화면/배터리", "언어 %s >", "사탕",
     "좋아하는 먹이", "주면 배가 더 차고 기분과 유대가 올라요", "여러 먹이를 줘 보면 알게 돼요",
     "함께한 지 %lu일째", "(%04u.%02u.%02u부터)",
+    "{1}{을} 배울까요?", "(지금 기술 {1}{은} 잊어요)", "배운다", "그만둔다", "새 기술 {1}{을} 배웠다!",
     "{1}{이} 고마워하며 떠났어요!", "포켓볼 +1", "물약 +1", "조각 +1", "경험치 +{2}",
     "이별 조건", "최종 진화형", "함께한 시간 3일", "진화 필요", "%u일 %u시간", "3일까지 %u시간 남음", "모두 충족! 기본 화면에 이별 버튼", "진화하면 이별할 수 있어요",
     "초원", "바닷가", "숲", "화산", "산", "설원", "발전소", "도장",
@@ -294,6 +296,121 @@ static const char *const MOVES_KO[3][PT_COUNT] = {
     "깨물어부수기", "아이언테일" },
 };
 
+// ko11.31: las otras dos variantes (1, 2) de cada tipo y fase; la 0 es la de MOVES_*
+static const char *const MOVES2_KO[3][PT_COUNT][2] = {
+  {
+    { "전광석화", "할퀴기" },
+    { "회오리불꽃", "불꽃펀치" },
+    { "거품", "아쿠아제트" },
+    { "흡수", "씨기관총" },
+    { "스파크", "번개펀치" },
+    { "얼음뭉치", "냉동펀치" },
+    { "발차기", "바위깨기" },
+    { "용해액", "독찌르기" },
+    { "뼈다귀치기", "머드숏" },
+    { "사이코웨이브", "사념의박치기" },
+    { "벌레먹음", "흡혈" },
+    { "암석봉인", "구르기" },
+    { "놀래키기", "섀도펀치" },
+    { "용의숨결", "드래곤테일" },
+    { "도둑질", "깜짝베기" },
+    { "불릿펀치", "미러숏" },
+  },
+  {
+    { "베어가르기", "돌진" },
+    { "열풍", "화염자동차" },
+    { "파도타기", "아쿠아테일" },
+    { "기가드레인", "꽃잎댄스" },
+    { "와일드볼트", "방전" },
+    { "얼음엄니", "오로라빔" },
+    { "이단차기", "파동탄" },
+    { "크로스포이즌", "오물웨이브" },
+    { "뼈다귀부메랑", "땅고르기" },
+    { "사이코커터", "미래예지" },
+    { "시저크로스", "시그널빔" },
+    { "파워젬", "락블레스트" },
+    { "섀도크루", "괴상한바람" },
+    { "드래곤크루", "용의파동" },
+    { "악의파동", "기습" },
+    { "아이언헤드", "러스터캐논" },
+  },
+  {
+    { "기가임팩트", "이판사판태클" },
+    { "블래스트번", "오버히트" },
+    { "하이드로캐논", "폭포오르기" },
+    { "하드플랜트", "리프스톰" },
+    { "볼트태클", "전자포" },
+    { "고드름떨구기", "프리즈드라이" },
+    { "인파이트", "기합구슬" },
+    { "더스트슈트", "베놈쇼크" },
+    { "땅가르기", "대지의힘" },
+    { "사이코부스트", "사이코쇼크" },
+    { "벌레의야단법석", "덤벼들기" },
+    { "스톤에지", "양날박치기" },
+    { "섀도다이브", "병상첨병" },
+    { "드래곤다이브", "용성군" },
+    { "속임수", "나이트버스트" },
+    { "코멧펀치", "헤비봄버" },
+  },
+};
+// ko11.31: las otras dos variantes (1, 2) de cada tipo y fase; la 0 es la de MOVES_*
+static const char *const MOVES2_EN[3][PT_COUNT][2] = {
+  {
+    { "QUICK ATTACK", "SCRATCH" },
+    { "FIRE SPIN", "FIRE PUNCH" },
+    { "BUBBLE", "AQUA JET" },
+    { "ABSORB", "BULLET SEED" },
+    { "SPARK", "THUNDERPUNCH" },
+    { "ICE SHARD", "ICE PUNCH" },
+    { "LOW KICK", "ROCK SMASH" },
+    { "ACID", "POISON JAB" },
+    { "BONE CLUB", "MUD SHOT" },
+    { "PSYWAVE", "ZEN HEADBUTT" },
+    { "BUG BITE", "LEECH LIFE" },
+    { "ROCK TOMB", "ROLLOUT" },
+    { "ASTONISH", "SHADOW PUNCH" },
+    { "DRAGONBREATH", "DRAGON TAIL" },
+    { "THIEF", "SUCKER PUNCH" },
+    { "BULLET PUNCH", "MIRROR SHOT" },
+  },
+  {
+    { "SLASH", "TAKE DOWN" },
+    { "HEAT WAVE", "FLAME WHEEL" },
+    { "SURF", "AQUA TAIL" },
+    { "GIGA DRAIN", "PETAL DANCE" },
+    { "WILD CHARGE", "DISCHARGE" },
+    { "ICE FANG", "AURORA BEAM" },
+    { "DOUBLE KICK", "AURA SPHERE" },
+    { "CROSS POISON", "SLUDGE WAVE" },
+    { "BONEMERANG", "BULLDOZE" },
+    { "PSYCHO CUT", "FUTURE SIGHT" },
+    { "X-SCISSOR", "SIGNAL BEAM" },
+    { "POWER GEM", "ROCK BLAST" },
+    { "SHADOW CLAW", "OMINOUS WIND" },
+    { "DRAGON CLAW", "DRAGON PULSE" },
+    { "DARK PULSE", "PURSUIT" },
+    { "IRON HEAD", "FLASH CANNON" },
+  },
+  {
+    { "GIGA IMPACT", "DOUBLE-EDGE" },
+    { "BLAST BURN", "OVERHEAT" },
+    { "HYDRO CANNON", "WATERFALL" },
+    { "FRENZY PLANT", "LEAF STORM" },
+    { "VOLT TACKLE", "ZAP CANNON" },
+    { "ICICLE CRASH", "FREEZE-DRY" },
+    { "CLOSE COMBAT", "FOCUS BLAST" },
+    { "GUNK SHOT", "VENOSHOCK" },
+    { "FISSURE", "EARTH POWER" },
+    { "PSYCHO BOOST", "PSYSHOCK" },
+    { "BUG BUZZ", "LUNGE" },
+    { "STONE EDGE", "HEAD SMASH" },
+    { "SHADOW FORCE", "HEX" },
+    { "DRAGON RUSH", "DRACO METEOR" },
+    { "FOUL PLAY", "NIGHT DAZE" },
+    { "METEOR MASH", "HEAVY SLAM" },
+  },
+};
+
 static const char *const TYPES_EN[PT_COUNT] = {
   "NORMAL", "FIRE", "WATER", "GRASS", "ELECTRIC", "ICE", "FIGHTING",
   "POISON", "GROUND", "PSYCHIC", "BUG", "ROCK", "GHOST", "DRAGON",
@@ -317,8 +434,10 @@ const char *XT(XId id) {
   return XS[isKo() ? 1 : 0][id];
 }
 
-const char *moveName(uint8_t move, uint8_t type, uint8_t tier) {
+const char *moveName(uint8_t move, uint8_t type, uint8_t tier, uint8_t var) {
   if (tier > 2) tier = 2;
+  if (move == BA_TYPE && type < PT_COUNT && var >= 1 && var <= 2)  // ko11.31
+    return isKo() ? MOVES2_KO[tier][type][var - 1] : MOVES2_EN[tier][type][var - 1];
   if (move == BA_TYPE && type < PT_COUNT) return isKo() ? MOVES_KO[tier][type] : MOVES_EN[tier][type];
   return XT(X_M_TACKLE);
 }
