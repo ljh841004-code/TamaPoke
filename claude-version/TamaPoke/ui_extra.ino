@@ -788,9 +788,6 @@ void startEvent(int i) {
     const BEvent &e = bq[i];
     bvMeTgt = bqAisMe ? e.hpA : e.hpB;
     bvFoeTgt = bqAisMe ? e.hpB : e.hpA;
-    // ko11.31: el efecto de la SD de ESTE movimiento (se lee al empezar; si ya esta, nada)
-    if ((e.kind == EV_HIT || e.kind == EV_MISS || e.kind == EV_USE) && e.mid && e.mid != MOVE_STRUGGLE)
-      fxMove[evIsMe(e.side) ? 0 : 1].loadId(e.mid);
     evMessages(e);
   }
 }
@@ -1793,12 +1790,12 @@ static void drawPrgBattler(PmdMon &m, uint8_t act, int cx, int groundY, uint32_t
 }
 
 // ko11.30: efecto de la SD del ataque de tipo en curso (nullptr = el dibujado)
-static FxAnim *bvFxNow(uint8_t &side) {
+static const FxAnim *bvFxNow(uint8_t &side) {
   if (bPhase != BP_PLAY || bqI >= bqN) return nullptr;
   const BEvent &e = bq[bqI];
   if ((e.kind != EV_HIT && e.kind != EV_MISS && e.kind != EV_USE) || !e.mid) return nullptr;
   side = evIsMe(e.side) ? 0 : 1;
-  return fxMove[side].ok() && fxMove[side].isId(e.mid) ? &fxMove[side] : nullptr;
+  return fxFind(e.mid);
 }
 
 // dibuja los dos Pokemon; anima al que actua segun el evento en curso
@@ -1809,7 +1806,7 @@ void drawBattlers() {
   bool meHide = false, foeHide = false, meSil = false, foeSil = false;
   uint32_t t = now - bqT;
   uint8_t fxSide = 0;
-  FxAnim *fxa = bvFxNow(fxSide);
+  const FxAnim *fxa = bvFxNow(fxSide);
   // con efecto de la SD el golpe llega cuando la animacion va por la mitad
   uint32_t hurt0 = fxa ? constrain(fxa->durMs(fxSide) / 2, 350u, 800u) : 350;
   if (fxa) fxa->drawBg(gfx->getFramebuffer(), fxSide, t, bvShakeX, bvShakeY);  // fondo, detras de los dos
@@ -2097,6 +2094,7 @@ static void partySwitchTo(uint8_t j) {
   pCur = j;
   pUsed |= (uint8_t)(1 << j);
   bMe = pMon[j];
+  bvPreloadFx();  // ko11.31
   bvMeDex = bMe.dex;
   bvMeType = bMe.type;
   bvMeTier = moveTier(bMe.dex);
@@ -2345,9 +2343,23 @@ void renderBattleView() {
   uiFlush();
 }
 
+// ko11.31: los efectos de la SD de los 4 mios y los 4 del rival, antes de empezar
+void bvPreloadFx() {
+  uint8_t ids[8];
+  memcpy(ids, bMe.mv, 4);
+  memcpy(ids + 4, bFoe.mv, 4);
+  fxPreload(ids, 8);
+}
+
 void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool foeShiny) {
   // ko11.16: sprites de combate (si la SD los tiene)
   prgLoadFor(me.dex, foe.dex, foeShiny);
+  {  // ko11.31: y los efectos de sus movimientos, ahora (no a mitad del combate)
+    uint8_t ids[8];
+    memcpy(ids, me.mv, 4);
+    memcpy(ids + 4, foe.mv, 4);
+    fxPreload(ids, 8);
+  }
   bvMeDex = me.dex; bvFoeDex = foe.dex;
   bvMeType = me.type; bvFoeType = foe.type;
   bvMeTier = moveTier(me.dex); bvFoeTier = moveTier(foe.dex);

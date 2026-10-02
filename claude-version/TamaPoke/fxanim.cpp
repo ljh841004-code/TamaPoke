@@ -6,7 +6,11 @@
 #include <SD_MMC.h>
 #include "battle.h"
 
-FxAnim fxMove[2];
+// ko11.31: cache de efectos ya leidos (se llena al empezar el combate, nunca a mitad de un
+// golpe: leer de la SD mientras suena la musica la hacia cortarse)
+#define FX_CACHE_N 10
+#define FX_BUDGET (3UL * 1024 * 1024)
+static FxAnim fxC[FX_CACHE_N];
 
 static inline uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | p[1] << 8); }
 static inline int16_t rds16(const uint8_t *p) { return (int16_t)rd16(p); }
@@ -26,26 +30,66 @@ void FxAnim::unload() {
 
 static bool fxParse(FxAnim &a, File &f);
 
-// ko11.31: los de tipo como siempre (fTTSV); placaje y los de estado, mNNN.bin
-bool FxAnim::loadId(uint8_t id) {
+// abre el archivo del movimiento: mons/fx/<n> o suelto en mons/ (el instalador web)
+static File fxOpen(uint8_t id) {
+  char name[16], path[28];
   uint8_t t, s, v;
-  if (moveDecode(id, &t, &s, &v)) {
-    bool ok = load(t, s, v);
-    if (ok) mid = id;
-    return ok;
-  }
-  uint16_t k = (uint16_t)(1000 + id);
-  if (data && key == k) return true;
-  unload();
-  if (!sdReady || !id) return false;
-  SdCardLock lock;
-  if (!lock) return false;
-  char path[28];
-  snprintf(path, sizeof(path), "/mons/fx/m%03u.bin", id);
+  if (moveDecode(id, &t, &s, &v)) snprintf(name, sizeof(name), "f%02u%u%u.bin", t, s, v);
+  else snprintf(name, sizeof(name), "m%03u.bin", id);
+  snprintf(path, sizeof(path), "/mons/fx/%s", name);
   File f = SD_MMC.open(path, FILE_READ);
   if (!f) {
-    snprintf(path, sizeof(path), "/mons/m%03u.bin", id);
+    snprintf(path, sizeof(path), "/mons/%s", name);
     f = SD_MMC.open(path, FILE_READ);
+  }
+  return f;
+}
+
+const FxAnim *fxFind(uint8_t id) {
+  if (!id) return nullptr;
+  for (FxAnim &a : fxC) if (a.isId(id)) return &a;
+  return nullptr;
+}
+
+void fxPreload(const uint8_t *ids, uint8_t n) {
+  if (!sdReady) return;
+  auto wanted = [&](uint8_t id) { for (uint8_t i = 0; i < n; i++) if (ids[i] == id) return true; return false; };
+  uint32_t used = 0;
+  for (FxAnim &a : fxC) {
+    if (a.ok() && !wanted(a.mid)) a.unload();  // lo de antes que ya no hace falta
+    if (a.ok()) used += a.size;
+  }
+  for (uint8_t i = 0; i < n; i++) {
+    uint8_t id = ids[i];
+    if (!id || id == MOVE_STRUGGLE || fxFind(id)) continue;
+    FxAnim *slot = nullptr;
+    for (FxAnim &a : fxC) if (!a.ok()) { slot = &a; break; }
+    if (!slot) return;
+    uint32_t sz = 0;
+    {
+      SdCardLock lock;
+      if (!lock) return;
+      File f = fxOpen(id);
+      if (!f) continue;
+      sz = f.size();
+      f.close();
+    }
+    if (used + sz > FX_BUDGET) continue;  // no cabe: ese usara el efecto dibujado
+    if (slot->loadId(id)) used += slot->size;
+  }
+}
+// ko11.31: los de tipo (fTTSV) y placaje / los de estado (mNNN.bin), por id
+bool FxAnim::loadId(uint8_t id) {
+  uint8_t t, s, v;
+  uint16_t k = moveDecode(id, &t, &s, &v) ? (uint16_t)(t * 9 + s * 3 + v) : (uint16_t)(1000 + id);
+  if (data && key == k) { mid = id; return true; }
+  unload();
+  if (!sdReady || !id) return false;
+  File f;
+  {
+    SdCardLock lock;
+    if (!lock) return false;
+    f = fxOpen(id);
   }
   if (!f) return false;
   if (!fxParse(*this, f)) return false;
@@ -55,35 +99,37 @@ bool FxAnim::loadId(uint8_t id) {
 }
 
 bool FxAnim::load(uint8_t type, uint8_t tier, uint8_t var) {
-  uint16_t k = (uint16_t)(type * 9 + tier * 3 + var);
-  if (data && key == k) return true;  // ya esta
-  unload();
-  if (!sdReady || type > 15 || tier > 2 || var > 2) return false;
-  SdCardLock lock;
-  if (!lock) return false;
-  char path[28];
-  snprintf(path, sizeof(path), "/mons/fx/f%02u%u%u.bin", type, tier, var);
-  File f = SD_MMC.open(path, FILE_READ);
-  if (!f) {  // el instalador web solo escribe archivos sueltos en /mons/
-    snprintf(path, sizeof(path), "/mons/f%02u%u%u.bin", type, tier, var);
-    f = SD_MMC.open(path, FILE_READ);
-  }
-  if (!f) return false;
-  if (!fxParse(*this, f)) return false;
-  key = k;
-  return true;
+  return loadId(moveIdTyped(type, tier, var));
 }
 
 static bool fxParse(FxAnim &a, File &f) {
-  uint32_t sz = f.size();
-  if (sz < FX_HDR + 4 || sz > 3UL * 1024 * 1024) { f.close(); return false; }
+  uint32_t sz;
+  {
+    SdCardLock lock;
+    if (!lock) { f.close(); return false; }
+    sz = f.size();
+  }
+  if (sz < FX_HDR + 4 || sz > 3UL * 1024 * 1024) { SdCardLock l; f.close(); return false; }
   a.data = (uint8_t *)ps_malloc(sz);
-  if (!a.data || f.read(a.data, sz) != sz || memcmp(a.data, "TFX2", 4) != 0 || a.data[4] < 1 || a.data[4] > 2) {
+  // a trozos, soltando la SD entre uno y otro: la musica (que tambien lee de la SD) no se corta
+  bool ok = a.data != nullptr;
+  for (uint32_t off = 0; ok && off < sz;) {
+    uint32_t n = sz - off > 8192 ? 8192 : sz - off;
+    {
+      SdCardLock lock;
+      ok = lock && f.read(a.data + off, n) == n;
+    }
+    off += n;
+    delay(1);
+  }
+  {
+    SdCardLock l;
     f.close();
+  }
+  if (!ok || memcmp(a.data, "TFX2", 4) != 0 || a.data[4] < 1 || a.data[4] > 2) {
     a.unload();
     return false;
   }
-  f.close();
   a.size = sz;
   a.frameMs = rd16(a.data + 5);
   if (a.frameMs < 10) a.frameMs = 10;

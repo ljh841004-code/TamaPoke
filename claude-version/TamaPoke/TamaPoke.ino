@@ -4231,6 +4231,25 @@ void drawThumb(const uint8_t *b, int x, int y, int s, bool sil) {
   smoothBlit(d, w, h, tp, ox, oy, s, sil);
 }
 
+// ko11.31: centro del dibujo (sin el fondo transparente 0xFF) de una miniatura dibujada en (x, y)
+void thumbCenter(const uint8_t *b, int x, int y, int s, int *cx, int *cy) {
+  uint8_t w = b[0], h = b[1], n = b[2];
+  const uint8_t *d = b + 3 + n * 2;
+  int x0 = w, x1 = -1, y0 = h, y1 = -1;
+  for (int yy = 0; yy < h; yy++)
+    for (int xx = 0; xx < w; xx++)
+      if (d[yy * w + xx] != 0xFF) {
+        if (xx < x0) x0 = xx;
+        if (xx > x1) x1 = xx;
+        if (yy < y0) y0 = yy;
+        if (yy > y1) y1 = yy;
+      }
+  int ox = x + (GAL_CELL - w * s) / 2, oy = y + (GAL_CELL - h * s) / 2;
+  if (x1 < 0) { *cx = x + GAL_CELL / 2; *cy = y + GAL_CELL / 2; return; }
+  *cx = ox + (x0 + x1 + 1) * s / 2;
+  *cy = oy + (y0 + y1 + 1) * s / 2;
+}
+
 // fork KO (ko4): descubierto = criado, visto en batalla o capturado
 bool dexDiscovered(int16_t dex) { return pet.isRegistered(dex) || dexLog.wasSeen(dex); }
 
@@ -4244,7 +4263,7 @@ uint16_t dexDiscoveredCount() {
 // ko11.31: los 4 movimientos que ensena la ficha: los de la fase mas alta que aprende
 // (de tipo de mayor fase y potencia primero; los de estado al final)
 #define DEXMV_R 28
-static const int16_t DEXMV_XY[4][2] = { { 64, 98 }, { 56, 184 }, { 402, 98 }, { 410, 184 } };
+static const int16_t DEXMV_XY[4][2] = { { 88, 100 }, { 70, 184 }, { 378, 100 }, { 396, 184 } };  // dentro del circulo
 static uint8_t dexMvFx = 0;      // el que se esta ensenando (0 = ninguno)
 static uint32_t dexMvT0 = 0;
 uint8_t dexTopMoves(int16_t dex, uint8_t out[4]) {
@@ -4348,7 +4367,7 @@ void renderDexDetail() {
       // el efecto: el de la SD si esta; si no, el dibujado
       if (dexMvFx) {
         int ax = CX + 30, ay = 140, tx = CX + 150, ty = 70;
-        if (fxMove[0].isId(dexMvFx)) fxMove[0].drawFg(gfx->getFramebuffer(), 0, mvT, ax - 140, ay - 200);
+        if (const FxAnim *fa = fxFind(dexMvFx)) fa->drawFg(gfx->getFramebuffer(), 0, mvT, ax - 140, ay - 200);
         else if (moveIsStatus(dexMvFx)) drawStatusMoveFx(dexMvFx, CX, 150, tx, ty, mvT);
         else {
           uint8_t t, tr, v;
@@ -4398,8 +4417,10 @@ void renderGallery() {
       if (t) {
         drawThumb(t, x, y, 2, !dexDiscovered(dex));
         if (dexLog.caughtCount(dex)) {  // ko11.31: capturado alguna vez: circulo
-          gfx->drawCircle(x + GAL_CELL / 2, y + GAL_CELL / 2, GAL_CELL / 2 - 2, C565(0xe0, 0x40, 0x38));
-          gfx->drawCircle(x + GAL_CELL / 2, y + GAL_CELL / 2, GAL_CELL / 2 - 3, C565(0xe0, 0x40, 0x38));
+          int ccx, ccy;
+          thumbCenter(t, x, y, 2, &ccx, &ccy);
+          gfx->drawCircle(ccx, ccy, 28, C565(0xe0, 0x40, 0x38));
+          gfx->drawCircle(ccx, ccy, 27, C565(0xe0, 0x40, 0x38));
         }
         if (pet.isShinyRegistered(dex)) {
           gfx->setTextColor(UI_BAR_WARN);
@@ -4470,7 +4491,6 @@ void galleryTap(int16_t x, int16_t y) {
         if (!mv[i] || ddx * ddx + ddy * ddy > (DEXMV_R + 8) * (DEXMV_R + 8)) continue;
         lastTap = 0;
         if (!dexLog.hasLearned(galleryDetail, mv[i])) { sfxPlay(SFX_DENY); return; }
-        fxMove[0].loadId(mv[i]);
         dexMvFx = mv[i];
         dexMvT0 = millis();
         sfxPlay(SFX_PLAY);
@@ -4500,6 +4520,12 @@ void galleryTap(int16_t x, int16_t y) {
   if (!dex) return;
   galleryDetail = dex;
   galleryPmd.load(dex, pet.isShinyRegistered(dex));
+  if (dexLog.caughtCount(dex)) {  // ko11.31: los efectos de sus botones, ya (no al tocarlos)
+    uint8_t mv[4];
+    dexTopMoves(dex, mv);
+    for (uint8_t i = 0; i < 4; i++) if (!dexLog.hasLearned(dex, mv[i])) mv[i] = 0;
+    fxPreload(mv, 4);
+  }
   // ko9.1: los ya vistos o criados dicen su nombre; los "???" no
   if (dexDiscovered(dex)) audioCry(dex);
   else sfxPlay(SFX_TAP);

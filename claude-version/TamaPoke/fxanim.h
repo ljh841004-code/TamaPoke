@@ -27,4 +27,7 @@ private:
   const uint8_t *table(uint8_t side) const;
 };
 
-extern FxAnim fxMove[2];  // 0 = ataque del mio, 1 = del rival
+// ko11.31: los efectos de los movimientos que pueden salir (los mios y los del rival) se
+// leen todos de una vez al empezar; durante el combate solo se buscan (sin tocar la SD)
+void fxPreload(const uint8_t *ids, uint8_t n);
+const FxAnim *fxFind(uint8_t id);

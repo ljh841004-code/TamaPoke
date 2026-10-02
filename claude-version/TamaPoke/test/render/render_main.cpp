@@ -379,7 +379,7 @@ static void scenes(bool ko, const char *sfx) {
           memset(&bq[0], 0, sizeof(bq[0]));
           bq[0].side = 0; bq[0].kind = EV_HIT; bq[0].move = BA_M0; bq[0].mid = id;
           bq[0].eff = 2; bq[0].dmg = 5; bq[0].hpA = bMe.hp; bq[0].hpB = bFoe.hp;
-          fxMove[0].loadId(id);
+          fxPreload(&id, 1);
           txFmt(bvL1, sizeof(bvL1), X_USED, bvMeName, moveNameId(id));
           bvL2[0] = 0;
           bqT = gMockMillis;
@@ -395,7 +395,7 @@ static void scenes(bool ko, const char *sfx) {
     }
     // ko11.30: el rival ataca con el efecto de la SD (lado 1: de arriba a abajo)
     bPhase = BP_PLAY; bqN = 1; bqI = 0; bq[0].side = 1; bq[0].mid = movesMain(bFoe);
-    fxMove[1].loadId(bq[0].mid);
+    fxPreload(bFoe.mv, 4);
     txFmt(bvL1, sizeof(bvL1), X_USED, bvFoeName, moveNameId(bq[0].mid));
     bqT = gMockMillis;
     for (uint32_t at : { 250u, 500u, 750u, 1000u }) {
