@@ -29,6 +29,8 @@ void FxAnim::unload() {
 }
 
 static bool fxParse(FxAnim &a, File &f);
+static bool fxValidate(FxAnim &a, uint32_t sz);
+static void fxAsyncCancel();
 
 // abre el archivo del movimiento: mons/fx/<n> o suelto en mons/ (el instalador web)
 static File fxOpen(uint8_t id) {
@@ -52,6 +54,7 @@ const FxAnim *fxFind(uint8_t id) {
 }
 
 void fxPreload(const uint8_t *ids, uint8_t n) {
+  fxAsyncCancel();  // el combate manda: lo que se leia para la ficha se deja
   if (!sdReady) return;
   auto wanted = [&](uint8_t id) { for (uint8_t i = 0; i < n; i++) if (ids[i] == id) return true; return false; };
   uint32_t used = 0;
@@ -78,6 +81,109 @@ void fxPreload(const uint8_t *ids, uint8_t n) {
     if (slot->loadId(id)) used += slot->size;
   }
 }
+// ---- ko11.31: lectura en segundo plano (la ficha del Pokedex): un trozo por vuelta del bucle
+static struct {
+  uint8_t ids[8];
+  uint8_t n = 0, i = 0;
+  FxAnim *slot = nullptr;
+  File f;
+  uint32_t off = 0, sz = 0, used = 0;
+  bool on = false;
+} gQ;
+
+static void fxAsyncCancel() {
+  if (gQ.slot) {
+    gQ.slot->unload();
+    SdCardLock l;
+    gQ.f.close();
+  }
+  gQ.slot = nullptr;
+  gQ.on = false;
+}
+
+void fxPreloadAsync(const uint8_t *ids, uint8_t n) {
+  fxAsyncCancel();
+  if (!sdReady) return;
+  if (n > 8) n = 8;
+  memcpy(gQ.ids, ids, n);
+  gQ.n = n;
+  gQ.i = 0;
+  gQ.used = 0;
+  for (FxAnim &a : fxC) {
+    bool want = false;
+    for (uint8_t k = 0; k < n; k++) if (a.mid && a.mid == ids[k]) want = true;
+    if (a.ok() && !want) a.unload();  // lo de antes que ya no hace falta
+    if (a.ok()) gQ.used += a.size;
+  }
+  gQ.on = true;
+}
+
+void fxPump(uint8_t chunks) {
+  for (uint8_t c = 0; c < chunks && gQ.on; c++) fxPumpOne();
+}
+
+static void fxPumpOneImpl();
+void fxPumpOne() { fxPumpOneImpl(); }
+
+static void fxPumpOneImpl() {
+  if (!gQ.on) return;
+  if (!gQ.slot) {
+    while (gQ.i < gQ.n && (!gQ.ids[gQ.i] || fxFind(gQ.ids[gQ.i]))) gQ.i++;
+    if (gQ.i >= gQ.n) { gQ.on = false; return; }
+    uint8_t id = gQ.ids[gQ.i];
+    FxAnim *slot = nullptr;
+    for (FxAnim &a : fxC) if (!a.ok()) { slot = &a; break; }
+    if (!slot) {  // lleno: fuera el primero que no sea de esta ficha
+      for (FxAnim &a : fxC) {
+        bool want = false;
+        for (uint8_t k = 0; k < gQ.n; k++) if (a.mid == gQ.ids[k]) want = true;
+        if (!want) { gQ.used -= a.size; a.unload(); slot = &a; break; }
+      }
+      if (!slot) { gQ.on = false; return; }
+    }
+    {
+      SdCardLock lock;
+      if (!lock) return;
+      gQ.f = fxOpen(id);
+      gQ.sz = gQ.f ? gQ.f.size() : 0;
+    }
+    if (!gQ.f || gQ.sz < FX_HDR + 4 || gQ.sz > 3UL * 1024 * 1024 || gQ.used + gQ.sz > FX_BUDGET) {
+      SdCardLock l;
+      if (gQ.f) gQ.f.close();
+      gQ.i++;
+      return;
+    }
+    slot->data = (uint8_t *)ps_malloc(gQ.sz);
+    if (!slot->data) { SdCardLock l; gQ.f.close(); gQ.on = false; return; }
+    slot->mid = 0;  // aun no: fxFind no lo da hasta que este entero
+    gQ.slot = slot;
+    gQ.off = 0;
+    return;
+  }
+  uint32_t n = gQ.sz - gQ.off > 8192 ? 8192 : gQ.sz - gQ.off;
+  bool ok;
+  {
+    SdCardLock lock;
+    if (!lock) return;
+    ok = gQ.f.read(gQ.slot->data + gQ.off, n) == n;
+  }
+  gQ.off += n;
+  if (!ok || gQ.off >= gQ.sz) {
+    { SdCardLock l; gQ.f.close(); }
+    FxAnim *a = gQ.slot;
+    gQ.slot = nullptr;
+    uint8_t id = gQ.ids[gQ.i++];
+    if (ok && fxValidate(*a, gQ.sz)) {
+      uint8_t t, s2, v;
+      a->key = moveDecode(id, &t, &s2, &v) ? (uint16_t)(t * 9 + s2 * 3 + v) : (uint16_t)(1000 + id);
+      a->mid = id;
+      gQ.used += a->size;
+    } else {
+      a->unload();
+    }
+  }
+}
+
 // ko11.31: los de tipo (fTTSV) y placaje / los de estado (mNNN.bin), por id
 bool FxAnim::loadId(uint8_t id) {
   uint8_t t, s, v;
@@ -101,6 +207,34 @@ bool FxAnim::loadId(uint8_t id) {
 bool FxAnim::load(uint8_t type, uint8_t tier, uint8_t var) {
   return loadId(moveIdTyped(type, tier, var));
 }
+
+static bool fxValidate(FxAnim &a, uint32_t sz) {
+  if (memcmp(a.data, "TFX2", 4) != 0 || a.data[4] < 1 || a.data[4] > 2) {
+    a.unload();
+    return false;
+  }
+  a.size = sz;
+  a.frameMs = rd16(a.data + 5);
+  if (a.frameMs < 10) a.frameMs = 10;
+  // valida los fondos y las tablas de los lados
+  const uint8_t *p = a.data + FX_HDR, *end = a.data + sz;
+  for (uint8_t i = 0; i < a.data[7]; i++) {
+    if (p + 6 > end) { a.unload(); return false; }
+    uint32_t w = rd16(p), h = rd16(p + 2), np = rd16(p + 4);
+    if (!w || !h || np > 256) { a.unload(); return false; }
+    p += 6 + np * 3 + w * h;
+  }
+  for (uint8_t s = 0; s < a.data[4]; s++) {
+    if (p + 2 > end) { a.unload(); return false; }
+    uint16_t n = rd16(p);
+    if (p + 2 + 4UL * n > end) { a.unload(); return false; }
+    for (uint16_t i = 0; i < n; i++)
+      if (rd32(p + 2 + 4 * i) + FX_BGHDR + 13 > sz) { a.unload(); return false; }
+    p += 2 + 4UL * n;
+  }
+  return true;
+}
+
 
 static bool fxParse(FxAnim &a, File &f) {
   uint32_t sz;
@@ -126,30 +260,8 @@ static bool fxParse(FxAnim &a, File &f) {
     SdCardLock l;
     f.close();
   }
-  if (!ok || memcmp(a.data, "TFX2", 4) != 0 || a.data[4] < 1 || a.data[4] > 2) {
-    a.unload();
-    return false;
-  }
-  a.size = sz;
-  a.frameMs = rd16(a.data + 5);
-  if (a.frameMs < 10) a.frameMs = 10;
-  // valida los fondos y las tablas de los lados
-  const uint8_t *p = a.data + FX_HDR, *end = a.data + sz;
-  for (uint8_t i = 0; i < a.data[7]; i++) {
-    if (p + 6 > end) { a.unload(); return false; }
-    uint32_t w = rd16(p), h = rd16(p + 2), np = rd16(p + 4);
-    if (!w || !h || np > 256) { a.unload(); return false; }
-    p += 6 + np * 3 + w * h;
-  }
-  for (uint8_t s = 0; s < a.data[4]; s++) {
-    if (p + 2 > end) { a.unload(); return false; }
-    uint16_t n = rd16(p);
-    if (p + 2 + 4UL * n > end) { a.unload(); return false; }
-    for (uint16_t i = 0; i < n; i++)
-      if (rd32(p + 2 + 4 * i) + FX_BGHDR + 13 > sz) { a.unload(); return false; }
-    p += 2 + 4UL * n;
-  }
-  return true;
+  if (!ok) { a.unload(); return false; }
+  return fxValidate(a, sz);
 }
 
 const uint8_t *FxAnim::bg(uint8_t i) const {

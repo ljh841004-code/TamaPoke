@@ -379,7 +379,7 @@ static void scenes(bool ko, const char *sfx) {
           memset(&bq[0], 0, sizeof(bq[0]));
           bq[0].side = 0; bq[0].kind = EV_HIT; bq[0].move = BA_M0; bq[0].mid = id;
           bq[0].eff = 2; bq[0].dmg = 5; bq[0].hpA = bMe.hp; bq[0].hpB = bFoe.hp;
-          fxPreload(&id, 1);
+          fxPreloadAsync(&id, 1); for (int k = 0; k < 4000; k++) fxPump();
           txFmt(bvL1, sizeof(bvL1), X_USED, bvMeName, moveNameId(id));
           bvL2[0] = 0;
           bqT = gMockMillis;
@@ -395,7 +395,7 @@ static void scenes(bool ko, const char *sfx) {
     }
     // ko11.30: el rival ataca con el efecto de la SD (lado 1: de arriba a abajo)
     bPhase = BP_PLAY; bqN = 1; bqI = 0; bq[0].side = 1; bq[0].mid = movesMain(bFoe);
-    fxPreload(bFoe.mv, 4);
+    fxPreloadAsync(bFoe.mv, 4); for (int k = 0; k < 4000; k++) fxPump();
     txFmt(bvL1, sizeof(bvL1), X_USED, bvFoeName, moveNameId(bq[0].mid));
     bqT = gMockMillis;
     for (uint32_t at : { 250u, 500u, 750u, 1000u }) {
@@ -742,11 +742,14 @@ static void scenes(bool ko, const char *sfx) {
   {
     uint8_t mv[4];
     dexTopMoves(25, mv);
+    { uint8_t m2[4]; dexTopMoves(25, m2); fxPreloadAsync(m2, 4); }
+    for (int k = 0; k < 2000; k++) fxPump();  // la lectura en segundo plano de sus efectos
+    navCheck("pokedex: los aprendidos van primero", dexLog.hasLearned(25, mv[0]) && dexLog.hasLearned(25, mv[1]));
     onTap(DEXMV_XY[0][0], DEXMV_XY[0][1]);
     navCheck("pokedex: tocar un movimiento aprendido lo ensena", dexMvFx == mv[0]);
     tick(500); render(); shot("13b_dex_move_fx");
     tick(1200); dexMvFx = 0;
-    onTap(DEXMV_XY[1][0], DEXMV_XY[1][1]);
+    onTap(DEXMV_XY[2][0], DEXMV_XY[2][1]);
     navCheck("pokedex: uno sin aprender no se ensena", dexMvFx == 0);
   }
   galleryDetail = 52; galleryPmd.load(52, false);

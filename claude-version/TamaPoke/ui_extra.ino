@@ -2353,17 +2353,18 @@ void bvPreloadFx() {
   uint8_t ids[8];
   memcpy(ids, bMe.mv, 4);
   memcpy(ids + 4, bFoe.mv, 4);
-  fxPreload(ids, 8);
+  fxPreloadAsync(ids, 8);
 }
 
 void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool foeShiny) {
   // ko11.16: sprites de combate (si la SD los tiene)
   prgLoadFor(me.dex, foe.dex, foeShiny);
-  {  // ko11.31: y los efectos de sus movimientos, ahora (no a mitad del combate)
+  {  // ko11.31: y los efectos de sus movimientos, poco a poco mientras sale (entrar ya no se para;
+     // si alguno aun no esta cuando se usa, sale el efecto dibujado)
     uint8_t ids[8];
     memcpy(ids, me.mv, 4);
     memcpy(ids + 4, foe.mv, 4);
-    fxPreload(ids, 8);
+    fxPreloadAsync(ids, 8);
   }
   bvMeDex = me.dex; bvFoeDex = foe.dex;
   bvMeType = me.type; bvFoeType = foe.type;

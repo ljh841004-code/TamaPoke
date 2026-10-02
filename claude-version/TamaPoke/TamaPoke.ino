@@ -857,6 +857,7 @@ void loop() {
   vibLoop(now);  // ko11.25
   moveLearnLoop();  // ko11.31
   centerPoll();     // ko11.31: el centro pokemon termina aunque no se mire
+  fxPump(4);        // ko11.31: efectos (combate / ficha del Pokedex), 4 trozos de 8 KB por vuelta
   uint32_t loopT0 = now, renderMs = 0;
   {  // ko11.9.2: en que pantalla estamos (si se reinicia, se ve al arrancar)
     uint8_t scr = vbOpen ? 1 : defOpen ? 2 : spdOpen ? 3 : gameOpen ? 4 : sackOpen ? 5 : trainMenuOpen ? 6
@@ -4276,21 +4277,28 @@ uint8_t dexTopMoves(int16_t dex, uint8_t out[4]) {
     return 1000 + s * 300 + moveDef(id).pow;
   };
   memset(out, 0, 4);
-  for (uint8_t k = 0; k < 4; k++) {
-    int best = -1;
-    for (uint8_t i = 0; i < n; i++) {
-      if (!pool[i] || movesHas(out, pool[i])) continue;
-      if (best < 0 || score(pool[i]) > score(pool[best])) best = i;
+  // ko11.31: primero los que saben los mios (los mas fuertes); el resto, los fuertes que faltan (???)
+  for (int pass = 0; pass < 2; pass++)
+    for (uint8_t k = moveCount(out); k < 4; k++) {
+      int best = -1;
+      for (uint8_t i = 0; i < n; i++) {
+        if (!pool[i] || movesHas(out, pool[i]) || dexLog.hasLearned(dex, pool[i]) != (pass == 0)) continue;
+        if (best < 0 || score(pool[i]) > score(pool[best])) best = i;
+      }
+      if (best < 0) break;
+      out[k] = pool[best];
     }
-    if (best < 0) break;
-    out[k] = pool[best];
-  }
   return moveCount(out);
 }
 
 // ficha de la pokedex (fork KO, ko4): datos basicos + historial
+#define DEXFX_AX (CX - 60)  // ko11.31: el efecto sale del Pokemon y va hacia arriba a la derecha (dentro)
+#define DEXFX_AY 190
 void renderDexDetail() {
   uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
+  uint32_t mvT0 = dexMvFx ? millis() - dexMvT0 : 0;
+  if (dexMvFx && mvT0 <= 1500)  // el fondo del efecto (olas, cielo rojo...) detras de todo
+    if (const FxAnim *fa = fxFind(dexMvFx)) fa->drawBg(gfx->getFramebuffer(), 0, mvT0, DEXFX_AX - 140, DEXFX_AY - 200);
   int16_t dx = galleryDetail;
   const DexEntry &d = DEX_TBL[dx];
   bool disc = dexDiscovered(dx);
@@ -4366,8 +4374,8 @@ void renderDexDetail() {
       }
       // el efecto: el de la SD si esta; si no, el dibujado
       if (dexMvFx) {
-        int ax = CX + 30, ay = 140, tx = CX + 150, ty = 70;
-        if (const FxAnim *fa = fxFind(dexMvFx)) fa->drawFg(gfx->getFramebuffer(), 0, mvT, ax - 140, ay - 200);
+        int ax = DEXFX_AX, ay = DEXFX_AY - 40, tx = DEXFX_AX + 176, ty = DEXFX_AY - 84;
+        if (const FxAnim *fa = fxFind(dexMvFx)) fa->drawFg(gfx->getFramebuffer(), 0, mvT, DEXFX_AX - 140, DEXFX_AY - 200);
         else if (moveIsStatus(dexMvFx)) drawStatusMoveFx(dexMvFx, CX, 150, tx, ty, mvT);
         else {
           uint8_t t, tr, v;
@@ -4524,7 +4532,7 @@ void galleryTap(int16_t x, int16_t y) {
     uint8_t mv[4];
     dexTopMoves(dex, mv);
     for (uint8_t i = 0; i < 4; i++) if (!dexLog.hasLearned(dex, mv[i])) mv[i] = 0;
-    fxPreload(mv, 4);
+    fxPreloadAsync(mv, 4);  // poco a poco: abrir la ficha ya no se para
   }
   // ko9.1: los ya vistos o criados dicen su nombre; los "???" no
   if (dexDiscovered(dex)) audioCry(dex);

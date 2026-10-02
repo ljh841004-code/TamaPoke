@@ -31,3 +31,7 @@ private:
 // leen todos de una vez al empezar; durante el combate solo se buscan (sin tocar la SD)
 void fxPreload(const uint8_t *ids, uint8_t n);
 const FxAnim *fxFind(uint8_t id);
+// ko11.31: lo mismo sin parar la pantalla (la ficha del Pokedex): fxPump() lee un trozo cada vez
+void fxPreloadAsync(const uint8_t *ids, uint8_t n);
+void fxPump(uint8_t chunks = 1);
+void fxPumpOne();
