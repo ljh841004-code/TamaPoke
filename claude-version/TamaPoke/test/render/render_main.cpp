@@ -347,7 +347,7 @@ static void scenes(bool ko, const char *sfx) {
         txFmt(bvL1, sizeof(bvL1), X_USED, bvMeName, moveName(BA_TYPE, bvMeType, bvMeTier));
         bvL2[0] = 0;
         bqT = gMockMillis;
-        for (uint32_t at : { 300u, 520u }) {
+        for (uint32_t at : { 250u, 500u, 750u, 1000u }) {  // ko11.30: 4 momentos (efectos de la SD)
           gMockMillis = bqT + at;
           render();
           snprintf(n, sizeof(n), "tier_%03d_%u", d, at);
@@ -360,7 +360,7 @@ static void scenes(bool ko, const char *sfx) {
           bPhase = BP_PLAY; bqN = 1; bqI = 0;
           txFmt(bvL1, sizeof(bvL1), X_USED, bvMeName, moveName(BA_TYPE, bvMeType, bvMeTier, bvMeVar));
           bqT = gMockMillis;
-          for (uint32_t at : { 300u, 560u }) {
+          for (uint32_t at : { 250u, 500u, 750u, 1000u }) {
             gMockMillis = bqT + at;
             render();
             snprintf(n, sizeof(n), "mv_%03d_v%u_%u", d, v, at);
@@ -370,6 +370,17 @@ static void scenes(bool ko, const char *sfx) {
         pet.moveK = 0;
       }
     }
+    // ko11.30: el rival ataca con el efecto de la SD (lado 1: de arriba a abajo)
+    bPhase = BP_PLAY; bqN = 1; bqI = 0; bq[0].side = 1;
+    txFmt(bvL1, sizeof(bvL1), X_USED, bvFoeName, moveName(BA_TYPE, bvFoeType, bvFoeTier, bvFoeVar));
+    bqT = gMockMillis;
+    for (uint32_t at : { 250u, 500u, 750u, 1000u }) {
+      gMockMillis = bqT + at;
+      render();
+      snprintf(n, sizeof(n), "fxfoe_%u", at);
+      shot(n);
+    }
+    bq[0].side = 0;
     pet.speciesId = keepSp;
     pmd.load((uint8_t)keepSp, pet.shiny);
     bMe = makeBattler(keepSp, pet.level(), pet.atkStat(), pet.defStat(), pet.speStat());

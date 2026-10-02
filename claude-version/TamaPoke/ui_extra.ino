@@ -1608,6 +1608,15 @@ static void drawPrgBattler(PmdMon &m, uint8_t act, int cx, int groundY, uint32_t
   gSmoothGfx = sm;
 }
 
+// ko11.30: efecto de la SD del ataque de tipo en curso (nullptr = el dibujado)
+static FxAnim *bvFxNow(uint8_t &side) {
+  if (bPhase != BP_PLAY || bqI >= bqN) return nullptr;
+  const BEvent &e = bq[bqI];
+  if ((e.kind != EV_HIT && e.kind != EV_MISS) || e.move != BA_TYPE) return nullptr;
+  side = evIsMe(e.side) ? 0 : 1;
+  return fxMove[side].ok() ? &fxMove[side] : nullptr;
+}
+
 // dibuja los dos Pokemon; anima al que actua segun el evento en curso
 void drawBattlers() {
   uint32_t now = millis();
@@ -1615,6 +1624,11 @@ void drawBattlers() {
   uint8_t meAct = PMD_IDLE, foeAct = PMD_IDLE;
   bool meHide = false, foeHide = false, meSil = false, foeSil = false;
   uint32_t t = now - bqT;
+  uint8_t fxSide = 0;
+  FxAnim *fxa = bvFxNow(fxSide);
+  // con efecto de la SD el golpe llega cuando la animacion va por la mitad
+  uint32_t hurt0 = fxa ? constrain(fxa->durMs(fxSide) / 2, 350u, 800u) : 350;
+  if (fxa) fxa->drawBg(gfx->getFramebuffer(), fxSide, t, bvShakeX, bvShakeY);  // fondo, detras de los dos
   if (bPhase == BP_PLAY && bqI < bqN) {
     const BEvent &e = bq[bqI];
     bool me = evIsMe(e.side);
@@ -1627,7 +1641,7 @@ void drawBattlers() {
         if (me) gfx->drawCircle(meX, meG - 50, r, 0x4C98);
         else gfx->drawCircle(foeX, foeG - 40, r, 0x4C98);
       }
-      if ((e.kind == EV_HIT || e.kind == EV_COUNTER) && e.eff && t > 350 && t < 1000) {
+      if ((e.kind == EV_HIT || e.kind == EV_COUNTER) && e.eff && t > hurt0 && t < hurt0 + 650) {
         bool blink = ((t / 80) % 2) == 0;
         if (me) { foeAct = PMD_HURT; foeHide = blink; }
         else    { meAct = PMD_HURT; meHide = blink; }
@@ -1707,7 +1721,8 @@ void drawBattlers() {
       bool me = evIsMe(e.side);
       uint8_t fx = e.move == BA_TYPE ? (me ? bvMeType : bvFoeType) : 0xFF;
       int ax = me ? 140 : 316, ay = me ? 200 : 116, tx = me ? 316 : 140, ty = me ? 116 : 200;
-      drawMoveFx(fx, ax + bvShakeX, ay + bvShakeY, tx + bvShakeX, ty + bvShakeY, t,
+      if (fxa) fxa->drawFg(gfx->getFramebuffer(), fxSide, t, bvShakeX, bvShakeY);
+      else drawMoveFx(fx, ax + bvShakeX, ay + bvShakeY, tx + bvShakeX, ty + bvShakeY, t,
                  (e.kind == EV_HIT || e.kind == EV_COUNTER) && e.eff, e.eff, e.move == BA_TYPE ? (me ? bvMeTier : bvFoeTier) : 0,
                  e.move == BA_TYPE ? (me ? bvMeVar : bvFoeVar) : 0);
     }
@@ -1844,6 +1859,7 @@ static void partySwitchTo(uint8_t j) {
   bvMeType = bMe.type;
   bvMeTier = moveTier(bMe.dex);
   bvMeVar = (j == 0 && pSlot0Pet && bMe.dex == pet.speciesId) ? pet.moveVar() : moveVarFor(bMe.dex, bMe.lvl);  // ko11.31
+  fxMove[0].load(bvMeType, bvMeTier, bvMeVar);
   bvMeLvl = bMe.lvl;
   bvMeMax = bMe.maxHp;
   bvMeHp = bvMeTgt = bMe.hp;
@@ -2095,6 +2111,8 @@ void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool fo
   // ko11.31: el que crias usa el ataque que aprendio; los demas, uno fijo por especie y tramo de 5 niveles
   bvMeVar = (pSlot0Pet && pCur == 0 && me.dex == pet.speciesId) ? pet.moveVar() : moveVarFor(me.dex, me.lvl);
   bvFoeVar = moveVarFor(foe.dex, foe.lvl);
+  fxMove[0].load(bvMeType, bvMeTier, bvMeVar);  // ko11.30: efectos de la SD (si estan)
+  fxMove[1].load(bvFoeType, bvFoeTier, bvFoeVar);
   bvMeLvl = me.lvl; bvFoeLvl = foe.lvl;
   bvMeMax = me.maxHp; bvFoeMax = foe.maxHp;
   bvMeHp = bvMeTgt = me.hp;

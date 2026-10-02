@@ -19,6 +19,7 @@
 #include "dex.h"
 #include "pet.h"
 #include "sdmon.h"
+#include "fxanim.h"
 #include "rtcbat.h"
 #include "i18n.h"
 #include "audio.h"
