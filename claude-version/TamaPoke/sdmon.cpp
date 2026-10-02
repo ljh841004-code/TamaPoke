@@ -15,27 +15,43 @@ SdThumbs portraits = { "/mons/story.bin" };  // ko11.21
 bool PmdMon::load(uint8_t dexNum, bool shiny, char kind) {
   unload();
   if (!sdReady) return false;
-  SdCardLock lock;
-  if (!lock) return false;
-
-  char path[28];
-  snprintf(path, sizeof(path), "/mons/%c%s%03u.bin", kind, shiny ? "s" : "", dexNum);
-  File f = SD_MMC.open(path, FILE_READ);
-  if (!f && shiny) {  // sin shiny PMD: usa el normal
-    snprintf(path, sizeof(path), "/mons/%c%03u.bin", kind, dexNum);
+  File f;
+  uint32_t size = 0;
+  {
+    SdCardLock lock;
+    if (!lock) return false;
+    char path[28];
+    snprintf(path, sizeof(path), "/mons/%c%s%03u.bin", kind, shiny ? "s" : "", dexNum);
     f = SD_MMC.open(path, FILE_READ);
+    if (!f && shiny) {  // sin shiny PMD: usa el normal
+      snprintf(path, sizeof(path), "/mons/%c%03u.bin", kind, dexNum);
+      f = SD_MMC.open(path, FILE_READ);
+    }
+    if (!f) return false;
+    size = f.size();
+    if (size < 7 || size > 3UL * 1024 * 1024) { f.close(); return false; }
   }
-  if (!f) return false;
-
-  uint32_t size = f.size();
-  if (size < 7 || size > 3UL * 1024 * 1024) { f.close(); return false; }
   blob = (uint8_t *)ps_malloc(size);
-  if (!blob || f.read(blob, size) != size || memcmp(blob, "TPK2", 4) != 0) {
-    if (blob) { free(blob); blob = nullptr; }
+  // ko11.31: a trozos de 8 KB soltando la SD entre uno y otro: la musica (que tambien
+  // lee de la SD) sigue sonando mientras se cargan los sprites al empezar un combate
+  bool ok = blob != nullptr;
+  for (uint32_t off = 0; ok && off < size;) {
+    uint32_t n = size - off > 8192 ? 8192 : size - off;
+    {
+      SdCardLock lock;
+      ok = lock && f.read(blob + off, n) == n;
+    }
+    off += n;
+    if (off < size) delay(1);
+  }
+  {
+    SdCardLock lock;
     f.close();
+  }
+  if (!ok || memcmp(blob, "TPK2", 4) != 0) {
+    if (blob) { free(blob); blob = nullptr; }
     return false;
   }
-  f.close();
 
   uint8_t nActs = blob[4];
   memcpy(&palCount, blob + 5, 2);
@@ -88,7 +104,7 @@ bool PmdMon::load(uint8_t dexNum, bool shiny, char kind) {
     }
   }
   loaded = true;
-  Serial.printf("cargado %s (%u KB)\n", path, size / 1024);
+  Serial.printf("cargado %c%03u (%u KB)\n", kind, dexNum, (unsigned)(size / 1024));
   return true;
 }
 

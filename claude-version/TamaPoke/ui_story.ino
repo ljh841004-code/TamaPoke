@@ -675,7 +675,10 @@ void renderStoryScene() {
   // el companero de la historia a la izquierda (aun no, antes de recibirlo)
   bool evoP = stEvoN && stEvoP[stEvoI];
   if (stPDex[stStyle] <= 0 || evoP) {
-  } else if (storyPmd.loaded && storyPmd.has(PMD_IDLE)) drawPmdActM(storyPmd, PMD_IDLE, 132, 258, now, true, false, 4, 170);
+  } else if (storyPmd.loaded && storyPmd.has(PMD_IDLE)) {
+    // ko11.31: como en el combate: de espaldas, mirando hacia quien esta a la derecha (si el sprite lo trae)
+    drawPmdActM(storyPmd, battleFacing(storyPmd, PMD_IDLE, true), 132, 258, now, true, false, 4, 170);
+  }
   else drawThumbAt(stPartnerDex(stStyle), 132, 220, 3, false);
   // el Pokemon de la escena (si hay) y quien habla a la derecha
   // el Pokemon de la escena, salvo que sea el propio companero (ya esta a la izquierda; ko11.23.1)
