@@ -5,6 +5,7 @@
 #include <FS.h>
 #include <SD_MMC.h>
 #include "battle.h"
+#include "audio.h"
 
 // ko11.31: cache de efectos ya leidos (se llena al empezar el combate, nunca a mitad de un
 // golpe: leer de la SD mientras suena la musica la hacia cortarse)
@@ -119,7 +120,8 @@ void fxPreloadAsync(const uint8_t *ids, uint8_t n) {
 }
 
 void fxPump(uint8_t chunks) {
-  for (uint8_t c = 0; c < chunks && gQ.on; c++) fxPumpOne();
+  // ko11.31.3: un trozo y se espera a que la musica se rellene (audioSdFree) antes del siguiente
+  for (uint8_t c = 0; c < chunks && gQ.on && audioSdFree(); c++) { fxPumpOne(); audioSdUsed(); }
 }
 
 static void fxPumpOneImpl();

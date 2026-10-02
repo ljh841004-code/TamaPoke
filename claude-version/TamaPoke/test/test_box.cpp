@@ -1018,6 +1018,25 @@ TEST(box, dex_recuerda_lo_aprendido) {
   CHECK(!e.hasLearned(5, 17));
 }
 
+// ko11.31.3: la caja guarda los que sabia al capturarlo; anyLearned para los de antes
+TEST(box, captura_guarda_sus_movimientos) {
+  mockNvsReset();
+  Box b;
+  b.begin();
+  const uint8_t mv[4] = { MOVE_TACKLE, 0, 0, 0 };
+  CHECK(b.add(25, 12, false, true, 0, mv));
+  CHECK_EQ(b.at(0).mv[0], (uint8_t)MOVE_TACKLE);
+  CHECK_EQ(moveCount(b.at(0).mv), (uint8_t)1);
+  CHECK(b.add(25, 12, false, true, 0));  // sin lista: los de su especie
+  CHECK(moveCount(b.at(1).mv) >= 1);
+  DexLog d;
+  d.begin();
+  CHECK(!d.anyLearned(25));
+  d.learned(25, MOVE_TACKLE);
+  CHECK(d.anyLearned(25));
+  CHECK(!d.anyLearned(26));
+}
+
 TEST(box, mascota_movimientos_y_oferta) {
   Pet p;
   freshPet(p, 4);

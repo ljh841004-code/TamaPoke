@@ -45,7 +45,8 @@ public:
   bool full() const { return n >= cap_; }
   const BoxMon &at(uint8_t i) const { return mons[i < n ? i : 0]; }
   // false si esta llena o el dex no es valido; los genes se sortean (90-110)
-  bool add(int16_t dex, uint16_t lvl, bool shiny, bool caught, uint32_t epoch);
+  // ko11.31.3: mv = los que sabia al capturarlo (nullptr = los de su especie y nivel)
+  bool add(int16_t dex, uint16_t lvl, bool shiny, bool caught, uint32_t epoch, const uint8_t *mv = nullptr);
   // ko10.5: el que se acaba de criar, con sus genes y la marca de criado
   bool addRaised(int16_t dex, uint16_t lvl, bool shiny, uint8_t gA, uint8_t gD, uint8_t gS, uint32_t epoch,
                  const uint8_t *mv = nullptr);
@@ -95,6 +96,11 @@ public:
   void saveLearned();
   bool hasLearned(int16_t dex, uint8_t id) const {
     return ok(dex) && id && (lrn[dex - 1][id / 8] >> (id % 8)) & 1;
+  }
+  bool anyLearned(int16_t dex) const {  // ko11.31.3
+    if (!ok(dex)) return false;
+    for (uint8_t i = 0; i < LRN_BYTES; i++) if (lrn[dex - 1][i]) return true;
+    return false;
   }
 private:
   static const int LRN_BYTES = 24;  // ids 0..191

@@ -123,6 +123,8 @@ void audioBegin() {}
 void sfxPlay(uint8_t) {}
 void audioSetEnabled(bool on) { gOn = on; }
 bool audioEnabled() { return gOn; }
+bool audioSdFree() { return true; }
+void audioSdUsed() {}
 uint32_t audioBgmSeconds() { return 170; }
 void audioSetSleeping(bool) {}
 void audioSetVolume(uint8_t c, uint8_t p) { if (c < 3) gVol[c] = p; }

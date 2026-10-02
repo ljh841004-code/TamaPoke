@@ -128,9 +128,10 @@ static void expCollect() {
   expNewDex = 0;
   if (expRes.newMon && !box.full()) {  // un Pokemon de su region se viene con el
     Battler w = makeWildIn(DEX_TBL[m.dex].biome, m.lvl, (uint8_t)sceneHour(), 0, 0, rng, nullptr);
-    if (box.add(w.dex, w.lvl, false, true, clockEpoch())) {
+    if (box.add(w.dex, w.lvl, false, true, clockEpoch(), w.mv)) {
       expNewDex = w.dex;
       dexLog.caught(w.dex, clockEpoch());
+      dexRecordMoves(w.dex, w.mv, true);  // ko11.31.3
     }
   }
   memset(&pet.exped, 0, sizeof(pet.exped));

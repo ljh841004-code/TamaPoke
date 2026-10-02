@@ -42,7 +42,9 @@ bool PmdMon::load(uint8_t dexNum, bool shiny, char kind) {
       ok = lock && f.read(blob + off, n) == n;
     }
     off += n;
-    if (off < size) delay(1);
+    // ko11.31.3: antes del siguiente trozo, que la musica vuelva a llenar su colchon (max ~60 ms)
+    audioSdUsed();
+    if (off < size) { delay(1); for (int w = 0; w < 30 && !audioSdFree(); w++) delay(2); }
   }
   {
     SdCardLock lock;

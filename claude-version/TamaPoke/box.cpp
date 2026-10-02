@@ -67,7 +67,7 @@ void Box::save() {
   else prefs.remove("mons");
 }
 
-bool Box::add(int16_t dex, uint16_t lvl, bool shiny, bool caught, uint32_t epoch) {
+bool Box::add(int16_t dex, uint16_t lvl, bool shiny, bool caught, uint32_t epoch, const uint8_t *mv) {
   if (full() || dex < 1 || dex > DexLog::N) return false;
   BoxMon &m = mons[n++];
   m.dex = dex;
@@ -77,7 +77,8 @@ bool Box::add(int16_t dex, uint16_t lvl, bool shiny, bool caught, uint32_t epoch
   m.geneDef = 90 + random(21);
   m.geneSpe = 90 + random(21);
   m.epoch = epoch;
-  movesDefault(dex, m.lvl, m.mv);  // ko11.31
+  if (mv && moveCount(mv)) memcpy(m.mv, mv, 4);  // ko11.31.3: los de cuando se capturo
+  else movesDefault(dex, m.lvl, m.mv);  // ko11.31
   save();
   return true;
 }

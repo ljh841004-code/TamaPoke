@@ -4390,9 +4390,12 @@ void renderDexDetail() {
   uiFlush();
 }
 
+int16_t galleryLoadWant = 0;
+void galleryLoadPending();
 void renderGallery() {
   if (galleryDetail) {  // vista detalle: se redibuja siempre (animada)
     renderDexDetail();
+    if (galleryLoadWant) galleryLoadPending();  // ko11.31.3: ya se ve la ficha
     return;
   }
 
@@ -4527,16 +4530,26 @@ void galleryTap(int16_t x, int16_t y) {
   int16_t dex = galDex(galleryPage, r * 4 + c);
   if (!dex) return;
   galleryDetail = dex;
+  galleryPmd.unload();
+  galleryLoadWant = dex;  // ko11.31.3: primero se ve la ficha (con la miniatura); luego el sprite y el grito
+  sfxPlay(SFX_TAP);
+}
+
+// ko11.31.3: lo que la ficha lee de la SD, despues de ensenarla (antes el grito sonaba y la
+// pantalla tardaba en cambiar mientras se leia el sprite)
+void galleryLoadPending() {
+  int16_t dex = galleryLoadWant;
+  galleryLoadWant = 0;
+  if (!dex || dex != galleryDetail || !galleryOpen) return;
   galleryPmd.load(dex, pet.isShinyRegistered(dex));
-  if (dexLog.caughtCount(dex)) {  // ko11.31: los efectos de sus botones, ya (no al tocarlos)
+  if (dexLog.caughtCount(dex)) {  // ko11.31: los efectos de sus botones, poco a poco
     uint8_t mv[4];
     dexTopMoves(dex, mv);
     for (uint8_t i = 0; i < 4; i++) if (!dexLog.hasLearned(dex, mv[i])) mv[i] = 0;
-    fxPreloadAsync(mv, 4);  // poco a poco: abrir la ficha ya no se para
+    fxPreloadAsync(mv, 4);
   }
-  // ko9.1: los ya vistos o criados dicen su nombre; los "???" no
+  // ko9.1: los ya vistos o criados dicen su nombre
   if (dexDiscovered(dex)) audioCry(dex);
-  else sfxPlay(SFX_TAP);
 }
 
 void drawBattery() {

@@ -1184,6 +1184,9 @@ void storyBattleQuit(uint8_t kind) {
 // ko11.24: la musica de la historia (audio.cpp prueba los ficheros y, si faltan, la de siempre)
 uint8_t storyBattleTrack() {
   if (bKind == BK_ROGUE) return rgWave % 10 == 0 ? MT_SGYM : MT_SBATTLE;  // jefe cada 10
+  // ko11.31.3: el anime hasta el 13화 suena como un combate salvaje (battle_wild.wav);
+  // las de la historia, del 14화 en adelante
+  if (stStyle == 1 && stCh < 13) return MT_NORMAL;
   switch (stBattleWho) {
     case W_RIVAL: case W_GARY: case W_RITCHIE: return MT_CHAMP;  // Final Battle! (Rival)
     case W_GRUNT: case W_TR: return MT_SROCKET;

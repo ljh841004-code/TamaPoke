@@ -493,10 +493,6 @@ bool dexRecordMoves(int16_t dex, const uint8_t *mv, bool save) {
   if (any && save) dexLog.saveLearned();
   return any;
 }
-// el ultimo que entro en la caja (capturado, se unio, repetido que se queda)
-void dexRecordBoxLast() {
-  if (box.count()) dexRecordMoves(box.at(box.count() - 1).dex, box.at(box.count() - 1).mv, true);
-}
 // al arrancar: lo que saben el que crias y los de la caja, el salon y la liga
 void dexSeedMoves() {
   bool any = false;
@@ -504,6 +500,16 @@ void dexSeedMoves() {
   for (uint8_t i = 0; i < box.count(); i++) any |= dexRecordMoves(box.at(i).dex, box.at(i).mv, false);
   for (uint8_t i = 0; i < hall.count(); i++) any |= dexRecordMoves(hall.at(i).dex, hall.at(i).mv, false);
   for (uint8_t i = 0; i < fame.count(); i++) any |= dexRecordMoves(fame.at(i).dex, fame.at(i).mv, false);
+  // ko11.31.3: los capturados antes de ko11.31 (o que ya no estan: caramelos, liberados...) no
+  // dejaron sus movimientos: los de su especie a un nivel como el de los salvajes de entonces
+  uint16_t lv = pet.isEgg() ? 10 : pet.level();
+  if (lv < 5) lv = 5;
+  for (int16_t d = 1; d <= DexLog::N; d++)
+    if (dexLog.caughtCount(d) && !dexLog.anyLearned(d)) {
+      uint8_t mv[4];
+      movesDefault(d, lv, mv);
+      any |= dexRecordMoves(d, mv, false);
+    }
   if (any) dexLog.saveLearned();
 }
 uint8_t bvOwned = 0;      // ko10.11: de esta especie en la caja
@@ -3242,8 +3248,8 @@ static void dupDecide(bool keep) {
   uint16_t got;
   if (keep) {
     if (box.full()) { sfxPlay(SFX_DENY); return; }  // caja llena: solo caramelos
-    box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, bDupCaught, bDupEpoch);
-    dexRecordBoxLast();  // ko11.31
+    box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, bDupCaught, bDupEpoch, bFoe.mv);
+    dexRecordMoves(bFoe.dex, bFoe.mv, true);  // ko11.31
     got = CANDY_KEEP;
   } else {
     got = Pet::dupCandy(bvFoeShiny, bFoe.lvl);
@@ -3288,8 +3294,8 @@ static void joinDecide(bool take) {
     sfxPlay(SFX_TAP);
     return;
   }
-  if (box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, false, bDupEpoch)) {
-    dexRecordBoxLast();  // ko11.31
+  if (box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, false, bDupEpoch, bFoe.mv)) {
+    dexRecordMoves(bFoe.dex, bFoe.mv, true);  // ko11.31
     txFmt(bNote, sizeof(bNote), X_JOIN_OK, dexName(bFoe.dex));
     sfxPlay(SFX_MEDAL);
   } else {
@@ -3451,14 +3457,14 @@ void finishBattle(bool won, bool fled, bool caught) {
     if (!bLink && caught) {
       uint32_t e = clockEpoch();
       dexLog.caught(bFoe.dex, e);
+      dexRecordMoves(bFoe.dex, bFoe.mv, true);  // ko11.31.3: el Pokedex ensena los que sabia al capturarlo
       if (ownsSpecies(bFoe.dex)) {  // ko10.4: repetido -> se pregunta tras el resultado
         bDupPending = true;
         bDupCaught = caught;
         bDupEpoch = e;
       } else {
-        bBoxMsg = !box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, caught, e) ? X_BOX_FULL
+        bBoxMsg = !box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, caught, e, bFoe.mv) ? X_BOX_FULL
                   : caught ? X_TO_BOX : X_JOINED;
-        if (bBoxMsg != X_BOX_FULL) dexRecordBoxLast();  // ko11.31
       }
     }
   }

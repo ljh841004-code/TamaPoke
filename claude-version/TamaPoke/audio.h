@@ -58,6 +58,10 @@ int8_t audioBgmNow();                 // la que suena ahora (-1 si ninguna norma
 void audioBgmPlay(uint8_t i);         // escucharla ya (luego sigue el sorteo)
 bool audioPauseForUpload(); // closes streaming file before PUT; false on timeout
 void audioResumeAfterUpload();
+// ko11.31.3: true si la musica tiene el anillo lleno (o no suena): ahora se puede usar la SD
+// un rato sin que se corte. Las cargas grandes (efectos, sprites) esperan a esto entre trozo y trozo
+bool audioSdFree();
+void audioSdUsed();  // acabo de leer un trozo: esperar al siguiente aviso de la musica
 void audioCry(uint16_t dex); // main loop only
 // fork KO (ko5): pantalla apagada con el PWR -> la musica se pausa (y sigue
 // donde iba al encenderla). Voces y efectos siguen sonando.

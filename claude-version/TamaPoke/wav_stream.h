@@ -47,6 +47,8 @@ private:
 public:
   void close() { file.close(); dataStart = dataBytes = played = fillPos = 0; head = count = 0; }
   bool valid() const { return dataBytes != 0; }
+  size_t buffered() const { return count; }  // ko11.31.3: bytes listos en el anillo
+  static constexpr size_t ringSize() { return RING; }
   uint32_t position() const { return played; }
   uint32_t lengthBytes() const { return dataBytes; }  // ko10.4: duracion = bytes / 32000 s
   bool open(Reader input, uint32_t resume = 0) {

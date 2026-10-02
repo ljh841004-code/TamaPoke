@@ -22,6 +22,11 @@
 
 #define ES8311_ADDR 0x18
 #define SAMPLE_RATE 16000
+static std::atomic<bool> gMusicRoom{true};  // ko11.31.3: ver audioSdFree()
+static std::atomic<uint32_t> gSdUsedAt{0};
+// el aviso lo renueva la tarea de audio en cada bloque (16 ms); si no llega (sin tarea), a los 40 ms vale igual
+bool audioSdFree() { return gMusicRoom.load() || millis() - gSdUsedAt.load() > 40; }
+void audioSdUsed() { gMusicRoom.store(false); gSdUsedAt.store(millis()); }
 
 static I2SClass i2s;
 static bool gReady = false;
@@ -254,6 +259,9 @@ static void audioTask(void *) {
         musicSamples = music.read(musicBlock, 256, false);
       }
     }
+    // ko11.31.3: anillo casi lleno (o sin musica): los demas pueden leer de la SD
+    gMusicRoom.store(!music.valid() || !audible || musicPaused.load() ||
+                     music.buffered() + 2048 >= music.ringSize());
     for (int i = 0; i < 256; ++i) {
       int32_t sample = i < (int)musicSamples ?
           (int32_t)musicBlock[i] * levels[0].load() / 100 : 0;
