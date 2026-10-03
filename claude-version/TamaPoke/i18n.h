@@ -29,17 +29,17 @@ enum StrId : uint8_t {
   // dialogo soltar
   S_RELEASE_FMT, S_YES, S_NO,
   // minijuego y saco
-  S_HITS_FMT, S_STR_GAIN_FMT, S_NEW_RECORD, S_RECORD_FMT, S_HIT_FAST,
-  S_SCORE_FMT, S_GREAT_JOY, S_PLUS_JOY,
+  S_HITS_FMT, S_STR_GAIN_FMT, S_NEW_RECORD, S_RECORD_FMT, 
+  S_SCORE_FMT, 
   // reloj / ajustes
-  S_SET_TIME, S_HOUR, S_MIN, S_CLOCK_CANCEL, S_LANG_LABEL,
+  S_SET_TIME, S_HOUR, S_MIN, 
   // celebracion
   S_MEDAL_BANNER, S_GREAT, S_STREAK_DAYS_FMT,
   // ficha: perfil
-  S_STREAK_FMT, S_VIN, S_BERRY_UNK, S_BERRY_RED, S_BERRY_BLUE, S_BERRY_GREEN,
+  S_STREAK_FMT, S_VIN, S_BERRY_RED, S_BERRY_BLUE, S_BERRY_GREEN,
   S_INFO_FMT, S_RENAME_HINT,
   // ficha: combate
-  S_BATTLE, S_STAT_ATK, S_STAT_DEF, S_STAT_SPE, S_STAT_WGT, S_TRAIN_STR,
+  S_BATTLE, S_STAT_ATK, S_STAT_DEF, S_STAT_SPE, S_STAT_WGT, 
   // ficha: medallas
   S_MEDALS_FMT, S_BACK,
   // teclado y galeria
@@ -52,7 +52,6 @@ enum StrId : uint8_t {
   S_PROGRESS, S_LVL_FMT, S_NEXT_LVL_FMT, S_EVO_LABEL, S_FINAL_FORM,
   S_EVO_READY, S_EVO_BLOCKED, S_EVO_IN_FMT, S_MISTAKES_FMT,
   // interruptor de sonido (ajustes)
-  S_SND_ON, S_SND_OFF,
   S_EVO_TAP,        // texto del boton de evolucion
   S_FAREWELL_BTN,   // texto del boton de despedida (lleva el nombre: "%s ...")
   S_RUNAWAY_BTN,    // texto del boton de escapada por abandono (final triste)
@@ -65,7 +64,6 @@ enum StrId : uint8_t {
 
 const char *T(StrId id);       // texto en el idioma activo
 const char *medalName(int i);  // banner de medalla (MED_COUNT)
-const char *medalLabel(int i); // etiqueta corta de medalla
 const char *medalDesc(int i);  // descripcion larga de medalla
 
 void loadLang();             // lee el idioma de NVS (llamar en setup)

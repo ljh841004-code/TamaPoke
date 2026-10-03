@@ -247,7 +247,6 @@ public:
   void update(uint32_t nowMs);  // llamar en cada loop()
 
   // Acciones (botones tactiles)
-  void feed();              // baya roja (compatibilidad)
   void feedBerry(uint8_t color);  // 0 roja, 1 azul, 2 verde
   void feedCandy();
   // fork KO (ko9): comida favorita entre las 4 del menu (0 roja, 1 azul,
@@ -275,7 +274,6 @@ public:
   void play();
 
   // batallas (yasaeng / tongsin) e intercambio
-  uint16_t hpStat() const;
   bool canBattle() const {  // despierto, nacido y sin nada en curso
     return !isEgg() && !sleeping && ceremony == CER_NONE && !evolving() && !starterPick;
   }

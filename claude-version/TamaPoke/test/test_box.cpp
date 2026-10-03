@@ -23,7 +23,6 @@ TEST(box, guarda_y_recupera_tras_reiniciar) {
   Box b;
   b.begin();
   CHECK_EQ(b.count(), (uint8_t)0);
-  CHECK_EQ(b.pickRandom(), -1);
   CHECK(b.add(25, 12, true, true, 1000));
   CHECK(b.add(1, 3, false, false, 2000));
   Box c;  // "reinicio": lee la NVS

@@ -63,7 +63,6 @@ void netStopPortal() {}
 bool gMockPortal = false;
 bool netPortalOn() { return gMockPortal; }
 uint8_t netSavedCount() { return 3; }
-const char *netSavedSsid(uint8_t) { return "MyHome_2.4G"; }
 void netForgetSaved(uint8_t) {}
 bool netOpenAllowed() { return true; }
 void netSetOpenAllowed(bool) {}
@@ -124,7 +123,6 @@ void sfxPlay(uint8_t) {}
 void audioSetEnabled(bool on) { gOn = on; }
 bool audioEnabled() { return gOn; }
 bool audioSdFree() { return true; }
-uint32_t audioBgmSeconds() { return 170; }
 void audioSetSleeping(bool) {}
 void audioSetVolume(uint8_t c, uint8_t p) { if (c < 3) gVol[c] = p; }
 uint8_t audioVolume(uint8_t c) { return c < 3 ? gVol[c] : 0; }
@@ -167,7 +165,6 @@ bool batCharging() { return gMockCharging; }
 int batMillivolts() { return 3900; }
 bool usbPresent() { return false; }
 void pwrSetup() {}
-bool pwrShortPressed() { return false; }
 uint8_t pwrPoll() { return 0; }
 
 // ---- Preferences en memoria (la misma de los tests) ----

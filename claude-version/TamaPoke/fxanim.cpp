@@ -29,7 +29,6 @@ void FxAnim::unload() {
   mid = 0;
 }
 
-static bool fxParse(FxAnim &a, File &f);
 static bool fxValidate(FxAnim &a, uint32_t sz);
 static void fxAsyncCancel();
 
@@ -65,34 +64,6 @@ const FxAnim *fxFind(uint8_t id) {
   return nullptr;
 }
 
-void fxPreload(const uint8_t *ids, uint8_t n) {
-  fxAsyncCancel();  // el combate manda: lo que se leia para la ficha se deja
-  if (!sdReady) return;
-  auto wanted = [&](uint8_t id) { for (uint8_t i = 0; i < n; i++) if (ids[i] == id) return true; return false; };
-  uint32_t used = 0;
-  for (FxAnim &a : fxC) {
-    if (a.ok() && !wanted(a.mid)) a.unload();  // lo de antes que ya no hace falta
-    if (a.ok()) used += a.size;
-  }
-  for (uint8_t i = 0; i < n; i++) {
-    uint8_t id = ids[i];
-    if (!id || id == MOVE_STRUGGLE || fxFind(id)) continue;
-    FxAnim *slot = nullptr;
-    for (FxAnim &a : fxC) if (!a.ok()) { slot = &a; break; }
-    if (!slot) return;
-    uint32_t sz = 0;
-    {
-      SdCardLock lock;
-      if (!lock) return;
-      File f = fxOpen(id);
-      if (!f) continue;
-      sz = f.size();
-      f.close();
-    }
-    if (used + sz > FX_BUDGET) continue;  // no cabe: ese usara el efecto dibujado
-    if (slot->loadId(id)) used += slot->size;
-  }
-}
 // ---- ko11.31: lectura en segundo plano (la ficha del Pokedex): un trozo por vuelta del bucle
 static struct {
   uint8_t ids[8];
@@ -143,16 +114,14 @@ void fxWant(uint8_t id) {
     }
 }
 
+static void fxPumpOne();
 void fxPump(uint8_t chunks) {
   // ko11.31.4: trozos mientras la musica tenga margen, como mucho ~20 ms por vuelta (la pantalla sigue)
   uint32_t t0 = millis();
   for (uint8_t c = 0; c < chunks && gQ.on && audioSdFree() && millis() - t0 < 20; c++) fxPumpOne();
 }
 
-static void fxPumpOneImpl();
-void fxPumpOne() { fxPumpOneImpl(); }
-
-static void fxPumpOneImpl() {
+static void fxPumpOne() {
   if (!gQ.on) return;
   if (!gQ.slot) {
     while (gQ.i < gQ.n && (!gQ.ids[gQ.i] || fxFind(gQ.ids[gQ.i]))) gQ.i++;
@@ -213,30 +182,6 @@ static void fxPumpOneImpl() {
   }
 }
 
-// ko11.31: los de tipo (fTTSV) y placaje / los de estado (mNNN.bin), por id
-bool FxAnim::loadId(uint8_t id) {
-  uint8_t t, s, v;
-  uint16_t k = moveDecode(id, &t, &s, &v) ? (uint16_t)(t * 9 + s * 3 + v) : (uint16_t)(1000 + id);
-  if (data && key == k) { mid = id; return true; }
-  unload();
-  if (!sdReady || !id) return false;
-  File f;
-  {
-    SdCardLock lock;
-    if (!lock) return false;
-    f = fxOpen(id);
-  }
-  if (!f) return false;
-  if (!fxParse(*this, f)) return false;
-  key = k;
-  mid = id;
-  return true;
-}
-
-bool FxAnim::load(uint8_t type, uint8_t tier, uint8_t var) {
-  return loadId(moveIdTyped(type, tier, var));
-}
-
 static bool fxValidate(FxAnim &a, uint32_t sz) {
   if (memcmp(a.data, "TFX2", 4) != 0 || a.data[4] < 1 || a.data[4] > 2) {
     a.unload();
@@ -264,34 +209,6 @@ static bool fxValidate(FxAnim &a, uint32_t sz) {
   return true;
 }
 
-
-static bool fxParse(FxAnim &a, File &f) {
-  uint32_t sz;
-  {
-    SdCardLock lock;
-    if (!lock) { f.close(); return false; }
-    sz = f.size();
-  }
-  if (sz < FX_HDR + 4 || sz > 3UL * 1024 * 1024) { SdCardLock l; f.close(); return false; }
-  a.data = (uint8_t *)ps_malloc(sz);
-  // a trozos, soltando la SD entre uno y otro: la musica (que tambien lee de la SD) no se corta
-  bool ok = a.data != nullptr;
-  for (uint32_t off = 0; ok && off < sz;) {
-    uint32_t n = sz - off > 8192 ? 8192 : sz - off;
-    {
-      SdCardLock lock;
-      ok = lock && f.read(a.data + off, n) == n;
-    }
-    off += n;
-    delay(1);
-  }
-  {
-    SdCardLock l;
-    f.close();
-  }
-  if (!ok) { a.unload(); return false; }
-  return fxValidate(a, sz);
-}
 
 const uint8_t *FxAnim::bg(uint8_t i) const {
   const uint8_t *p = data + FX_HDR;

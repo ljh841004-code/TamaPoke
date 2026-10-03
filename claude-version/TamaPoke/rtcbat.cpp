@@ -113,11 +113,3 @@ uint8_t pwrPoll() {
   if (r) pmu.clearIrqStatus();
   return r;
 }
-
-bool pwrShortPressed() {
-  if (!pmuOk) return false;
-  pmu.getIrqStatus();
-  bool hit = pmu.isPekeyShortPressIrq();
-  if (hit) pmu.clearIrqStatus();
-  return hit;
-}

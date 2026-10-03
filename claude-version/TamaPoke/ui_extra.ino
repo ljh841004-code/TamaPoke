@@ -2072,8 +2072,8 @@ int battleMenuHit(int16_t x, int16_t y) {
   if (row < 0 || x < BM_X) return -1;
   int col = (x - BM_X) / (BM_W + BM_GAP);
   if (col > 2 || (x - BM_X) % (BM_W + BM_GAP) >= BM_W) return -1;
-  if (row == 0) return col == 0 ? BMH_FIGHT : col == 1 ? BA_GUARD : BMH_AUTO;
-  if (bKind != BK_WILD) return col == 0 ? BA_POTION : col == 1 ? BMH_COUNT : -1;
+  if (row == 0) return col == 0 ? (int)BMH_FIGHT : col == 1 ? (int)BA_GUARD : (int)BMH_AUTO;
+  if (bKind != BK_WILD) return col == 0 ? (int)BA_POTION : col == 1 ? (int)BMH_COUNT : -1;
   return BM_ACT[row][col];
 }
 
@@ -2371,7 +2371,7 @@ static void renderBattleViewImpl() {
       }
       if (bNote[0] && bPartyNote[0] && ly > 350) {  // ko11.20: sin sitio: los dos en una linea
         char both[112];
-        snprintf(both, sizeof(both), "%s  %s", bNote, bPartyNote);
+        snprintf(both, sizeof(both), "%.54s  %.54s", bNote, bPartyNote);  // si no cabe, se corta
         if (ly <= 374) drawFit(both, ly, 330, C565(0xa0, 0x30, 0x60), 2);
       } else {
         if (bNote[0] && ly <= 374) { drawFit(bNote, ly, 330, C565(0xa0, 0x30, 0x60), 2); ly += 24; }  // ko10.4: medalla / reto

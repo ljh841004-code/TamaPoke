@@ -140,7 +140,6 @@ bool Box::release(uint8_t i) {
   return true;
 }
 
-int Box::pickRandom() const { return n ? (int)random(n) : -1; }
 
 void Box::wipe() {
   prefs.clear();

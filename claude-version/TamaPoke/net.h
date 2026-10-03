@@ -29,7 +29,6 @@ bool netSetCreds(const char *ssid, const char *pass);  // guarda (al principio d
 void netClearCreds();            // olvida todas
 // ko8: hasta 5 WiFi guardadas + WiFi abiertas como ultimo recurso
 uint8_t netSavedCount();
-const char *netSavedSsid(uint8_t i);
 void netForgetSaved(uint8_t i);
 bool netOpenAllowed();
 void netSetOpenAllowed(bool on);

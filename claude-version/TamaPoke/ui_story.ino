@@ -583,7 +583,7 @@ static int stWrap(const char *s, char lines[][96], int maxLines, int w, uint8_t 
     char trial[192];
     snprintf(trial, sizeof(trial), "%s%s%s", cur, cur[0] ? " " : "", word);
     if (textW(trial, size) <= w) {
-      snprintf(cur, sizeof(cur), "%s", trial);
+      snprintf(cur, sizeof(cur), "%.*s", (int)sizeof(cur) - 1, trial);  // cabe: ya se midio que entra en la linea
     } else if (cur[0]) {
       snprintf(lines[n++], 96, "%s", cur);
       snprintf(cur, sizeof(cur), "%s", word);

@@ -74,9 +74,6 @@ void vbPress(int16_t x, int16_t y) {
   }
 }
 
-// ko11.9.1: moverse ya no depende del dedo
-void vbHold(int16_t x, int16_t y) {}
-void vbRelease() {}
 
 // ---- fin de la partida ----
 static void vbFinish() {

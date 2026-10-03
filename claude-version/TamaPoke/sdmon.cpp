@@ -187,7 +187,7 @@ bool SdThumbs::load() {
   }
   size = sz;
   loaded = true;
-  Serial.printf("miniaturas cargadas: %u (%u KB)\n", count, sz / 1024);
+  Serial.printf("miniaturas cargadas: %u (%u KB)\n", count, (unsigned)(sz / 1024));
   return true;
 }
 
@@ -300,7 +300,7 @@ bool SdMon::load(uint8_t dexNum, bool shiny) {
   uint32_t got = f.read(data, size);
   f.close();
   if (got != size) {
-    Serial.printf("%s truncado (%u de %u)\n", path, got, size);
+    Serial.printf("%s truncado (%u de %u)\n", path, (unsigned)got, (unsigned)size);
     unload();
     return false;
   }
@@ -400,7 +400,7 @@ bool sdSerialCommand(const String &line) {
     if (dir) {
       File e;
       while ((e = dir.openNextFile())) {
-        Serial.printf("%s %u\n", e.name(), (uint32_t)e.size());
+        Serial.printf("%s %u\n", e.name(), (unsigned)e.size());
         e.close();
       }
       dir.close();

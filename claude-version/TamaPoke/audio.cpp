@@ -49,7 +49,6 @@ static std::atomic<uint32_t> musicReload{0}, uploadRequest{0}, uploadAck{0};
 static std::atomic<bool> musicEnabled{false};
 static std::atomic<bool> musicPaused{false};  // fork KO (ko5): pantalla apagada
 static std::atomic<uint8_t> musicTrack{MT_NORMAL};  // ko11: gimnasio / liga / salon
-static std::atomic<uint32_t> bgmSeconds{0};    // ko10.4: duracion de bgm.wav (0 = no cargado)
 static const char *const volumeKeys[] = {"volBgm", "volCry", "volSfx"};
 // ko11.8: fondos normales elegibles (bgm.wav, bgm2.wav ... bgm8.wav)
 static std::atomic<uint8_t> bgmAvail{1}, bgmMaskA{0xFF};
@@ -257,7 +256,6 @@ static void audioTask(void *) {
               else {  // ko10.4: la duracion real del fichero (para ver si esta recortado)
                 uint32_t sec = music.lengthBytes() / (SAMPLE_RATE * 2);
                 Serial.printf("AUDIO %s: %u:%02u\n", path, (unsigned)(sec / 60), (unsigned)(sec % 60));
-                if (path == base && !(request & 1u)) bgmSeconds.store(sec);
               }
             }
           }
@@ -371,7 +369,7 @@ void audioScanBgm() {
           int k = bgmSlotFromName(e->d_name, &ex);
           if (k < 0) continue;
           if (found[k][0] && (exactF[k] || !ex)) continue;  // ya hay uno mejor (o igual de bueno)
-          snprintf(found[k], sizeof(found[k]), "%s/%s", DIRS[d], e->d_name);
+          if (snprintf(found[k], sizeof(found[k]), "%s/%s", DIRS[d], e->d_name) >= (int)sizeof(found[k])) continue;  // nombre largo: no cabe
           exactF[k] = ex;
         }
         closedir(dir);
@@ -417,7 +415,6 @@ uint16_t audioBgmSecondsOf(uint8_t i) { return i < BGM_MAX ? bgmSecs[i] : 0; }
 const char *audioBgmTitle(uint8_t i) { return i < BGM_MAX ? bgmTitles[i] : ""; }
 int8_t audioBgmNow() { return bgmNowA.load(); }
 void audioBgmPlay(uint8_t i) { if (i < BGM_MAX) bgmForce = (int8_t)i; }
-uint32_t audioBgmSeconds() { return bgmSeconds.load(); }
 void audioSetMusicPaused(bool paused) { musicPaused = paused; }
 void audioSetMusicTrack(uint8_t track) { musicTrack = track; }
 void audioSetBattleMusic(bool active, bool newSession) {

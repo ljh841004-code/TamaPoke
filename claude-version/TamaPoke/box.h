@@ -56,7 +56,6 @@ public:
   bool bumpLevel(uint8_t i, uint16_t cap = 100);  // ko11.20: +1 nivel (ayudante que gano)
   void markFlag(uint8_t i, uint8_t f);             // ko11.20: anade una marca (BOXF_TEAM)
   bool set(uint8_t i, const BoxMon &m);            // ko11.20: la ficha cambia (evoluciono, sube de nivel)
-  int pickRandom() const;             // indice al azar, -1 si vacia
   void wipe();                        // fork KO (ko8): [nuevo comienzo]
 private:
   Preferences prefs;

@@ -290,14 +290,6 @@ void drawPerfLine(int y, uint16_t ink) {
   drawFit(p, y, 300, ink, 1);
 }
 
-// el bicho en el suelo, mirando al juego
-void drawTrainPet(int x, uint8_t act) {
-  if (pmd.loaded) {
-    if (!pmd.has(act)) act = PMD_IDLE;
-    drawPmdAct(act, x, 394, millis(), true, false, 3);
-  }
-}
-
 void drawTimeBar(uint32_t left, uint32_t total, int y) {
   int bw = 280, fw = (int)((uint64_t)bw * left / total);
   uiGauge(CX - bw / 2, y, bw, 14, fw * 1000 / bw, UI_BAR_OK, UI_TRACK);  // ko11.12

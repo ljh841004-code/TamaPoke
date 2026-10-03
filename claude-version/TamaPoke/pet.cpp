@@ -165,7 +165,7 @@ void Pet::syncClock(uint32_t nowEpoch) {
     // la evolucion NO se aplica offline: queda lista y la dispara el usuario
     // tocando al bicho cuando vuelve (para que vea la transformacion)
   }
-  Serial.printf("offline: %u min aplicados (nv.%u)\n", mins, level());
+  Serial.printf("offline: %u min aplicados (nv.%u)\n", (unsigned)mins, level());
   save();
 }
 
@@ -332,7 +332,7 @@ bool Pet::lineHasUnregistered(int16_t base) const {
 }
 
 uint8_t Pet::eggRarity() const {
-  return (eggTarget >= 1 && eggTarget <= DEX_COUNT) ? DEX_TBL[eggTarget].rarity : R_COMUN;
+  return (eggTarget >= 1 && eggTarget <= DEX_COUNT) ? DEX_TBL[eggTarget].rarity : (uint8_t)R_COMUN;
 }
 
 // elige la especie del huevo: tirada de rareza (mejorada por una despedida
@@ -762,10 +762,6 @@ void Pet::evolve() {
   sfxPlay(SFX_EVOLVE);
   evolveUntil = millis() + EVOLVE_ANIM_MS;
   save();
-}
-
-void Pet::feed() {
-  feedBerry(0);
 }
 
 void Pet::feedBerry(uint8_t color) {
@@ -1362,11 +1358,6 @@ void Pet::wipeGameKeepSettings() {
 }
 
 // ---------------------------------------------------------------- batallas
-
-uint16_t Pet::hpStat() const {
-  if (isEgg()) return 0;
-  return battleHp(DEX_TBL[speciesId].bHp, level());
-}
 
 static uint8_t addCap(uint8_t v, uint8_t d) { return (v + d > 100) ? 100 : v + d; }
 

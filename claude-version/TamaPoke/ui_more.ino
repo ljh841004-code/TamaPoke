@@ -187,13 +187,6 @@ void expLoop() {
   }
 }
 
-static void drawCrown(int x, int y, uint16_t c) {
-  gfx->fillRect(x, y + 8, 18, 6, c);
-  gfx->fillTriangle(x, y + 8, x + 3, y, x + 6, y + 8, c);
-  gfx->fillTriangle(x + 6, y + 8, x + 9, y - 2, x + 12, y + 8, c);
-  gfx->fillTriangle(x + 12, y + 8, x + 15, y, x + 18, y + 8, c);
-}
-
 // ko11.17: los criados hasta el final llevan una ESCARAPELA (lazo de premio), no
 // corona: la corona queda para los campeones de la liga (salon de la fama).
 // (cx, cy) = centro del medallon, r = su radio
@@ -2316,9 +2309,9 @@ void renderSettings() {
   snprintf(lang, sizeof(lang), XT(X_SET_LANG_FMT), LANG_CODES[gLang]);
   struct { const char *t; uint16_t bg, fg; } b[8] = {
     { XT(X_SET_TIME), UI_WHITE, UI_INK },
-    { XT(X_SET_SOUND), audioEnabled() ? UI_BAR_OK : UI_WHITE, audioEnabled() ? UI_WHITE : UI_INK },
+    { XT(X_SET_SOUND), (uint16_t)(audioEnabled() ? UI_BAR_OK : UI_WHITE), (uint16_t)(audioEnabled() ? UI_WHITE : UI_INK) },
     { XT(X_SET_SCREEN), UI_WHITE, UI_INK },
-    { "WiFi", netConfigured() ? (uint16_t)0x4C98 : UI_WHITE, netConfigured() ? UI_WHITE : UI_INK },
+    { "WiFi", (uint16_t)(netConfigured() ? 0x4C98 : UI_WHITE), (uint16_t)(netConfigured() ? UI_WHITE : UI_INK) },
     { XT(X_UPD_BTN), 0xFB20, UI_WHITE },
     { XT(X_BAK_BTN), 0x6B4D, UI_WHITE },
     { lang, UI_WHITE, UI_INK },

@@ -49,6 +49,7 @@
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
 bool battleFxPlaying();  // ko11.31.5 (ui_extra.ino)
+bool chargeCap90();       // ko11.23.3
 __attribute__((used)) const char TP_VERSION_TAG[] = UPD_TAG FW_VERSION;
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
@@ -130,8 +131,6 @@ extern uint8_t trainMenuPage;
 void startVolley();
 void renderVolley();
 void vbPress(int16_t x, int16_t y);
-void vbHold(int16_t x, int16_t y);
-void vbRelease();
 void openBgmPick();       // ko11.8: elegir los fondos normales
 void renderBgmPick();
 void bgmPickTap(int16_t x, int16_t y);
@@ -736,7 +735,7 @@ void setup() {
   rtcBegin();
   bootStep(BS_POWER);
   batBegin();
-  { bool chargeCap90(); batSetChargeLimit(chargeCap90()); }  // ko11.23.3
+  batSetChargeLimit(chargeCap90());  // ko11.23.3
   pwrSetup();
   bootStep(BS_I2C);
   if (!safeMode) i2cFastMode();  // ko11.3
@@ -759,7 +758,7 @@ void setup() {
     // cuando aplicar el tiempo apagado. Con la fecha fija de siembra, el NTP
     // aplicaba meses de "ausencia" (tope 2 semanas = Lv338 con el nivel viejo)
     gRtcWasLost = seen > 1767225600UL;
-    Serial.printf("RTC sin hora: sembrado en %u%s\n", seed,
+    Serial.printf("RTC sin hora: sembrado en %u%s\n", (unsigned)seed,
                   seen > 1767225600UL ? " (desde la ultima hora guardada)" : "");
   }
   pet.syncClock(e);
@@ -956,7 +955,7 @@ void loop() {
   if (now - lastHealth > 300000) {
     lastHealth = now;
     Serial.printf("HEALTH up=%lus heap=%u min=%u bat=%d%% mv=%d chg=%d usb=%d dim=%u off=%d\n",
-                  (unsigned long)(now / 1000), ESP.getFreeHeap(), ESP.getMinFreeHeap(),
+                  (unsigned long)(now / 1000), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(),
                   batPercent(), batMillivolts(), batCharging() ? 1 : 0,
                   usbPresent() ? 1 : 0, dimStage, screenOff ? 1 : 0);
   }
@@ -1092,14 +1091,14 @@ void handleSerial() {
     uint32_t e = (uint32_t)line.substring(5).toInt();
     rtcSetEpoch(e);
     pet.setClock(e);
-    Serial.printf("rtc=%u\n", rtcEpoch());
+    Serial.printf("rtc=%u\n", (unsigned)rtcEpoch());
     Serial.println("DONE");
   } else if (line.startsWith("RTCSET ")) {  // solo RTC (simular apagados en pruebas)
     rtcSetEpoch((uint32_t)line.substring(7).toInt());
-    Serial.printf("rtc=%u\n", rtcEpoch());
+    Serial.printf("rtc=%u\n", (unsigned)rtcEpoch());
     Serial.println("DONE");
   } else if (line == "TIME") {
-    Serial.printf("rtc=%u\n", rtcEpoch());
+    Serial.printf("rtc=%u\n", (unsigned)rtcEpoch());
     Serial.println("DONE");
   } else if (line == "GAL") {
     galleryOpen = !galleryOpen;
@@ -1158,14 +1157,14 @@ void handleSerial() {
     Serial.println("DONE");
   } else if (line == "HEALTH") {
     Serial.printf("up=%lus heap=%u min=%u sd=%d mon=%d\n",
-                  (unsigned long)(millis() / 1000), ESP.getFreeHeap(),
-                  ESP.getMinFreeHeap(), sdReady, pmd.loaded || mon.loaded);
+                  (unsigned long)(millis() / 1000), (unsigned)ESP.getFreeHeap(),
+                  (unsigned)ESP.getMinFreeHeap(), sdReady, pmd.loaded || mon.loaded);
     Serial.println("DONE");
   } else if (line == "STATS") {
     Serial.printf("spec=%d nv=%u com=%u fel=%u ene=%u lim=%u desc=%u sd=%d mon=%d bat=%d usb=%d rtc=%u\n",
                   pet.speciesId, pet.level(), pet.fullness, pet.joy, pet.energy,
                   pet.hygiene, pet.careMistakes, sdReady, mon.loaded,
-                  batPercent(), usbPresent(), rtcEpoch());
+                  batPercent(), usbPresent(), (unsigned)rtcEpoch());
     Serial.printf("peso=%u fue=%u def=%u vel=%u genes=%u/%u/%u tr=%u/%u/%u baya=%d\n",
                   pet.weight, pet.atkStat(), pet.defStat(), pet.speStat(),
                   pet.geneAtk, pet.geneDef, pet.geneSpe,
@@ -1377,11 +1376,9 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
     wasPressed = pressed;
     return;
   }
-  // ko11.9: voleibol: apoyar (saltar/remate o empezar a moverse), mantener (moverse), soltar
+  // ko11.9: voleibol: solo cuenta el toque (ko11.9.1: moverse ya no depende del dedo)
   if (vbOpen) {
     if (pressed && !wasPressed) vbPress(x, y);
-    else if (pressed) vbHold(x, y);
-    else if (wasPressed) vbRelease();
     wasPressed = pressed;
     return;
   }
@@ -2709,15 +2706,6 @@ static int utf8Next(const char *s, uint32_t *cp) {
   return n;
 }
 
-// ancho de un caracter que NO es hangul en la fuente CJK activa
-static uint16_t cjkGlyphW(const char *g) {
-  if ((unsigned char)g[0] < 0x80) return 8 * gTextSize;  // unifont: medio ancho
-  int16_t x1, y1;
-  uint16_t w, h;
-  gfx->getTextBounds(g, 0, 0, &x1, &y1, &w, &h);
-  return w ? w : 16 * gTextSize;
-}
-
 uint16_t textW(const char *s, uint8_t size) {
   if (!gCjkFont) return (uint16_t)strlen(s) * 6 * size;
   if (!koNoto()) {
@@ -3584,17 +3572,6 @@ void drawCelebration() {
   printT(l2);
 }
 
-// medallas en la ficha: badge con etiqueta, color si conseguida
-void drawMedalBadge(int x, int y, int i) {
-  bool got = pet.hasMedal(1 << i);
-  gfx->fillRoundRect(x, y, 100, 24, 6, got ? UI_BAR_OK : UI_TRACK);
-  if (!got) gfx->drawRoundRect(x, y, 100, 24, 6, UI_TRACK);
-  gfx->setTextColor(got ? UI_BG_DAY : 0x4208);
-  setSize(2);
-  setCur(x + (100 - textW(medalLabel(i), 2)) / 2, y + 5);
-  printT(medalLabel(i));
-}
-
 // pagina 0: perfil (retrato grande, identidad, racha, vinculo, baya)
 void renderCardProfile() {
   const DexEntry &d = DEX_TBL[pet.speciesId];
@@ -4443,7 +4420,7 @@ void renderGallery() {
           printT("*");
         }
       } else {
-        char num[6];
+        char num[12];
         snprintf(num, sizeof(num), "%d", dex);
         gfx->setTextColor(UI_INK);
         setSize(2);
@@ -4563,7 +4540,7 @@ void drawBattery() {
   bool charging = batCharging();
   // ko11.27: placa de fondo (blanca de dia, oscura de noche) con borde: sobre el cielo
   // despejado el numero con contorno fino casi no se leia
-  char t[6];
+  char t[12];
   snprintf(t, sizeof(t), "%d%%", pc);
   uint16_t plate = gNight ? INK_K : UI_WHITE;
   int pw = 4 + w + 3 + 6 + textW(t, 1) + 5;
@@ -4729,7 +4706,7 @@ int learnDlgHit(int16_t x, int16_t y) {
 void drawChoiceDialog() {
   const char *q, *o1, *o2;
   uint16_t c1, c2, t1, t2;
-  char qb[96], fb[96];
+  char fb[96];
   fb[0] = 0;
   if (choiceKind == 1) {  // evolucion
     q = T(S_EVO_Q); o1 = T(S_EVO_TAP); o2 = T(S_EVO_KEEP);

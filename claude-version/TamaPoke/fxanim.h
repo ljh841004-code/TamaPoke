@@ -10,8 +10,6 @@ struct FxAnim {
   uint32_t size = 0;
   uint16_t key = 0xFFFF;   // tipo*9 + fase*3 + variante del archivo cargado
   uint16_t frameMs = 50;
-  bool load(uint8_t type, uint8_t tier, uint8_t var);
-  bool loadId(uint8_t id);   // ko11.31: por id de movimiento (los que no son de tipo: mNNN.bin)
   bool isId(uint8_t id) const { return data && mid == id; }
   uint8_t mid = 0;
   void unload();
@@ -28,11 +26,9 @@ private:
 };
 
 // ko11.31: los efectos de los movimientos que pueden salir (los mios y los del rival) se
-// leen todos de una vez al empezar; durante el combate solo se buscan (sin tocar la SD)
-void fxPreload(const uint8_t *ids, uint8_t n);
+// leen en segundo plano (fxPreloadAsync + fxPump en el bucle); al usarlos solo se buscan
 const FxAnim *fxFind(uint8_t id);
 // ko11.31: lo mismo sin parar la pantalla (la ficha del Pokedex): fxPump() lee un trozo cada vez
 void fxPreloadAsync(const uint8_t *ids, uint8_t n);
 void fxPump(uint8_t chunks = 1);
-void fxPumpOne();
 void fxWant(uint8_t id);  // ko11.31.4: leer este antes que los demas de la cola

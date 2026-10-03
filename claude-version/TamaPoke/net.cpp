@@ -113,7 +113,6 @@ void netSafeMode() { gAuto = false; }
 bool netConfigured() { return gNSaved > 0; }
 const char *netSsid() { return gSsid[0] ? gSsid : gSaved[0]; }
 uint8_t netSavedCount() { return gNSaved; }
-const char *netSavedSsid(uint8_t i) { return i < gNSaved ? gSaved[i] : ""; }
 bool netOpenAllowed() { return gOpenOk; }
 void netSetOpenAllowed(bool on) { gOpenOk = on; saveCfg(); }
 static bool netCanSync() { return gNSaved > 0 || gOpenOk; }

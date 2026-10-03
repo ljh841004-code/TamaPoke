@@ -154,14 +154,11 @@ TEST(i18n, las_medallas_estan_en_todos_los_idiomas) {
     // en pantalla, que aqui no se puede medir: eso se comprueba en la placa.
     const bool cjk = LANG_IS_CJK(lang);
     for (int m = 0; m < MED_COUNT; m++) {
-      const char *n = medalName(m), *l = medalLabel(m), *d = medalDesc(m);
+      const char *n = medalName(m), *d = medalDesc(m);
       char where[64];
       snprintf(where, sizeof(where), "[%s][medalla %d]", LANG_NAME[lang], m);
       CHECK_MSG(n && n[0], std::string("medalName vacio ") + where);
-      CHECK_MSG(l && l[0], std::string("medalLabel vacio ") + where);
       CHECK_MSG(d && d[0], std::string("medalDesc vacio ") + where);
-      // la etiqueta corta va en una casilla de la cuadricula de medallas
-      if (!cjk && l) CHECK_MSG(strlen(l) <= 6, std::string("etiqueta demasiado larga ") + where + ": " + l);
       if (!cjk && n) CHECK_MSG(strlen(n) <= 12, std::string("nombre demasiado largo ") + where + ": " + n);
       if (!cjk && d) CHECK_MSG(strlen(d) <= 16, std::string("descripcion demasiado larga ") + where + ": " + d);
     }
@@ -174,8 +171,8 @@ TEST(i18n, las_medallas_no_llevan_acentos) {
     if (LANG_IS_CJK(lang)) continue;  // los CJK van en UTF-8 con fuente U8g2
     gLang = (Lang)lang;
     for (int m = 0; m < MED_COUNT; m++) {
-      const char *tab[3] = { medalName(m), medalLabel(m), medalDesc(m) };
-      for (int t = 0; t < 3; t++)
+      const char *tab[2] = { medalName(m), medalDesc(m) };
+      for (int t = 0; t < 2; t++)
         for (const char *c = tab[t]; c && *c; c++)
           CHECK_MSG((unsigned char)*c < 128, std::string("no ASCII: ") + tab[t]);
     }
