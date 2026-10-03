@@ -386,6 +386,15 @@ static void scenes(bool ko, const char *sfx) {
           for (uint32_t at : { 250u, 500u, 750u, 1000u }) {  // ko11.30: 4 momentos (efectos de la SD)
             gMockMillis = bqT + at;
             render();
+            if (at == 500u && v == 0 && fxFind(id)) {  // ko11.32: con el fondo copiado sale igual que pintado
+              static uint16_t prev[LCD_WIDTH * LCD_HEIGHT];
+              battleBgCacheReset();
+              render();  // pintado (y guardado)
+              memcpy(prev, gfx->getFramebuffer(), sizeof(prev));
+              render();  // copiado
+              static bool once = false;
+              if (!once) { once = true; navCheck("efecto SD: fondo en cache = pintado", memcmp(prev, gfx->getFramebuffer(), sizeof(prev)) == 0); }
+            }
             if (v == 0) snprintf(n, sizeof(n), "tier_%03d_%u", d, at);
             else snprintf(n, sizeof(n), "mv_%03d_v%u_%u", d, v, at);
             shot(n);

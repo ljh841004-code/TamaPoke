@@ -803,8 +803,15 @@ void startEvent(int i) {
   }
 }
 
+bool battleFxPlaying();
 // cielo segun la hora y el tiempo + escenario + dos plataformas.
 // ko10.1: en salvaje, el escenario es la region elegida; en tongsin, el de mi Pokemon
+// ko11.32: mientras se ve un efecto de la SD (el fotograma mas caro) el cielo y el escenario
+// se pintan una vez y luego se copian (1,3 s quietos: las nubes no se notan bajo el efecto)
+static uint16_t *bbCache = nullptr;
+static bool bbValid = false;
+#define BB_ROWS 262
+void battleBgCacheReset() { bbValid = false; }
 void drawBattleBg() {
   int hh = sceneHour();
   bool night = hh < 6 || hh >= 20;
@@ -812,8 +819,17 @@ void drawBattleBg() {
   uint8_t bio = bLink ? petRegion() : bRegion;
   uint32_t now = millis();
   int hor = 150;
-  drawSky(hor, hh, night, wx, now, false);
-  drawBiome(bio, hor, 262, now, night, wx);
+  uint16_t *fb = gfx->getFramebuffer();
+  bool fxNow = fb && battleFxPlaying();
+  if (fxNow && !bbCache) bbCache = (uint16_t *)ps_malloc((size_t)LCD_WIDTH * BB_ROWS * 2);
+  if (fxNow && bbCache && bbValid) {
+    memcpy(fb, bbCache, (size_t)LCD_WIDTH * BB_ROWS * 2);
+  } else {
+    drawSky(hor, hh, night, wx, now, false);
+    drawBiome(bio, hor, 262, now, night, wx);
+    if (fxNow && bbCache) { memcpy(bbCache, fb, (size_t)LCD_WIDTH * BB_ROWS * 2); bbValid = true; }
+  }
+  if (!fxNow) bbValid = false;
   uint16_t soil = nightDim(BIOME_SOIL[bio < BIOME_N ? bio : 0], night);
   uint16_t pad = lerp565(soil, C565(0x10, 0x18, 0x20), 4, 16);
   gfx->fillEllipse(316 + bvShakeX, 160 + bvShakeY, 78, 16, pad);   // plataforma del rival
@@ -2234,7 +2250,28 @@ static void drawAutoBanner() {
   drawFit(XT(X_AUTO_TAP), BM_Y2 + 8, 3 * BM_W, 0x6B4D, 1);
 }
 
+// ko11.32: cuanto tarda cada fotograma del combate (por el USB, cada 10 s): "PERF bat n=.. avg=.. max=.. lentos=.."
+static uint32_t pfN = 0, pfSum = 0, pfMax = 0, pfSlow = 0, pfFxMax = 0, pfT0 = 0;
+static void renderBattleViewImpl();
 void renderBattleView() {
+  uint32_t t0 = micros();
+  renderBattleViewImpl();
+  uint32_t us = micros() - t0;
+  pfN++; pfSum += us;
+  if (us > pfMax) pfMax = us;
+  if (us > 50000) pfSlow++;
+  if (battleFxPlaying() && us > pfFxMax) pfFxMax = us;
+  uint32_t now = millis();
+  if (!pfT0) pfT0 = now;
+  if (now - pfT0 >= 10000) {
+    Serial.printf("PERF bat n=%u avg=%ums max=%ums fxmax=%ums >50ms=%u\n", (unsigned)pfN,
+                  (unsigned)(pfSum / (pfN ? pfN : 1) / 1000), (unsigned)(pfMax / 1000), (unsigned)(pfFxMax / 1000),
+                  (unsigned)pfSlow);
+    pfN = pfSum = pfMax = pfSlow = pfFxMax = 0;
+    pfT0 = now;
+  }
+}
+static void renderBattleViewImpl() {
   uint32_t now = millis();
   lastInteract = now;  // una batalla no deja que la pantalla se atenue
   // barras de vida que bajan poco a poco
@@ -2370,6 +2407,8 @@ void bvPreloadFx() {
 }
 
 void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool foeShiny) {
+  uint32_t perfT0 = millis();  // ko11.32
+  battleBgCacheReset();
   // ko11.16: sprites de combate (si la SD los tiene)
   prgLoadFor(me.dex, foe.dex, foeShiny);
   {  // ko11.31: y los efectos de sus movimientos, poco a poco mientras sale (entrar ya no se para;
@@ -2408,6 +2447,7 @@ void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool fo
   bvFoeCaught = bCaught = false;
   bBoxMsg = -1;
   dexLog.seen(foe.dex, clockEpoch());  // fork KO (ko4): la pokedex lo registra como visto
+  Serial.printf("PERF setup %ums (sprites %u vs %u)\n", (unsigned)(millis() - perfT0), (unsigned)me.dex, (unsigned)foe.dex);
 }
 
 // ======================================================================

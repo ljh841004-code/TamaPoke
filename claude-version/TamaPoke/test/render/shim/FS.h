@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <sys/stat.h>
 #define FILE_READ "rb"
 #define FILE_WRITE "wb"
 // File sobre stdio (lee de la carpeta de la SD simulada)
@@ -15,5 +16,6 @@ public:
   size_t size() { if (!f) return 0; long c = ftell(f); fseek(f, 0, SEEK_END); long s = ftell(f); fseek(f, c, SEEK_SET); return s; }
   void close() { if (f) fclose(f); f = nullptr; }
   const char *name() { return ""; }
+  bool isDirectory() { struct stat st; return f && fstat(fileno(f), &st) == 0 && S_ISDIR(st.st_mode); }
   File openNextFile() { return File(); }
 };

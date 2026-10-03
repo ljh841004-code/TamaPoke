@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <FS.h>
 
 // Sprite animado TPK1 (formato heredado, camino de respaldo). El proyecto usa
 // PMD/TPK2 (PmdMon) para todo; esta ruta queda inactiva si no hay NNN.bin en la SD.
@@ -68,3 +69,10 @@ bool sdRemount();               // ko11.16.2: desmonta y vuelve a montar (en mar
 bool sdSerialCommand(const String &line);  // PUT/LS por USB; true si la maneja
 extern bool sdReady;
 extern bool sdDirty;  // true tras recibir archivos: recargar sprite
+// ko11.32: rutas que ya se buscaron y no estaban. En la FAT abrir un fichero que no existe
+// recorre la carpeta entera (mons tiene ~1000 ficheros): asi solo se busca una vez.
+// Se olvida al recibir ficheros (PUT) o al volver a montar la SD. Solo el bucle principal
+bool sdMaybe(const char *path);        // false = ya se sabe que no esta
+void sdMarkMissing(const char *path);
+void sdForgetMissing();
+File sdOpenKnown(const char *path);    // SD_MMC.open(path) salvo que se sepa que no esta (con el cerrojo ya cogido)

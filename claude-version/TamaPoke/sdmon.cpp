@@ -12,6 +12,31 @@ bool sdDirty = false;
 SdThumbs thumbs;
 SdThumbs portraits = { "/mons/story.bin" };  // ko11.21
 
+// ---- ko11.32: rutas que no estan (hash FNV-1a; 0 = libre)
+static uint32_t gMiss[128];
+static uint8_t gMissN = 0;
+static uint32_t pathHash(const char *p) {
+  uint32_t h = 2166136261u;
+  while (*p) { h ^= (uint8_t)*p++; h *= 16777619u; }
+  return h ? h : 1;
+}
+bool sdMaybe(const char *path) {
+  uint32_t h = pathHash(path);
+  for (uint8_t i = 0; i < gMissN; i++) if (gMiss[i] == h) return false;
+  return true;
+}
+void sdMarkMissing(const char *path) {
+  if (!sdMaybe(path)) return;
+  if (gMissN < sizeof(gMiss) / sizeof(gMiss[0])) gMiss[gMissN++] = pathHash(path);
+}
+void sdForgetMissing() { gMissN = 0; }
+File sdOpenKnown(const char *path) {
+  if (!sdMaybe(path)) return File();
+  File f = SD_MMC.open(path, FILE_READ);
+  if (!f) sdMarkMissing(path);
+  return f;
+}
+
 bool PmdMon::load(uint8_t dexNum, bool shiny, char kind) {
   unload();
   if (!sdReady) return false;
@@ -22,10 +47,10 @@ bool PmdMon::load(uint8_t dexNum, bool shiny, char kind) {
     if (!lock) return false;
     char path[28];
     snprintf(path, sizeof(path), "/mons/%c%s%03u.bin", kind, shiny ? "s" : "", dexNum);
-    f = SD_MMC.open(path, FILE_READ);
+    f = sdOpenKnown(path);  // ko11.32: los que no estan (shiny sin sprite propio...) solo se buscan una vez
     if (!f && shiny) {  // sin shiny PMD: usa el normal
       snprintf(path, sizeof(path), "/mons/%c%03u.bin", kind, dexNum);
-      f = SD_MMC.open(path, FILE_READ);
+      f = sdOpenKnown(path);
     }
     if (!f) return false;
     size = f.size();
@@ -220,6 +245,7 @@ bool sdRemount() {
   sdReady = false;
   bool ok = sdTryMount();
   if (ok) sdDirty = true;  // recargar sprite y miniaturas
+  sdForgetMissing();  // ko11.32
   return ok;
 }
 
@@ -334,6 +360,7 @@ bool sdSerialCommand(const String &line) {
     // que quedo a medias lo alargaba en vez de reemplazarlo: quedaba un sprite
     // corrupto y mas grande que el original. Importa mas desde que el instalador
     // reanuda transferencias cortadas, porque reintenta justo los que fallaron.
+    sdForgetMissing();  // ko11.32: puede ser uno que antes faltaba
     if (SD_MMC.exists(path)) SD_MMC.remove(path);
     File f = SD_MMC.open(path, FILE_WRITE);
     if (!f) {

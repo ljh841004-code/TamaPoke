@@ -175,6 +175,19 @@ static void audioTask(void *) {
     // ko11: la pista va en los bits altos: cambiarla reabre (y no reanuda la de salvaje)
     uint32_t request = (musicRequest.load() & 0x00FFFFFFu) | ((uint32_t)musicTrack.load() << 24);
     uint32_t reload = musicReload.load();
+    // ko11.32: las pistas opcionales que no estan (story_*.wav, fame2.wav...) solo se buscan una
+    // vez: cada SD_MMC.exists() de un fichero que falta recorre la carpeta mons entera.
+    // Se olvida al recargar la musica o al recibir ficheros
+    static const char *noFile[12];
+    static uint8_t noFileN = 0;
+    static uint32_t noFileGen = 0xFFFFFFFFu;
+    if (noFileGen != reload || (upload & 1u)) { noFileN = 0; noFileGen = reload; }
+    auto haveFile = [&](const char *p) {
+      for (uint8_t i = 0; i < noFileN; i++) if (noFile[i] == p) return false;
+      bool ok = SD_MMC.exists(p);
+      if (!ok && noFileN < 12) noFile[noFileN++] = p;
+      return ok;
+    };
     {
       // Sprite loads and USB writes share the card. Never block I2S on a lock:
       // use read-ahead while busy, then silence without losing the cursor.
@@ -221,13 +234,13 @@ static void audioTask(void *) {
               else if (tr == MT_STORY_END) { cand[0] = "/mons/story_end.wav"; cand[1] = "/mons/fame2.wav"; cand[2] = "/mons/fame.wav"; }
               if (cand[0]) {
                 for (int k = 0; k < 3 && cand[k]; k++)
-                  if (SD_MMC.exists(cand[k])) { path = cand[k]; break; }
+                  if (haveFile(cand[k])) { path = cand[k]; break; }
               } else if (request & 1u) {
                 if (tr == MT_GYM) path = "/mons/battle_gym.wav";
                 else if (tr == MT_CHAMP) path = "/mons/battle_champ.wav";
               } else if (tr == MT_FAME) {
                 path = famePick ? "/mons/fame2.wav" : "/mons/fame.wav";  // ko11: 2 al azar
-                if (famePick && !SD_MMC.exists(path)) path = "/mons/fame.wav";
+                if (famePick && !haveFile(path)) path = "/mons/fame.wav";
               } else if (bgmIdx) {
                 audioBgmPath(bgmIdx, bgmPathBuf, sizeof(bgmPathBuf));  // ko11.8
                 path = bgmPathBuf;

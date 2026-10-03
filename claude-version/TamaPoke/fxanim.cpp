@@ -39,11 +39,22 @@ static File fxOpen(uint8_t id) {
   uint8_t t, s, v;
   if (moveDecode(id, &t, &s, &v)) snprintf(name, sizeof(name), "f%02u%u%u.bin", t, s, v);
   else snprintf(name, sizeof(name), "m%03u.bin", id);
-  snprintf(path, sizeof(path), "/mons/fx/%s", name);
-  File f = SD_MMC.open(path, FILE_READ);
+  // ko11.32: sin la carpeta mons/fx (lo normal con el instalador web) ni se prueba; y los que no
+  // estan en ningun sitio (sin animacion) se recuerdan: cada intento recorria la carpeta mons entera
+  File f;
+  if (sdMaybe("/mons/fx")) {
+    File d = SD_MMC.open("/mons/fx");
+    bool dir = d && d.isDirectory();
+    if (d) d.close();
+    if (!dir) sdMarkMissing("/mons/fx");
+  }
+  if (sdMaybe("/mons/fx")) {
+    snprintf(path, sizeof(path), "/mons/fx/%s", name);
+    f = sdOpenKnown(path);
+  }
   if (!f) {
     snprintf(path, sizeof(path), "/mons/%s", name);
-    f = SD_MMC.open(path, FILE_READ);
+    f = sdOpenKnown(path);
   }
   return f;
 }
@@ -89,6 +100,7 @@ static struct {
   FxAnim *slot = nullptr;
   File f;
   uint32_t off = 0, sz = 0, used = 0;
+  uint32_t t0 = 0;  // ko11.32: cuando empezo a leer este (PERF)
   bool on = false;
 } gQ;
 
@@ -173,6 +185,7 @@ static void fxPumpOneImpl() {
     slot->mid = 0;  // aun no: fxFind no lo da hasta que este entero
     gQ.slot = slot;
     gQ.off = 0;
+    gQ.t0 = millis();
     return;
   }
   uint32_t n = gQ.sz - gQ.off > 8192 ? 8192 : gQ.sz - gQ.off;
@@ -188,6 +201,7 @@ static void fxPumpOneImpl() {
     FxAnim *a = gQ.slot;
     gQ.slot = nullptr;
     uint8_t id = gQ.ids[gQ.i++];
+    Serial.printf("PERF fx %u %uKB %ums\n", (unsigned)id, (unsigned)(gQ.sz / 1024), (unsigned)(millis() - gQ.t0));
     if (ok && fxValidate(*a, gQ.sz)) {
       uint8_t t, s2, v;
       a->key = moveDecode(id, &t, &s2, &v) ? (uint16_t)(t * 9 + s2 * 3 + v) : (uint16_t)(1000 + id);
