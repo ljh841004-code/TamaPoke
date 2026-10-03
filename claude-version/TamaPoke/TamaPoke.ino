@@ -48,6 +48,7 @@
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
+bool battleFxPlaying();  // ko11.31.5 (ui_extra.ino)
 __attribute__((used)) const char TP_VERSION_TAG[] = UPD_TAG FW_VERSION;
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
@@ -857,7 +858,9 @@ void loop() {
   vibLoop(now);  // ko11.25
   moveLearnLoop();  // ko11.31
   centerPoll();     // ko11.31: el centro pokemon termina aunque no se mire
-  fxPump(12);       // ko11.31.4: efectos (combate / ficha del Pokedex): trozos de 8 KB, ~20 ms por vuelta como mucho
+  // ko11.31.4: efectos (combate / ficha del Pokedex): trozos de 8 KB, ~20 ms por vuelta como mucho;
+  // ko11.31.5: nada mientras se ve un efecto de la SD
+  if (!battleFxPlaying()) fxPump(12);
   uint32_t loopT0 = now, renderMs = 0;
   {  // ko11.9.2: en que pantalla estamos (si se reinicia, se ve al arrancar)
     uint8_t scr = vbOpen ? 1 : defOpen ? 2 : spdOpen ? 3 : gameOpen ? 4 : sackOpen ? 5 : trainMenuOpen ? 6

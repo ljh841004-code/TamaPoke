@@ -1809,6 +1809,13 @@ static const FxAnim *bvFxNow(uint8_t &side) {
   return fxFind(e.mid);
 }
 
+// ko11.31.5: un efecto de la SD se esta viendo: no leer otros de la SD mientras (el dibujo va justo)
+bool battleFxPlaying() {
+  if (xScreen != XS_WILD) return false;
+  uint8_t side;
+  return bvFxNow(side) != nullptr;
+}
+
 // dibuja los dos Pokemon; anima al que actua segun el evento en curso
 void drawBattlers() {
   uint32_t now = millis();

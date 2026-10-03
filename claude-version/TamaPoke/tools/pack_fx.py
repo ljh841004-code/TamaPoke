@@ -53,6 +53,13 @@ A_T = (128.0, -64.0)        # objetivo en el espacio de la animacion (usuario en
 FRAME_MS = 50               # PokeRogue: 3 fotogramas de 60 Hz
 MAX_MS = 1300               # el golpe dura 1400 ms: las largas se aceleran
 CELL = 96
+# ko11.31.4: el ESP32 pinta ~25-30 fotogramas/s: con las aceleradas (22-30 ms) se saltaba la mitad.
+# Se guarda 1 de cada STEP (>= MIN_MS por fotograma) y, si aun pasa de MAX_BYTES, menos todavia.
+# Los fondos van a media resolucion (escala x2): son mosaicos de pixel art ampliados
+MIN_MS = 40
+MAX_BYTES = 700 * 1024
+MAX_STEP = 4
+BG_HALF = True
 CLIP_Y = 262                # no pinta encima del cuadro de texto
 
 # nombres antiguos (MAYUSCULAS juntas) -> nombre de PokeRogue
@@ -269,6 +276,9 @@ def bg_image(name):
         if not fetch(url, dest):
             return None
         im = Image.open(dest).convert('RGBA')
+    half = BG_HALF and im.width >= 16 and im.height >= 16
+    if half:
+        im = im.resize((im.width // 2, im.height // 2), Image.NEAREST)
     q = im.quantize(colors=255, method=Image.Quantize.FASTOCTREE)
     pal = q.getpalette(rawmode='RGBA')
     npal = len(pal) // 4
@@ -276,7 +286,7 @@ def bg_image(name):
     for i in range(npal):
         r, g, bl, al = pal[4 * i:4 * i + 4]
         b += struct.pack('<HB', ((r >> 3) << 11) | ((g >> 2) << 5) | (bl >> 3), (al * 32 + 127) // 255)
-    return b + q.tobytes()
+    return b + q.tobytes(), half
 
 
 def bg_track(anim, nfr):
@@ -323,8 +333,22 @@ def pack(t, s, v, name, fname=None):
     if isinstance(anims, dict):
         anims = [anims]
     nfr = max(len(a['frames']) for a in anims)
-    ms = FRAME_MS if nfr * FRAME_MS <= MAX_MS else max(20, MAX_MS // nfr)
-    bgs, bgdata = [], []
+    ms0 = FRAME_MS if nfr * FRAME_MS <= MAX_MS else max(20, MAX_MS // nfr)
+    step = max(1, -(-MIN_MS // ms0))
+    while True:
+        r = pack_step(t, s, v, anims, nfr, ms0, step, fname)
+        if r in (None, 'empty') or r[3] <= MAX_BYTES:
+            return r
+        if step >= MAX_STEP:   # aun enorme (p. ej. fissure, 2 MB): el efecto dibujado del firmware
+            os.remove(r[0])
+            print('  -- demasiado grande (%d KB):' % (r[3] // 1024), name)
+            return 'empty'
+        step += 1
+
+
+def pack_step(t, s, v, anims, nfr, ms0, step, fname):
+    ms = ms0 * step
+    bgs, bgdata, bg_halved = [], [], []
     sides = []
     useful = False
     for side, (A, T) in enumerate(SIDES):
@@ -337,7 +361,7 @@ def pack(t, s, v, name, fname=None):
         scale = dist / math.hypot(*A_T)
         track = bg_track(anim, len(anim['frames']))
         frames = []
-        for fi in range(len(anim['frames'])):
+        for fi in range(0, len(anim['frames']), step):
             st = track[fi]
             bgi, bh = 0xFF, struct.pack('<BhhHHHHB', 0xFF, 0, 0, 0, 0, 0, 0, 0)
             if st is not None and st['a'] > 0.02:
@@ -345,14 +369,16 @@ def pack(t, s, v, name, fname=None):
                     img = bg_image(st['name'])
                     if img is not None:
                         bgs.append(st['name'])
-                        bgdata.append(img)
+                        bgdata.append(img[0])
+                        bg_halved.append(img[1])
                 if st['name'] in bgs:
                     bgi = bgs.index(st['name'])
                     x0, y0 = pr2scr(st['x'], st['y'])
                     sx, sy = BG_SCALE * KX, BG_SCALE * abs(KY)
                     bw, bhh = BG_TILE[0] * sx, BG_TILE[1] * sy
+                    bk = 2 if bg_halved[bgi] else 1   # media resolucion: cada pixel cubre el doble
                     bh = struct.pack('<BhhHHHHB', bgi, int(x0), int(y0), int(bw), int(bhh),
-                                     int(sx * 256), int(sy * 256), int(min(st['a'], BG_MAX_A) * 32 + 0.5))
+                                     int(sx * bk * 256), int(sy * bk * 256), int(min(st['a'], BG_MAX_A) * 32 + 0.5))
                     useful = True
             fg = encode(*compose(anim, fi, A, T, scale))
             if fg[4:8] != b'\0\0\0\0':
