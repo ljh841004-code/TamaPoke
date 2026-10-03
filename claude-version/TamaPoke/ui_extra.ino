@@ -3196,6 +3196,7 @@ static void battleDoAction(int a) {
   BAct foeAct = foeMoveRule(battleAi(bFoe, bMe, bRng, 35));  // el salvaje es algo torpe
   if (a == BA_POTION && autoLeft) autoPotions++;
   bqN = battleTurn(bMe, bFoe, (BAct)a, foeAct, bRng, bq, BATTLE_MAX_EVENTS, true);
+  for (int i = bqN - 1; i >= 0; i--) if (bq[i].kind == EV_USE) fxWant(bq[i].mid);  // ko11.31.4: los de este turno, primero
   bqAisMe = true;
   bPhase = BP_PLAY;
   startEvent(0);

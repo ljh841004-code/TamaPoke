@@ -857,7 +857,7 @@ void loop() {
   vibLoop(now);  // ko11.25
   moveLearnLoop();  // ko11.31
   centerPoll();     // ko11.31: el centro pokemon termina aunque no se mire
-  fxPump(4);        // ko11.31: efectos (combate / ficha del Pokedex), 4 trozos de 8 KB por vuelta
+  fxPump(12);       // ko11.31.4: efectos (combate / ficha del Pokedex): trozos de 8 KB, ~20 ms por vuelta como mucho
   uint32_t loopT0 = now, renderMs = 0;
   {  // ko11.9.2: en que pantalla estamos (si se reinicia, se ve al arrancar)
     uint8_t scr = vbOpen ? 1 : defOpen ? 2 : spdOpen ? 3 : gameOpen ? 4 : sackOpen ? 5 : trainMenuOpen ? 6
@@ -4502,6 +4502,7 @@ void galleryTap(int16_t x, int16_t y) {
         if (!mv[i] || ddx * ddx + ddy * ddy > (DEXMV_R + 8) * (DEXMV_R + 8)) continue;
         lastTap = 0;
         if (!dexLog.hasLearned(galleryDetail, mv[i])) { sfxPlay(SFX_DENY); return; }
+        fxWant(mv[i]);  // ko11.31.4: si aun no esta, este primero
         dexMvFx = mv[i];
         dexMvT0 = millis();
         sfxPlay(SFX_PLAY);

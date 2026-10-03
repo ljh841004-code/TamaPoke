@@ -22,11 +22,19 @@
 
 #define ES8311_ADDR 0x18
 #define SAMPLE_RATE 16000
-static std::atomic<bool> gMusicRoom{true};  // ko11.31.3: ver audioSdFree()
-static std::atomic<uint32_t> gSdUsedAt{0};
-// el aviso lo renueva la tarea de audio en cada bloque (16 ms); si no llega (sin tarea), a los 40 ms vale igual
-bool audioSdFree() { return gMusicRoom.load() || millis() - gSdUsedAt.load() > 40; }
-void audioSdUsed() { gMusicRoom.store(false); gSdUsedAt.store(millis()); }
+// ko11.31.4: cuanto lleva la musica leido por adelantado (bytes; 0xFFFFFFFF = no suena) y cuando se
+// miro. La tarea de audio lo renueva en cada bloque (16 ms); los demas restan lo que se ha gastado
+// desde entonces (32 bytes por ms) y solo leen de la SD si aun quedan mas de MUSIC_SD_MARGIN
+#define MUSIC_RING 32768
+#define MUSIC_SD_MARGIN 12288  // ~380 ms
+static std::atomic<uint32_t> gMusicBuf{0xFFFFFFFFu};
+static std::atomic<uint32_t> gMusicBufAt{0};
+bool audioSdFree() {
+  uint32_t b = gMusicBuf.load();
+  if (b == 0xFFFFFFFFu) return true;
+  uint32_t used = (millis() - gMusicBufAt.load()) * (SAMPLE_RATE * 2 / 1000);
+  return b > used && b - used >= MUSIC_SD_MARGIN;
+}
 
 static I2SClass i2s;
 static bool gReady = false;
@@ -141,7 +149,7 @@ static const SfxDef SFX[SFX_COUNT] = {
 // Single task owns all playback state. Commands transfer ownership of PCM buffers.
 static void audioTask(void *) {
   int16_t out[256 * 2];
-  static WavStream<File> music; // 8 KiB read-ahead, never a whole-song allocation
+  static WavStream<File, MUSIC_RING> music; // ko11.31.4: 32 KiB (1 s) read-ahead, never a whole-song allocation
   int16_t musicBlock[256];
   int16_t *cry = nullptr;
   uint32_t cryLen = 0, cryAt = 0;
@@ -209,6 +217,7 @@ static void audioTask(void *) {
                 else if (tr == MT_SGYM) { cand[0] = "/mons/story_gym.wav"; cand[1] = "/mons/battle_gym.wav"; }
               } else if (tr == MT_STORY) { cand[0] = "/mons/story.wav"; cand[1] = "/mons/bgm2.wav"; }
               else if (tr == MT_STORY_A) { cand[0] = "/mons/story_anime.wav"; cand[1] = "/mons/story.wav"; cand[2] = "/mons/bgm2.wav"; }
+              else if (tr == MT_SLEAGUE) { cand[0] = "/mons/story_league.wav"; cand[1] = "/mons/story.wav"; cand[2] = "/mons/bgm2.wav"; }
               else if (tr == MT_STORY_END) { cand[0] = "/mons/story_end.wav"; cand[1] = "/mons/fame2.wav"; cand[2] = "/mons/fame.wav"; }
               if (cand[0]) {
                 for (int k = 0; k < 3 && cand[k]; k++)
@@ -260,8 +269,8 @@ static void audioTask(void *) {
       }
     }
     // ko11.31.3: anillo casi lleno (o sin musica): los demas pueden leer de la SD
-    gMusicRoom.store(!music.valid() || !audible || musicPaused.load() ||
-                     music.buffered() + 2048 >= music.ringSize());
+    gMusicBuf.store(!music.valid() || !audible || musicPaused.load() ? 0xFFFFFFFFu : (uint32_t)music.buffered());
+    gMusicBufAt.store(millis());
     for (int i = 0; i < 256; ++i) {
       int32_t sample = i < (int)musicSamples ?
           (int32_t)musicBlock[i] * levels[0].load() / 100 : 0;

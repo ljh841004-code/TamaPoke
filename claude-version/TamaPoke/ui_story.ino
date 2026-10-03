@@ -1204,6 +1204,8 @@ uint8_t storySceneTrack() {
     for (uint16_t k = stStep; k < ch.n; k++) if (ch.steps[k].op == ST_BATTLE) { battleLeft = true; break; }
     if (!battleLeft) return MT_STORY_END;
   }
+  // ko11.31.4: la Liga (juego 13장 사천왕 y 14장 챔피언): su propia cancion
+  if (stStyle == 0 && xScreen == XS_SCENE && (stCh == 12 || stCh == 13)) return MT_SLEAGUE;
   return stStyle == 1 && xScreen != XS_STORY ? MT_STORY_A : MT_STORY;
 }
 

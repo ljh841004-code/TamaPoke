@@ -42,6 +42,7 @@ enum : uint8_t { MT_NORMAL = 0, MT_GYM, MT_CHAMP, MT_FAME,
   MT_SBATTLE,    // combate normal / oleada: story_battle.wav -> battle_wild.wav
   MT_SROCKET,    // Team Rocket: story_rocket.wav -> story_battle.wav
   MT_SGYM,       // lider / Alto Mando / jefe de oleada: story_gym.wav -> battle_gym.wav
+  MT_SLEAGUE,    // ko11.31.4: escenas del juego en la Liga (13장 사천왕, 14장): story_league.wav -> story.wav -> bgm2.wav
 };
 void audioSetMusicTrack(uint8_t track);
 // ko11.8: fondos normales elegibles: /mons/bgm.wav, bgm2.wav ... bgm8.wav. Suenan al
@@ -58,10 +59,9 @@ int8_t audioBgmNow();                 // la que suena ahora (-1 si ninguna norma
 void audioBgmPlay(uint8_t i);         // escucharla ya (luego sigue el sorteo)
 bool audioPauseForUpload(); // closes streaming file before PUT; false on timeout
 void audioResumeAfterUpload();
-// ko11.31.3: true si la musica tiene el anillo lleno (o no suena): ahora se puede usar la SD
-// un rato sin que se corte. Las cargas grandes (efectos, sprites) esperan a esto entre trozo y trozo
+// ko11.31.3: true si la musica tiene bastante leido por adelantado (o no suena): se puede usar la SD
+// un rato sin que se corte. Las cargas grandes (efectos, sprites) lo miran antes de cada trozo
 bool audioSdFree();
-void audioSdUsed();  // acabo de leer un trozo: esperar al siguiente aviso de la musica
 void audioCry(uint16_t dex); // main loop only
 // fork KO (ko5): pantalla apagada con el PWR -> la musica se pausa (y sigue
 // donde iba al encenderla). Voces y efectos siguen sonando.

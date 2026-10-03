@@ -119,9 +119,22 @@ void fxPreloadAsync(const uint8_t *ids, uint8_t n) {
   gQ.on = true;
 }
 
+// ko11.31.4: este se necesita ya (se acaba de elegir): pasa delante en la cola
+void fxWant(uint8_t id) {
+  if (!gQ.on || !id || fxFind(id)) return;
+  uint8_t p = gQ.i + (gQ.slot ? 1 : 0);
+  for (uint8_t k = p; k < gQ.n; k++)
+    if (gQ.ids[k] == id) {
+      for (uint8_t q = k; q > p; q--) gQ.ids[q] = gQ.ids[q - 1];
+      gQ.ids[p] = id;
+      return;
+    }
+}
+
 void fxPump(uint8_t chunks) {
-  // ko11.31.3: un trozo y se espera a que la musica se rellene (audioSdFree) antes del siguiente
-  for (uint8_t c = 0; c < chunks && gQ.on && audioSdFree(); c++) { fxPumpOne(); audioSdUsed(); }
+  // ko11.31.4: trozos mientras la musica tenga margen, como mucho ~20 ms por vuelta (la pantalla sigue)
+  uint32_t t0 = millis();
+  for (uint8_t c = 0; c < chunks && gQ.on && audioSdFree() && millis() - t0 < 20; c++) fxPumpOne();
 }
 
 static void fxPumpOneImpl();

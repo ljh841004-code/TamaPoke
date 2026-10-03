@@ -35,3 +35,4 @@ const FxAnim *fxFind(uint8_t id);
 void fxPreloadAsync(const uint8_t *ids, uint8_t n);
 void fxPump(uint8_t chunks = 1);
 void fxPumpOne();
+void fxWant(uint8_t id);  // ko11.31.4: leer este antes que los demas de la cola

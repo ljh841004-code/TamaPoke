@@ -2,10 +2,13 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include <stdlib.h>
 
 // Reader must provide read(uint8_t*, size_t), seek(uint32_t), size(), close(),
 // and bool conversion. No allocation proportional to the length of the song.
-template<class Reader> class WavStream {
+// ko11.31.4: RING = tamano del anillo (el firmware usa 32 KiB = 1 s; se pide a malloc al abrir,
+// que en la placa lo pone en la PSRAM)
+template<class Reader, size_t RING = 8192> class WavStream {
   Reader file;
   uint32_t dataStart = 0, dataBytes = 0, played = 0;
   // ko11.2: anillo de lectura adelantada. Antes se leia de golpe al vaciarse
@@ -13,11 +16,15 @@ template<class Reader> class WavStream {
   // se retrasaba, el I2S (90 ms de colchon) se quedaba sin datos y la musica
   // daba tirones. Ahora se rellena a trozos de 2 KiB en cuanto hay hueco, asi
   // que el anillo casi siempre esta lleno (~256 ms de margen).
-  static constexpr size_t RING = 8192, CHUNK = 2048;
-  uint8_t cache[RING];
+  static constexpr size_t CHUNK = 2048;
+  uint8_t *cache = nullptr;
   size_t head = 0, count = 0;  // lectura (bytes) y bytes validos del anillo
   uint32_t fillPos = 0;        // siguiente byte del chunk data a leer del fichero
 public:
+  WavStream() = default;
+  WavStream(const WavStream &) = delete;
+  WavStream &operator=(const WavStream &) = delete;
+  ~WavStream() { free(cache); }
   uint32_t loops = 0;  // ko11: vueltas completas desde open()
 private:
   static uint16_t u16(const uint8_t *p) { return p[0] | uint16_t(p[1]) << 8; }
@@ -53,6 +60,8 @@ public:
   uint32_t lengthBytes() const { return dataBytes; }  // ko10.4: duracion = bytes / 32000 s
   bool open(Reader input, uint32_t resume = 0) {
     close(); file = input; loops = 0;
+    if (!cache) cache = (uint8_t *)malloc(RING);
+    if (!cache) { close(); return false; }
     uint8_t h[16];
     if (!file || file.size() < 12 || file.read(h, 12) != 12 ||
         memcmp(h, "RIFF", 4) || memcmp(h + 8, "WAVE", 4)) { close(); return false; }
