@@ -114,6 +114,8 @@ void fxWant(uint8_t id) {
     }
 }
 
+bool fxLoading() { return gQ.on; }
+
 bool fxQueued(uint8_t id) {
   if (!gQ.on || !id) return false;
   for (uint8_t k = gQ.i; k < gQ.n; k++) if (gQ.ids[k] == id) return true;

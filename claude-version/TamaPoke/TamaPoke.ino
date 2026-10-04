@@ -4419,7 +4419,9 @@ static void dexMvStart(uint8_t id, bool sd) {
 static void dexMvPoll() {
   if (!dexMvPend) return;
   bool sd = fxFind(dexMvPend) != nullptr;
-  if (sd || !fxQueued(dexMvPend) || millis() - dexMvPendT0 >= DEXMV_WAIT_MS) {
+  // ko12.3.2: y que ya no se lea nada de la SD (log del aparato: parpadeaba el primer uso, cuando el
+  // efecto empezaba justo al acabar de leerse con los demas aun leyendose; luego, todo leido, nunca)
+  if ((sd && !fxLoading()) || (!sd && !fxQueued(dexMvPend)) || millis() - dexMvPendT0 >= DEXMV_WAIT_MS) {
     uint8_t id = dexMvPend;
     dexMvPend = 0;
 #ifdef ESP_PLATFORM
@@ -4691,9 +4693,9 @@ void galleryTap(int16_t x, int16_t y) {
 #ifdef ESP_PLATFORM
         Serial.printf("DEX tap mv=%u ready=%d queued=%d\n", (unsigned)mv[i], (int)(fxFind(mv[i]) != nullptr), (int)fxQueued(mv[i]));  // ko12.3.1
 #endif
-        if (fxFind(mv[i])) { dexMvStart(mv[i], true); return; }
+        if (fxFind(mv[i]) && !fxLoading()) { dexMvStart(mv[i], true); return; }
         fxWant(mv[i]);  // ko12.2.1: delante en la cola; mientras, la SD sigue leyendo (dexFxPlaying = no)
-        if (fxQueued(mv[i])) { dexMvPend = mv[i]; dexMvPendT0 = millis(); sfxPlay(SFX_TAP); }
+        if (fxQueued(mv[i]) || fxFind(mv[i])) { dexMvPend = mv[i]; dexMvPendT0 = millis(); sfxPlay(SFX_TAP); }
         else dexMvStart(mv[i], false);  // no esta en la SD: el dibujado
         return;
       }
