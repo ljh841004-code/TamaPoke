@@ -1022,7 +1022,7 @@ TEST(ceremony, la_despedida_deja_un_huevo_nuevo) {
   CHECK_EQ(p.ageMinutes, (uint32_t)0);
 }
 
-TEST(ceremony, escaparse_pide_una_hora_de_abandono_total) {
+TEST(ceremony, escaparse_pide_12_horas_de_abandono_total) {
   Pet p;
   makePet(p, 4);
   setStats(p, 0, 0, 0, 0);
@@ -1031,6 +1031,40 @@ TEST(ceremony, escaparse_pide_una_hora_de_abandono_total) {
   CHECK(!p.canRunawayNow());
   advance(p, 1);
   CHECK(p.canRunawayNow());
+}
+
+// ko12.2: dormirse sola tras estar quieta; con hambre o sucia no; se despierta con hambre y luego puede escaparse
+TEST(ceremony, dormirse_sola_y_despertar_con_hambre) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 25, 80, 50, 80);
+  CHECK_MSG(!p.canAutoSleep(), "con hambre no se duerme sola");
+  setStats(p, 80, 80, 50, 20);
+  CHECK_MSG(!p.canAutoSleep(), "sucia no se duerme sola");
+  setStats(p, 80, 80, 50, 80);
+  CHECK(p.canAutoSleep());
+  p.autoSleepNow();
+  CHECK(p.sleeping && p.autoSleep);
+  advance(p, 600);  // dormida, la comida baja despacio hasta 30 y se despierta
+  CHECK_MSG(!p.sleeping && !p.autoSleep, "se despierta sola con hambre");
+  CHECK(p.fullness <= AUTO_SLEEP_MIN_FULL);
+  CHECK_MSG(!p.canAutoSleep(), "recien despierta con hambre: no vuelve a dormirse");
+  advance(p, 240);  // despierta y sin cuidados: todo a cero, y 12 h despues lista para irse
+  setStats(p, 0, 0, 0, 0);
+  advance(p, RUNAWAY_TICKS);
+  CHECK(p.canRunawayNow());
+}
+
+TEST(ceremony, dormida_sola_un_toque_la_despierta) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 80, 80, 50, 80);
+  p.autoSleepNow();
+  CHECK(p.wakeAuto());
+  CHECK(!p.sleeping);
+  p.toggleLight();  // a mano: no es "sola"
+  CHECK(p.sleeping && !p.autoSleep);
+  CHECK_MSG(!p.wakeAuto(), "la dormida a mano no se despierta con un toque");
 }
 
 TEST(ceremony, un_solo_cuidado_salva_del_abandono) {

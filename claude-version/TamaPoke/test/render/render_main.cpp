@@ -604,9 +604,10 @@ static void scenes(bool ko, const char *sfx) {
     partyPickTap(200, PP_ROW_Y + 10);                          // 1a fila
     partyPickTap(200, PP_ROW_Y + (PP_ROW_H + PP_ROW_GAP) + 10);  // 2a fila
     render(); shot("53b_party_pick_two");
-    navCheck("equipo: 2 elegidos", ppPickN() == 2);
-    partyPickTap(250, PP_BTN_Y + 10);  // [시작 2/2]
-    navCheck("equipo: 3 en el combate", xScreen == XS_WILD && pN == 3);
+    // ko12.2: Brock tiene 2: un ayudante como mucho (el 2o toque cambia el elegido)
+    navCheck("equipo: contra 2, un ayudante", ppPickN() == 1 && ppMaxHelpers() == 1);
+    partyPickTap(250, PP_BTN_Y + 10);  // [시작 1/1]
+    navCheck("equipo: 2 en el combate (como el rival)", xScreen == XS_WILD && pN == 2);
     tick(2300); updateWild(); render(); shot("53c_party_battle");
     bMe.hp = 0; bvMeTgt = 0; bqN = bqI = 0; bPhase = BP_PLAY; bvMeFainted = true;
     updateWild(); render(); shot("53d_party_swap_forced");
@@ -615,11 +616,12 @@ static void scenes(bool ko, const char *sfx) {
     tick(100); render(); shot("53e_party_helper_in");
     navCheck("equipo: sale el ayudante", pCur != 0 && bPhase == BP_MENU);
     bFoe.hp = 0; nextTrainerMon(); tick(2300); updateWild(); render(); shot("53f_party_next_switch");
-    navCheck("equipo: rival nuevo -> cambiar?", bPhase == BP_SWAP && bSwapMode == 1);
+    // ko12.2: contra 2 vamos 2: caido el mio, no queda a quien cambiar (antes 3)
+    navCheck("equipo: rival nuevo -> cambiar? (si queda alguien)", (bPhase == BP_SWAP && bSwapMode == 1) || !partyOtherAlive());
     wildTap(380, SW_Y + 10);  // [그대로]
     wildTap(300, 190);        // mi caja de vida -> cambio a mano
     render(); shot("53g_party_manual");
-    navCheck("equipo: cambio a mano", bPhase == BP_SWAP && bSwapMode == 2);
+    navCheck("equipo: cambio a mano (si queda alguien)", (bPhase == BP_SWAP && bSwapMode == 2) || !partyOtherAlive());
     wildTap(380, SW_Y + 10);  // [취소]
     bPhase = BP_MENU; bTeamI = bTeamN - 1; bFoe.hp = 0;
     finishBattle(true, false, false); render(); shot("53h_party_win");
@@ -630,6 +632,29 @@ static void scenes(bool ko, const char *sfx) {
     render(); shot("53i_wild_after_team");
     closeAll(); endBattleScreen();
     box.wipe(); pet.badges = 0;
+  }
+  {  // ko12.2: liga (6): hasta 5 ayudantes; el cambio con 5 para elegir va compacto
+    closeAll(); pet.energy = 80; box.wipe();
+    const int16_t ds[6] = { 7, 4, 1, 25, 133, 152 };
+    for (int i = 0; i < 6; i++) box.add(ds[i], 20 + i, false, true, gMockEpoch - 50000 - 100 * i);
+    const int16_t fd[6] = { 18, 65, 112, 59, 103, 9 };
+    Battler team[6];
+    for (int j = 0; j < 6; j++) team[j] = makeTrainerMon(fd[j], 40);
+    partyOpen(BK_CHAMP, CHAMP_REGION, team, 6, XS_GYM);
+    navCheck("liga: eleccion de equipo", xScreen == XS_PARTY && ppMaxHelpers() == 5);
+    for (int r = 0; r < PP_ROWS; r++) partyPickTap(200, PP_ROW_Y + r * (PP_ROW_H + PP_ROW_GAP) + 10);
+    partyPickTap(300, PP_NAV_Y + 5);  // pagina 2
+    partyPickTap(200, PP_ROW_Y + 10);
+    render(); shot("53j_party_pick_league");
+    navCheck("liga: 5 elegidos", ppPickN() == 5);
+    partyPickTap(250, PP_BTN_Y + 10);
+    navCheck("liga: 6 en el combate", xScreen == XS_WILD && pN == 6);
+    tick(2300); updateWild();
+    bMe.hp = 0; bvMeTgt = 0; bqN = bqI = 0; bPhase = BP_PLAY; bvMeFainted = true;
+    updateWild(); render(); shot("53k_party_swap_six");
+    navCheck("liga: elegir entre 5", bPhase == BP_SWAP);
+    closeAll(); endBattleScreen();
+    box.wipe();
   }
   // ko10.1: elegir region y encuentros
   {

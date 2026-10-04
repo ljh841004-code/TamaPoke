@@ -162,8 +162,9 @@ uint8_t gymRematchTeam(uint8_t gym, uint16_t petLvl, uint32_t seed, Battler out[
 void championTeam(uint16_t petLvl, uint32_t seed, Battler out[CHAMP_TEAM]);
 
 // ---- ko11.20: equipo (el que crias + hasta 2 ayudantes de la caja) contra entrenadores
-#define PARTY_MAX 3
-#define PARTY_HELPERS 2
+#define PARTY_MAX 6     // ko12.2: el que crias + hasta 5 ayudantes (tantos como el rival: liga 6)
+#define TEAM_HELPERS 5  // ko12.2: ayudantes de la caja en un combate (como mucho rival - 1)
+#define PARTY_HELPERS 2 // ayudantes que recuerda la ficha del salon de la liga (formato guardado: 2)
 #define HELPER_USES_PER_DAY 3  // cada ayudante: 3 combates al dia
 // un Pokemon de la caja como luchador: su nivel no pasa del de tu Pokemon (asi un
 // Lv70 de la caja no gana solo) y sus genes cuentan como en los salvajes

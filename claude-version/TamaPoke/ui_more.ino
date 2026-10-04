@@ -2158,7 +2158,7 @@ void dexRewardLoop(uint32_t now) {
 
 // ======================================================================
 // ko11.20: doumi (ayudantes) antes de gimnasio / liga / reto del dia
-// Hasta 2 de la caja. En el gimnasio se sabe el tipo del lider: "유리" / "불리".
+// ko12.2: tantos como el rival (contando al que crias), hasta 5 de la caja; [혼자] sigue. En el gimnasio se sabe el tipo del lider: "유리" / "불리".
 // En la liga y el reto, como en PokeRogue, el rival se ve al salir.
 // ======================================================================
 #define PP_ROWS 4
@@ -2170,7 +2170,9 @@ void dexRewardLoop(uint32_t now) {
 static uint8_t ppView[BOX_MAX];
 static uint8_t ppViewN = 0;
 static int ppFoeType() { return ppKind == BK_GYM && bGym < GYM_COUNT ? GYM_TYPE[bGym] : -1; }
-static uint8_t ppPickN() { return (ppPick[0] >= 0) + (ppPick[1] >= 0); }
+uint8_t ppMaxHelpers();
+static uint8_t ppPickN() { uint8_t n = 0; for (uint8_t k = 0; k < TEAM_HELPERS; k++) n += ppPick[k] >= 0; return n; }
+static bool ppPicked(int8_t bi) { for (uint8_t k = 0; k < TEAM_HELPERS; k++) if (ppPick[k] == bi) return true; return false; }
 // orden: en el gimnasio primero los que tienen ventaja; luego por nivel
 static void ppBuildView() {
   ppViewN = 0;
@@ -2191,7 +2193,7 @@ void renderPartyPick() {
   ppBuildView();
   if (ppPage >= ppPages()) ppPage = ppPages() - 1;
   char t[48];
-  snprintf(t, sizeof(t), XT(X_PT_TITLE_FMT), ppPickN());
+  snprintf(t, sizeof(t), XT(X_PT_TITLE_FMT), ppPickN(), ppMaxHelpers());
   drawFit(t, 30, 300, UI_INK, 2);
   int ft = ppFoeType();
   if (ft >= 0) {
@@ -2209,7 +2211,7 @@ void renderPartyPick() {
     uint8_t bi = ppView[k];
     const BoxMon &m = box.at(bi);
     int y = PP_ROW_Y + r * (PP_ROW_H + PP_ROW_GAP);
-    bool sel = ppPick[0] == (int8_t)bi || ppPick[1] == (int8_t)bi;
+    bool sel = ppPicked((int8_t)bi);
     uint8_t left = helperUsesLeft(m);  // ko11.20: hoy le quedan
     uiButton(73, y, 320, PP_ROW_H, 10, sel ? C565(0xe6, 0xf8, 0xdc) : left ? UI_WHITE : UI_TRACK, sel ? UI_BAR_OK : UI_INK);
     drawThumbAt(m.dex, 100, y + PP_ROW_H / 2, 1, false);
@@ -2245,7 +2247,7 @@ void renderPartyPick() {
   }
   uint8_t n = ppPickN();
   drawBtn(83, PP_BTN_Y, 110, 44, UI_TRACK, UI_INK, XT(X_PT_ALONE));
-  snprintf(t, sizeof(t), XT(X_PT_GO_FMT), n);
+  snprintf(t, sizeof(t), XT(X_PT_GO_FMT), n, ppMaxHelpers());
   drawBtn(203, PP_BTN_Y, 180, 44, n ? UI_BAR_OK : C565(0x9a, 0xc8, 0x9a), UI_WHITE, t);
   drawNav(NAV_L, UI_INK);
   uiFlush();
@@ -2267,12 +2269,22 @@ void partyPickTap(int16_t x, int16_t y) {
   int k = ppPage * PP_ROWS + r;
   if (k >= ppViewN) return;
   int8_t bi = (int8_t)ppView[k];
-  if (ppPick[0] != bi && ppPick[1] != bi && !helperUsesLeft(box.at((uint8_t)bi))) { sfxPlay(SFX_DENY); return; }  // hoy ya no
-  if (ppPick[0] == bi) { ppPick[0] = ppPick[1]; ppPick[1] = -1; }        // quitar
-  else if (ppPick[1] == bi) ppPick[1] = -1;
-  else if (ppPick[0] < 0) ppPick[0] = bi;                               // poner
-  else if (ppPick[1] < 0) ppPick[1] = bi;
-  else { ppPick[0] = ppPick[1]; ppPick[1] = bi; }                        // lleno: el mas viejo sale
+  if (!ppPicked(bi) && !helperUsesLeft(box.at((uint8_t)bi))) { sfxPlay(SFX_DENY); return; }  // hoy ya no
+  // ko12.2: hasta ppMaxHelpers() (los mismos que el rival). Quitar = los de detras avanzan; lleno = el mas viejo sale
+  uint8_t mx = ppMaxHelpers(), n = ppPickN();
+  int at = -1;
+  for (uint8_t k = 0; k < TEAM_HELPERS; k++) if (ppPick[k] == bi) at = k;
+  if (at >= 0) {
+    for (uint8_t k = (uint8_t)at; k + 1 < TEAM_HELPERS; k++) ppPick[k] = ppPick[k + 1];
+    ppPick[TEAM_HELPERS - 1] = -1;
+  } else if (mx == 0) {
+    sfxPlay(SFX_DENY); return;
+  } else if (n < mx) {
+    ppPick[n] = bi;
+  } else {
+    for (uint8_t k = 0; k + 1 < mx; k++) ppPick[k] = ppPick[k + 1];
+    ppPick[mx - 1] = bi;
+  }
   sfxPlay(SFX_TAP);
 }
 

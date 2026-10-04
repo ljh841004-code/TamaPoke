@@ -20,7 +20,10 @@
 #define TRAIN_EXP_PCT 5        // ko10.7: EXP por entrenar (% del nivel actual)
 #define TRAIN_EXP_PCT_HI 20    // ... y si bate el record (+1 caramelo)
 #define GOOD_CARE_TICKS 720              // ko10.6: 12 h seguidas bien cuidado = +1 DEF y -1 descuido
-#define RUNAWAY_TICKS 60                   // se escapa tras 1 h con TODO a cero
+#define RUNAWAY_TICKS 720                  // ko12.2: lista para escaparse tras 12 h con TODO a cero (antes 1 h)
+#define AUTO_SLEEP_MS 180000UL             // ko12.2: 3 min sin tocar nada en la pantalla principal -> se duerme sola
+#define AUTO_SLEEP_MIN_FULL 30             // ... si no tiene hambre (comida > 30) ni esta sucia (higiene >= 30);
+#define AUTO_SLEEP_MIN_HYG 30              //     y se despierta sola cuando el hambre llega a 30
 
 // milisegundos que faltan hasta `deadline` (0 si ya paso, o si deadline==0:
 // "temporizador inactivo"). Todos los temporizadores del juego (dialogos,
@@ -135,6 +138,7 @@ public:
   uint8_t mistWhy = 0;        // MW_*: que barra cayo a 10 o menos
   uint32_t mistEpoch = 0;     // cuando (hora local; 0 = sin reloj)
   bool sleeping = false;
+  bool autoSleep = false;  // ko12.2: dormida sola (por estar quieta): un toque o el hambre la despiertan
   uint32_t lastSeenEpoch = 0;   // ultima hora RTC vista (para progresion offline)
   uint8_t ceremony = CER_NONE;  // despedida/escapada/liberacion en curso
   uint8_t lastEnd = CER_NONE;   // como acabo la anterior (afecta al huevo)
@@ -327,6 +331,13 @@ public:
   }
   static bool tradeEvolves(int16_t dex) { return tradeTarget(dex) != 0; }
   void toggleLight();  // dormir / despertar
+  // ko12.2: dormirse sola tras 3 min quieta (no con hambre ni sucia: si no, nunca llegaria a escaparse)
+  bool canAutoSleep() const {
+    return !isEgg() && !sleeping && ceremony == CER_NONE && !evolving() && !starterPick &&
+           fullness > AUTO_SLEEP_MIN_FULL && hygiene >= AUTO_SLEEP_MIN_HYG;
+  }
+  void autoSleepNow() { if (canAutoSleep()) { sleeping = true; autoSleep = true; save(); } }
+  bool wakeAuto() { if (!(sleeping && autoSleep)) return false; sleeping = false; autoSleep = false; save(); return true; }
   void clean();
   void caress();  // tocar al bicho
   void eggTap();  // tocar el huevo: 3 toques y eclosiona
@@ -435,7 +446,7 @@ private:
   uint16_t evoDeclinedLv = 0;   // "mantener forma": no ofrecer evolucion hasta subir de nivel
   uint32_t farDeclinedAge = 0;  // "quedaros juntos": no ofrecer despedida hasta esta edad
   bool starterPick = false;     // primera partida: esperando que el jugador elija inicial
-  uint8_t neglectTicks = 0;
+  uint16_t neglectTicks = 0;  // ko12.2: hasta 720 (12 h)
   uint16_t goodTicks = 0;  // racha bien cuidado: forja la DEF
   uint32_t ceremonyUntil = 0;
   uint8_t bondToday = 0;       // tope diario de subida de vinculo

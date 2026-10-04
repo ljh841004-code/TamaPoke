@@ -44,7 +44,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.1"
+#define FW_VERSION "1.17-ko12.2"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -859,6 +859,8 @@ uint32_t perfFrames = 0, perfRenderSum = 0;  // ko11.13: + media
 void drawPerfLine(int y, uint16_t ink);  // train.ino
 void perfReset() { perfRenderMax = perfStallMax = 0; perfFrames = 0; perfRenderSum = 0; }
 
+static bool petHoldAllowed();  // ko12.2
+bool mainNavAllowed();
 void loop() {
   uint32_t now = millis();
   vibLoop(now);  // ko11.25
@@ -868,6 +870,8 @@ void loop() {
   // ko11.31.5: nada mientras se ve un efecto de la SD
   if (!battleFxPlaying() && !dexFxPlaying()) fxPump(12);  // ko12.1.1: tampoco en la ficha
   if (!battleScreenOn()) flushPipeStop();  // ko12.1: fuera del combate, un solo buffer otra vez
+  // ko12.2: 3 min sin tocar nada en la pantalla principal -> se duerme sola (si no tiene hambre ni esta sucia)
+  if (!pet.sleeping && petHoldAllowed() && mainNavAllowed() && now - lastInteract >= AUTO_SLEEP_MS) pet.autoSleepNow();
   uint32_t loopT0 = now, renderMs = 0;
   {  // ko11.9.2: en que pantalla estamos (si se reinicia, se ve al arrancar)
     uint8_t scr = vbOpen ? 1 : defOpen ? 2 : spdOpen ? 3 : gameOpen ? 4 : sackOpen ? 5 : trainMenuOpen ? 6
@@ -1635,6 +1639,11 @@ void onTap(int16_t x, int16_t y) {
   }
   if (pet.isEgg()) {
     pet.eggTap();
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  // ko12.2: dormida sola por estar quieta: el primer toque solo la despierta
+  if (pet.wakeAuto()) {
     sfxPlay(SFX_TAP);
     return;
   }

@@ -522,7 +522,7 @@ uint8_t bTeamN = 0, bTeamI = 0;
 extern uint8_t stBattleWho;  // ko11.21: ui_story.ino
 // ko11.20: mi equipo contra entrenadores: [0] el que crias + hasta 2 ayudantes de la caja
 Battler pMon[PARTY_MAX];
-int8_t pBox[PARTY_MAX] = { -1, -1, -1 };  // indice en la caja (-1 = el que crias)
+int8_t pBox[PARTY_MAX] = { -1, -1, -1, -1, -1, -1 };  // indice en la caja (-1 = el que crias)
 uint8_t pN = 1, pCur = 0, pUsed = 1;      // pUsed: bit i = ya salio a luchar
 uint8_t pShiny = 0;                       // bit i = variocolor
 uint32_t bQuitArm = 0;                    // ko11.23.1: [◀] armado (salir de un combate de la historia)
@@ -537,9 +537,11 @@ bool helperPmdShiny = false;
 // eleccion antes del combate (pantalla XS_PARTY, ui_more.ino)
 uint8_t ppKind = 0, ppRegion = 0, ppN = 0, ppFrom = 0, ppPage = 0;
 Battler ppTeam[CHAMP_TEAM];
-int8_t ppPick[PARTY_HELPERS] = { -1, -1 };        // indices en la caja (-1 = nadie)
-int16_t ppPickDex[PARTY_HELPERS] = { 0, 0 };      // para reconocerlos la proxima vez
-uint32_t ppPickEpoch[PARTY_HELPERS] = { 0, 0 };
+int8_t ppPick[TEAM_HELPERS] = { -1, -1, -1, -1, -1 };  // indices en la caja (-1 = nadie)
+int16_t ppPickDex[TEAM_HELPERS] = { 0 };             // para reconocerlos la proxima vez
+uint32_t ppPickEpoch[TEAM_HELPERS] = { 0 };
+// ko12.2: cuantos ayudantes caben: los mismos que el rival (contando al que crias), hasta 5
+uint8_t ppMaxHelpers() { uint8_t m = ppN > 1 ? ppN - 1 : 0; return m > TEAM_HELPERS ? TEAM_HELPERS : m; }
 bool ppArmed = false;                             // startTrainer usa ppPick
 char bPartyNote[40] = "";                         // "도우미 Lv+1" en el resultado
 
@@ -2159,7 +2161,7 @@ static int swapLayout(int16_t *xs, int16_t *ws, int8_t *who) {
   int m = 0;
   for (uint8_t j = 0; j < pN; j++) if (j != pCur && pMon[j].hp > 0) who[m++] = (int8_t)j;
   bool extra = bSwapMode != 0;
-  int total = 320, gap = 6, ew = extra ? 80 : 0;
+  int total = 320, gap = m >= 4 ? 4 : 6, ew = extra ? (m >= 4 ? 60 : 80) : 0;  // ko12.2: hasta 5 + quedarse
   int bw = (total - ew - gap * (m - 1 + (extra ? 1 : 0))) / (m ? m : 1);
   int x = 73;
   for (int i = 0; i < m; i++) { xs[i] = (int16_t)x; ws[i] = (int16_t)bw; x += bw + gap; }
@@ -2203,6 +2205,21 @@ static void drawSwapPanel() {
     const Battler &b = pMon[who[i]];
     int8_t tm = typeMatch(b.type, bFoe.type);
     uint16_t bg = tm > 0 ? C565(0xd6, 0xf5, 0xcc) : tm < 0 ? C565(0xff, 0xdc, 0xdc) : UI_WHITE;
+    if (ws[i] < 90) {  // ko12.2: 4 o 5 para elegir (equipo de 6): solo dibujo, nivel y vida
+      uiButton(xs[i], SW_Y, ws[i], SW_H, 8, bg, UI_INK);
+      drawThumbAt(b.dex, xs[i] + ws[i] / 2, SW_Y + 17, 1, false);
+      char lv[8];
+      snprintf(lv, sizeof(lv), "%u", b.lvl);
+      gfx->setTextColor(tm > 0 ? C565(0x1a, 0x8a, 0x3a) : tm < 0 ? UI_BAR_BAD : UI_INK);
+      setSize(1);
+      setCur(xs[i] + 4, SW_Y + 2);
+      printT(lv);
+      int bw2 = ws[i] - 10;
+      gfx->fillRect(xs[i] + 5, SW_Y + SW_H - 7, bw2, 4, UI_TRACK);
+      gfx->fillRect(xs[i] + 5, SW_Y + SW_H - 7, (int)((uint32_t)bw2 * b.hp / b.maxHp), 4,
+                    b.hp * 4 < b.maxHp ? UI_BAR_BAD : UI_BAR_OK);
+      continue;
+    }
     uiButton(xs[i], SW_Y, ws[i], SW_H, 10, bg, UI_INK);
     drawThumbAt(b.dex, xs[i] + 22, SW_Y + SW_H / 2, 1, false);
     gfx->setTextColor(UI_INK);
@@ -2516,7 +2533,7 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
   // ko11.20: el equipo: el que crias primero y los ayudantes elegidos
   pN = 1; pCur = 0; pUsed = 1; pShiny = 0;
   pMon[0] = bMe; pBox[0] = -1;
-  for (uint8_t k = 0; ppArmed && k < PARTY_HELPERS; k++) {
+  for (uint8_t k = 0; ppArmed && k < TEAM_HELPERS && pN < n && pN < PARTY_MAX; k++) {  // ko12.2: tantos como el rival
     int8_t bi = ppPick[k];
     if (bi < 0 || bi >= box.count()) continue;
     const BoxMon &m = box.at((uint8_t)bi);
@@ -2954,29 +2971,36 @@ bool gymSwipe(int dir) {
 
 // ko11.20: antes de un entrenador, elegir ayudantes de la caja (si hay alguno)
 static void partyOpen(uint8_t kind, uint8_t region, const Battler *team, uint8_t n, uint8_t from) {
-  if (!box.count()) { ppArmed = false; xScreen = XS_NONE; startTrainer(kind, region, team, n); return; }
+  if (!box.count() || n <= 1) { ppArmed = false; xScreen = XS_NONE; startTrainer(kind, region, team, n); return; }  // ko12.2: rival de 1 = solo
   ppKind = kind;
   ppRegion = region;
   ppN = n > CHAMP_TEAM ? CHAMP_TEAM : n;
   for (uint8_t i = 0; i < ppN; i++) ppTeam[i] = team[i];
   ppFrom = from;
-  for (uint8_t k = 0; k < PARTY_HELPERS; k++) {  // los de la ultima vez, si siguen en la caja
+  // los de la ultima vez, si siguen en la caja (ko12.2: hasta los que caben contra este rival)
+  int8_t got[TEAM_HELPERS];
+  uint8_t ng = 0, mx = ppMaxHelpers();
+  for (uint8_t k = 0; k < TEAM_HELPERS && ng < mx; k++) {
     int8_t f = -1;
-    for (uint8_t i = 0; ppPickDex[k] && i < box.count(); i++)
-      if (box.at(i).dex == ppPickDex[k] && box.at(i).epoch == ppPickEpoch[k] && (k == 0 || i != ppPick[0])) { f = (int8_t)i; break; }
+    for (uint8_t i = 0; ppPickDex[k] && i < box.count(); i++) {
+      if (box.at(i).dex != ppPickDex[k] || box.at(i).epoch != ppPickEpoch[k]) continue;
+      bool dup = false;
+      for (uint8_t q = 0; q < ng; q++) if (got[q] == (int8_t)i) dup = true;
+      if (!dup) { f = (int8_t)i; break; }
+    }
     if (f >= 0 && !helperUsesLeft(box.at((uint8_t)f))) f = -1;  // hoy ya no puede
-    ppPick[k] = f;
+    if (f >= 0) got[ng++] = f;
   }
-  if (ppPick[0] < 0 && ppPick[1] >= 0) { ppPick[0] = ppPick[1]; ppPick[1] = -1; }
+  for (uint8_t k = 0; k < TEAM_HELPERS; k++) ppPick[k] = k < ng ? got[k] : -1;
   ppPage = 0;
   xScreen = XS_PARTY;
   sfxPlay(SFX_TAP);
 }
 void partyStart(bool solo) {
   ppArmed = !solo;
-  for (uint8_t k = 0; ppArmed && k < PARTY_HELPERS; k++)  // un uso del dia para cada ayudante
+  for (uint8_t k = 0; ppArmed && k < TEAM_HELPERS; k++)  // un uso del dia para cada ayudante
     if (ppPick[k] >= 0 && ppPick[k] < box.count()) helperUse(box.at((uint8_t)ppPick[k]));
-  for (uint8_t k = 0; k < PARTY_HELPERS; k++) {
+  for (uint8_t k = 0; k < TEAM_HELPERS; k++) {
     bool ok = ppPick[k] >= 0 && ppPick[k] < box.count();
     ppPickDex[k] = ok ? box.at((uint8_t)ppPick[k]).dex : 0;
     ppPickEpoch[k] = ok ? box.at((uint8_t)ppPick[k]).epoch : 0;

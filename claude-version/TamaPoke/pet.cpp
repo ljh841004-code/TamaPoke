@@ -102,6 +102,7 @@ void Pet::newEgg() {
   mistWhy = MW_NONE;
   mistEpoch = 0;
   sleeping = false;
+  autoSleep = false;
   save();
 }
 
@@ -215,6 +216,8 @@ void Pet::tick() {
     if (ageMinutes % 3 == 0) hygiene = dropTo(hygiene, 1, 45);
     careTick();  // ko9: dormir tambien es tiempo de crianza
     checkMedals();
+    // ko12.2: dormida sola: se despierta con hambre (y si nadie la cuida, ya no vuelve a dormirse)
+    if (autoSleep && fullness <= AUTO_SLEEP_MIN_FULL) { sleeping = false; autoSleep = false; }
     pendingSave = true;  // fork KO (ko4): se guarda cada minuto
     return;
   }
@@ -310,6 +313,7 @@ void Pet::flushSave() {
   prefs.putUInt("mwhen", mistEpoch);
   prefs.putUShort("good", goodTicks);  // ko10.6: la racha sobrevive a un reinicio
   prefs.putBool("sleep", sleeping);
+  prefs.putBool("aslp", autoSleep);  // ko12.2
   prefs.putUChar("bond", bond);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
 }
@@ -1048,6 +1052,7 @@ void Pet::toggleLight() {
   if (ceremony != CER_NONE) return;
   if (isEgg()) return;
   sleeping = !sleeping;
+  autoSleep = false;  // ko12.2: acostada (o despertada) a mano
   save();
 }
 
@@ -1141,6 +1146,7 @@ void Pet::save() {
   prefs.putUInt("mwhen", mistEpoch);
   prefs.putUShort("good", goodTicks);  // ko10.6: la racha sobrevive a un reinicio
   prefs.putBool("sleep", sleeping);
+  prefs.putBool("aslp", autoSleep);  // ko12.2
   prefs.putUChar("lend", lastEnd);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
   prefs.putBytes("dexreg", dexReg, sizeof(dexReg));
@@ -1273,6 +1279,7 @@ void Pet::load(bool *migrated) {
   goodTicks = prefs.getUShort("good", 0);
   if (goodTicks >= GOOD_CARE_TICKS) goodTicks = 0;
   sleeping = prefs.getBool("sleep", false);
+  autoSleep = sleeping && prefs.getBool("aslp", false);  // ko12.2
   lastEnd = prefs.getUChar("lend", CER_NONE);
   prefs.getBytes("dexreg", dexReg, sizeof(dexReg));
   // ko10.5: familias criadas. Guardados de antes: lo registrado (criado) cuenta
@@ -1536,6 +1543,7 @@ void Pet::adoptMon(int16_t dex, uint16_t lvl, bool isShiny, uint8_t gA, uint8_t 
   careMistakes = 0; mistakeCooldown = 0;
   mistWhy = MW_NONE; mistEpoch = 0;
   sleeping = false;
+  autoSleep = false;
   berryKnown = false;
   bond = 0; bondToday = 0;
   medals = 0; newMedal = 0;
