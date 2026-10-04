@@ -816,6 +816,7 @@ static void scenes(bool ko, const char *sfx) {
       bool queued = fxQueued(mv[0]) && !fxFind(mv[0]);
       onTap(DEXMV_XY[0][0], DEXMV_XY[0][1]);
       navCheck("pokedex: aun leyendo -> espera sin efecto dibujado", !queued || (dexMvFx == 0 && dexMvPend == mv[0]));
+      if (queued) { render(); shot("13e_dex_move_wait"); }
       for (int k = 0; k < 2000 && dexMvPend; k++) { fxPump(); render(); }
       navCheck("pokedex: leido -> sale el de la SD", dexMvFx == mv[0] && (!queued || dexMvSd == (fxFind(mv[0]) != nullptr)));
       tick(1700); render(); dexMvFx = 0;

@@ -4407,7 +4407,7 @@ bool dexFxPlaying() { return galleryDetail && dexMvFx; }  // ko12.1.1: no leer l
 static uint32_t dexMvT0 = 0;
 // ko12.2.1: tocado antes de que su efecto de la SD termine de leerse: espera un poco (sin dibujar
 // el de puntos, que en el primer uso parecia un parpadeo) y sale el original; si tarda, el dibujado
-#define DEXMV_WAIT_MS 1500
+#define DEXMV_WAIT_MS 6000  // ko12.3.1: 1,5 s no bastaba con musica (los grandes tardan 2-4 s): antes salia el de puntos
 static uint8_t dexMvPend = 0;
 static uint32_t dexMvPendT0 = 0;
 static void dexMvStart(uint8_t id, bool sd) {
@@ -4422,6 +4422,9 @@ static void dexMvPoll() {
   if (sd || !fxQueued(dexMvPend) || millis() - dexMvPendT0 >= DEXMV_WAIT_MS) {
     uint8_t id = dexMvPend;
     dexMvPend = 0;
+#ifdef ESP_PLATFORM
+    Serial.printf("PERF dexfx %u wait=%lums sd=%d\n", (unsigned)id, (unsigned long)(millis() - dexMvPendT0), (int)sd);
+#endif
     dexMvStart(id, sd);
   }
 }
@@ -4527,6 +4530,12 @@ void renderDexDetail() {
         gfx->drawCircle(bx, by, DEXMV_R, UI_INK);
         gfx->drawCircle(bx, by, DEXMV_R - 1, UI_INK);
         if (dexMvFx == mv[i]) gfx->drawCircle(bx, by, DEXMV_R + 4, UI_BAR_WARN);
+        else if (dexMvPend == mv[i])  // ko12.3.1: leyendo su efecto: puntos que giran alrededor
+          for (int k = 0; k < 8; k++) {
+            float a = k * 0.7854f + millis() * 0.008f;
+            gfx->fillCircle(bx + (int)(cosf(a) * (DEXMV_R + 5)), by + (int)(sinf(a) * (DEXMV_R + 5)), k == 0 ? 3 : 2,
+                            uiLerp(UI_BAR_WARN, UI_BG_DAY, k * 2, 16));
+          }
         const char *nm = known ? moveNameId(mv[i]) : "???";
         if (known) drawTypeGlyph(bx, by, moveType(mv[i]), moveIsStatus(mv[i]), c);  // ko12.2.1: dibujo del tipo
         else {
