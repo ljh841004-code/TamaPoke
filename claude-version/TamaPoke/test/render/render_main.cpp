@@ -748,6 +748,11 @@ static void scenes(bool ko, const char *sfx) {
     dexLog.learned(25, mv[0]); dexLog.learned(25, mv[2]);
   }
   render(); shot("13_dex_detail");
+  {  // ko12.1.1: el primer fotograma (aun sin el sprite grande): la miniatura debe quedar igual de grande y en el mismo sitio
+    galleryPmd.unload(); galleryLoadWant = 0;
+    render(); shot("13c_dex_detail_thumb");
+    galleryPmd.load(25, false);
+  }
   {
     uint8_t mv[4];
     dexTopMoves(25, mv);

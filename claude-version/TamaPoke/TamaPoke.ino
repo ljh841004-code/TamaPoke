@@ -51,6 +51,7 @@ extern const char TP_VERSION_TAG[];
 bool battleFxPlaying();  // ko11.31.5 (ui_extra.ino)
 bool chargeCap90();       // ko11.23.3
 void flushPipeStop();     // ko12.1
+bool dexFxPlaying();      // ko12.1.1
 bool battleScreenOn();    // ko12.1 (ui_extra.ino): pantalla de combate (se repinta entera)
 void flushWaitIdle();
 __attribute__((used)) const char TP_VERSION_TAG[] = UPD_TAG FW_VERSION;
@@ -865,7 +866,7 @@ void loop() {
   centerPoll();     // ko11.31: el centro pokemon termina aunque no se mire
   // ko11.31.4: efectos (combate / ficha del Pokedex): trozos de 8 KB, ~20 ms por vuelta como mucho;
   // ko11.31.5: nada mientras se ve un efecto de la SD
-  if (!battleFxPlaying()) fxPump(12);
+  if (!battleFxPlaying() && !dexFxPlaying()) fxPump(12);  // ko12.1.1: tampoco en la ficha
   if (!battleScreenOn()) flushPipeStop();  // ko12.1: fuera del combate, un solo buffer otra vez
   uint32_t loopT0 = now, renderMs = 0;
   {  // ko11.9.2: en que pantalla estamos (si se reinicia, se ve al arrancar)
@@ -4286,6 +4287,25 @@ void drawThumb(const uint8_t *b, int x, int y, int s, bool sil) {
 }
 
 // ko11.31: centro del dibujo (sin el fondo transparente 0xFF) de una miniatura dibujada en (x, y)
+// ko12.1.1: caja de lo visible (sin el fondo 0xFF) de una miniatura dibujada en (x, y): [bx0,bx1) x [by0,by1)
+void thumbBox(const uint8_t *b, int x, int y, int s, int *bx0, int *by0, int *bx1, int *by1) {
+  uint8_t w = b[0], h = b[1], n = b[2];
+  const uint8_t *d = b + 3 + n * 2;
+  int x0 = w, x1 = -1, y0 = h, y1 = -1;
+  for (int yy = 0; yy < h; yy++)
+    for (int xx = 0; xx < w; xx++)
+      if (d[yy * w + xx] != 0xFF) {
+        if (xx < x0) x0 = xx;
+        if (xx > x1) x1 = xx;
+        if (yy < y0) y0 = yy;
+        if (yy > y1) y1 = yy;
+      }
+  int ox = x + (GAL_CELL - w * s) / 2, oy = y + (GAL_CELL - h * s) / 2;
+  if (x1 < 0) { x0 = y0 = 0; x1 = w - 1; y1 = h - 1; }
+  *bx0 = ox + x0 * s; *bx1 = ox + (x1 + 1) * s;
+  *by0 = oy + y0 * s; *by1 = oy + (y1 + 1) * s;
+}
+
 void thumbCenter(const uint8_t *b, int x, int y, int s, int *cx, int *cy) {
   uint8_t w = b[0], h = b[1], n = b[2];
   const uint8_t *d = b + 3 + n * 2;
@@ -4319,6 +4339,8 @@ uint16_t dexDiscoveredCount() {
 #define DEXMV_R 28
 static const int16_t DEXMV_XY[4][2] = { { 88, 100 }, { 70, 184 }, { 378, 100 }, { 396, 184 } };  // dentro del circulo
 static uint8_t dexMvFx = 0;      // el que se esta ensenando (0 = ninguno)
+static bool dexMvSd = false;     // ko12.1.1: con el efecto de la SD (se decide al tocar: no cambia a media animacion)
+bool dexFxPlaying() { return galleryDetail && dexMvFx; }  // ko12.1.1: no leer la SD mientras
 static uint32_t dexMvT0 = 0;
 uint8_t dexTopMoves(int16_t dex, uint8_t out[4]) {
   uint8_t pool[200];
@@ -4347,11 +4369,12 @@ uint8_t dexTopMoves(int16_t dex, uint8_t out[4]) {
 // ficha de la pokedex (fork KO, ko4): datos basicos + historial
 #define DEXFX_AX (CX - 60)  // ko11.31: el efecto sale del Pokemon y va hacia arriba a la derecha (dentro)
 #define DEXFX_AY 190
+#define DEX_FEET_Y 172  // ko12.1.1: donde quedan los pies del sprite grande de la ficha (drawPmdActM en suelo 196)
 void renderDexDetail() {
   uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   uint32_t mvT0 = dexMvFx ? millis() - dexMvT0 : 0;
   if (dexMvFx && mvT0 <= 1500)  // el fondo del efecto (olas, cielo rojo...) detras de todo
-    if (const FxAnim *fa = fxFind(dexMvFx)) fa->drawBg(gfx->getFramebuffer(), 0, mvT0, DEXFX_AX - 140, DEXFX_AY - 200);
+    if (const FxAnim *fa = dexMvSd ? fxFind(dexMvFx) : nullptr) fa->drawBg(gfx->getFramebuffer(), 0, mvT0, DEXFX_AX - 140, DEXFX_AY - 200);
   int16_t dx = galleryDetail;
   const DexEntry &d = DEX_TBL[dx];
   bool disc = dexDiscovered(dx);
@@ -4369,8 +4392,14 @@ void renderDexDetail() {
     if (!galleryPmd.has(act)) act = PMD_IDLE;
     drawPmdActM(galleryPmd, act, CX, 196, disc ? millis() : 0, true, !disc, 4, 170);
   } else {
+    // ko12.1.1: mientras llega el sprite grande, la miniatura casi del mismo tamano y con los pies donde los
+    // pone el sprite (antes 2x y mas arriba: al llegar el sprite se notaba el salto)
     const uint8_t *t = thumbs.get(dx);
-    if (t) drawThumb(t, CX - GAL_CELL / 2, 96, 2, !disc);
+    if (t) {
+      int s = t[1] * 4 > 150 ? 3 : 4, x0 = CX - GAL_CELL / 2, y0 = 0, bx0, by0, bx1, by1;
+      thumbBox(t, x0, y0, s, &bx0, &by0, &bx1, &by1);
+      drawThumb(t, x0 + CX - (bx0 + bx1) / 2, y0 + DEX_FEET_Y - by1, s, !disc);
+    }
   }
   if (!disc) {
     drawFit(XT(X_UNKNOWN), 250, 340, UI_INK, 2);
@@ -4428,7 +4457,7 @@ void renderDexDetail() {
       // el efecto: el de la SD si esta; si no, el dibujado
       if (dexMvFx) {
         int ax = DEXFX_AX, ay = DEXFX_AY - 40, tx = DEXFX_AX + 176, ty = DEXFX_AY - 84;
-        if (const FxAnim *fa = fxFind(dexMvFx)) fa->drawFg(gfx->getFramebuffer(), 0, mvT, DEXFX_AX - 140, DEXFX_AY - 200);
+        if (const FxAnim *fa = dexMvSd ? fxFind(dexMvFx) : nullptr) fa->drawFg(gfx->getFramebuffer(), 0, mvT, DEXFX_AX - 140, DEXFX_AY - 200);
         else if (moveIsStatus(dexMvFx)) drawStatusMoveFx(dexMvFx, CX, 150, tx, ty, mvT);
         else {
           uint8_t t, tr, v;
@@ -4555,7 +4584,8 @@ void galleryTap(int16_t x, int16_t y) {
         if (!mv[i] || ddx * ddx + ddy * ddy > (DEXMV_R + 8) * (DEXMV_R + 8)) continue;
         lastTap = 0;
         if (!dexLog.hasLearned(galleryDetail, mv[i])) { sfxPlay(SFX_DENY); return; }
-        fxWant(mv[i]);  // ko11.31.4: si aun no esta, este primero
+        dexMvSd = fxFind(mv[i]) != nullptr;  // ko12.1.1: si aun no esta, la dibujada entera (y se lee para la proxima)
+        if (!dexMvSd) fxWant(mv[i]);
         dexMvFx = mv[i];
         dexMvT0 = millis();
         sfxPlay(SFX_PLAY);

@@ -1822,7 +1822,16 @@ static const FxAnim *bvFxNow(uint8_t &side) {
   const BEvent &e = bq[bqI];
   if ((e.kind != EV_HIT && e.kind != EV_MISS && e.kind != EV_USE) || !e.mid) return nullptr;
   side = evIsMe(e.side) ? 0 : 1;
-  return fxFind(e.mid);
+  // ko12.1.1: SD o dibujado se decide al empezar el ataque (uso + golpe del mismo movimiento): si el
+  // fichero terminaba de leerse a media animacion, saltaba de un efecto al otro (parpadeo)
+  static uint8_t latchI = 0xFF, latchMid = 0, latchSide = 0xFF;
+  static bool latchSd = false;
+  if (latchMid != e.mid || latchSide != side || bqI < latchI) {
+    latchMid = e.mid; latchSide = side;
+    latchSd = fxFind(e.mid) != nullptr;
+  }
+  latchI = bqI;
+  return latchSd ? fxFind(e.mid) : nullptr;
 }
 
 // ko11.31.5: un efecto de la SD se esta viendo: no leer otros de la SD mientras (el dibujo va justo)
