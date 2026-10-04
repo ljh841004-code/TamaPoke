@@ -1662,3 +1662,66 @@ TEST(life, recuerdo_en_el_salon_ida_y_vuelta) {
   ms.wipe();
   CHECK(!ms.get(1790000000UL, 25, b));
 }
+
+// ko12.4: paseo: pasos del dia, premios una vez al dia, semana que corre
+TEST(walk, pasos_premios_y_semana) {
+  Pet p;
+  makePet(p, 4);
+  uint32_t d = 20730;
+  uint8_t j0 = p.joy > 70 ? 70 : p.joy; p.joy = j0;
+  uint16_t c0 = p.candy[DEX_FAM[4]], s0 = p.rareShards;
+  CHECK_EQ((int)p.addSteps(1999, d), 0);
+  CHECK_EQ((int)p.addSteps(1, d), 1);            // 2000: animo
+  CHECK_EQ((int)p.joy, (int)j0 + 20);
+  CHECK_EQ((int)p.addSteps(500, d), 0);          // no se repite
+  CHECK_EQ((int)p.addSteps(3000, d), 2);         // 5000: caramelo
+  CHECK_EQ(p.candy[DEX_FAM[4]], (uint16_t)(c0 + 1));
+  CHECK_EQ((int)p.addSteps(6000, d), 4);         // 10000: trozos
+  CHECK_EQ(p.rareShards, (uint16_t)(s0 + 2));
+  CHECK_EQ(p.stepsToday(d), (uint16_t)11500);
+  CHECK_EQ(p.walk.total, (uint32_t)11500);
+  // dia siguiente: hoy a cero, ayer en la casilla 1, premios otra vez
+  CHECK_EQ(p.stepsToday(d + 1), (uint16_t)0);
+  CHECK_EQ(p.walk.days[1], (uint16_t)11500);
+  CHECK_EQ((int)p.addSteps(2000, d + 1), 1);
+  // 3 dias despues: se corren 3
+  CHECK_EQ(p.stepsToday(d + 4), (uint16_t)0);
+  CHECK_EQ(p.walk.days[3], (uint16_t)2000);
+  CHECK_EQ(p.walk.days[4], (uint16_t)11500);
+  // una semana o mas sin andar: todo a cero (el total se queda)
+  CHECK_EQ(p.stepsToday(d + 20), (uint16_t)0);
+  for (int i = 0; i < 7; i++) CHECK_EQ(p.walk.days[i], (uint16_t)0);
+  CHECK_EQ(p.walk.total, (uint32_t)13500);
+  p.saveNow();
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.walk.total, (uint32_t)13500);
+}
+
+TEST(room, objetos_y_condiciones) {
+  Pet p;
+  makePet(p, 25);
+  CHECK(p.decoUnlocked(DECO_CUSHION, 0));
+  CHECK(!p.decoUnlocked(DECO_PLANT, 0));
+  p.bestStreak = 7;
+  CHECK(p.decoUnlocked(DECO_PLANT, 0));
+  CHECK(!p.decoUnlocked(DECO_BALL, 0));
+  p.allGameHi = 20;
+  CHECK(p.decoUnlocked(DECO_BALL, 0));
+  CHECK(!p.decoUnlocked(DECO_LAMP, 0));
+  p.walk.total = 10000;
+  CHECK(p.decoUnlocked(DECO_LAMP, 0));
+  CHECK(!p.decoUnlocked(DECO_TROPHY, 0));
+  p.champWins = 1;
+  CHECK(p.decoUnlocked(DECO_TROPHY, 0));
+  CHECK(!p.decoUnlocked(DECO_DOLL, 99));
+  CHECK(p.decoUnlocked(DECO_DOLL, 100));
+  p.roomOn = 1; p.deco[0] = DECO_PLANT + 1; p.deco[2] = DECO_CUSHION + 1;
+  p.saveNow();
+  Pet q;
+  q.begin();
+  CHECK_EQ((int)q.roomOn, 1);
+  CHECK_EQ((int)q.deco[0], DECO_PLANT + 1);
+  CHECK_EQ((int)q.deco[1], 0);
+  CHECK_EQ((int)q.deco[2], DECO_CUSHION + 1);
+}

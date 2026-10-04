@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko12.3.3)
+# TamaPoke KO (v1.17-ko12.4)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko12.4: LifeLog(pet "life")→MemRec(nvs2 "tpmem", 키 m+epoch+dex, SD 백업 포함), 리본 상세 [추억] 2쪽. ui_home.ino: drawRoom(방 배경, 잠들면 불 끔)·drawDecor(3자리, DECO 6종, decoUnlocked)·XS_ROOM/XS_WALK, 설정 5줄(SET_N 10). QMI8658(0x6B/6A, WHO_AM_I 0x05, CTRL2 0x17 ±4g 62.5Hz) 걸음(피크 0.28~2초, 4걸음 연속부터)·흔들기(1초에 4번 ±1.2g → wakeAuto/쓰다듬기), Pet::walk(7일, 2천/5천/1만 보상). hwScan(부팅 로그·HW 명령). 폰트 재생성. PC 테스트 275개, 화면 검사 139개
 - ✅ ko12.3.3: updateBrightness idle = (int32_t)(now - lastInteract) 음수면 0 (루프 시작 now < handleTouch의 millis() → wrap → dimStage 2 → 밝기 8 깜박임). 자동 잠자기 판정도 부호 있게. 화면 검사 "brillo" 추가 (128)
 - ✅ ko12.3.2: dexMvPoll/탭 — fxFind && !fxLoading()일 때만 시작(큐 전체 읽기 끝난 뒤). 로그상 깜박임은 SD 읽기 중 시작한 첫 사용에서만
 - ✅ ko12.3.1: DEXMV_WAIT_MS 1500→6000, 대기 중 버튼 둘레 회전 점(화면 검사 13e), 로그 PERF dexfx / DEX tap / PERF dexframe(>70ms)

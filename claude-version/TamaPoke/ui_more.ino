@@ -2420,9 +2420,10 @@ void partyPickTap(int16_t x, int16_t y) {
 #define SET_X1 66
 #define SET_X2 238
 #define SET_W 162
-#define SET_H 56
-#define SET_Y0 98
-#define SET_DY 68
+#define SET_H 50
+#define SET_Y0 88
+#define SET_DY 60
+#define SET_N 10  // ko12.4: 5 filas (+ decorar, paseo)
 static bool gClockFromSet = false;
 
 void openSettings() {
@@ -2443,7 +2444,7 @@ void renderSettings() {
   drawFit(XT(X_SET_TITLE), 36, 300, UI_INK, 3);
   char lang[24];
   snprintf(lang, sizeof(lang), XT(X_SET_LANG_FMT), LANG_CODES[gLang]);
-  struct { const char *t; uint16_t bg, fg; } b[8] = {
+  struct { const char *t; uint16_t bg, fg; } b[SET_N] = {
     { XT(X_SET_TIME), UI_WHITE, UI_INK },
     { XT(X_SET_SOUND), (uint16_t)(audioEnabled() ? UI_BAR_OK : UI_WHITE), (uint16_t)(audioEnabled() ? UI_WHITE : UI_INK) },
     { XT(X_SET_SCREEN), UI_WHITE, UI_INK },
@@ -2452,13 +2453,15 @@ void renderSettings() {
     { XT(X_BAK_BTN), 0x6B4D, UI_WHITE },
     { lang, UI_WHITE, UI_INK },
     { XT(X_RESET_BTN), UI_WHITE, UI_BAR_BAD },
+    { XT(X_ROOM_BTN), C565(0xe8, 0x80, 0xa8), UI_WHITE },  // ko12.4
+    { XT(X_WALK_BTN), C565(0x8a, 0x5a, 0x3a), UI_WHITE },
   };
-  for (int i = 0; i < 8; i++)
+  for (int i = 0; i < SET_N; i++)
     drawBtn(i % 2 ? SET_X2 : SET_X1, SET_Y0 + (i / 2) * SET_DY, SET_W, SET_H, b[i].bg, b[i].fg, b[i].t);
   // version del firmware (antes en la pantalla de la hora)
   char ver[40];
   snprintf(ver, sizeof(ver), "TamaPoke v%s", FW_VERSION);
-  int vy = SET_Y0 + 4 * SET_DY + 6;
+  int vy = SET_Y0 + 5 * SET_DY + 2;
   gfx->setTextColor(UI_INK);
   setSize(1);
   setCur(centerX(ver, 1), vy);
@@ -2472,7 +2475,7 @@ void settingsTap(int16_t x, int16_t y) {
   if (navHit(NAV_L, x, y) || y < 60) { sfxPlay(SFX_TAP); goBack(); return; }
   if (y < SET_Y0 || x < SET_X1 || x >= SET_X2 + SET_W) return;
   int row = (y - SET_Y0) / SET_DY;
-  if (row > 3 || (y - SET_Y0) % SET_DY >= SET_H) return;
+  if (row > SET_N / 2 - 1 || (y - SET_Y0) % SET_DY >= SET_H) return;
   int i = row * 2 + (x >= SET_X2 - 5 ? 1 : 0);
   sfxPlay(SFX_TAP);
   switch (i) {
@@ -2484,5 +2487,7 @@ void settingsTap(int16_t x, int16_t y) {
     case 5: openBackup(); break;
     case 6: setLang((Lang)((gLang + 1) % LANG_COUNT)); applyLangFont(); break;
     case 7: openReset(); break;
+    case 8: openRoom(); break;  // ko12.4
+    case 9: openWalk(); break;
   }
 }

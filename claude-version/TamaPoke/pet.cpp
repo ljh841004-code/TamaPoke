@@ -21,6 +21,54 @@ void Pet::begin() {
   lastTick = millis();
 }
 
+// ---- ko12.4: habitacion y paseo ----
+bool Pet::decoUnlocked(uint8_t item, uint16_t dexCount) const {
+  switch (item) {
+    case DECO_CUSHION: return true;
+    case DECO_PLANT: return bestStreak >= 7 || streak >= 7;       // 7 dias seguidos cuidandolo
+    case DECO_BALL: return allGameHi >= 20 || gameHi >= 20;       // pelota: 20 puntos
+    case DECO_LAMP: return walk.total >= DECO_LAMP_STEPS || wildWins >= 50;
+    case DECO_TROPHY: return champWins >= 1;
+    case DECO_DOLL: return dexCount >= 100;
+    default: return false;
+  }
+}
+
+// el dia cambio: los de antes se corren una casilla por dia (7 dias)
+static void walkRoll(Pet::Walk &w, uint32_t dayIdx) {
+  if (w.day == dayIdx) return;
+  if (!w.day || dayIdx < w.day || dayIdx - w.day >= 7) {
+    memset(w.days, 0, sizeof(w.days));
+  } else {
+    uint32_t sh = dayIdx - w.day;
+    for (int i = 6; i >= 0; i--) w.days[i] = i >= (int)sh ? w.days[i - sh] : 0;
+  }
+  w.day = dayIdx;
+  w.rw = 0;
+}
+
+uint16_t Pet::stepsToday(uint32_t dayIdx) {
+  walkRoll(walk, dayIdx);
+  return walk.days[0];
+}
+
+uint8_t Pet::addSteps(uint16_t n, uint32_t dayIdx) {
+  if (!n) return 0;
+  walkRoll(walk, dayIdx);
+  uint32_t t = (uint32_t)walk.days[0] + n;
+  walk.days[0] = t > 65535 ? 65535 : (uint16_t)t;
+  walk.total += n;
+  uint8_t got = 0;
+  static const uint16_t GOAL[3] = { WALK_GOAL1, WALK_GOAL2, WALK_GOAL3 };
+  for (uint8_t k = 0; k < 3; k++)
+    if (walk.days[0] >= GOAL[k] && !(walk.rw & (1 << k))) { walk.rw |= (uint8_t)(1 << k); got |= (uint8_t)(1 << k); }
+  if (got & 1) { if (!isEgg()) { joy = clamp100(joy + 20); addBond(2); } }
+  if (got & 2) { if (!isEgg()) addCandy(speciesId, 1); else addShards(2); }
+  if (got & 4) addShards(2);
+  if (got) save(); else pendingSave = true;
+  return got;
+}
+
 // ---- ko12.4: diario de la crianza ----
 static uint8_t popcount8(uint8_t v) { uint8_t c = 0; while (v) { c += v & 1; v >>= 1; } return c; }
 static uint8_t popcount16(uint16_t v) { uint8_t c = 0; while (v) { c += v & 1; v >>= 1; } return c; }
@@ -355,6 +403,7 @@ void Pet::flushSave() {
   prefs.putBool("sleep", sleeping);
   prefs.putBool("aslp", autoSleep);  // ko12.2
   prefs.putBytes("life", &life, sizeof(life));  // ko12.4
+  prefs.putBytes("walk", &walk, sizeof(walk));  // ko12.4
   prefs.putUChar("bond", bond);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
 }
@@ -1207,6 +1256,9 @@ void Pet::save() {
   prefs.putBool("sleep", sleeping);
   prefs.putBool("aslp", autoSleep);  // ko12.2
   prefs.putBytes("life", &life, sizeof(life));  // ko12.4
+  prefs.putBytes("walk", &walk, sizeof(walk));  // ko12.4
+  prefs.putUChar("room", roomOn);
+  prefs.putBytes("deco", deco, sizeof(deco));
   prefs.putUChar("lend", lastEnd);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
   prefs.putBytes("dexreg", dexReg, sizeof(dexReg));
@@ -1344,6 +1396,12 @@ void Pet::load(bool *migrated) {
   memset(&life, 0, sizeof(life));
   if (prefs.getBytesLength("life") == sizeof(life)) prefs.getBytes("life", &life, sizeof(life));
   else if (!isEgg() && speciesId >= 1) lifeStart(LF_UPDATE);
+  memset(&walk, 0, sizeof(walk));
+  if (prefs.getBytesLength("walk") == sizeof(walk)) prefs.getBytes("walk", &walk, sizeof(walk));
+  roomOn = prefs.getUChar("room", 0);
+  memset(deco, 0, sizeof(deco));
+  if (prefs.getBytesLength("deco") == sizeof(deco)) prefs.getBytes("deco", deco, sizeof(deco));
+  for (uint8_t &d : deco) if (d > DECO_COUNT) d = 0;
   lastEnd = prefs.getUChar("lend", CER_NONE);
   prefs.getBytes("dexreg", dexReg, sizeof(dexReg));
   // ko10.5: familias criadas. Guardados de antes: lo registrado (criado) cuenta

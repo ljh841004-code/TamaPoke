@@ -44,7 +44,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.3.3"
+#define FW_VERSION "1.17-ko12.4"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -750,6 +750,7 @@ void setup() {
   bootStep(BS_I2C);
   if (!safeMode) i2cFastMode();  // ko11.3
   if (!safeMode) hwScan();       // ko12.4: sensor de movimiento / microfono (log)
+  if (!safeMode) imuBegin();     // ko12.4: podometro
   bootStep(BS_CLOCK);
   uint32_t e = rtcEpoch();
   gClockTrusted = e != 0;
@@ -912,6 +913,7 @@ void loop() {
 
   handleTouch();
   handleSerial();
+  imuPoll(now);  // ko12.4: pasos (tambien con la pantalla apagada)
   extraLoop(now);  // fork KO: red, tongsin, batallas (ui_extra.ino)
   bakAutoLoop(now);  // ko11.6: copia de la partida en la SD
   expLoop();         // ko11.7: aviso de vuelta de la expedicion
@@ -1672,6 +1674,8 @@ void onTap(int16_t x, int16_t y) {
     sfxPlay(SFX_TAP);
     return;
   }
+  // ko12.4: el contador de pasos abre el paseo
+  if (walkPillHit(x, y)) { sfxPlay(SFX_TAP); openWalk(); return; }
   // ko12.2: dormida sola por estar quieta: el primer toque solo la despierta
   if (pet.wakeAuto()) {
     sfxPlay(SFX_TAP);
@@ -2977,7 +2981,10 @@ void render() {
   gNight = pet.sleeping || h < 6 || h >= 20;
   // drawScene cubre los 466x466 completos: sin fillScreen(NEGRO) previo para
   // que un flush DMA solapado nunca capture negro a medias (anti-parpadeo)
-  drawScene(pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome, millis(), gNight);
+  // ko12.4: habitacion (de noche despierto la luz sigue encendida: solo se apaga al dormir)
+  if (pet.roomOn) drawRoom(millis(), pet.sleeping);
+  else drawScene(pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome, millis(), gNight);
+  drawDecor(pet.roomOn ? pet.sleeping : gNight);  // ko12.4: los objetos del suelo
   if (!pet.ceremony) drawBigClock(gNight);  // fork KO (ko4): hora grande de fondo
 
   if (pet.ceremony) {
@@ -3020,6 +3027,7 @@ void render() {
     snprintf(name, sizeof(name), T(S_NAME_FMT), pet.shiny ? "*" : "", base, pet.level());
     drawHeader(name, gNight ? UI_INK_NIGHT : d.accent, statusMsg());
     drawStreakBadge();
+    drawWalkPill();  // ko12.4: pasos de hoy (si la placa tiene sensor)
     drawPet();
     drawBath();
     drawPoops();

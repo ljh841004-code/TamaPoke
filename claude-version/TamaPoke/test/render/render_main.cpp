@@ -39,6 +39,42 @@ static void scenes(bool ko, const char *sfx) {
   pet.lastSeenEpoch = gMockEpoch;
   render(); snprintf(n, sizeof(n), "01_main%s", sfx); shot(n);
   if (!ko) return;
+  {  // ko12.4: habitacion y objetos; menu de decorar; paseo (con y sin sensor)
+    pet.roomOn = 1; pet.deco[0] = DECO_CUSHION + 1; pet.deco[1] = DECO_BALL + 1; pet.deco[2] = DECO_PLANT + 1;
+    render(); shot("01r_main_room");
+    gMockEpoch = 1790343900 + 9 * 3600; pet.lastSeenEpoch = gMockEpoch;  // 22:45
+    pet.sleeping = true; render(); shot("01r_main_room_night"); pet.sleeping = false;
+    gMockEpoch = 1790343900; pet.lastSeenEpoch = gMockEpoch;
+    pet.roomOn = 0; render(); shot("01r_main_outdoor_deco");
+    pet.bestStreak = 9; pet.allGameHi = 25;
+    openSettings(); render(); shot("01s_settings");
+    settingsTap(150, SET_Y0 + 4 * SET_DY + 10);  // [방 꾸미기]
+    navCheck("ajustes -> decorar", xScreen == XS_ROOM);
+    render(); shot("01t_room_menu");
+    roomTap(300, ROOM_TOG_Y + 10);  // [방]
+    navCheck("decorar: fondo habitacion", pet.roomOn == 1);
+    roomTap(100, ROOM_GRID_Y + 52 + 10);  // pelota
+    navCheck("decorar: elegir la pelota", roomSel == DECO_BALL);
+    render(); shot("01u_room_pick");
+    roomTap(ROOM_SLOT_X[0], ROOM_PAN_Y + 40);  // a la izquierda (y deja el sitio de delante)
+    navCheck("decorar: colocar (un sitio por objeto)", pet.deco[0] == DECO_BALL + 1 && pet.deco[1] == 0);
+    roomTap(300, ROOM_GRID_Y + 2 * 52 + 10);  // muneco: bloqueado
+    navCheck("decorar: bloqueado no se elige", roomSel < 0);
+    roomTap(30, NAV_Y); navCheck("decorar: <- vuelve", xScreen == XS_SET);
+    settingsTap(320, SET_Y0 + 4 * SET_DY + 10);  // [산책]
+    navCheck("ajustes -> paseo", xScreen == XS_WALK);
+    render(); shot("01v_walk_nosensor");
+    imuAddr = 0x6B;  // como si la placa tuviera el sensor
+    pet.walk.day = (uint32_t)(gMockEpoch / 86400); pet.walk.rw = 1;
+    const uint16_t W[7] = { 3214, 7430, 2890, 5005, 1830, 6120, 4210 };
+    memcpy(pet.walk.days, W, sizeof(W)); pet.walk.total = 152340;
+    render(); shot("01w_walk_page");
+    xScreen = XS_NONE; render(); shot("01x_main_walk_pill");
+    navCheck("principal: el contador abre el paseo", walkPillHit(WALK_PILL_X + 20, WALK_PILL_Y + 10) && !navHit(NAV_L, WALK_PILL_X + 20, WALK_PILL_Y + 10));
+    imuAddr = 0;
+    pet.roomOn = 0; memset(pet.deco, 0, sizeof(pet.deco)); memset(&pet.walk, 0, sizeof(pet.walk));
+    closeAll();
+  }
   {  // ko11.16: orbe equipado en el hueco de abajo a la derecha (ataque = llamas, defensa = brillo)
     uint8_t pt = DEX_TBL[pet.speciesId].ptype;
     pet.orb = orbMake(pt, false, 18); render(); shot("01o_main_orb_atk");
@@ -979,7 +1015,7 @@ static void navChecks() {
   navCheck("ficha -> tongsin -> [<]", xScreen == XS_NONE && cardOpen);
   // ko11.26: menu de ajustes (flecha de arriba); cada boton y su [<]
   const int SX[2] = { 147, 319 };
-  auto setBtn = [&](int i) { settingsTap(SX[i % 2], 98 + (i / 2) * 68 + 28); };
+  auto setBtn = [&](int i) { settingsTap(SX[i % 2], SET_Y0 + (i / 2) * SET_DY + SET_H / 2); };  // ko12.4: 5 filas
   closeAll(); tick(3000); onTap(233, 20);
   navCheck("principal: flecha de arriba = ajustes", xScreen == XS_SET && !clockOpen);
   closeAll(); onSwipeV(1);

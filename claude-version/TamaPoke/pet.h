@@ -4,6 +4,12 @@
 #include <Preferences.h>
 #include "battle.h"  // fork KO (ko7): curva de EXP y niveles de evolucion
 #include "box.h"     // ko12.4: LifeLog / MemRec
+#define DECO_SLOTS 3   // ko12.4: izquierda, delante (derecha), derecha
+enum : uint8_t { DECO_CUSHION = 0, DECO_PLANT, DECO_BALL, DECO_LAMP, DECO_TROPHY, DECO_DOLL, DECO_COUNT };
+#define WALK_GOAL1 2000   // animo +20, vinculo +2
+#define WALK_GOAL2 5000   // 1 caramelo de su familia
+#define WALK_GOAL3 10000  // 2 trozos de caramelo raro
+#define DECO_LAMP_STEPS 10000UL
 #define LIFE_INC(f) do { if ((f) < 65535) (f)++; } while (0)  // ko12.4: contador del diario (campo packed)
 
 // 1 tick = 1 minuto de juego. Baja este valor para probar mas rapido
@@ -188,6 +194,14 @@ public:
   uint8_t mv[4] = { 0, 0, 0, 0 };
   uint8_t pp[4] = { 0, 0, 0, 0 };
   LifeLog life = {};           // ko12.4: diario de esta crianza (recuerdos del salon)
+  // ko12.4: habitacion (del jugador: se queda entre crianzas). deco[i] = objeto+1 en el sitio i (0 = vacio)
+  uint8_t roomOn = 0;
+  uint8_t deco[DECO_SLOTS] = { 0, 0, 0 };
+  bool decoUnlocked(uint8_t item, uint16_t dexCount) const;
+  // ko12.4: paseo (podometro): pasos por dia (days[0] = hoy), total y premios de hoy (bits)
+  struct __attribute__((packed)) Walk { uint32_t total, day; uint16_t days[7]; uint8_t rw; } walk = {};
+  uint8_t addSteps(uint16_t n, uint32_t dayIdx);  // devuelve los premios nuevos (bits WALK_RW_*)
+  uint16_t stepsToday(uint32_t dayIdx);
   void lifeStart(uint8_t from);
   void lifeMemory(MemRec &m, uint32_t endEpoch) const;  // lo que se guarda al despedirse
   uint8_t moveLv = 0;          // ultimo multiplo de 5 en que se ofrecio

@@ -152,6 +152,14 @@ static const char *const XS[2][X_COUNT] = {
     "Meals %u   Snacks %u   Cleanups %u", "Pets %u   Play %u   Training %u", "Link wins %u   Daily %u",
     "Badges +%u   Champion %u", "Bond %u   Mistakes %u   Medals %u", "Ball %u   Sack %u   Guard %u", "Speed %u   Volley %u in a row",
     "Tap: next page",
+    "Cushion", "Plant", "Beach ball", "Lamp", "Trophy", "Teddy bear",
+    "From the start", "7-day care streak", "Ball game 20 pts", "10k steps/50 wins", "Champion once", "Pokedex 100",
+    "DECORATE", "Outdoors", "Room", "Left", "Front", "Right", "Pick an item, then a spot",
+    "Now tap a spot", "DECORATE", "WALK", "TODAY'S WALK", "No motion sensor found", "(this board has no QMI8658)",
+    "%u steps", "%u goal: %u to go", "Today's goals reached!", "Last 7 days (today on the right)",
+    "2,000  Joy +20, Bond +2", "5,000  1 candy", "10,000  2 rare-candy shards",
+    "2,000 steps! Joy +20", "5,000 steps! Candy +1", "10,000 steps! Shards +2", "Total %lu steps",
+    "Shake: wake up / cheer", "Shook awake!", "Wheee! It loved the shake",
   },
   // ---------------- KO ----------------
   {
@@ -298,6 +306,14 @@ static const char *const XS[2][X_COUNT] = {
     "밥 %u   간식 %u   청소 %u", "쓰다듬기 %u   놀이 %u   훈련 %u", "통신 대전 승리 %u   오늘의 대전 %u",
     "체육관 배지 +%u   챔피언 %u번", "친밀도 %u   돌봄 실수 %u   메달 %u개", "공놀이 %u   샌드백 %u   방어 %u", "속도 %u   배구 %u연승",
     "탭: 다음 쪽",
+    "쿠션", "화분", "비치볼", "등불", "트로피", "곰인형",
+    "처음부터", "7일 연속 돌보기", "공놀이 20점", "1만 걸음/50승", "챔피언 1번", "도감 100종",
+    "방 꾸미기", "야외", "방", "왼쪽", "앞", "오른쪽", "물건을 고른 뒤 자리를 누르세요",
+    "놓을 자리를 누르세요", "방 꾸미기", "산책", "오늘의 산책", "움직임 센서를 찾지 못했어요", "(이 보드에는 QMI8658이 없어요)",
+    "%u 걸음", "목표 %u걸음까지 %u", "오늘 목표를 모두 채웠어요!", "최근 7일 (오른쪽이 오늘)",
+    "2,000  기분 +20, 친밀도 +2", "5,000  사탕 1개", "10,000  만능 사탕 조각 2",
+    "2,000 걸음! 기분 +20", "5,000 걸음! 사탕 +1", "10,000 걸음! 조각 +2", "전체 %lu 걸음",
+    "흔들면 깨우거나 신나해요", "흔들어서 깼어요!", "와아! 흔들어 줘서 신났어요",
   },
 };
 
