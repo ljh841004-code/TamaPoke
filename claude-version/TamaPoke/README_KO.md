@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko12.2)
+# TamaPoke KO (v1.17-ko12.3)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko12.3: 무지개구슬 ORB_DUAL(bit13, orbMakeDual/orbDual, orbSame 마스크 0x6F00, orbAtkPct·orbDefPct 둘 다), synthOrbs 성공의 ORB_SYNTH_DUAL_PCT 4% → 3 반환, drawOrb 무지개 테두리·금별·orbHue, 진화 시 ORB_EVO_DUAL_CANDY 10 + 30% 만능(orbEvoNote 3/4). 도감 기술 버튼 drawTypeGlyph(16속성+변화). 도감 dexMvPend: 읽는 중이면 최대 1.5초 대기(fxQueued). PC 테스트 270개, 화면 검사 127개
 - ✅ ko12.2: pet autoSleep(AUTO_SLEEP_MS 3분, 배부름>30·청결≥30, 배부름≤30이면 깸, 터치로 wakeAuto, 저장 키 aslp), RUNAWAY_TICKS 720(12시간). TEAM_HELPERS 5 / PARTY_MAX 6: 도우미 수 = 상대 수-1(ppMaxHelpers), 교체 칸 좁으면 작은 버튼. 깜박임: 전투 bvFxNow 잠금·도감 dexMvSd, 도감 미리보기 큰 그림 위치(DEX_FEET_Y). PC 테스트 268개, 화면 검사 123개
 - ✅ ko12.1: 전투(XS_WILD) 중 uiFlush = 이중 버퍼 + 코어0 flush 태스크(panel->draw16bitRGBBitmap), 밝기 전 flushWaitIdle, 전투 밖 flushPipeStop(마지막 화면을 원래 버퍼로). PERF bat wait=. test/render/perf.sh(부분별 PC 측정). PC 테스트 266개, 화면 검사 119개
 - ✅ ko12.0.1: savebak_sd addEntry 블롭 버퍼 4KB 고정 → 실제 크기(PSRAM, 최소 8KB). DexLog lrn 6KB 때문에 ko11.31부터 백업 전체 실패하던 문제
