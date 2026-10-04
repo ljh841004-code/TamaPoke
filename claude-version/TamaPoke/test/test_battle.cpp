@@ -580,7 +580,7 @@ TEST(gym, revancha_del_tipo_del_gimnasio_a_tu_nivel) {
   CHECK(a[0].lvl <= LEVEL_MAX);
 }
 
-// ko10.11: liga = 6 formas finales fuertes, sin legendarios ni repetidos, nivel +2..+6
+// ko10.11: liga = 6 formas finales fuertes, sin legendarios ni repetidos. ko12.5.1: nivel +0..+4
 TEST(gym, liga_seis_fuertes_sin_repetir) {
   for (uint32_t seed = 1; seed < 60; seed++) {
     Battler t[CHAMP_TEAM];
@@ -589,7 +589,7 @@ TEST(gym, liga_seis_fuertes_sin_repetir) {
       const DexEntry &e = DEX_TBL[t[i].dex];
       CHECK(e.rarity != R_LEGENDARIO);
       CHECK_EQ((int)e.evolvesTo, 0);
-      CHECK(t[i].lvl >= 42 && t[i].lvl <= 46);
+      CHECK(t[i].lvl >= 40 && t[i].lvl <= 44);
       for (uint8_t j = 0; j < i; j++) CHECK(t[i].dex != t[j].dex);
     }
   }

@@ -1123,7 +1123,7 @@ void championTeam(uint16_t petLvl, uint32_t seed, Battler out[CHAMP_TEAM]) {
     for (uint8_t j = i + 1; j < k; j++)
       if (baseTotal(pick[j]) < baseTotal(pick[i])) { int16_t t = pick[i]; pick[i] = pick[j]; pick[j] = t; }
   for (uint8_t i = 0; i < CHAMP_TEAM; i++)
-    out[i] = makeTrainerMon(pick[i < k ? i : 0], trainerLvl((int32_t)petLvl + 2 + (i * 4) / (CHAMP_TEAM - 1)));
+    out[i] = makeTrainerMon(pick[i < k ? i : 0], trainerLvl((int32_t)petLvl + (i * 4) / (CHAMP_TEAM - 1)));  // ko12.5.1: +0..+4 (antes +2..+6)
 }
 
 // ---- ko11.20: equipo contra entrenadores

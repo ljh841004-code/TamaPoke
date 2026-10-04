@@ -720,6 +720,14 @@ static void scenes(bool ko, const char *sfx) {
     bMe.hp = 0; bvMeTgt = 0; bqN = bqI = 0; bPhase = BP_PLAY; bvMeFainted = true;
     updateWild(); render(); shot("53k_party_swap_six");
     navCheck("liga: elegir entre 5", bPhase == BP_SWAP);
+    {  // ko12.5.1: el banquillo descansa: +5 % por turno hasta la mitad
+      uint8_t j = pCur == 1 ? 2 : 1;
+      pMon[j].hp = 1;
+      for (int t = 0; t < 30; t++) benchRest();
+      navCheck("liga: el banquillo se cura hasta la mitad", pMon[j].hp == pMon[j].maxHp / 2);
+      uint16_t h = pMon[j].hp; benchRest();
+      navCheck("liga: y no pasa de la mitad", pMon[j].hp == h);
+    }
     {
       int16_t xs[PARTY_MAX]; int16_t ws[PARTY_MAX]; int8_t who[PARTY_MAX];
       swapLayout(xs, ws, who);

@@ -121,7 +121,10 @@ DayEvent dayEvent(uint32_t localEpoch);   // 0 = sin reloj: sin evento
 #define AUTO_POTION_HP_HARD 50   // ... o del 50 % si el rival es fuerte
 #define AUTO_POTION_MAX 3        // pociones por combate (rival normal); fuerte: sin limite
 #define AUTO_STEP_MS 700         // pausa entre turnos del combate automatico
-#define DAILY_HEAL_PCT 35                 // ko11.18: reto del dia: entre rivales, +35 % de la vida que queda
+#define DAILY_HEAL_PCT 20                 // ko12.5.1: gimnasio, liga y reto del dia: al caer un rival, +20 % de la vida MAXIMA
+                                          // (antes solo el reto del dia, +35 % de la que quedaba: casi nada con poca vida)
+#define BENCH_HEAL_PCT 5                  // ko12.5.1: el que descansa en el banquillo recupera 5 % por turno...
+#define BENCH_HEAL_CAP 50                 // ...hasta la mitad de su vida (cambiar sin parar no cura del todo)
 #define EVENT_TYPE_PCT 25                 // dia de un tipo: 1 de cada 4 es de ese tipo
 #define EVENT_MOON_MULT 3
 Battler makeWildIn(uint8_t region, uint16_t petLvl, uint8_t hour, uint8_t wx, uint8_t season,

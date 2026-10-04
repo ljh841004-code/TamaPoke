@@ -2719,8 +2719,8 @@ static bool nextTrainerMon() {
   // ko11.18: reto del dia: antes del siguiente rival se recupera el 35 % de la vida
   // que queda (40 -> +14 = 54), sin pasar del maximo. Gimnasio y liga, como antes
   uint16_t healed = 0;
-  if (bKind == BK_DAILY && bMe.hp > 0) {
-    uint16_t add = (uint16_t)((uint32_t)bMe.hp * DAILY_HEAL_PCT / 100);
+  if ((bKind == BK_DAILY || bKind == BK_GYM || bKind == BK_CHAMP) && bMe.hp > 0) {  // ko12.5.1
+    uint16_t add = (uint16_t)((uint32_t)bMe.maxHp * DAILY_HEAL_PCT / 100);
     if (bMe.hp + add > bMe.maxHp) add = bMe.maxHp - bMe.hp;
     bMe.hp += add;
     healed = add;
@@ -3396,6 +3396,20 @@ void wildTap(int16_t x, int16_t y) {
   battleDoAction(a);
 }
 
+// ko12.5.1: gimnasio, liga y reto del dia: el que espera en el banquillo (vivo) recupera un poco cada
+// turno, hasta la mitad de su vida. Asi cambiar al que esta tocado tiene sentido
+void benchRest() {
+  if (bLink || !(bKind == BK_GYM || bKind == BK_CHAMP || bKind == BK_DAILY)) return;
+  for (uint8_t j = 0; j < pN; j++) {
+    if (j == pCur || pMon[j].hp == 0) continue;
+    uint16_t cap = (uint16_t)((uint32_t)pMon[j].maxHp * BENCH_HEAL_CAP / 100);
+    if (pMon[j].hp >= cap) continue;
+    uint16_t add = (uint16_t)((uint32_t)pMon[j].maxHp * BENCH_HEAL_PCT / 100);
+    if (!add) add = 1;
+    pMon[j].hp = pMon[j].hp + add > cap ? cap : pMon[j].hp + add;
+  }
+}
+
 // ko11.19: un turno con la accion a (toque o combate automatico)
 static void battleDoAction(int a) {
   // fork KO (ko4): los objetos se gastan al elegirlos; sin existencias no hay turno
@@ -3412,6 +3426,7 @@ static void battleDoAction(int a) {
   BAct foeAct = foeMoveRule(battleAi(bFoe, bMe, bRng, 35));  // el salvaje es algo torpe
   if (a == BA_POTION && autoLeft) autoPotions++;
   bqN = battleTurn(bMe, bFoe, (BAct)a, foeAct, bRng, bq, BATTLE_MAX_EVENTS, true);
+  benchRest();  // ko12.5.1: los del banquillo descansan
   for (int i = bqN - 1; i >= 0; i--) if (bq[i].kind == EV_USE) fxWant(bq[i].mid);  // ko11.31.4: los de este turno, primero
   bqAisMe = true;
   bPhase = BP_PLAY;
