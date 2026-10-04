@@ -41,6 +41,22 @@ static void scenes(bool ko, const char *sfx) {
   if (!ko) return;
   {  // ko12.4: habitacion y objetos; menu de decorar; paseo (con y sin sensor)
     pet.roomOn = 1; pet.deco[0] = DECO_CUSHION + 1; pet.deco[1] = DECO_BALL + 1; pet.deco[2] = DECO_PLANT + 1;
+    {  // ko12.5: barras, berrinche y pagina "생활"
+      uint8_t f0 = pet.fullness > 80 ? 80 : pet.fullness; pet.fullness = f0;
+      onTap(150, 318);  // barra de comida
+      navCheck("principal: tocar la barra sube 15", pet.fullness == f0 + 15);
+      pet.tantrum = TANTRUM_MIN; render(); shot("01y_tantrum");
+      onTap(CX, PET_CY);
+      navCheck("berrinche: tocar al bicho abre el dialogo", tantrumDlg);
+      render(); shot("01y_tantrum_dlg");
+      uint8_t d0 = pet.discipline;
+      onTap(150, TT_Y + 100);  // [혼내기]
+      navCheck("berrinche: reganar educa", !tantrumDlg && pet.tantrum == 0 && pet.discipline == d0 + 20);
+      pet.life.meals = 40; pet.life.snacks = 30;
+      pet.rtDay = pet.lastSeenEpoch / 86400; pet.rtBits = 1 << RT_MEAL; pet.rtStreak = 3; pet.rtBest = 5;
+      toastUntil = 0; cardOpen = true; cardPage = 5; render(); shot("01z_card_life");
+      cardOpen = false; cardPage = 0; memset(&pet.life, 0, sizeof(pet.life)); pet.rtBits = 0;
+    }
     pet.bgAsked = 0; render(); shot("01q_main_bg_ask");
     onTap(320, BGQ_Y + 160);  // [방]
     navCheck("fondo: elegir habitacion una vez", pet.roomOn == 1 && pet.bgAsked == 1);

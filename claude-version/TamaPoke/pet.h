@@ -4,6 +4,14 @@
 #include <Preferences.h>
 #include "battle.h"  // fork KO (ko7): curva de EXP y niveles de evolucion
 #include "box.h"     // ko12.4: LifeLog / MemRec
+// ko12.5: tamagotchi: tocar una barra la sube, berrinches (educar), rutina del dia, caracter
+#define GAUGE_TAP_GAIN 15
+#define TANTRUM_MIN 15          // minutos que dura un berrinche si nadie hace nada
+#define DISC_START 30
+enum : uint8_t { RT_MEAL = 0, RT_PLAY, RT_BED, RT_COUNT };  // rutina: desayuno 6-11, jugar 12-19, acostarlo 20-24
+enum : uint8_t { PERS_NONE = 0, PERS_GLUTTON, PERS_PLAYFUL, PERS_CUDDLY, PERS_HARDWORK, PERS_TIDY, PERS_CALM, PERS_COUNT };
+#define PERS_MIN_ACTS 30        // cuidados que hacen falta para que se vea el caracter
+uint8_t personalityOf(const LifeLog &l, uint8_t discipline);
 #define DECO_SLOTS 3   // ko12.4: izquierda, delante (derecha), derecha
 enum : uint8_t { DECO_CUSHION = 0, DECO_PLANT, DECO_BALL, DECO_LAMP, DECO_TROPHY, DECO_DOLL, DECO_COUNT };
 #define WALK_GOAL1 2000   // animo +20, vinculo +2
@@ -195,6 +203,19 @@ public:
   uint8_t pp[4] = { 0, 0, 0, 0 };
   LifeLog life = {};           // ko12.4: diario de esta crianza (recuerdos del salon)
   // ko12.4: habitacion (del jugador: se queda entre crianzas). deco[i] = objeto+1 en el sitio i (0 = vacio)
+  // ko12.5: educar (berrinches), rutina, caracter
+  uint8_t discipline = DISC_START;  // 0..100 (del individuo)
+  uint8_t tantrum = 0;              // minutos que le quedan al berrinche (0 = ninguno)
+  bool scold();                     // reganar: en un berrinche educa; si no habia, le sienta mal
+  bool soothe();                    // consentir el berrinche
+  uint32_t rtDay = 0;               // dia de la rutina (epoch local / 86400)
+  uint8_t rtBits = 0;               // bit RT_* hechos hoy
+  uint16_t rtStreak = 0, rtBest = 0;  // dias seguidos con la rutina entera (del jugador)
+  uint8_t rtNote = 0;               // aviso pendiente: 1 + RT_* hecho, 9 = dia completo (lo consume la UI)
+  void routineDo(uint8_t what);     // lo llaman comer / jugar / acostarse en su franja
+  uint8_t routineToday();           // bits de hoy (rueda el dia)
+  uint8_t personality() const { return personalityOf(life, discipline); }
+  void gaugeTap(uint8_t which);     // 0 comida, 1 animo, 2 energia, 3 limpieza: +GAUGE_TAP_GAIN
   uint8_t roomOn = 0;
   uint8_t bgAsked = 0;  // ko12.4.1: ya eligio fondo (paisaje / habitacion) en el aviso de una vez
   uint8_t deco[DECO_SLOTS] = { 0, 0, 0 };

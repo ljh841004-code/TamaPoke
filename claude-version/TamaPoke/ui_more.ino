@@ -325,7 +325,11 @@ static void renderMemory(const BoxMon &bm) {
     memDate(r.end, d1, sizeof(d1));
     snprintf(l, sizeof(l), XT(X_MEM_END_FMT), (unsigned)r.lvl, d1);
     drawFit(l, y, 340, UI_INK, 1); y += LH - 4;
-    if (r.nick[0]) { snprintf(l, sizeof(l), XT(X_MEM_NICK_FMT), r.nick); drawFit(l, y, 340, 0x8410, 1); }
+    {  // ko12.5: el caracter que tuvo (por sus cuidados)
+      snprintf(l, sizeof(l), XT(X_LIFE_PERS_FMT), personalityName(personalityOf(r.life, 0)));
+      if (r.nick[0]) { size_t k = strlen(l); snprintf(l + k, sizeof(l) - k, "   "); k = strlen(l); snprintf(l + k, sizeof(l) - k, XT(X_MEM_NICK_FMT), r.nick); }
+      drawFit(l, y, 340, 0x8410, 1);
+    }
   } else {  // los numeros
     drawFit(XT(X_MEM_P2), y, 300, UI_INK, 2); y += LH + 8;
     snprintf(l, sizeof(l), XT(X_MEM_CARE_FMT), r.life.meals, r.life.snacks, r.life.cleans);

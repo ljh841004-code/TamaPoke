@@ -493,3 +493,87 @@ bool bgAskTap(int16_t x, int16_t y) {
   sfxPlay(SFX_MEDAL);
   return true;
 }
+
+// ======================================================================
+// ko12.5: educar (berrinche), rutina del dia y caracter
+// ======================================================================
+static bool tantrumDlg = false;
+#define TT_Y 150
+void tantrumMark(uint32_t now) {  // "!" rojo sobre el bicho mientras dura el berrinche
+  if (!pet.tantrum || pet.sleeping) return;
+  int x = CX + 64, y = 176 + (int)((now / 120) % 2) * 3;  // junto a la cabeza (debajo del reloj)
+  gfx->fillCircle(x, y, 16, UI_WHITE);
+  gfx->drawCircle(x, y, 16, UI_BAR_BAD);
+  gfx->fillTriangle(x - 10, y + 10, x - 2, y + 14, x - 14, y + 20, UI_WHITE);
+  gfx->fillRoundRect(x - 3, y - 10, 6, 13, 3, UI_BAR_BAD);
+  gfx->fillCircle(x, y + 8, 3, UI_BAR_BAD);
+}
+bool tantrumDraw() {
+  if (!tantrumDlg) return false;
+  if (!pet.tantrum) { tantrumDlg = false; return false; }
+  uiShade(0, 0, LCD_WIDTH, LCD_HEIGHT, 0, 9);
+  uiPanel(68, TT_Y, 330, 168, 20, UI_WHITE, UI_INK);
+  drawFit(XT(X_TT_TITLE), TT_Y + 16, 300, UI_BAR_BAD, 2);
+  drawFit(XT(X_TT_SUB), TT_Y + 48, 300, 0x8410, 1);
+  drawBtn(90, TT_Y + 82, 136, 48, UI_BAR_BAD, UI_WHITE, XT(X_TT_SCOLD));
+  drawBtn(240, TT_Y + 82, 136, 48, C565(0xe8, 0x80, 0xa8), UI_WHITE, XT(X_TT_SOOTHE));
+  drawFit(XT(X_TT_HINT), TT_Y + 140, 300, 0x8410, 1);
+  return true;
+}
+// true = el toque era suyo
+bool tantrumTap(int16_t x, int16_t y) {
+  if (tantrumDlg) {
+    if (y >= TT_Y + 82 && y < TT_Y + 130) {
+      if (x >= 90 && x < 226) { pet.scold(); sfxPlay(SFX_DENY); showToast(XT(X_TT_SCOLDED)); }
+      else if (x >= 240 && x < 376) { pet.soothe(); sfxPlay(SFX_HEART); showToast(XT(X_TT_SOOTHED)); }
+      else return true;
+      tantrumDlg = false;
+    } else if (y < TT_Y || y > TT_Y + 168) tantrumDlg = false;  // fuera: cerrar
+    return true;
+  }
+  if (pet.tantrum && !pet.sleeping && inPetZone(x, y)) { tantrumDlg = true; sfxPlay(SFX_TAP); return true; }
+  return false;
+}
+// avisos de la rutina (los pone Pet::routineDo)
+void tamaLoop() {
+  if (!pet.rtNote) return;
+  static const XId RT_T[3] = { X_RT_DONE_MEAL, X_RT_DONE_PLAY, X_RT_DONE_BED };
+  uint8_t n = pet.rtNote;
+  pet.rtNote = 0;
+  if (n == 9) { char b[64]; snprintf(b, sizeof(b), XT(X_RT_DONE_ALL_FMT), (unsigned)pet.rtStreak); showToast(b); sfxPlay(SFX_MEDAL); }
+  else if (n >= 1 && n <= 3) showToast(XT(RT_T[n - 1]));
+}
+
+// pagina "생활" de la ficha: caracter, educacion y rutina de hoy
+static const XId PERS_NM[PERS_COUNT] = { X_PERS_NONE, X_PERS_GLUTTON, X_PERS_PLAYFUL, X_PERS_CUDDLY, X_PERS_HARDWORK, X_PERS_TIDY, X_PERS_CALM };
+static const XId PERS_DS[PERS_COUNT] = { X_PERSD_NONE, X_PERSD_GLUTTON, X_PERSD_PLAYFUL, X_PERSD_CUDDLY, X_PERSD_HARDWORK, X_PERSD_TIDY, X_PERSD_CALM };
+const char *personalityName(uint8_t p) { return XT(PERS_NM[p < PERS_COUNT ? p : 0]); }
+void renderCardLife() {
+  drawFit(XT(X_LIFE_TITLE), 40, 300, UI_INK, 3);
+  uint8_t ps = pet.personality();
+  char b[80];
+  snprintf(b, sizeof(b), XT(X_LIFE_PERS_FMT), personalityName(ps));
+  drawFit(b, 84, 340, UI_INK, 2);
+  drawFit(XT(PERS_DS[ps]), 112, 340, 0x8410, 1);
+  // educacion
+  drawFitIn(XT(X_LIFE_DISC), 76, 142, 120, UI_INK, 2);
+  int bx = 190, bw = 190, by = 146;
+  gfx->fillRoundRect(bx, by, bw, 16, 8, UI_TRACK);
+  int fw = bw * pet.discipline / 100;
+  if (fw > 0) gfx->fillRoundRect(bx, by, fw < 16 ? 16 : fw, 16, 8, C565(0x6a, 0x4c, 0xf0));
+  gfx->drawRoundRect(bx, by, bw, 16, 8, UI_INK);
+  if (pet.tantrum) drawFit(XT(X_LIFE_TANTRUM), 172, 320, UI_BAR_BAD, 1);
+  // rutina de hoy
+  uint8_t bits = pet.routineToday();
+  drawFit(XT(X_LIFE_ROUTINE), 196, 300, UI_INK, 2);
+  static const XId RT_L[3] = { X_RT_MEAL, X_RT_PLAY, X_RT_BED };
+  for (int i = 0; i < 3; i++) {
+    int y = 228 + i * 28;
+    bool ok = bits & (1 << i);
+    gfx->fillCircle(104, y + 9, 9, ok ? UI_BAR_OK : UI_TRACK);
+    if (ok) { gfx->drawLine(99, y + 9, 103, y + 13, UI_WHITE); gfx->drawLine(103, y + 13, 110, y + 5, UI_WHITE); }
+    drawFitIn(XT(RT_L[i]), 122, y, 250, ok ? UI_INK : 0x8410, 1);
+  }
+  snprintf(b, sizeof(b), XT(X_LIFE_STREAK_FMT), (unsigned)pet.rtStreak, (unsigned)pet.rtBest);
+  drawFit(b, 318, 320, UI_INK, 1);
+}

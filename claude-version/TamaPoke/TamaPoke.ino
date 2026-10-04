@@ -156,7 +156,7 @@ uint8_t nameLen = 0;
 Cji kbCji;               // ko8: silabas en construccion (teclado cheonjiin)
 bool kbKo = true;        // ko8: teclado coreano (true) o alfabeto (false)
 uint8_t cardPage = 0;         // 0 perfil, 1 stats+medallas
-#define CARD_PAGES 5          // ko10.4: + pagina de caramelos
+#define CARD_PAGES 6          // ko10.4: + pagina de caramelos. ko12.5: + vida (caracter, educacion, rutina)
 const char *cardMsg = nullptr;  // ko10.4: aviso breve en la pagina de caramelos (ko11.27: y el perfil)
 #define PROF_FAV_Y 290   // ko11.27: filas del perfil (comida favorita, dias juntos, aviso)
 #define PROF_DAY_Y 316
@@ -914,6 +914,7 @@ void loop() {
   handleTouch();
   handleSerial();
   imuPoll(now);  // ko12.4: pasos (tambien con la pantalla apagada)
+  tamaLoop();    // ko12.5: avisos de la rutina
   extraLoop(now);  // fork KO: red, tongsin, batallas (ui_extra.ino)
   bakAutoLoop(now);  // ko11.6: copia de la partida en la SD
   expLoop();         // ko11.7: aviso de vuelta de la expedicion
@@ -1675,6 +1676,7 @@ void onTap(int16_t x, int16_t y) {
     return;
   }
   if (bgAskTap(x, y)) return;  // ko12.4.1: elegir el fondo (una vez)
+  if (tantrumTap(x, y)) return;  // ko12.5: berrinche: reganar / consentir
   // ko12.4: el contador de pasos abre el paseo
   if (walkPillHit(x, y)) { sfxPlay(SFX_TAP); openWalk(); return; }
   // ko12.2: dormida sola por estar quieta: el primer toque solo la despierta
@@ -1722,6 +1724,13 @@ void onTap(int16_t x, int16_t y) {
       }
       return;
     }
+  }
+  // ko12.5: tocar una barra la sube 15
+  if (y >= 306 && y < 362 && x >= 70 && x < 400) {
+    uint8_t g = (uint8_t)((y >= 334 ? 2 : 0) + (x >= 236 ? 1 : 0));
+    pet.gaugeTap(g);
+    sfxPlay(SFX_TAP);
+    return;
   }
   // tocar al bicho = caricia
   if (inPetZone(x, y)) {
@@ -3030,6 +3039,7 @@ void render() {
     drawStreakBadge();
     drawWalkPill();  // ko12.4: pasos de hoy (si la placa tiene sensor)
     drawPet();
+    tantrumMark(millis());  // ko12.5
     drawBath();
     drawPoops();
     // panel inferior: base limpia para barras y botones sobre el paisaje
@@ -3099,7 +3109,7 @@ void render() {
   }
 
   // dialogo de decision (evolucionar/mantener, despedirse/quedaros)
-  if (!choiceKind && !confirmUntil && !feedMenuUntil) bgAskDraw();  // ko12.4.1: elegir el fondo (una vez)
+  if (!choiceKind && !confirmUntil && !feedMenuUntil) { if (!bgAskDraw()) tantrumDraw(); }  // ko12.4.1 / ko12.5
   if (choiceKind) {
     if (!timeLeft(choiceUntil)) { if (choiceKind == 3) pet.moveDecline(); choiceKind = 0; }  // ko11.31: sin respuesta = se queda el suyo
     else drawChoiceDialog();
@@ -4114,7 +4124,8 @@ void renderCard() {
   else if (cardPage == 1) renderCardStats();
   else if (cardPage == 2) renderCardMedals();
   else if (cardPage == 3) renderCardProgress();
-  else renderCardCandy();
+  else if (cardPage == 4) renderCardCandy();
+  else renderCardLife();  // ko12.5
 
   // indicador de paginas + ayuda
   for (int i = 0; i < CARD_PAGES; i++) {
@@ -5667,6 +5678,7 @@ const char *eggMsg() {
 
 const char *statusMsg() {
   if (pet.evolving()) return T(S_EVOLVING);
+  if (pet.tantrum && !pet.sleeping) return XT(X_TANTRUM_MSG);  // ko12.5
   if (bathUntil) return "Splish splash!";  // onomatopeya universal
   if (pet.sleeping) return "Zzz...";
   if (pet.eating()) return T(S_EATING);

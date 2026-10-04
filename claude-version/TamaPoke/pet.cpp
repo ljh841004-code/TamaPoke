@@ -21,6 +21,84 @@ void Pet::begin() {
   lastTick = millis();
 }
 
+// ---- ko12.5: barras, educar, rutina, caracter ----
+static uint8_t dropTo(uint8_t v, uint8_t d, uint8_t fl);
+void Pet::gaugeTap(uint8_t which) {
+  if (isEgg() || ceremony != CER_NONE) return;
+  uint8_t *v = which == 0 ? &fullness : which == 1 ? &joy : which == 2 ? &energy : which == 3 ? &hygiene : nullptr;
+  if (!v) return;
+  *v = clamp100(*v + GAUGE_TAP_GAIN);
+  if (which == 3 && poops) poops--;  // limpiar de verdad: una caca menos
+  pendingSave = true;
+}
+
+bool Pet::scold() {
+  if (isEgg() || ceremony != CER_NONE) return false;
+  if (tantrum) {  // berrinche: aprende
+    tantrum = 0;
+    discipline = clamp100(discipline + 20);
+    joy = dropTo(joy, 5, 0);
+    save();
+    return true;
+  }
+  joy = dropTo(joy, 10, 0);  // sin motivo: no entiende por que
+  discipline = dropTo(discipline, 5, 0);
+  save();
+  return false;
+}
+
+bool Pet::soothe() {
+  if (!tantrum) return false;
+  tantrum = 0;
+  joy = clamp100(joy + 5);
+  discipline = dropTo(discipline, 8, 0);
+  save();
+  return true;
+}
+
+static uint8_t hourOf(uint32_t e) { return (uint8_t)(e / 3600 % 24); }
+static bool rtWindow(uint8_t what, uint8_t h) {
+  return what == RT_MEAL ? (h >= 6 && h < 11) : what == RT_PLAY ? (h >= 12 && h < 19) : (h >= 20 && h < 24);
+}
+uint8_t Pet::routineToday() {
+  uint32_t day = lastSeenEpoch / 86400;
+  if (!lastSeenEpoch || day == rtDay) return rtBits;
+  if (rtDay && day != rtDay + 1 && rtStreak) rtStreak = 0;           // dias sin rutina entera: se corta
+  if (rtDay && day == rtDay + 1 && rtBits != (1 << RT_COUNT) - 1) rtStreak = 0;  // ayer no la completo
+  rtDay = day;
+  rtBits = 0;
+  return 0;
+}
+void Pet::routineDo(uint8_t what) {
+  if (isEgg() || !lastSeenEpoch || what >= RT_COUNT) return;
+  routineToday();
+  if (rtBits & (1 << what) || !rtWindow(what, hourOf(lastSeenEpoch))) return;
+  rtBits |= (uint8_t)(1 << what);
+  rtNote = (uint8_t)(1 + what);
+  if (rtBits == (1 << RT_COUNT) - 1) {  // el dia entero: premio
+    joy = clamp100(joy + 10);
+    addBond(3);
+    rtStreak++;
+    if (rtStreak > rtBest) rtBest = rtStreak;
+    rtNote = 9;
+  }
+  pendingSave = true;
+}
+
+// el caracter sale de como lo cuidas (lo que mas haces, con pesos: dar de comer es lo normal)
+uint8_t personalityOf(const LifeLog &l, uint8_t discipline) {
+  uint32_t total = (uint32_t)l.meals + l.snacks + l.cleans + l.pets + l.plays + l.trains;
+  if (total < PERS_MIN_ACTS) return PERS_NONE;
+  if (discipline >= 80) return PERS_CALM;
+  struct { uint32_t v; uint8_t p; } c[5] = {
+    { (uint32_t)l.snacks * 3, PERS_GLUTTON }, { (uint32_t)l.plays * 2, PERS_PLAYFUL }, { (uint32_t)l.pets, PERS_CUDDLY },
+    { (uint32_t)l.trains * 5 / 2, PERS_HARDWORK }, { (uint32_t)l.cleans * 2, PERS_TIDY },
+  };
+  uint8_t best = 0;
+  for (uint8_t i = 1; i < 5; i++) if (c[i].v > c[best].v) best = i;
+  return c[best].v * 4 >= total ? c[best].p : PERS_NONE;  // nada destaca: aun no se sabe
+}
+
 // ---- ko12.4: habitacion y paseo ----
 bool Pet::decoUnlocked(uint8_t item, uint16_t dexCount) const {
   switch (item) {
@@ -75,6 +153,7 @@ static uint8_t popcount16(uint16_t v) { uint8_t c = 0; while (v) { c += v & 1; v
 
 void Pet::lifeStart(uint8_t from) {
   memset(&life, 0, sizeof(life));
+  if (from != LF_UPDATE) { discipline = DISC_START; tantrum = 0; }  // ko12.5: educacion del individuo
   life.start = lastSeenEpoch;
   life.from = from;
   life.firstDex = speciesId;
@@ -311,6 +390,15 @@ void Pet::tick() {
   }
 
   careTick();  // ko9: EXP por tiempo de crianza
+  // ko12.5: berrinches: sin necesitar nada, a veces llama "por llamar". Si nadie lo educa, se acostumbra
+  routineToday();
+  if (tantrum) {
+    if (--tantrum == 0) discipline = dropTo(discipline, 3, 0);
+  } else if (fullness >= 40 && joy >= 40 && energy >= 40 && hygiene >= 40 && !poops) {
+    int pm = 7 - discipline / 20;                     // por mil y minuto: ~1 cada 2-5 h despierto
+    if (personality() == PERS_CALM) pm = 2;
+    if ((int)random(1000) < pm) tantrum = TANTRUM_MIN;
+  }
 
   fullness = clamp100(fullness - 2);
   energy = clamp100(energy - 1);
@@ -404,6 +492,12 @@ void Pet::flushSave() {
   prefs.putBool("aslp", autoSleep);  // ko12.2
   prefs.putBytes("life", &life, sizeof(life));  // ko12.4
   prefs.putBytes("walk", &walk, sizeof(walk));  // ko12.4
+  prefs.putUChar("disc", discipline);  // ko12.5
+  prefs.putUChar("tant", tantrum);
+  prefs.putUInt("rtd", rtDay);
+  prefs.putUChar("rtb", rtBits);
+  prefs.putUShort("rts", rtStreak);
+  prefs.putUShort("rtx", rtBest);
   prefs.putUChar("bond", bond);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
 }
@@ -726,6 +820,7 @@ void Pet::trainBonus(bool scored, bool record) {
   if (L < LEVEL_MAX) {
     uint32_t step = expForLevel(L + 1) - expForLevel(L);
     lastTrainExp = step * (record ? TRAIN_EXP_PCT_HI : TRAIN_EXP_PCT) / 100;
+    if (discipline >= 60 || personality() == PERS_HARDWORK) lastTrainExp = lastTrainExp * 5 / 4;  // ko12.5: bien educado / trabajador
     if (!lastTrainExp) lastTrainExp = 1;
     addExp(lastTrainExp);
   }
@@ -884,6 +979,8 @@ void Pet::feedBerry(uint8_t color) {
   }
   eatUntil = millis() + EAT_ANIM_MS;
   LIFE_INC(life.meals);  // ko12.4
+  routineDo(RT_MEAL);    // ko12.5
+  if (personality() == PERS_GLUTTON) fullness = clamp100(fullness + 5);
   registerCare();
   save();
 }
@@ -1023,6 +1120,7 @@ bool Pet::playResult(uint8_t score) {
   int burn = (int)weight - score * 2;
   weight = burn > 0 ? burn : 0;
   LIFE_INC(life.plays);  // ko12.4
+  routineDo(RT_PLAY);    // ko12.5
   bool record = score > gameHi;
   lastAllTime = record && score > allGameHi;
   if (record) {
@@ -1149,6 +1247,8 @@ void Pet::play() {
   fullness = clamp100(fullness - 5);
   heartUntil = millis() + HEART_MS;
   LIFE_INC(life.plays);  // ko12.4
+  routineDo(RT_PLAY);    // ko12.5
+  if (personality() == PERS_PLAYFUL) joy = clamp100(joy + 5);
   addBond(2);
   registerCare();
   save();
@@ -1159,12 +1259,13 @@ void Pet::toggleLight() {
   if (isEgg()) return;
   sleeping = !sleeping;
   autoSleep = false;  // ko12.2: acostada (o despertada) a mano
+  if (sleeping) { routineDo(RT_BED); tantrum = 0; }  // ko12.5
   save();
 }
 
 void Pet::clean() {
   if (ceremony != CER_NONE) return;
-  if (poops && !isEgg()) LIFE_INC(life.cleans);  // ko12.4
+  if (poops && !isEgg()) { LIFE_INC(life.cleans); if (personality() == PERS_TIDY) joy = clamp100(joy + 5); }  // ko12.4 / ko12.5
   poops = 0;
   hygiene = 100;
   addBond(1);
@@ -1179,6 +1280,7 @@ void Pet::caress() {
   heartUntil = millis() + HEART_MS;
   addBond(1);
   LIFE_INC(life.pets);  // ko12.4
+  if (personality() == PERS_CUDDLY) joy = clamp100(joy + 3);  // ko12.5
   registerCare();
 }
 
@@ -1257,6 +1359,12 @@ void Pet::save() {
   prefs.putBool("aslp", autoSleep);  // ko12.2
   prefs.putBytes("life", &life, sizeof(life));  // ko12.4
   prefs.putBytes("walk", &walk, sizeof(walk));  // ko12.4
+  prefs.putUChar("disc", discipline);  // ko12.5
+  prefs.putUChar("tant", tantrum);
+  prefs.putUInt("rtd", rtDay);
+  prefs.putUChar("rtb", rtBits);
+  prefs.putUShort("rts", rtStreak);
+  prefs.putUShort("rtx", rtBest);
   prefs.putUChar("room", roomOn);
   prefs.putUChar("bgask", bgAsked);
   prefs.putBytes("deco", deco, sizeof(deco));
@@ -1399,6 +1507,13 @@ void Pet::load(bool *migrated) {
   else if (!isEgg() && speciesId >= 1) lifeStart(LF_UPDATE);
   memset(&walk, 0, sizeof(walk));
   if (prefs.getBytesLength("walk") == sizeof(walk)) prefs.getBytes("walk", &walk, sizeof(walk));
+  discipline = prefs.getUChar("disc", DISC_START);  // ko12.5
+  tantrum = prefs.getUChar("tant", 0);
+  if (tantrum > TANTRUM_MIN) tantrum = 0;
+  rtDay = prefs.getUInt("rtd", 0);
+  rtBits = prefs.getUChar("rtb", 0);
+  rtStreak = prefs.getUShort("rts", 0);
+  rtBest = prefs.getUShort("rtx", 0);
   roomOn = prefs.getUChar("room", 0);
   bgAsked = prefs.getUChar("bgask", 0);
   memset(deco, 0, sizeof(deco));

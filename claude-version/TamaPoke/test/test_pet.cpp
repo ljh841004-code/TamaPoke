@@ -1725,3 +1725,103 @@ TEST(room, objetos_y_condiciones) {
   CHECK_EQ((int)q.deco[1], 0);
   CHECK_EQ((int)q.deco[2], DECO_CUSHION + 1);
 }
+
+// ko12.5: tocar una barra la sube 15
+TEST(tama, tocar_la_barra_sube_15) {
+  Pet p;
+  makePet(p, 4);
+  setStats(p, 50, 50, 50, 50);
+  p.poops = 2;
+  p.gaugeTap(0); p.gaugeTap(1); p.gaugeTap(2); p.gaugeTap(3);
+  CHECK_EQ((int)p.fullness, 65); CHECK_EQ((int)p.joy, 65); CHECK_EQ((int)p.energy, 65); CHECK_EQ((int)p.hygiene, 65);
+  CHECK_EQ((int)p.poops, 1);
+  p.fullness = 95; p.gaugeTap(0);
+  CHECK_EQ((int)p.fullness, 100);
+}
+
+// ko12.5: berrinches: reganar educa, consentir malcria, ignorar tambien
+TEST(tama, berrinche_reganar_y_consentir) {
+  Pet p;
+  makePet(p, 4);
+  CHECK_EQ((int)p.discipline, DISC_START);
+  p.tantrum = TANTRUM_MIN; p.joy = 50;
+  CHECK(p.scold());
+  CHECK_EQ((int)p.discipline, DISC_START + 20);
+  CHECK_EQ((int)p.tantrum, 0);
+  CHECK_EQ((int)p.joy, 45);
+  CHECK(!p.scold());  // sin berrinche: le sienta mal
+  CHECK_EQ((int)p.discipline, DISC_START + 15);
+  CHECK_EQ((int)p.joy, 35);
+  p.tantrum = 3;
+  CHECK(p.soothe());
+  CHECK_EQ((int)p.discipline, DISC_START + 7);
+  CHECK(!p.soothe());
+  // nadie le hace caso: se acaba solo y pierde un poco
+  p.tantrum = 1; setStats(p, 90, 90, 90, 90); p.poops = 0;
+  advance(p, 1);
+  CHECK_EQ((int)p.tantrum, 0);
+  CHECK_EQ((int)p.discipline, DISC_START + 4);
+  // con todo bien, a veces llama sin motivo (en unas horas)
+  int seen = 0;
+  for (int i = 0; i < 600 && !seen; i++) { setStats(p, 90, 90, 90, 90); p.poops = 0; advance(p, 1); if (p.tantrum) seen = 1; }
+  CHECK(seen);
+  p.saveNow();
+  Pet q; q.begin();
+  CHECK_EQ((int)q.discipline, (int)p.discipline);
+}
+
+// ko12.5: rutina: desayuno, jugar por la tarde, acostarlo por la noche
+TEST(tama, rutina_del_dia) {
+  Pet p;
+  makePet(p, 4);
+  uint32_t d0 = 20730UL * 86400;
+  p.lastSeenEpoch = d0 + 5 * 3600;  // 5:00: aun no es la hora del desayuno
+  p.feedBerry(0);
+  CHECK_EQ((int)p.routineToday(), 0);
+  p.lastSeenEpoch = d0 + 8 * 3600;
+  p.feedBerry(0);
+  CHECK_EQ((int)p.routineToday(), 1 << RT_MEAL);
+  CHECK_EQ((int)p.rtNote, 1 + RT_MEAL);
+  p.lastSeenEpoch = d0 + 14 * 3600; p.energy = 100;
+  p.play();
+  p.lastSeenEpoch = d0 + 21 * 3600;
+  uint8_t j = p.joy;
+  p.toggleLight();
+  CHECK(p.sleeping);
+  CHECK_EQ((int)p.routineToday(), 7);
+  CHECK_EQ((int)p.rtNote, 9);
+  CHECK_EQ((int)p.rtStreak, 1);
+  CHECK((int)p.joy >= (int)j);
+  // dia siguiente completo: racha 2; uno sin completar: se corta
+  p.toggleLight();
+  p.lastSeenEpoch = d0 + 86400 + 7 * 3600; p.feedBerry(0);
+  p.lastSeenEpoch = d0 + 86400 + 13 * 3600; p.play();
+  p.lastSeenEpoch = d0 + 86400 + 22 * 3600; p.toggleLight();
+  CHECK_EQ((int)p.rtStreak, 2);
+  CHECK_EQ((int)p.rtBest, 2);
+  p.toggleLight();
+  p.lastSeenEpoch = d0 + 2 * 86400 + 8 * 3600; p.feedBerry(0);
+  p.lastSeenEpoch = d0 + 3 * 86400 + 8 * 3600;
+  CHECK_EQ((int)p.routineToday(), 0);
+  CHECK_EQ((int)p.rtStreak, 0);
+  CHECK_EQ((int)p.rtBest, 2);
+}
+
+// ko12.5: caracter segun como lo cuidas
+TEST(tama, caracter) {
+  LifeLog l = {};
+  CHECK_EQ((int)personalityOf(l, 30), PERS_NONE);
+  l.meals = 40; l.snacks = 30;
+  CHECK_EQ((int)personalityOf(l, 30), PERS_GLUTTON);
+  CHECK_EQ((int)personalityOf(l, 85), PERS_CALM);
+  l.snacks = 2; l.plays = 40;
+  CHECK_EQ((int)personalityOf(l, 30), PERS_PLAYFUL);
+  l.plays = 2; l.trains = 30;
+  CHECK_EQ((int)personalityOf(l, 30), PERS_HARDWORK);
+  l.trains = 2; l.pets = 100;
+  CHECK_EQ((int)personalityOf(l, 30), PERS_CUDDLY);
+  l.pets = 2; l.cleans = 30;
+  CHECK_EQ((int)personalityOf(l, 30), PERS_TIDY);
+  l.cleans = 3;  // nada destaca
+  CHECK_EQ((int)personalityOf(l, 30), PERS_NONE);
+}

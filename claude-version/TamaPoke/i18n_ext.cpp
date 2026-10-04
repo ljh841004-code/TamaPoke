@@ -161,6 +161,14 @@ static const char *const XS[2][X_COUNT] = {
     "2,000 steps! Joy +20", "5,000 steps! Candy +1", "10,000 steps! Shards +2", "Total %lu steps",
     "Shake: wake up / cheer", "Shook awake!", "Wheee! It loved the shake",
     "Choose the background", "Change it any time: Settings > Decorate",
+    "It's throwing a tantrum!", "It doesn't need anything: just wants attention", "SCOLD", "SPOIL",
+    "Scolding a tantrum teaches it", "It calmed down. Discipline up!", "It got its way... discipline down", "Tantrum!",
+    "Breakfast done! (routine)", "Afternoon play done! (routine)", "Bedtime done! (routine)", "Perfect day! Routine streak %u",
+    "Breakfast  6-11 h", "Play  12-19 h", "Bedtime (lights off)  20-24 h",
+    "Not clear yet", "Foodie", "Playful", "Cuddly", "Hard worker", "Neat", "Calm",
+    "Shows after more care", "Meals fill a bit more", "Playing cheers it up more", "Petting cheers it up more",
+    "Training gives more EXP", "Cleaning cheers it up", "Rarely throws tantrums",
+    "LIFE", "Personality: %s", "Discipline", "Throwing a tantrum now: tap it", "Today's routine", "Routine streak %u days (best %u)",
   },
   // ---------------- KO ----------------
   {
@@ -316,6 +324,14 @@ static const char *const XS[2][X_COUNT] = {
     "2,000 걸음! 기분 +20", "5,000 걸음! 사탕 +1", "10,000 걸음! 조각 +2", "전체 %lu 걸음",
     "흔들면 깨우거나 신나해요", "흔들어서 깼어요!", "와아! 흔들어 줘서 신났어요",
     "배경을 골라 주세요", "설정 > 방 꾸미기에서 언제든 바꿀 수 있어요",
+    "떼쓰고 있어요!", "필요한 건 없는데 관심을 받고 싶어해요", "혼내기", "달래기",
+    "떼쓸 때 혼내면 의젓해져요", "얌전해졌어요. 훈육 +", "원하는 걸 얻었어요... 훈육 -", "떼쓰는 중!",
+    "아침밥 완료! (하루 일과)", "낮 놀이 완료! (하루 일과)", "밤 재우기 완료! (하루 일과)", "규칙적인 하루! 연속 %u일",
+    "아침밥  6~11시", "낮 놀이  12~19시", "밤 재우기 (불 끄기)  20~24시",
+    "아직 몰라요", "먹보", "장난꾸러기", "응석쟁이", "노력파", "깔끔이", "의젓함",
+    "더 돌보면 드러나요", "밥을 먹으면 조금 더 배불러요", "놀아 주면 더 기뻐해요", "쓰다듬으면 더 기뻐해요",
+    "훈련 경험치가 더 많아요", "청소해 주면 기뻐해요", "떼를 거의 안 써요",
+    "생활", "성격: %s", "훈육", "지금 떼쓰는 중: 포켓몬을 눌러 보세요", "오늘의 일과", "규칙적인 날 %u일 연속 (최고 %u일)",
   },
 };
 
