@@ -1674,6 +1674,7 @@ void onTap(int16_t x, int16_t y) {
     sfxPlay(SFX_TAP);
     return;
   }
+  if (bgAskTap(x, y)) return;  // ko12.4.1: elegir el fondo (una vez)
   // ko12.4: el contador de pasos abre el paseo
   if (walkPillHit(x, y)) { sfxPlay(SFX_TAP); openWalk(); return; }
   // ko12.2: dormida sola por estar quieta: el primer toque solo la despierta
@@ -3098,6 +3099,7 @@ void render() {
   }
 
   // dialogo de decision (evolucionar/mantener, despedirse/quedaros)
+  if (!choiceKind && !confirmUntil && !feedMenuUntil) bgAskDraw();  // ko12.4.1: elegir el fondo (una vez)
   if (choiceKind) {
     if (!timeLeft(choiceUntil)) { if (choiceKind == 3) pet.moveDecline(); choiceKind = 0; }  // ko11.31: sin respuesta = se queda el suyo
     else drawChoiceDialog();

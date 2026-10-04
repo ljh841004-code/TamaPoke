@@ -196,6 +196,7 @@ public:
   LifeLog life = {};           // ko12.4: diario de esta crianza (recuerdos del salon)
   // ko12.4: habitacion (del jugador: se queda entre crianzas). deco[i] = objeto+1 en el sitio i (0 = vacio)
   uint8_t roomOn = 0;
+  uint8_t bgAsked = 0;  // ko12.4.1: ya eligio fondo (paisaje / habitacion) en el aviso de una vez
   uint8_t deco[DECO_SLOTS] = { 0, 0, 0 };
   bool decoUnlocked(uint8_t item, uint16_t dexCount) const;
   // ko12.4: paseo (podometro): pasos por dia (days[0] = hoy), total y premios de hoy (bits)

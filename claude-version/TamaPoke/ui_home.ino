@@ -102,7 +102,7 @@ void drawRoom(uint32_t now, bool night) {  // night = luz apagada (dormido)
   gfx->fillRect(0, 0, LCD_WIDTH, floorY, wall);
   for (int x = 10; x < LCD_WIDTH; x += 36) gfx->fillRect(x, 0, 12, floorY, stripe);
   // ventana (izquierda): el cielo de la hora y el tiempo
-  const int wx0 = 40, wy0 = 96, ww = 92, wh = 104;
+  const int wx0 = 334, wy0 = 96, ww = 92, wh = 104;  // ko12.4.1: a la derecha (a la izquierda va el contador de pasos)
   uint16_t sky = (h >= 6 && h < 17) ? C565(0x8c, 0xc8, 0xf0) : (h >= 17 && h < 20) ? C565(0xf4, 0xa0, 0x70) : C565(0x1c, 0x24, 0x4c);
   if (wx == WX_RAIN || wx == WX_SNOW) sky = uiLerp(sky, C565(0x80, 0x88, 0x98), 9, 16);
   gfx->fillRect(wx0, wy0, ww, wh, sky);
@@ -135,12 +135,15 @@ void drawRoom(uint32_t now, bool night) {  // night = luz apagada (dormido)
   gfx->fillTriangle(wx0 - 12, wy0 - 6, wx0 + 16, wy0 - 6, wx0 - 12, wy0 + wh + 6, cur);
   gfx->fillTriangle(wx0 + ww + 12, wy0 - 6, wx0 + ww - 16, wy0 - 6, wx0 + ww + 12, wy0 + wh + 6, cur);
   gfx->fillRect(wx0 - 16, wy0 - 10, ww + 32, 5, nightDim(C565(0x8a, 0x5a, 0x3a), night));
-  // cuadro (derecha)
-  uint16_t pf = nightDim(C565(0x9a, 0x6a, 0x44), night);
-  gfx->fillRect(352, 112, 64, 50, pf);
-  gfx->fillRect(357, 117, 54, 40, nightDim(C565(0xbc, 0xe0, 0xf4), night));
-  gfx->fillTriangle(360, 154, 382, 128, 404, 154, nightDim(C565(0x5a, 0x9a, 0x5a), night));
-  gfx->fillCircle(398, 126, 5, nightDim(C565(0xff, 0xd8, 0x60), night));
+  // estante con un libro y un reloj (izquierda, bajo el contador de pasos)
+  uint16_t sh = nightDim(C565(0x9a, 0x6a, 0x44), night);
+  gfx->fillRect(40, 216, 100, 6, sh);
+  gfx->fillRect(52, 198, 10, 18, nightDim(C565(0x5a, 0x8a, 0xd0), night));
+  gfx->fillRect(64, 202, 8, 14, nightDim(C565(0xe0, 0x70, 0x60), night));
+  gfx->fillCircle(116, 206, 9, nightDim(UI_WHITE, night));
+  gfx->drawCircle(116, 206, 9, sh);
+  gfx->drawLine(116, 206, 116, 200, UI_INK);
+  gfx->drawLine(116, 206, 120, 208, UI_INK);
   // zocalo y suelo de madera
   gfx->fillRect(0, floorY - 8, LCD_WIDTH, 8, nightDim(C565(0xd8, 0xb8, 0x94), night));
   uint16_t fl = nightDim(C565(0xc8, 0x94, 0x60), night), fl2 = nightDim(C565(0xb4, 0x80, 0x4e), night);
@@ -275,49 +278,65 @@ static uint32_t walkDay() {
   uint32_t e = clockEpoch();
   return e ? e / 86400UL : 0;
 }
-// pasos: picos de la aceleracion (sin la gravedad) separados 0,3-2 s; se cuentan en rachas de 4+
-// para no sumar golpes sueltos. Agitar fuerte = sacudida
-static uint32_t imuT = 0, stepLastT = 0, shakeT = 0;
+// pasos: picos de la aceleracion (sin la gravedad) separados 0,28-2 s. ko12.4.1: los pasos se guardan
+// aparte y solo se suman cuando la racha termina tranquila (1,5 s sin pasos ni golpes) o ya es larga
+// (16+ y sin golpes en 3 s): agitar la placa daba 4 pasos (prueba en el aparato). Un golpe fuerte
+// (sacudida) borra lo pendiente. Las rachas de menos de 4 pasos no cuentan
+static uint32_t imuT = 0, stepLastT = 0, shakeT = 0, bigT = 0;
 static int32_t imuBase = 1000;
 static bool stepUp = false;
 static uint8_t stepRun = 0, shakeHits = 0;
 static uint32_t shakeWin = 0;
-static uint8_t walkPend = 0;  // pasos de una racha aun sin confirmar
+static uint16_t walkPend = 0;  // pasos aun sin sumar
 void walkReward(uint8_t got);
+static void walkFlush() {
+  uint16_t n = walkPend;
+  walkPend = 0;
+  uint32_t day = walkDay();
+  if (!n || !day) return;
+  uint8_t got = pet.addSteps(n, day);
+  if (got) walkReward(got);
+}
 void imuPoll(uint32_t now) {
   if (!imuAddr || now - imuT < 35) return;
   imuT = now;
+  // la racha termino tranquila: se suma (si tuvo 4+ pasos)
+  if (walkPend && now - stepLastT > 1500 && now - bigT > 1500) {
+    if (stepRun >= 4) walkFlush(); else walkPend = 0;
+    stepRun = 0;
+  }
   int32_t ax, ay, az;
   if (!imuRead(ax, ay, az)) return;
   float m = sqrtf((float)(ax * ax + ay * ay + az * az));
   imuBase += ((int32_t)m - imuBase) / 16;  // ~0,5 s de media: la gravedad
   int32_t d = (int32_t)m - imuBase;
-  // sacudida: 4 golpes de mas de 1,2 g en 1 s
-  if (d > 1200 || d < -900) {
-    if (now - shakeWin > 1000) { shakeWin = now; shakeHits = 0; }
-    if (++shakeHits >= 4 && now - shakeT > 4000) {
-      shakeT = now;
-      shakeHits = 0;
-      lastInteract = now;
-      if (pet.wakeAuto()) { sfxPlay(SFX_TAP); showToast(XT(X_WALK_SHAKE_WAKE)); }
-      else if (!pet.isEgg() && !pet.sleeping && !pet.ceremony) { pet.caress(); sfxPlay(SFX_PLAY); showToast(XT(X_WALK_SHAKE_JOY)); }
+  if (d > 700 || d < -600) {  // golpe fuerte: no es andar (lo pendiente se tira)
+    bigT = now;
+    walkPend = 0;
+    stepRun = 0;
+    stepUp = false;
+    if (d > 1200 || d < -900) {  // sacudida: 4 golpes de mas de 1,2 g en 1 s
+      if (now - shakeWin > 1000) { shakeWin = now; shakeHits = 0; }
+      if (++shakeHits >= 4 && now - shakeT > 4000) {
+        shakeT = now;
+        shakeHits = 0;
+        lastInteract = now;
+        if (pet.wakeAuto()) { sfxPlay(SFX_TAP); showToast(XT(X_WALK_SHAKE_WAKE)); }
+        else if (!pet.isEgg() && !pet.sleeping && !pet.ceremony) { pet.caress(); sfxPlay(SFX_PLAY); showToast(XT(X_WALK_SHAKE_JOY)); }
+      }
     }
-    return;  // agitar no son pasos
+    return;
   }
+  if (now - bigT < 1500) return;  // justo despues de agitar: nada
   if (!stepUp && d > 130) {
     stepUp = true;
     uint32_t dt = now - stepLastT;
-    stepLastT = now;
     if (dt < 280) return;  // rebote del mismo paso
+    stepLastT = now;
     if (dt > 2000) { stepRun = 0; walkPend = 0; }
-    stepRun = stepRun < 255 ? stepRun + 1 : 255;
-    if (stepRun < 4) { walkPend++; return; }
-    uint16_t n = 1 + walkPend;
-    walkPend = 0;
-    uint32_t day = walkDay();
-    if (!day) return;
-    uint8_t got = pet.addSteps(n, day);
-    if (got) walkReward(got);
+    if (stepRun < 255) stepRun++;
+    if (walkPend < 60000) walkPend++;
+    if (stepRun >= 16 && walkPend >= 16 && now - bigT > 3000) walkFlush();  // andando: se ve subir
   } else if (stepUp && d < 40) {
     stepUp = false;
   }
@@ -328,24 +347,51 @@ void walkReward(uint8_t got) {
 }
 
 // ---------- el contador en la pantalla principal (toque = pantalla del paseo) ----------
-#define WALK_PILL_X 30
-#define WALK_PILL_Y 110
-#define WALK_PILL_W 92
-#define WALK_PILL_H 26
+// ko12.4.1: anillo que se llena hacia la meta de hoy (verde; dorado al pasar 5.000; arcoiris a 10.000)
+// con la huella dentro y el numero debajo. A la izquierda del reloj, dentro del circulo de la pantalla
+// (antes una pastilla mas arriba: en la pantalla redonda se cortaba el borde y tapaba la ventana)
+#define WALK_RING_X 92
+#define WALK_RING_Y 150
+#define WALK_RING_R 22
 static void drawFootIcon(int x, int y, uint16_t c) {
   gfx->fillEllipse(x, y + 3, 4, 6, c);
   for (int i = 0; i < 3; i++) gfx->fillCircle(x - 4 + i * 4, y - 6, 2, c);
 }
+static void fmtSteps(char *b, size_t n, uint32_t v) {  // 12,345
+  if (v >= 1000) snprintf(b, n, "%lu,%03lu", (unsigned long)(v / 1000), (unsigned long)(v % 1000));
+  else snprintf(b, n, "%lu", (unsigned long)v);
+}
+void drawWalkRing(int cx, int cy, int r, uint16_t today, uint32_t now) {
+  gfx->fillCircle(cx, cy, r + 3, UI_WHITE);
+  gfx->drawCircle(cx, cy, r + 3, UI_INK);
+  // la pista y lo andado (empieza arriba, sentido horario)
+  uint32_t goal = today < WALK_GOAL2 ? WALK_GOAL2 : WALK_GOAL3;
+  float fr = today >= WALK_GOAL3 ? 1.0f : (float)today / goal;
+  const int N = 40;
+  for (int k = 0; k < N; k++) {
+    float a = -1.5708f + k * 6.2832f / N;
+    int x = cx + (int)(cosf(a) * (r - 2)), y = cy + (int)(sinf(a) * (r - 2));
+    uint16_t c = UI_TRACK;
+    if (k < (int)(fr * N + 0.5f))
+      c = today >= WALK_GOAL3 ? orbHue(k / (float)N + now * 0.0003f) : today >= WALK_GOAL2 ? C565(0xf0, 0xc0, 0x30) : UI_BAR_OK;
+    gfx->fillCircle(x, y, 3, c);
+  }
+  drawFootIcon(cx - 4, cy + 2, C565(0x8a, 0x5a, 0x3a));
+  drawFootIcon(cx + 5, cy - 4, C565(0x8a, 0x5a, 0x3a));
+}
 void drawWalkPill() {
   if (!imuOk()) return;
-  uiPanel(WALK_PILL_X, WALK_PILL_Y, WALK_PILL_W, WALK_PILL_H, 12, UI_WHITE, UI_INK);
-  drawFootIcon(WALK_PILL_X + 16, WALK_PILL_Y + 13, C565(0x8a, 0x5a, 0x3a));
+  uint16_t today = pet.stepsToday(walkDay());
+  drawWalkRing(WALK_RING_X, WALK_RING_Y, WALK_RING_R, today, millis());
   char b[12];
-  snprintf(b, sizeof(b), "%u", (unsigned)pet.stepsToday(walkDay()));
-  drawFitIn(b, WALK_PILL_X + 28, WALK_PILL_Y + 5, WALK_PILL_W - 32, UI_INK, 1);
+  fmtSteps(b, sizeof(b), today);
+  int w = textW(b, 1) + 12;
+  uiPanel(WALK_RING_X - w / 2, WALK_RING_Y + WALK_RING_R + 4, w, 20, 9, UI_WHITE, UI_INK);
+  homeTextAt(b, WALK_RING_X, WALK_RING_Y + WALK_RING_R + 6, UI_INK);
 }
 bool walkPillHit(int16_t x, int16_t y) {
-  return imuOk() && x >= WALK_PILL_X - 6 && x < WALK_PILL_X + WALK_PILL_W + 6 && y >= WALK_PILL_Y - 8 && y < WALK_PILL_Y + WALK_PILL_H + 6;
+  int dx = x - WALK_RING_X, dy = y - (WALK_RING_Y + 10);
+  return imuOk() && dx * dx + dy * dy <= 40 * 40;
 }
 
 // ---------- pantalla del paseo ----------
@@ -363,7 +409,7 @@ void renderWalk() {
   uint32_t day = walkDay();
   uint16_t today = pet.stepsToday(day);
   char b[64];
-  snprintf(b, sizeof(b), XT(X_WALK_STEPS_FMT), (unsigned)today);
+  { char nb[12]; fmtSteps(nb, sizeof(nb), today); snprintf(b, sizeof(b), XT(X_WALK_STEPS_FMT), nb); }
   drawFootIcon(118, 92, C565(0x8a, 0x5a, 0x3a));
   drawFootIcon(132, 80, C565(0x8a, 0x5a, 0x3a));
   drawFit(b, 82, 260, UI_INK, 3);
@@ -402,4 +448,48 @@ void renderWalk() {
 }
 void walkTap(int16_t x, int16_t y) {
   if (navHit(NAV_L, x, y) || y < 60) { sfxPlay(SFX_TAP); goBack(); }
+}
+
+// ---------- ko12.4.1: elegir el fondo (una vez, al actualizar o al empezar) ----------
+#define BGQ_Y 120
+static bool bgAskShown() { return !pet.bgAsked && !pet.isEgg() && !pet.ceremony && !pet.awaitingStarter(); }
+static void bgMini(int x, int y, bool room) {  // miniatura de cada fondo
+  if (room) {
+    gfx->fillRect(x, y, 110, 52, C565(0xf6, 0xe6, 0xd2));
+    for (int i = 4; i < 110; i += 14) gfx->fillRect(x + i, y, 5, 52, C565(0xee, 0xd8, 0xc0));
+    gfx->fillRect(x + 70, y + 8, 30, 30, C565(0x8c, 0xc8, 0xf0));
+    gfx->drawRect(x + 70, y + 8, 30, 30, C565(0xb0, 0x80, 0x58));
+    gfx->fillRect(x, y + 52, 110, 26, C565(0xc8, 0x94, 0x60));
+    gfx->fillEllipse(x + 55, y + 62, 34, 6, C565(0x8c, 0xb4, 0xe0));
+  } else {
+    gfx->fillRect(x, y, 110, 52, C565(0x8c, 0xc8, 0xf0));
+    gfx->fillCircle(x + 88, y + 16, 9, C565(0xff, 0xe0, 0x60));
+    gfx->fillTriangle(x + 10, y + 52, x + 46, y + 22, x + 82, y + 52, C565(0x7a, 0xa8, 0x6a));
+    gfx->fillRect(x, y + 52, 110, 26, C565(0x8c, 0xc0, 0x5c));
+  }
+  gfx->drawRect(x, y, 110, 78, UI_INK);
+}
+bool bgAskDraw() {
+  if (!bgAskShown()) return false;
+  uiShade(0, 0, LCD_WIDTH, LCD_HEIGHT, 0, 9);
+  uiPanel(58, BGQ_Y, 350, 230, 20, UI_WHITE, UI_INK);
+  drawFit(XT(X_BGQ_TITLE), BGQ_Y + 16, 320, UI_INK, 2);
+  bgMini(88, BGQ_Y + 54, false);
+  bgMini(268, BGQ_Y + 54, true);
+  drawBtn(88, BGQ_Y + 142, 110, 40, UI_BAR_OK, UI_WHITE, XT(X_ROOM_OUT));
+  drawBtn(268, BGQ_Y + 142, 110, 40, C565(0xe8, 0x80, 0xa8), UI_WHITE, XT(X_ROOM_IN));
+  drawFit(XT(X_BGQ_NOTE), BGQ_Y + 194, 300, 0x8410, 1);
+  return true;
+}
+// true = el toque era del dialogo
+bool bgAskTap(int16_t x, int16_t y) {
+  if (!bgAskShown()) return false;
+  if (y < BGQ_Y + 50 || y > BGQ_Y + 186) return true;  // fuera de las opciones: el dialogo sigue
+  if (x >= 80 && x < 206) pet.roomOn = 0;
+  else if (x >= 260 && x < 386) pet.roomOn = 1;
+  else return true;
+  pet.bgAsked = 1;
+  pet.saveNow();
+  sfxPlay(SFX_MEDAL);
+  return true;
 }

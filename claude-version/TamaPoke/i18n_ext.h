@@ -153,7 +153,8 @@ enum XId : uint16_t {  // ko10.6: pasaron de 255
   X_ROOM_TITLE, X_ROOM_OUT, X_ROOM_IN, X_ROOM_LEFT, X_ROOM_MID, X_ROOM_RIGHT, X_ROOM_HINT, X_ROOM_HINT2, X_ROOM_BTN,
   X_WALK_BTN, X_WALK_TITLE, X_WALK_NOSENSOR, X_WALK_NOSENSOR2, X_WALK_STEPS_FMT, X_WALK_LEFT_FMT, X_WALK_DONE, X_WALK_WEEK,
   X_WALK_RL1, X_WALK_RL2, X_WALK_RL3, X_WALK_RW1, X_WALK_RW2, X_WALK_RW3, X_WALK_TOTAL_FMT, X_WALK_SHAKE_HINT,
-  X_WALK_SHAKE_WAKE, X_WALK_SHAKE_JOY,  // ko12.4: habitacion y paseo  // ko12.2.1: orbe arcoiris (ataque y defensa)
+  X_WALK_SHAKE_WAKE, X_WALK_SHAKE_JOY,  // ko12.4: habitacion y paseo
+  X_BGQ_TITLE, X_BGQ_NOTE,  // ko12.4.1: elegir el fondo  // ko12.2.1: orbe arcoiris (ataque y defensa)
   X_COUNT
 };
 

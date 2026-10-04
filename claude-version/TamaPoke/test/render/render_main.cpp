@@ -41,6 +41,9 @@ static void scenes(bool ko, const char *sfx) {
   if (!ko) return;
   {  // ko12.4: habitacion y objetos; menu de decorar; paseo (con y sin sensor)
     pet.roomOn = 1; pet.deco[0] = DECO_CUSHION + 1; pet.deco[1] = DECO_BALL + 1; pet.deco[2] = DECO_PLANT + 1;
+    pet.bgAsked = 0; render(); shot("01q_main_bg_ask");
+    onTap(320, BGQ_Y + 160);  // [방]
+    navCheck("fondo: elegir habitacion una vez", pet.roomOn == 1 && pet.bgAsked == 1);
     render(); shot("01r_main_room");
     gMockEpoch = 1790343900 + 9 * 3600; pet.lastSeenEpoch = gMockEpoch;  // 22:45
     pet.sleeping = true; render(); shot("01r_main_room_night"); pet.sleeping = false;
@@ -70,7 +73,8 @@ static void scenes(bool ko, const char *sfx) {
     memcpy(pet.walk.days, W, sizeof(W)); pet.walk.total = 152340;
     render(); shot("01w_walk_page");
     xScreen = XS_NONE; render(); shot("01x_main_walk_pill");
-    navCheck("principal: el contador abre el paseo", walkPillHit(WALK_PILL_X + 20, WALK_PILL_Y + 10) && !navHit(NAV_L, WALK_PILL_X + 20, WALK_PILL_Y + 10));
+    navCheck("principal: el contador abre el paseo", walkPillHit(WALK_RING_X, WALK_RING_Y) && !navHit(NAV_L, WALK_RING_X, WALK_RING_Y)
+             && !walkPillHit(26, NAV_Y));
     imuAddr = 0;
     pet.roomOn = 0; memset(pet.deco, 0, sizeof(pet.deco)); memset(&pet.walk, 0, sizeof(pet.walk));
     closeAll();
@@ -1347,6 +1351,7 @@ int main(int argc, char **argv) {
   pet.exp = expForLevel(18) + 1200;  // Lv.18
   pet.fullness = 72; pet.joy = 88; pet.energy = 54; pet.hygiene = 23;
   pet.balls = 5; pet.potions = 2;
+  pet.bgAsked = 1;  // ko12.4.1: el aviso de elegir fondo tiene su propia captura
   ensureMon();
   navChecks();
   previewShots();

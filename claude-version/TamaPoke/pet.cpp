@@ -1258,6 +1258,7 @@ void Pet::save() {
   prefs.putBytes("life", &life, sizeof(life));  // ko12.4
   prefs.putBytes("walk", &walk, sizeof(walk));  // ko12.4
   prefs.putUChar("room", roomOn);
+  prefs.putUChar("bgask", bgAsked);
   prefs.putBytes("deco", deco, sizeof(deco));
   prefs.putUChar("lend", lastEnd);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
@@ -1399,6 +1400,7 @@ void Pet::load(bool *migrated) {
   memset(&walk, 0, sizeof(walk));
   if (prefs.getBytesLength("walk") == sizeof(walk)) prefs.getBytes("walk", &walk, sizeof(walk));
   roomOn = prefs.getUChar("room", 0);
+  bgAsked = prefs.getUChar("bgask", 0);
   memset(deco, 0, sizeof(deco));
   if (prefs.getBytesLength("deco") == sizeof(deco)) prefs.getBytes("deco", deco, sizeof(deco));
   for (uint8_t &d : deco) if (d > DECO_COUNT) d = 0;
