@@ -2018,6 +2018,134 @@ uint16_t typeColor(uint8_t t) {
   };
   return t < PT_COUNT ? TC[t] : UI_TRACK;
 }
+// ko12.2.1: el dibujo de cada tipo en los botones de movimientos de la ficha (antes ">" / "+")
+static void tgStar(int cx, int cy, int r, uint16_t c) {  // estrella de 5 puntas
+  int px[10], py[10];
+  for (int i = 0; i < 10; i++) {
+    float a = -1.5708f + i * 0.6283f;
+    int rr = (i & 1) ? r * 2 / 5 : r;
+    px[i] = cx + (int)(cosf(a) * rr); py[i] = cy + (int)(sinf(a) * rr);
+  }
+  for (int i = 0; i < 10; i++) gfx->fillTriangle(cx, cy, px[i], py[i], px[(i + 1) % 10], py[(i + 1) % 10], c);
+}
+static void tgSparkle(int cx, int cy, int r, uint16_t c) {  // brillo de 4 puntas
+  int q = r / 4 + 1;
+  gfx->fillTriangle(cx - q, cy, cx + q, cy, cx, cy - r, c);
+  gfx->fillTriangle(cx - q, cy, cx + q, cy, cx, cy + r, c);
+  gfx->fillTriangle(cx, cy - q, cx, cy + q, cx - r, cy, c);
+  gfx->fillTriangle(cx, cy - q, cx, cy + q, cx + r, cy, c);
+}
+static void tgShape(int x, int y, uint8_t t, bool status, uint16_t c, uint16_t bg) {
+  if (status) {
+    tgSparkle(x - 3, y + 1, 13, c);
+    tgSparkle(x + 9, y - 9, 6, c);
+    return;
+  }
+  switch (t) {
+    case PT_FIRE:
+      gfx->fillCircle(x, y + 5, 9, c);
+      gfx->fillTriangle(x - 9, y + 4, x + 9, y + 4, x + 2, y - 15, c);
+      gfx->fillTriangle(x - 9, y + 4, x - 2, y + 4, x - 8, y - 7, c);
+      gfx->fillCircle(x, y + 7, 4, bg);
+      gfx->fillTriangle(x - 4, y + 6, x + 4, y + 6, x + 1, y - 2, bg);
+      break;
+    case PT_WATER:
+      gfx->fillCircle(x, y + 5, 9, c);
+      gfx->fillTriangle(x - 9, y + 3, x + 9, y + 3, x, y - 15, c);
+      gfx->fillCircle(x - 3, y + 5, 2, bg);
+      break;
+    case PT_GRASS:
+      gfx->fillEllipse(x, y - 2, 8, 13, c);
+      fxLine(x, y - 10, x, y + 15, 2, bg);
+      fxLine(x, y - 1, x + 5, y - 6, 1, bg);
+      fxLine(x, y + 4, x - 5, y - 1, 1, bg);
+      fxLine(x, y + 9, x, y + 15, 3, c);
+      break;
+    case PT_ELECTRIC:
+      gfx->fillTriangle(x + 5, y - 15, x - 9, y + 2, x + 2, y + 2, c);
+      gfx->fillTriangle(x - 2, y - 2, x + 9, y - 2, x - 5, y + 15, c);
+      break;
+    case PT_ICE:
+      for (int k = 0; k < 3; k++) {
+        float a = k * 1.0472f;
+        int dx = (int)(cosf(a) * 14), dy = (int)(sinf(a) * 14);
+        fxLine(x - dx, y - dy, x + dx, y + dy, 3, c);
+      }
+      gfx->fillCircle(x, y, 4, c);
+      break;
+    case PT_FIGHT:
+      gfx->fillRoundRect(x - 11, y - 9, 22, 19, 6, c);
+      gfx->fillRoundRect(x - 14, y - 3, 7, 11, 3, c);  // pulgar
+      for (int k = 1; k < 4; k++) gfx->drawFastVLine(x - 11 + k * 5 + 1, y - 9, 8, bg);
+      gfx->fillRect(x - 6, y + 10, 13, 5, c);
+      break;
+    case PT_POISON:
+      gfx->fillCircle(x - 4, y + 4, 9, c);
+      gfx->fillCircle(x + 8, y - 6, 5, c);
+      gfx->fillCircle(x + 4, y - 14, 2, c);
+      gfx->fillCircle(x - 7, y + 1, 2, bg);
+      break;
+    case PT_GROUND:
+      gfx->fillTriangle(x - 15, y + 10, x + 1, y + 10, x - 6, y - 8, c);
+      gfx->fillTriangle(x - 4, y + 10, x + 15, y + 10, x + 6, y - 13, c);
+      gfx->fillRect(x - 15, y + 9, 31, 5, c);
+      break;
+    case PT_PSYCHIC:
+      gfx->fillCircle(x, y, 14, c);
+      gfx->fillCircle(x, y, 10, bg);
+      gfx->fillCircle(x, y, 7, c);
+      gfx->fillCircle(x, y, 3, bg);
+      break;
+    case PT_BUG:
+      gfx->fillEllipse(x, y + 4, 9, 11, c);
+      gfx->fillCircle(x, y - 8, 5, c);
+      fxLine(x - 2, y - 11, x - 8, y - 16, 1, c);
+      fxLine(x + 2, y - 11, x + 8, y - 16, 1, c);
+      gfx->drawFastHLine(x - 9, y + 2, 19, bg);
+      gfx->drawFastHLine(x - 8, y + 8, 17, bg);
+      break;
+    case PT_ROCK:
+      gfx->fillTriangle(x - 14, y + 4, x - 6, y - 12, x + 8, y - 13, c);
+      gfx->fillTriangle(x - 14, y + 4, x + 8, y - 13, x + 15, y + 2, c);
+      gfx->fillTriangle(x - 14, y + 4, x + 15, y + 2, x + 6, y + 14, c);
+      gfx->fillTriangle(x - 14, y + 4, x + 6, y + 14, x - 8, y + 13, c);
+      fxLine(x - 6, y - 12, x - 1, y + 2, 1, bg);
+      fxLine(x - 1, y + 2, x + 15, y + 2, 1, bg);
+      break;
+    case PT_GHOST:
+      gfx->fillCircle(x, y - 3, 11, c);
+      gfx->fillRect(x - 11, y - 3, 23, 14, c);
+      for (int k = 0; k < 3; k++) gfx->fillCircle(x - 7 + k * 7, y + 12, 3, bg);
+      gfx->fillCircle(x - 4, y - 4, 3, bg);
+      gfx->fillCircle(x + 4, y - 4, 3, bg);
+      break;
+    case PT_DRAGON:
+      for (int k = 0; k < 3; k++) {
+        int ox = x - 9 + k * 9;
+        gfx->fillTriangle(ox - 4, y - 12, ox + 4, y - 12, ox + 2, y + 14, c);
+      }
+      break;
+    case PT_DARK:
+      gfx->fillCircle(x, y, 13, c);
+      gfx->fillCircle(x + 7, y - 5, 11, bg);
+      break;
+    case PT_STEEL:
+      for (int k = 0; k < 8; k++) {
+        float a = k * 0.7854f;
+        fxLine(x, y, x + (int)(cosf(a) * 14), y + (int)(sinf(a) * 14), 3, c);
+      }
+      gfx->fillCircle(x, y, 10, c);
+      gfx->fillCircle(x, y, 4, bg);
+      break;
+    default:  // normal
+      tgStar(x, y + 1, 14, c);
+      break;
+  }
+}
+void drawTypeGlyph(int x, int y, uint8_t t, bool status, uint16_t bg) {
+  tgShape(x + 1, y + 2, t, status, UI_INK, bg);  // sombra para que se lea en colores claros
+  tgShape(x, y, t, status, UI_WHITE, bg);
+}
 #define MV_X0 70
 #define MV_X1 238
 #define MV_W 160

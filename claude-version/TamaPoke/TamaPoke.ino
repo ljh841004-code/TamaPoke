@@ -52,6 +52,7 @@ bool battleFxPlaying();  // ko11.31.5 (ui_extra.ino)
 bool chargeCap90();       // ko11.23.3
 void flushPipeStop();     // ko12.1
 bool dexFxPlaying();      // ko12.1.1
+void drawTypeGlyph(int x, int y, uint8_t t, bool status, uint16_t bg);  // ko12.2.1
 bool battleScreenOn();    // ko12.1 (ui_extra.ino): pantalla de combate (se repinta entera)
 void flushWaitIdle();
 __attribute__((used)) const char TP_VERSION_TAG[] = UPD_TAG FW_VERSION;
@@ -4474,11 +4475,13 @@ void renderDexDetail() {
         gfx->drawCircle(bx, by, DEXMV_R - 1, UI_INK);
         if (dexMvFx == mv[i]) gfx->drawCircle(bx, by, DEXMV_R + 4, UI_BAR_WARN);
         const char *nm = known ? moveNameId(mv[i]) : "???";
-        gfx->setTextColor(known ? UI_WHITE : 0x8410);
-        setSize(2);
-        const char *ic = known ? (moveIsStatus(mv[i]) ? "+" : ">") : "?";
-        setCur(bx - textW(ic, 2) / 2, by - textH(2) / 2 - 2);
-        printT(ic);
+        if (known) drawTypeGlyph(bx, by, moveType(mv[i]), moveIsStatus(mv[i]), c);  // ko12.2.1: dibujo del tipo
+        else {
+          gfx->setTextColor(0x8410);
+          setSize(2);
+          setCur(bx - textW("?", 2) / 2, by - textH(2) / 2 - 2);
+          printT("?");
+        }
         gfx->setTextColor(UI_INK);
         setSize(1);
         setCur(bx - textW(nm, 1) / 2, by + DEXMV_R + 2);

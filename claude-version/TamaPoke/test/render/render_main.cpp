@@ -781,6 +781,17 @@ static void scenes(bool ko, const char *sfx) {
     dexLog.learned(25, mv[0]); dexLog.learned(25, mv[2]);
   }
   render(); shot("13_dex_detail");
+  {  // ko12.2.1: los dibujos de los 16 tipos (+ estado) en los botones de la ficha
+    uiScreenBg();
+    for (uint8_t t = 0; t <= PT_COUNT; t++) {
+      int x = 83 + (t % 5) * 75, y = 83 + (t / 5) * 75;
+      uint16_t c = typeColor(t < PT_COUNT ? t : PT_NORMAL);
+      gfx->fillCircle(x, y, DEXMV_R, c);
+      gfx->drawCircle(x, y, DEXMV_R, UI_INK);
+      drawTypeGlyph(x, y, t < PT_COUNT ? t : PT_NORMAL, t == PT_COUNT, c);
+    }
+    shot("13d_type_glyphs");
+  }
   {  // ko12.1.1: el primer fotograma (aun sin el sprite grande): la miniatura debe quedar igual de grande y en el mismo sitio
     galleryPmd.unload(); galleryLoadWant = 0;
     render(); shot("13c_dex_detail_thumb");
