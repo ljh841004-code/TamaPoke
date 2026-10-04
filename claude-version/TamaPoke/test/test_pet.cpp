@@ -1456,6 +1456,29 @@ TEST(orb, al_evolucionar_a_otro_tipo_se_vuelve_caramelos) {
   }
 }
 
+// ko12.2.1: el arcoiris que deja de servir vale mas: 10 caramelos (+ a veces 1 raro)
+TEST(orb, arcoiris_al_evolucionar_da_mas_caramelos) {
+  int checked = 0, withRare = 0;
+  for (int k = 0; k < 60; k++) {
+    Pet q;
+    makePet(q, 133);
+    q.gainOrb(orbMakeDual(PT_NORMAL, 20));
+    CHECK(q.equipOrb(0));
+    q.exp = expForLevel(40);
+    uint32_t rare0 = q.rareCandy;
+    for (int i = 0; i < 20 && q.speciesId == 133; i++) { if (q.canEvolveNow()) q.evolve(); else break; }
+    if (q.speciesId == 133 || DEX_TBL[q.speciesId].ptype == PT_NORMAL) continue;
+    checked++;
+    CHECK(!orbValid(q.orb));
+    CHECK(q.orbEvoNote == 3 || q.orbEvoNote == 4);
+    CHECK(q.candy[DEX_FAM[q.speciesId]] >= ORB_EVO_DUAL_CANDY);
+    if (q.orbEvoNote == 4) { withRare++; CHECK_EQ(q.rareCandy, rare0 + 1); }
+    else CHECK_EQ(q.rareCandy, rare0);
+  }
+  CHECK(checked >= 20);
+  CHECK(withRare > 0 && withRare < checked);  // ~30 %
+}
+
 // ko11.19: fusion de orbes: 3 -> 1 del tipo del Pokemon; a veces falla (con consuelo)
 TEST(orb, fusion_tres_en_uno_con_fallos) {
   int ok = 0, fail = 0, great = 0, dual = 0;

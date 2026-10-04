@@ -145,6 +145,7 @@ static const char *const XS[2][X_COUNT] = {
     "MEADOW", "BEACH", "FOREST", "VOLCANO", "MOUNTAIN", "SNOWFIELD", "POWER PLANT", "DOJO",
     "SWAMP", "DESERT", "RUINS", "GARDEN", "GRAVEYARD", "DRAGON VALE", "CITY", "MINE",
     "%s Rainbow Orb", "ATK/DEF +%u%%", "RAINBOW ORB!",
+    "Rainbow orb didn't fit the new type: 10 candies", "Rainbow orb didn't fit the new type: 10 candies + 1 rare candy",
   },
   // ---------------- KO ----------------
   {
@@ -284,6 +285,7 @@ static const char *const XS[2][X_COUNT] = {
     "초원", "바닷가", "숲", "화산", "산", "설원", "발전소", "도장",
     "늪", "사막", "유적", "꽃밭", "묘지", "용의 계곡", "도시", "광산",
     "%s 무지개구슬", "공격/방어 +%u%%", "무지개구슬 탄생!",
+    "진화로 속성이 바뀌어 무지개구슬이 사탕 10개로", "진화로 속성이 바뀌어 무지개구슬이 사탕 10개 + 만능 사탕 1개로",
   },
 };
 

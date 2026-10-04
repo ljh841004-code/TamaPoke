@@ -758,8 +758,13 @@ void Pet::evolve() {
   // ko11.16: si cambia de tipo, el orbe ya no le sirve: 3 caramelos (o, a veces, 1 raro)
   orbEvoNote = 0;
   if (orbValid(orb) && !orbFits(orb)) {
+    bool dual = orbDual(orb);
     orb = 0;
-    if ((int)random(100) < ORB_EVO_RARE_PCT) { if (rareCandy < 999) rareCandy++; orbEvoNote = 2; }
+    if (dual) {  // ko12.2.1: el arcoiris vale mas
+      addCandy(speciesId, ORB_EVO_DUAL_CANDY);
+      orbEvoNote = 3;
+      if ((int)random(100) < ORB_EVO_DUAL_RARE_PCT) { if (rareCandy < 999) rareCandy++; orbEvoNote = 4; }
+    } else if ((int)random(100) < ORB_EVO_RARE_PCT) { if (rareCandy < 999) rareCandy++; orbEvoNote = 2; }
     else { addCandy(speciesId, ORB_EVO_CANDY); orbEvoNote = 1; }
   }
   registerSpecies(speciesId);

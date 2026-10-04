@@ -89,6 +89,8 @@ static const uint8_t CANDY_COST[CU_COUNT] = { 3, 1, 5, 10, 5 };
 // ko12.2.1: rara vez la fusion sale "arcoiris": sube ataque Y defensa a la vez (bit 13)
 #define ORB_SYNTH_DUAL_PCT 4    // de las fusiones que salen bien
 #define ORB_DUAL 0x2000
+#define ORB_EVO_DUAL_CANDY 10     // arcoiris que ya no sirve al evolucionar: 10 caramelos (normal: 3)
+#define ORB_EVO_DUAL_RARE_PCT 30  //   ... y a veces (30 %) ademas 1 caramelo raro
 enum : uint8_t { RG_BALL = 1, RG_POTION, RG_SHARD, RG_EXP, RG_ORB };  // regalo al soltar (seguidores)
 static inline uint16_t orbMake(uint8_t type, bool def, uint8_t pct) {
   return (uint16_t)(0x8000 | (def ? 0x4000 : 0) | ((type & 15) << 8) | pct);
@@ -195,7 +197,7 @@ public:
   void ppRefill();
   bool ppFull() const;
   uint8_t moveRandomNew() const;   // uno que puede aprender y aun no sabe (0 = ninguno)
-  uint8_t orbEvoNote = 0;   // 1 = al evolucionar el orbe se volvio caramelos, 2 = caramelo raro (aviso)
+  uint8_t orbEvoNote = 0;   // 1 = al evolucionar el orbe se volvio caramelos, 2 = caramelo raro, 3/4 = arcoiris (sin/con raro) (aviso)
   bool candyTrade(int16_t famDex, uint16_t times);
   // ko11.16: orbes. gainOrb: 1 nuevo a la bolsa, 2 mejoro uno igual (el viejo -> 1
   // caramelo), 3 no mejoraba (el nuevo -> 1 caramelo), 0 no se pudo

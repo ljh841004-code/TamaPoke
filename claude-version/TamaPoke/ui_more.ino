@@ -172,7 +172,7 @@ void expLoop() {
   }
   // ko11.16: tras la animacion de evolucion, el aviso del orbe que se volvio caramelos
   if (pet.orbEvoNote && !pet.evolving() && !extraOpen() && !screenOff) {
-    showToast(XT(pet.orbEvoNote == 2 ? X_ORB_EVO_RARE : X_ORB_EVO_CANDY));
+    showToast(XT(pet.orbEvoNote == 4 ? X_ORB_EVO_DUAL_RARE : pet.orbEvoNote == 3 ? X_ORB_EVO_DUAL : pet.orbEvoNote == 2 ? X_ORB_EVO_RARE : X_ORB_EVO_CANDY));
     pet.orbEvoNote = 0;
   }
   static int16_t told = 0;
