@@ -57,6 +57,16 @@ static void scenes(bool ko, const char *sfx) {
       toastUntil = 0; cardOpen = true; cardPage = 5; render(); shot("01z_card_life");
       cardOpen = false; cardPage = 0; memset(&pet.life, 0, sizeof(pet.life)); pet.rtBits = 0;
     }
+    {  // ko12.5.1: dialogo de decision con dos cuadros grandes a los lados
+      choiceKind = 2; choiceUntil = millis() + 12000; render(); shot("01p_choice_farewell");
+      onTap(CX, CH_BY + CH_BH / 2);  // entre los dos cuadros: no pasa nada
+      navCheck("decision: tocar entre los cuadros no elige", choiceKind == 2);
+      uint32_t a0 = pet.ageMinutes;
+      onTap(CH_B2X + 40, CH_BY + 40);  // [계속 함께]
+      navCheck("decision: quedarse = 24 h sin preguntar", choiceKind == 0 && pet.farewellDeclinedUntil() == a0 + 1440);
+      choiceKind = 1; choiceUntil = millis() + 12000; render(); shot("01p_choice_evolve");
+      choiceKind = 0;
+    }
     pet.bgAsked = 0; render(); shot("01q_main_bg_ask");
     onTap(320, BGQ_Y + 160);  // [방]
     navCheck("fondo: elegir habitacion una vez", pet.roomOn == 1 && pet.bgAsked == 1);

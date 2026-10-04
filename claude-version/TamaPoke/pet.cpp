@@ -1369,6 +1369,8 @@ void Pet::save() {
   prefs.putUChar("bgask", bgAsked);
   prefs.putBytes("deco", deco, sizeof(deco));
   prefs.putUChar("lend", lastEnd);
+  prefs.putUShort("evdl", evoDeclinedLv);  // ko12.5.1
+  prefs.putUInt("fdcl", farDeclinedAge);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
   prefs.putBytes("dexreg", dexReg, sizeof(dexReg));
   prefs.putUShort("strk", streak);
@@ -1520,6 +1522,8 @@ void Pet::load(bool *migrated) {
   if (prefs.getBytesLength("deco") == sizeof(deco)) prefs.getBytes("deco", deco, sizeof(deco));
   for (uint8_t &d : deco) if (d > DECO_COUNT) d = 0;
   lastEnd = prefs.getUChar("lend", CER_NONE);
+  evoDeclinedLv = prefs.getUShort("evdl", 0);  // ko12.5.1
+  farDeclinedAge = prefs.getUInt("fdcl", 0);
   prefs.getBytes("dexreg", dexReg, sizeof(dexReg));
   // ko10.5: familias criadas. Guardados de antes: lo registrado (criado) cuenta
   // como criado, salvo la familia del que se esta criando ahora

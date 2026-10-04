@@ -156,6 +156,16 @@ uint8_t nameLen = 0;
 Cji kbCji;               // ko8: silabas en construccion (teclado cheonjiin)
 bool kbKo = true;        // ko8: teclado coreano (true) o alfabeto (false)
 uint8_t cardPage = 0;         // 0 perfil, 1 stats+medallas
+// ko12.5.1: dialogo de decision (evolucionar / despedirse): dos cuadros grandes separados
+#define CH_PX 52
+#define CH_PY 140
+#define CH_PW 362
+#define CH_PH 214
+#define CH_BY 206
+#define CH_BW 140
+#define CH_BH 120
+#define CH_B1X 70
+#define CH_B2X 256
 #define CARD_PAGES 6          // ko10.4: + pagina de caramelos. ko12.5: + vida (caracter, educacion, rutina)
 const char *cardMsg = nullptr;  // ko10.4: aviso breve en la pagina de caramelos (ko11.27: y el perfil)
 #define PROF_FAV_Y 290   // ko11.27: filas del perfil (comida favorita, dias juntos, aviso)
@@ -1636,8 +1646,10 @@ void onTap(int16_t x, int16_t y) {
   }
   if (gameOpen) return;  // ko10.3: el golpe ya se dio al apoyar el dedo
   if (choiceKind) {          // dialogo de decision: boton accion (arriba) / mantener (abajo)
-    bool b1 = (x >= 93 && x <= 373 && y >= 206 && y <= 258);  // accion
-    bool b2 = (x >= 93 && x <= 373 && y >= 268 && y <= 320);  // mantener / quedaros
+    // ko12.5.1: cuadros a izquierda (accion) y derecha (mantener); tocar fuera no cierra nada
+    bool b1 = (x >= CH_B1X && x < CH_B1X + CH_BW && y >= CH_BY && y < CH_BY + CH_BH);
+    bool b2 = (x >= CH_B2X && x < CH_B2X + CH_BW && y >= CH_BY && y < CH_BY + CH_BH);
+    if ((choiceKind == 1 || choiceKind == 2) && !b1 && !b2) return;
     if (choiceKind == 1) {                 // evolucion
       if (b1) { int16_t old = pet.speciesId; pet.evolve(); evoPmd.load(old, pet.shiny); }
       else if (b2) pet.declineEvolve();
@@ -4981,24 +4993,15 @@ void drawChoiceDialog() {
     c1 = UI_BAR_WARN; t1 = UI_INK; c2 = UI_BAR_OK; t2 = UI_WHITE;
   }
   uiShade(0, 0, LCD_WIDTH, LCD_HEIGHT, 0, 5);  // ko11.12: velo detras del dialogo
-  uiPanel(73, 156, 320, 188, 16, UI_WHITE, UI_INK);
-  gfx->setTextColor(UI_INK);
-  setSize(2);
-  if (fb[0]) {  // ko11.31: pregunta + una linea pequena
-    drawFit(q, 163, 290, UI_INK, 2);
-    drawFit(fb, 187, 290, 0x8410, 1);
-  } else {
-    setCur(centerX(q, 2), 176);
-    printT(q);
-  }
-  uiButton(93, 206, 280, 52, 12, c1, lerp565(c1, UI_INK, 8, 16));  // boton accion
-  gfx->setTextColor(t1);
-  setCur(centerX(o1, 2), 224);
-  printT(o1);
-  uiButton(93, 268, 280, 52, 12, c2, lerp565(c2, UI_INK, 8, 16));  // boton mantener/quedaros
-  gfx->setTextColor(t2);
-  setCur(centerX(o2, 2), 286);
-  printT(o2);
+  // ko12.5.1: las dos opciones en dos cuadros grandes a izquierda y derecha, separados (antes una
+  // encima de otra y pegadas: era facil tocar la que no era)
+  uiPanel(CH_PX, CH_PY, CH_PW, CH_PH, 18, UI_WHITE, UI_INK);
+  drawFit(q, CH_PY + 18, CH_PW - 30, UI_INK, 2);
+  if (fb[0]) drawFit(fb, CH_PY + 44, CH_PW - 30, 0x8410, 1);
+  uiButton(CH_B1X, CH_BY, CH_BW, CH_BH, 16, c1, lerp565(c1, UI_INK, 8, 16));  // accion (izquierda)
+  drawFitIn(o1, CH_B1X + 6, CH_BY + CH_BH / 2 - 12, CH_BW - 12, t1, 2);  // (drawFitIn ya centra)
+  uiButton(CH_B2X, CH_BY, CH_BW, CH_BH, 16, c2, lerp565(c2, UI_INK, 8, 16));  // mantener / quedaros (derecha)
+  drawFitIn(o2, CH_B2X + 6, CH_BY + CH_BH / 2 - 12, CH_BW - 12, t2, 2);
 }
 
 // boton-CTA rojo y grande para evolucionar (pulsa para llamar la atencion)

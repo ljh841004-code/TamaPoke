@@ -415,8 +415,11 @@ public:
   // el usuario decide en un dialogo; "mantener/quedaros" pospone y re-ofrece luego
   bool wantEvolveButton() const { return canEvolveNow() && level() > evoDeclinedLv; }
   bool wantFarewellButton() const { return canFarewellNow() && ageMinutes >= farDeclinedAge; }
-  void declineEvolve() { evoDeclinedLv = level(); }              // re-ofrece al subir de nivel
-  void declineFarewell() { farDeclinedAge = ageMinutes + 1440; } // re-ofrece dentro de 1 dia
+  void declineEvolve() { evoDeclinedLv = level(); save(); }      // re-ofrece al subir de nivel (ko12.5.1: guardado)
+  // re-ofrece dentro de 1 dia. ko12.5.1: se guarda (antes, al reiniciar volvia a salir enseguida)
+  void declineFarewell() { farDeclinedAge = ageMinutes + 1440; save(); }
+  uint32_t farewellDeclinedUntil() const { return farDeclinedAge; }  // edad (min) hasta la que no pregunta
+  uint16_t evolveDeclinedLevel() const { return evoDeclinedLv; }
   // primera partida: el jugador elige inicial (Bulbasaur/Charmander/Squirtle)
   bool awaitingStarter() const { return starterPick; }
   void chooseStarter(int16_t dex) { eggTarget = dex; starterPick = false; save(); }

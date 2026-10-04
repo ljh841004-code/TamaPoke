@@ -1825,3 +1825,16 @@ TEST(tama, caracter) {
   l.cleans = 3;  // nada destaca
   CHECK_EQ((int)personalityOf(l, 30), PERS_NONE);
 }
+
+// ko12.5.1: "quedaros juntos" se guarda: tras reiniciar no vuelve a preguntar hasta 24 h despues
+TEST(tama, quedarse_se_guarda) {
+  Pet p;
+  makePet(p, 4);
+  p.ageMinutes = 5000;
+  p.declineFarewell();
+  p.declineEvolve();
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.farewellDeclinedUntil(), (uint32_t)(5000 + 1440));
+  CHECK_EQ(q.evolveDeclinedLevel(), p.level());
+}
