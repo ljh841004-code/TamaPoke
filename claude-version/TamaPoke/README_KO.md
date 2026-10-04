@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko12.0)
+# TamaPoke KO (v1.17-ko12.0.1)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko12.0.1: savebak_sd addEntry 블롭 버퍼 4KB 고정 → 실제 크기(PSRAM, 최소 8KB). DexLog lrn 6KB 때문에 ko11.31부터 백업 전체 실패하던 문제
 - ✅ ko12.0: 정리판 — 미사용 함수(drawMedalBadge·medalLabel·FxAnim::load/loadId·fxParse·fxPreload·vbHold/vbRelease 등)·X_/S_ 문구 52개 삭제(8개 언어 덤프 비교), -Wall 경고 31→1, symbols 3개만, README/버전기록.md 분리. PC 테스트 266개, 화면 검사 119개
 - ✅ ko11.32: sdMaybe/sdMarkMissing/sdOpenKnown(없는 경로 FNV 해시 128개, PUT·재마운트 때 비움), fxOpen mons/fx 폴더 확인 1번, 음악 haveFile 캐시, battleFxPlaying(이펙트 중 fxPump 안 함 + drawBattleBg 하늘·배경 PSRAM 복사), pack_fx 프레임 1/2·배경 1/2·700KB 상한, PERF bat/setup/fx 로그. PC 테스트 266개, 화면 검사 119개
 - ✅ ko11.31.4: WavStream<File,32768> (malloc, PSRAM), audioSdFree = 남은 음악 바이트 - 경과시간×32 ≥ 12KB, fxPump 20ms 한도(12조각), fxWant(이번 턴 EV_USE·도감 버튼), MT_SLEAGUE(story_league.wav, 게임 stCh 12·13 장면). PC 테스트 266개, 화면 검사 118개
