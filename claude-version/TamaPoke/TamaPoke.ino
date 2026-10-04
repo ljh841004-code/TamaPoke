@@ -4351,6 +4351,26 @@ static uint8_t dexMvFx = 0;      // el que se esta ensenando (0 = ninguno)
 static bool dexMvSd = false;     // ko12.1.1: con el efecto de la SD (se decide al tocar: no cambia a media animacion)
 bool dexFxPlaying() { return galleryDetail && dexMvFx; }  // ko12.1.1: no leer la SD mientras
 static uint32_t dexMvT0 = 0;
+// ko12.2.1: tocado antes de que su efecto de la SD termine de leerse: espera un poco (sin dibujar
+// el de puntos, que en el primer uso parecia un parpadeo) y sale el original; si tarda, el dibujado
+#define DEXMV_WAIT_MS 1500
+static uint8_t dexMvPend = 0;
+static uint32_t dexMvPendT0 = 0;
+static void dexMvStart(uint8_t id, bool sd) {
+  dexMvSd = sd;
+  dexMvFx = id;
+  dexMvT0 = millis();
+  sfxPlay(SFX_PLAY);
+}
+static void dexMvPoll() {
+  if (!dexMvPend) return;
+  bool sd = fxFind(dexMvPend) != nullptr;
+  if (sd || !fxQueued(dexMvPend) || millis() - dexMvPendT0 >= DEXMV_WAIT_MS) {
+    uint8_t id = dexMvPend;
+    dexMvPend = 0;
+    dexMvStart(id, sd);
+  }
+}
 uint8_t dexTopMoves(int16_t dex, uint8_t out[4]) {
   uint8_t pool[200];
   uint8_t n = movePool(dex, pool, sizeof(pool));
@@ -4380,6 +4400,7 @@ uint8_t dexTopMoves(int16_t dex, uint8_t out[4]) {
 #define DEXFX_AY 190
 #define DEX_FEET_Y 172  // ko12.1.1: donde quedan los pies del sprite grande de la ficha (drawPmdActM en suelo 196)
 void renderDexDetail() {
+  dexMvPoll();  // ko12.2.1
   uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   uint32_t mvT0 = dexMvFx ? millis() - dexMvT0 : 0;
   if (dexMvFx && mvT0 <= 1500)  // el fondo del efecto (olas, cielo rojo...) detras de todo
@@ -4593,11 +4614,11 @@ void galleryTap(int16_t x, int16_t y) {
         if (!mv[i] || ddx * ddx + ddy * ddy > (DEXMV_R + 8) * (DEXMV_R + 8)) continue;
         lastTap = 0;
         if (!dexLog.hasLearned(galleryDetail, mv[i])) { sfxPlay(SFX_DENY); return; }
-        dexMvSd = fxFind(mv[i]) != nullptr;  // ko12.1.1: si aun no esta, la dibujada entera (y se lee para la proxima)
-        if (!dexMvSd) fxWant(mv[i]);
-        dexMvFx = mv[i];
-        dexMvT0 = millis();
-        sfxPlay(SFX_PLAY);
+        dexMvPend = 0;
+        if (fxFind(mv[i])) { dexMvStart(mv[i], true); return; }
+        fxWant(mv[i]);  // ko12.2.1: delante en la cola; mientras, la SD sigue leyendo (dexFxPlaying = no)
+        if (fxQueued(mv[i])) { dexMvPend = mv[i]; dexMvPendT0 = millis(); sfxPlay(SFX_TAP); }
+        else dexMvStart(mv[i], false);  // no esta en la SD: el dibujado
         return;
       }
     }
@@ -4624,6 +4645,7 @@ void galleryTap(int16_t x, int16_t y) {
   if (!dex) return;
   galleryDetail = dex;
   galleryPmd.unload();
+  dexMvPend = 0;  // ko12.2.1
   galleryLoadWant = dex;  // ko11.31.3: primero se ve la ficha (con la miniatura); luego el sprite y el grito
   sfxPlay(SFX_TAP);
 }

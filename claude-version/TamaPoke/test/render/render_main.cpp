@@ -650,9 +650,17 @@ static void scenes(bool ko, const char *sfx) {
     partyPickTap(250, PP_BTN_Y + 10);
     navCheck("liga: 6 en el combate", xScreen == XS_WILD && pN == 6);
     tick(2300); updateWild();
+    bMe.st = ST_PSN;  // el mio envenenado: el estado es de cada uno, no del equipo
     bMe.hp = 0; bvMeTgt = 0; bqN = bqI = 0; bPhase = BP_PLAY; bvMeFainted = true;
     updateWild(); render(); shot("53k_party_swap_six");
     navCheck("liga: elegir entre 5", bPhase == BP_SWAP);
+    {
+      int16_t xs[PARTY_MAX]; int16_t ws[PARTY_MAX]; int8_t who[PARTY_MAX];
+      swapLayout(xs, ws, who);
+      wildTap(xs[0] + 5, SW_Y + 10);
+      tick(100); updateWild();
+      navCheck("liga: el veneno no pasa al siguiente", pCur != 0 && bMe.st == ST_NONE && pMon[0].st == ST_PSN);
+    }
     closeAll(); endBattleScreen();
     box.wipe();
   }
@@ -782,6 +790,14 @@ static void scenes(bool ko, const char *sfx) {
     uint8_t mv[4];
     dexTopMoves(25, mv);
     { uint8_t m2[4]; dexTopMoves(25, m2); fxPreloadAsync(m2, 4); }
+    {  // ko12.2.1: tocado antes de leerse: espera (sin el de puntos) y luego sale
+      bool queued = fxQueued(mv[0]) && !fxFind(mv[0]);
+      onTap(DEXMV_XY[0][0], DEXMV_XY[0][1]);
+      navCheck("pokedex: aun leyendo -> espera sin efecto dibujado", !queued || (dexMvFx == 0 && dexMvPend == mv[0]));
+      for (int k = 0; k < 2000 && dexMvPend; k++) { fxPump(); render(); }
+      navCheck("pokedex: leido -> sale el de la SD", dexMvFx == mv[0] && (!queued || dexMvSd == (fxFind(mv[0]) != nullptr)));
+      tick(1700); render(); dexMvFx = 0;
+    }
     for (int k = 0; k < 2000; k++) fxPump();  // la lectura en segundo plano de sus efectos
     navCheck("pokedex: los aprendidos van primero", dexLog.hasLearned(25, mv[0]) && dexLog.hasLearned(25, mv[1]));
     onTap(DEXMV_XY[0][0], DEXMV_XY[0][1]);

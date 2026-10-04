@@ -114,6 +114,12 @@ void fxWant(uint8_t id) {
     }
 }
 
+bool fxQueued(uint8_t id) {
+  if (!gQ.on || !id) return false;
+  for (uint8_t k = gQ.i; k < gQ.n; k++) if (gQ.ids[k] == id) return true;
+  return false;
+}
+
 static void fxPumpOne();
 void fxPump(uint8_t chunks) {
   // ko11.31.4: trozos mientras la musica tenga margen, como mucho ~20 ms por vuelta (la pantalla sigue)

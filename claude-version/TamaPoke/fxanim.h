@@ -32,3 +32,4 @@ const FxAnim *fxFind(uint8_t id);
 void fxPreloadAsync(const uint8_t *ids, uint8_t n);
 void fxPump(uint8_t chunks = 1);
 void fxWant(uint8_t id);  // ko11.31.4: leer este antes que los demas de la cola
+bool fxQueued(uint8_t id);  // ko12.2.1: aun en la cola de lectura (llegara pronto)
