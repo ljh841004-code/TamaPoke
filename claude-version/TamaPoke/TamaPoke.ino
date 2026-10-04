@@ -872,7 +872,7 @@ void loop() {
   if (!battleFxPlaying() && !dexFxPlaying()) fxPump(12);  // ko12.1.1: tampoco en la ficha
   if (!battleScreenOn()) flushPipeStop();  // ko12.1: fuera del combate, un solo buffer otra vez
   // ko12.2: 3 min sin tocar nada en la pantalla principal -> se duerme sola (si no tiene hambre ni esta sucia)
-  if (!pet.sleeping && petHoldAllowed() && mainNavAllowed() && now - lastInteract >= AUTO_SLEEP_MS) pet.autoSleepNow();
+  if (!pet.sleeping && petHoldAllowed() && mainNavAllowed() && (int32_t)(now - lastInteract) >= (int32_t)AUTO_SLEEP_MS) pet.autoSleepNow();
   uint32_t loopT0 = now, renderMs = 0;
   {  // ko11.9.2: en que pantalla estamos (si se reinicia, se ve al arrancar)
     uint8_t scr = vbOpen ? 1 : defOpen ? 2 : spdOpen ? 3 : gameOpen ? 4 : sackOpen ? 5 : trainMenuOpen ? 6
@@ -1043,7 +1043,11 @@ void updateBrightness(uint32_t now) {
   if (pet.evolving() || pet.ceremony || pet.eating() || pet.showHeart()) {
     lastInteract = now;
   }
-  uint32_t idle = now - lastInteract;
+  // ko12.3.3: "now" se toma al empezar la vuelta y el toque guarda millis() despues (handleTouch):
+  // si entre medias pasaba algo (leer efectos de la SD, ~20 ms) la resta daba negativa -> un numero
+  // enorme -> "5 min sin tocar" -> brillo 8 una vuelta: el parpadeo negro del primer toque en la ficha
+  int32_t idleS = (int32_t)(now - lastInteract);
+  uint32_t idle = idleS > 0 ? (uint32_t)idleS : 0;
   dimStage = (idle > 300000) ? 2 : (idle > 90000) ? 1 : 0;
   // ko11.18: el mismo brillo con USB y con bateria (antes 145 con bateria para
   // ahorrar: se notaba que la pantalla se oscurecia un poco al desenchufar)

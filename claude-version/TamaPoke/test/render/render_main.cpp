@@ -792,6 +792,14 @@ static void scenes(bool ko, const char *sfx) {
     dexLog.learned(25, mv[0]); dexLog.learned(25, mv[2]);
   }
   render(); shot("13_dex_detail");
+  {  // ko12.3.3: el toque guarda un millis() posterior al "now" de la vuelta: no debe contar como 5 min sin tocar
+    uint32_t keepLI = lastInteract;
+    lastInteract = millis() + 20;
+    updateBrightness(millis());
+    navCheck("brillo: toque despues del inicio de la vuelta no oscurece", dimStage == 0);
+    lastInteract = keepLI;
+    updateBrightness(millis());
+  }
   {  // ko12.2.1: los dibujos de los 16 tipos (+ estado) en los botones de la ficha
     uiScreenBg();
     for (uint8_t t = 0; t <= PT_COUNT; t++) {
