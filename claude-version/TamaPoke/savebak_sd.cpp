@@ -69,8 +69,18 @@ static bool addEntry(BakWriter &w, nvs_handle_t h, const char *ns, const nvs_ent
       return w.add(ns, e.key, e.type, s, len);  // len incluye el 0 final
     }
     case NVS_TYPE_BLOB: {
-      static uint8_t blob[4096];
-      size_t len = sizeof(blob);
+      // ko12.0.1: antes 4 KB fijos y el Pokedex trae "lrn" (24 B x 251 = 6 KB, ko11.31): no cabia y
+      // TODA la copia se descartaba ("BAK: tpdex no cabe"). Ahora el tamano real, en la PSRAM
+      static uint8_t *blob = nullptr;
+      static size_t cap = 0;
+      size_t len = 0;
+      if (nvs_get_blob(h, e.key, nullptr, &len) != ESP_OK) return false;
+      if (len > cap) {
+        free(blob);
+        cap = len < 8192 ? 8192 : len;
+        blob = (uint8_t *)ps_malloc(cap);
+        if (!blob) { cap = 0; return false; }
+      }
       if (nvs_get_blob(h, e.key, blob, &len) != ESP_OK) return false;
       return w.add(ns, e.key, e.type, blob, len);
     }
