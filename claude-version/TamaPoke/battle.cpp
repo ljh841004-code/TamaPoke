@@ -485,7 +485,8 @@ bool moveValid(uint8_t id) { return id >= 1 && id < MOVE_N; }
 bool moveIsTyped(uint8_t id) { return id >= 1 && id <= 144; }
 bool moveIsStatus(uint8_t id) { return id && id != MOVE_STRUGGLE && (moveDef(id).flags & MF_STATUS); }
 uint8_t moveType(uint8_t id) { return moveDef(id).type; }
-uint8_t movePP(uint8_t id) { return id == MOVE_STRUGGLE ? 1 : moveDef(id).pp; }
+// ko12.6: PP x2 (aqui casi siempre lucha uno solo contra varios)
+uint8_t movePP(uint8_t id) { return id == MOVE_STRUGGLE ? 1 : (uint8_t)(moveDef(id).pp * PP_MULT); }
 bool moveDecode(uint8_t id, uint8_t *type, uint8_t *tier, uint8_t *var) {
   if (!moveIsTyped(id)) return false;
   uint8_t k = (uint8_t)(id - 1);

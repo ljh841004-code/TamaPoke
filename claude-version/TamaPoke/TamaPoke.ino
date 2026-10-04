@@ -4959,10 +4959,10 @@ void drawLearnDialog() {
   txFmt(nb, sizeof(nb), X_MV_NEW_FMT, moveNameId(id));
   drawFitIn(nb, LD_X0 + 6, LD_NEW_Y + 4, LD_X1 + LD_W - LD_X0 - 12, UI_INK, 2);
   const MoveDef &m = moveDef(id);
-  if (moveIsStatus(id)) snprintf(sb, sizeof(sb), "%s  %s  PP %u", typeName(m.type), XT(X_MV_STATUS), m.pp);
+  if (moveIsStatus(id)) snprintf(sb, sizeof(sb), "%s  %s  PP %u", typeName(m.type), XT(X_MV_STATUS), movePP(id));
   else {
     char pw[40];
-    snprintf(pw, sizeof(pw), XT(X_MV_POW_FMT), m.pow, m.acc, m.pp);
+    snprintf(pw, sizeof(pw), XT(X_MV_POW_FMT), m.pow, m.acc, movePP(id));
     snprintf(sb, sizeof(sb), "%s  %s", typeName(m.type), pw);
   }
   drawFitIn(sb, LD_X0 + 6, LD_NEW_Y + LD_H - 20, LD_X1 + LD_W - LD_X0 - 12, UI_INK, 1);

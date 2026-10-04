@@ -270,6 +270,8 @@ bool moveValid(uint8_t id);                         // 1..MOVE_N-1
 bool moveIsTyped(uint8_t id);                       // 1..144
 bool moveIsStatus(uint8_t id);
 uint8_t moveType(uint8_t id);
+#define PP_MULT 2            // ko12.6: PP de la tabla x2
+#define PP_LOSS_MIN_PCT 50   // ko12.6: al perder, los PP vuelven al menos a la mitad
 uint8_t movePP(uint8_t id);                         // PP maximos
 // tipo, fase y variante de un ataque de tipo (para nombre y efecto); false si no lo es
 bool moveDecode(uint8_t id, uint8_t *type, uint8_t *tier, uint8_t *var);

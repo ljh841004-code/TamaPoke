@@ -755,11 +755,11 @@ static Battler withMoves(int16_t dex, uint8_t m0, uint8_t m1 = 0, uint8_t m2 = 0
 TEST(battle, pp_baja_y_forcejeo) {
   Battler a = withMoves(25, MOVE_TACKLE), b = makeBattler(19, 60, 60, 400, 60);
   b.maxHp = b.hp = 60000;
-  CHECK_EQ(a.pp[0], (uint8_t)35);
+  CHECK_EQ(a.pp[0], (uint8_t)70);  // ko12.6: PP x2
   BRng rng(5);
   BEvent ev[BATTLE_MAX_EVENTS];
   battleTurn(a, b, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
-  CHECK_EQ(a.pp[0], (uint8_t)34);
+  CHECK_EQ(a.pp[0], (uint8_t)69);
   a.pp[0] = 0;
   CHECK(!battleHasPP(a));
   int n = battleTurn(a, b, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
@@ -870,4 +870,10 @@ TEST(battle, estados_se_pasan_a_veces) {
     if (c) { cured++; CHECK_EQ(a.st, (uint8_t)ST_NONE); } else { kept++; CHECK_EQ(a.st, (uint8_t)ST_PSN); }
   }
   CHECK(cured > 40 && kept > 60);  // unas se pasan, otras siguen
+}
+
+TEST(battle, pp_doble_ko126) {
+  CHECK_EQ(movePP(7), (uint8_t)10);   // hyper-beam: 5 -> 10
+  CHECK_EQ(movePP(MOVE_STRUGGLE), (uint8_t)1);
+  for (uint8_t id = 1; id < MOVE_N; id++) CHECK(movePP(id) <= 80);
 }

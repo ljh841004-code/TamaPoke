@@ -3551,7 +3551,12 @@ static void petPPAfter(bool won) {
   if (bLink || !pSlot0Pet) return;  // historia / expedicion: lucha el companero
   const Battler &b = pCur == 0 ? bMe : pMon[0];
   if (won) pet.ppRefill();
-  else for (uint8_t i = 0; i < 4; i++) if (b.mv[i] == pet.mv[i]) pet.pp[i] = b.pp[i];
+  else for (uint8_t i = 0; i < 4; i++) {
+    if (b.mv[i] == pet.mv[i]) pet.pp[i] = b.pp[i];
+    // ko12.6: al perder, cada PP vuelve al menos a la mitad (el centro lo llena)
+    uint8_t half = (uint8_t)((movePP(pet.mv[i]) * PP_LOSS_MIN_PCT + 99) / 100);
+    if (pet.mv[i] && pet.pp[i] < half) pet.pp[i] = half;
+  }
   dexRecordMoves(pet.speciesId, pet.mv, true);
   pet.saveNow();
 }
