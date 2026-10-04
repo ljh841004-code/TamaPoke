@@ -76,7 +76,11 @@ void moveLearnLoop() {
 
 // ko11.16: "<tipo> 공격구슬" / "<tipo> 방어구슬"
 void orbName(uint16_t o, char *out, size_t n) {
-  snprintf(out, n, XT(orbDef(o) ? X_ORB_DEF_FMT : X_ORB_ATK_FMT), typeName(orbType(o)));
+  snprintf(out, n, XT(orbDual(o) ? X_ORB_DUAL_FMT : orbDef(o) ? X_ORB_DEF_FMT : X_ORB_ATK_FMT), typeName(orbType(o)));
+}
+// ko12.2.1: "공격 +N%" / "방어 +N%" / "공격/방어 +N%"
+void orbPctText(uint16_t o, char *out, size_t n) {
+  snprintf(out, n, XT(orbDual(o) ? X_ORB_DUALP_FMT : orbDef(o) ? X_ORB_DEFP_FMT : X_ORB_ATKP_FMT), orbPct(o));
 }
 
 // ko11.16: un orbe del tipo dado (ataque o defensa y % al azar) a la bolsa, con aviso

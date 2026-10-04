@@ -1491,9 +1491,10 @@ uint8_t Pet::synthOrbs(const uint8_t idx[3], uint16_t &out) {
   int pct = great ? ORB_MAX_PCT : (int)(sum / 3) - 3 + (int)random(9);  // media -3 .. +5
   if (pct < ORB_MIN_PCT) pct = ORB_MIN_PCT;
   if (pct > ORB_MAX_PCT) pct = ORB_MAX_PCT;
-  out = orbMake(DEX_TBL[speciesId].ptype, random(2) != 0, (uint8_t)pct);
+  bool dual = (int)random(100) < ORB_SYNTH_DUAL_PCT;  // ko12.2.1
+  out = dual ? orbMakeDual(DEX_TBL[speciesId].ptype, (uint8_t)pct) : orbMake(DEX_TBL[speciesId].ptype, random(2) != 0, (uint8_t)pct);
   gainOrb(out);  // (guarda)
-  return great ? 2 : 1;
+  return dual ? 3 : great ? 2 : 1;
 }
 
 uint8_t Pet::wildWinItems() {

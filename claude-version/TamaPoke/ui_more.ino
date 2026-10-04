@@ -670,7 +670,7 @@ void renderOrbBag() {
     drawOrb(CX, y + 96, 40, o, now);
     orbName(o, b, sizeof(b));
     drawFit(b, y + 146, w - 30, uiLerp(orbColor(orbType(o)), UI_INK, 8, 16), 2);
-    snprintf(b, sizeof(b), XT(orbDef(o) ? X_ORB_DEFP_FMT : X_ORB_ATKP_FMT), orbPct(o));
+    orbPctText(o, b, sizeof(b));
     drawFit(b, y + 174, w - 30, UI_INK, 2);
     int by = y + h - 58;
     if (worn) {
@@ -713,18 +713,25 @@ void renderOrbBag() {
     uiPanel(x, y, w, h, 20, UI_WHITE, UI_INK);
     if (synRes) {
       uint16_t o = synOut;
-      if (synRes == 2)  // exito grande: rayos dorados
-        for (int k = 0; k < 12; k++) {
-          float a = now * 0.001f + k * 0.5236f;
-          gfx->drawLine(CX + (int)(cosf(a) * 50), y + 96 + (int)(sinf(a) * 50), CX + (int)(cosf(a) * 78),
-                        y + 96 + (int)(sinf(a) * 78), C565(0xf0, 0xc0, 0x30));
+      if (synRes >= 2)  // exito grande: rayos dorados (ko12.2.1: arcoiris: de colores)
+        for (int k = 0; k < (synRes == 3 ? 18 : 12); k++) {
+          float a = now * 0.001f + k * (synRes == 3 ? 0.349f : 0.5236f);
+          uint16_t rc = synRes == 3 ? orbHue(k / 18.0f + now * 0.0003f) : C565(0xf0, 0xc0, 0x30);
+          int r1 = synRes == 3 ? 82 + (int)(6 * sinf(now * 0.01f + k)) : 78;
+          gfx->drawLine(CX + (int)(cosf(a) * 50), y + 96 + (int)(sinf(a) * 50), CX + (int)(cosf(a) * r1), y + 96 + (int)(sinf(a) * r1), rc);
+          if (synRes == 3) gfx->drawLine(CX + (int)(cosf(a) * 50) + 1, y + 96 + (int)(sinf(a) * 50), CX + (int)(cosf(a) * r1) + 1, y + 96 + (int)(sinf(a) * r1), rc);
         }
       gfx->fillCircle(CX, y + 90, 58, uiLerp(orbColor(orbType(o)), UI_WHITE, 13, 16));
       drawOrb(CX, y + 96, 40, o, now);
-      drawFit(XT(synRes == 2 ? X_SYN_GREAT : X_SYN_OK), y + 14, w - 40, synRes == 2 ? C565(0xc0, 0x80, 0x10) : UI_BAR_OK, 2);
+      const char *ttl = XT(synRes == 3 ? X_SYN_DUAL : synRes == 2 ? X_SYN_GREAT : X_SYN_OK);
+      int tw = textW(ttl, 2);
+      if (tw > w - 40) tw = w - 40;
+      gfx->fillRoundRect(CX - tw / 2 - 10, y + 8, tw + 20, textH(2) + 14, 10, UI_WHITE);  // ko12.2.1: legible sobre las llamas
+      drawFit(ttl, y + 14, w - 40,
+              synRes == 3 ? uiLerp(orbHue(now * 0.0005f), UI_INK, 6, 16) : synRes == 2 ? C565(0xc0, 0x80, 0x10) : UI_BAR_OK, 2);
       orbName(o, b, sizeof(b));
       drawFit(b, y + 150, w - 30, uiLerp(orbColor(orbType(o)), UI_INK, 8, 16), 2);
-      snprintf(b, sizeof(b), XT(orbDef(o) ? X_ORB_DEFP_FMT : X_ORB_ATKP_FMT), orbPct(o));
+      orbPctText(o, b, sizeof(b));
       drawFit(b, y + 178, w - 30, UI_INK, 2);
     } else {
       // fallo: esfera gris rajada y humo

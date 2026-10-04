@@ -143,6 +143,7 @@ enum XId : uint16_t {  // ko10.6: pasaron de 255
   X_FW_TITLE, X_FW_FINAL, X_FW_TIME, X_FW_EVO_NEED, X_FW_TIME_FMT, X_FW_LEFT_FMT, X_FW_READY, X_FW_WAIT,  // ko11.18: despedida
   X_REG_0, X_REG_1, X_REG_2, X_REG_3, X_REG_4, X_REG_5, X_REG_6, X_REG_7,
   X_REG_8, X_REG_9, X_REG_10, X_REG_11, X_REG_12, X_REG_13, X_REG_14, X_REG_15,
+  X_ORB_DUAL_FMT, X_ORB_DUALP_FMT, X_SYN_DUAL,  // ko12.2.1: orbe arcoiris (ataque y defensa)
   X_COUNT
 };
 

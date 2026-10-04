@@ -86,6 +86,9 @@ static const uint8_t CANDY_COST[CU_COUNT] = { 3, 1, 5, 10, 5 };
 #define ORB_SYNTH_FAIL_PCT 20   // 1 de cada 5 falla (los 3 se pierden; consuelo: 2 trozos)
 #define ORB_SYNTH_GREAT_PCT 5   // exito grande: +25 %
 #define ORB_SYNTH_FAIL_SHARDS 2
+// ko12.2.1: rara vez la fusion sale "arcoiris": sube ataque Y defensa a la vez (bit 13)
+#define ORB_SYNTH_DUAL_PCT 4    // de las fusiones que salen bien
+#define ORB_DUAL 0x2000
 enum : uint8_t { RG_BALL = 1, RG_POTION, RG_SHARD, RG_EXP, RG_ORB };  // regalo al soltar (seguidores)
 static inline uint16_t orbMake(uint8_t type, bool def, uint8_t pct) {
   return (uint16_t)(0x8000 | (def ? 0x4000 : 0) | ((type & 15) << 8) | pct);
@@ -94,7 +97,9 @@ static inline bool orbValid(uint16_t o) { return (o & 0x8000) != 0; }
 static inline uint8_t orbType(uint16_t o) { return (uint8_t)((o >> 8) & 15); }
 static inline bool orbDef(uint16_t o) { return (o & 0x4000) != 0; }
 static inline uint8_t orbPct(uint16_t o) { return (uint8_t)(o & 0xFF); }
-static inline bool orbSame(uint16_t a, uint16_t b) { return orbValid(a) && orbValid(b) && ((a ^ b) & 0x4F00) == 0; }
+static inline bool orbDual(uint16_t o) { return (o & ORB_DUAL) != 0; }
+static inline uint16_t orbMakeDual(uint8_t type, uint8_t pct) { return (uint16_t)(0x8000 | ORB_DUAL | ((type & 15) << 8) | pct); }
+static inline bool orbSame(uint16_t a, uint16_t b) { return orbValid(a) && orbValid(b) && ((a ^ b) & 0x6F00) == 0; }
 #define SHARDS_PER_RARE 10  // ko11.15.1: 10 trozos = 1 caramelo raro (= 5 de tu familia)
 #define CANDY_TRADE_RATE 3   // ko10.11: 3 de otra familia = 1 de la que crias
 #define RARE_CANDY_VALUE 5   // ko10.11: 1 caramelo universal = 5 de la que crias
@@ -196,7 +201,7 @@ public:
   // caramelo), 3 no mejoraba (el nuevo -> 1 caramelo), 0 no se pudo
   uint8_t gainOrb(uint16_t o);
   // ko11.19: fusion. idx = 3 posiciones distintas de orbBag. Devuelve 0 fallo, 1 exito,
-  // 2 exito grande; out = el orbe nuevo (0 si fallo)
+  // 2 exito grande, 3 arcoiris (ko12.2.1); out = el orbe nuevo (0 si fallo)
   uint8_t synthOrbs(const uint8_t idx[3], uint16_t &out);
   void addShards(uint16_t n);  // ko11.19: trozos (10 = 1 caramelo raro)
   // ko11.19: al soltar un Pokemon que SOLO te siguio: un regalo pequeno al azar.
@@ -205,8 +210,8 @@ public:
   bool equipOrb(uint8_t bagIdx);   // solo si es de su tipo; el equipado vuelve a la bolsa
   void unequipOrb();
   bool orbFits(uint16_t o) const;  // del tipo del Pokemon que crias
-  uint8_t orbAtkPct() const { return orbValid(orb) && !orbDef(orb) && orbFits(orb) ? orbPct(orb) : 0; }
-  uint8_t orbDefPct() const { return orbValid(orb) && orbDef(orb) && orbFits(orb) ? orbPct(orb) : 0; }
+  uint8_t orbAtkPct() const { return orbValid(orb) && (!orbDef(orb) || orbDual(orb)) && orbFits(orb) ? orbPct(orb) : 0; }
+  uint8_t orbDefPct() const { return orbValid(orb) && (orbDef(orb) || orbDual(orb)) && orbFits(orb) ? orbPct(orb) : 0; }
   uint16_t candyToShards();  // ko11.15.1: los de OTRAS familias -> trozos (1:1); devuelve cuantos  // 3 de otra familia -> 1 de la actual (x times)
   bool useRareCandy();                              // 1 universal -> RARE_CANDY_VALUE de la actual
   // racha de cuidado diario (del jugador: persiste entre crianzas)

@@ -144,6 +144,7 @@ static const char *const XS[2][X_COUNT] = {
     "FAREWELL", "Final form", "3 days together", "Evolve", "%ud %uh", "%uh left to 3 days", "Ready! Farewell button on the main screen", "Evolve to say goodbye",
     "MEADOW", "BEACH", "FOREST", "VOLCANO", "MOUNTAIN", "SNOWFIELD", "POWER PLANT", "DOJO",
     "SWAMP", "DESERT", "RUINS", "GARDEN", "GRAVEYARD", "DRAGON VALE", "CITY", "MINE",
+    "%s Rainbow Orb", "ATK/DEF +%u%%", "RAINBOW ORB!",
   },
   // ---------------- KO ----------------
   {
@@ -282,6 +283,7 @@ static const char *const XS[2][X_COUNT] = {
     "이별 조건", "최종 진화형", "함께한 시간 3일", "진화 필요", "%u일 %u시간", "3일까지 %u시간 남음", "모두 충족! 기본 화면에 이별 버튼", "진화하면 이별할 수 있어요",
     "초원", "바닷가", "숲", "화산", "산", "설원", "발전소", "도장",
     "늪", "사막", "유적", "꽃밭", "묘지", "용의 계곡", "도시", "광산",
+    "%s 무지개구슬", "공격/방어 +%u%%", "무지개구슬 탄생!",
   },
 };
 

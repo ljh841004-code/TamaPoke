@@ -1458,7 +1458,7 @@ TEST(orb, al_evolucionar_a_otro_tipo_se_vuelve_caramelos) {
 
 // ko11.19: fusion de orbes: 3 -> 1 del tipo del Pokemon; a veces falla (con consuelo)
 TEST(orb, fusion_tres_en_uno_con_fallos) {
-  int ok = 0, fail = 0, great = 0;
+  int ok = 0, fail = 0, great = 0, dual = 0;
   for (int k = 0; k < 400; k++) {
     Pet p;
     makePet(p, 4);  // charmander (fuego)
@@ -1479,6 +1479,8 @@ TEST(orb, fusion_tres_en_uno_con_fallos) {
     } else {
       ok++;
       if (r == 2) great++;
+      if (r == 3) dual++;
+      CHECK_EQ(r == 3, orbDual(out));  // ko12.2.1: arcoiris
       CHECK_EQ(orbType(out), (uint8_t)PT_FIRE);
       CHECK(orbPct(out) >= 17 && orbPct(out) <= 25);  // media 20: -3 .. +5
       CHECK_EQ(p.orbN, (uint8_t)2);
@@ -1487,6 +1489,30 @@ TEST(orb, fusion_tres_en_uno_con_fallos) {
   CHECK(fail > 40 && fail < 130);  // ~20 %
   CHECK(ok > 270);
   CHECK(great > 0);
+  CHECK(dual > 0 && dual < 40);  // ko12.2.1: ~4 % de los buenos (unos 13 de 320)
+}
+
+// ko12.2.1: orbe arcoiris: sube ataque y defensa a la vez; es distinto de los normales y se guarda
+TEST(orb, arcoiris_sube_ataque_y_defensa) {
+  Pet p;
+  makePet(p, 4);  // fuego
+  p.orbN = 0; p.orb = 0;
+  uint16_t d = orbMakeDual(PT_FIRE, 18);
+  CHECK(orbDual(d) && orbValid(d) && !orbDef(d));
+  CHECK_EQ((int)p.gainOrb(orbMake(PT_FIRE, false, 25)), 1);
+  CHECK_EQ((int)p.gainOrb(d), 1);  // no es "el mismo" que el de ataque
+  CHECK_EQ((int)p.orbN, 2);
+  CHECK(p.equipOrb(1));
+  CHECK_EQ((int)p.orbAtkPct(), 18);
+  CHECK_EQ((int)p.orbDefPct(), 18);
+  CHECK_EQ((int)p.gainOrb(orbMakeDual(PT_FIRE, 22)), 2);  // otro arcoiris mejor: sustituye al equipado
+  CHECK_EQ((int)p.orbDefPct(), 22);
+  p.saveNow();
+  Pet q;
+  q.begin();
+  CHECK(orbDual(q.orb));
+  CHECK_EQ((int)q.orbAtkPct(), 22);
+  CHECK_EQ((int)q.orbDefPct(), 22);
 }
 
 TEST(orb, fusion_rechaza_repetidos_o_fuera_de_rango) {

@@ -763,6 +763,17 @@ static void scenes(bool ko, const char *sfx) {
       tick(900); render(); render(); shot("11u_orb_synth_result");
       orbBagTap(CX, 200);
     }
+    {  // ko12.2.1: el arcoiris: en la bolsa, su ventana y el resultado de la fusion
+      uint8_t pt = DEX_TBL[pet.speciesId].ptype;
+      pet.gainOrb(orbMakeDual(pt, 21));
+      orbPage = 0; orbSel = -1; render(); shot("11v_orb_bag_rainbow");
+      for (int k = 0; k < (int)orbViewN(); k++) { bool w; if (orbDual(orbViewAt(k, w))) { orbSel = k; break; } }
+      render(); shot("11w_orb_detail_rainbow");
+      orbSel = -1;
+      synRes = 3; synOut = orbMakeDual(pt, 21); synShow = true; render(); shot("11x_orb_synth_rainbow");
+      synShow = false;
+      navCheck("orbe: arcoiris = ataque+defensa", orbDual(synOut) && pet.orbFits(synOut));
+    }
     boxOrb = false;
   }
   xScreen = XS_NEXTPICK; nextPage = 0; render(); shot("11c_next_pick");

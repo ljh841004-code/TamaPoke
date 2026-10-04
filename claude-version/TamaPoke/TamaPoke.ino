@@ -1863,6 +1863,22 @@ static const uint16_t ORB_COL[16] = {
   C565(0x70, 0x60, 0xb0), C565(0x6a, 0x4c, 0xf0), C565(0x60, 0x48, 0x38), C565(0xa8, 0xb0, 0xc8),
 };
 uint16_t orbColor(uint8_t type) { return ORB_COL[type & 15]; }
+// ko12.2.1: color del arcoiris (h = 0..1, da la vuelta)
+uint16_t orbHue(float h) {
+  h -= floorf(h);
+  float x = h * 6.0f;
+  int i = (int)x;
+  float f = x - i;
+  uint8_t up = (uint8_t)(f * 255), dn = (uint8_t)(255 - f * 255);
+  switch (i % 6) {
+    case 0: return C565(255, up, 60);
+    case 1: return C565(dn, 255, 60);
+    case 2: return C565(60, 255, up);
+    case 3: return C565(60, dn, 255);
+    case 4: return C565(up, 60, 255);
+    default: return C565(255, 60, dn);
+  }
+}
 
 void drawOrb(int cx, int cy, int r, uint16_t o, uint32_t t) {
   if (!orbValid(o)) {  // hueco vacio: circulo punteado
@@ -1874,6 +1890,13 @@ void drawOrb(int cx, int cy, int r, uint16_t o, uint32_t t) {
   }
   uint16_t c = orbColor(orbType(o));
   uint16_t light = uiLerp(c, UI_WHITE, 9, 16), dark = uiLerp(c, UI_INK, 7, 16);
+  bool dual = orbDual(o);  // ko12.2.1: arcoiris: halo de defensa + llamas de ataque + aro de colores
+  if (dual) {
+    float pl = 0.5f + 0.5f * sinf(t * 0.006f);
+    int hr = r + 4 + (int)(pl * r * 0.4f);
+    gfx->fillCircle(cx, cy, hr, uiLerp(orbHue(t * 0.0003f), UI_WHITE, 10 + (int)(pl * 3), 16));
+    gfx->fillCircle(cx, cy, r + 3, uiLerp(orbHue(t * 0.0003f + 0.5f), UI_WHITE, 8, 16));
+  }
   if (!orbDef(o)) {
     // ataque: arde como una llama del color de su tipo. Lenguas que suben desde la
     // mitad de arriba (fuera: el color del tipo; dentro: amarillo claro), que
@@ -1904,7 +1927,8 @@ void drawOrb(int cx, int cy, int r, uint16_t o, uint32_t t) {
       int er = (int)((1.0f - ph) * r * 0.12f) + 1;
       gfx->fillCircle(ex, ey, er, uiLerp(mid, c, (int)(ph * 16), 16));
     }
-  } else {
+  }
+  if (orbDef(o)) {
     // defensa: halo que late + 4 destellos que giran
     float pl = 0.5f + 0.5f * sinf(t * 0.006f);
     int hr = r + 3 + (int)(pl * r * 0.35f);
@@ -1929,6 +1953,35 @@ void drawOrb(int cx, int cy, int r, uint16_t o, uint32_t t) {
   gfx->fillEllipse(cx - r * 2 / 5, cy - r * 2 / 5, r / 3 + 1, r / 5 + 1, uiLerp(light, UI_WHITE, 12, 16));
   if (r >= 12) gfx->fillCircle(cx + r / 3, cy + r / 2, r / 8 + 1, uiLerp(c, UI_WHITE, 10, 16));
   gfx->drawCircle(cx, cy, r, uiLerp(dark, UI_INK, 6, 16));
+  if (dual) {
+    // aro arcoiris que gira por el borde
+    int dr = r > 14 ? 3 : 2;
+    for (int k = 0; k < 24; k++) {
+      float a = k * 0.2618f + t * 0.002f;
+      gfx->fillCircle(cx + (int)(cosf(a) * r), cy + (int)(sinf(a) * r), dr, orbHue(k / 24.0f + t * 0.0004f));
+    }
+    // destellos blancos que aparecen y se apagan alrededor
+    for (int k = 0; k < 5; k++) {
+      float ph = fmodf(t * 0.0009f + k * 0.2f, 1.0f);
+      float a = k * 1.2566f + 0.6f;
+      int sx = cx + (int)(cosf(a) * (r + 8 + r / 4)), sy = cy + (int)(sinf(a) * (r + 8 + r / 4));
+      int l = (int)(sinf(ph * 3.1416f) * (3 + r / 6));
+      if (l < 1) continue;
+      gfx->drawFastHLine(sx - l, sy, 2 * l + 1, UI_WHITE);
+      gfx->drawFastVLine(sx, sy - l, 2 * l + 1, UI_WHITE);
+      gfx->fillCircle(sx, sy, l / 3 + 1, UI_WHITE);
+    }
+    // estrella dorada en el centro (late)
+    int sr = r / 3 + (int)(sinf(t * 0.008f) * r / 14);
+    if (sr >= 3) {
+      uint16_t gold = C565(0xff, 0xd8, 0x40);
+      gfx->fillTriangle(cx - sr / 4, cy, cx + sr / 4, cy, cx, cy - sr, gold);
+      gfx->fillTriangle(cx - sr / 4, cy, cx + sr / 4, cy, cx, cy + sr, gold);
+      gfx->fillTriangle(cx, cy - sr / 4, cx, cy + sr / 4, cx - sr, cy, gold);
+      gfx->fillTriangle(cx, cy - sr / 4, cx, cy + sr / 4, cx + sr, cy, gold);
+      gfx->fillCircle(cx, cy, sr / 4 + 1, UI_WHITE);
+    }
+  }
 }
 
 // ko11.16: el hueco (engaste) del orbe junto al Pokemon: aro oscuro con filo dorado
