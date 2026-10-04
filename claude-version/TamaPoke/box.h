@@ -77,6 +77,41 @@ struct __attribute__((packed)) FameRec {
   uint16_t solo, team;
 };
 
+// ko12.4: el diario de una crianza (lo lleva el Pokemon que crias) y su recuerdo en el
+// salon (se guarda al despedirse, ligado a su ficha de la cinta por epoch + dex)
+enum : uint8_t { LF_EGG = 0, LF_BOX, LF_TRADE, LF_UPDATE };  // de donde vino (UPDATE: ya se criaba al actualizar)
+struct __attribute__((packed)) LifeLog {
+  uint32_t start;      // cuando nacio / llego (0 = sin reloj)
+  uint8_t from;        // LF_*
+  int16_t firstDex;    // la forma con la que empezo
+  int16_t evoDex[2];   // en que evoluciono (0 = nada)
+  uint32_t evoT[2];
+  uint32_t firstWin;   // primera victoria (0 = ninguna)
+  uint16_t wins0, link0, daily0, champ0;  // contadores del jugador al empezar
+  uint8_t badges0;
+  uint16_t meals, snacks, cleans, pets, plays, trains;
+};
+struct __attribute__((packed)) MemRec {
+  LifeLog life;
+  uint32_t end;        // despedida
+  uint16_t lvl, days;
+  uint8_t bond, mistakes, medals, badges;  // medallas de cuidado (bits) y de gimnasio ganadas
+  uint16_t wins, link, daily, champ;       // durante esta crianza
+  uint16_t gameHi, strHi, defHi, speHi, vbBest;
+  char nick[20];
+};
+
+class MemStore {
+public:
+  void begin();  // espacio "tpmem" (particion grande)
+  bool put(uint32_t epoch, int16_t dex, const MemRec &m);
+  bool get(uint32_t epoch, int16_t dex, MemRec &out);
+  void wipe();
+private:
+  Preferences prefs;
+  static void key(uint32_t epoch, int16_t dex, char out[16]);
+};
+
 class DexLog {
 public:
   // ko10: 251 especies (gen 1 + 2). Los guardados de 151 se leen y se amplian.

@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include "battle.h"  // fork KO (ko7): curva de EXP y niveles de evolucion
+#include "box.h"     // ko12.4: LifeLog / MemRec
+#define LIFE_INC(f) do { if ((f) < 65535) (f)++; } while (0)  // ko12.4: contador del diario (campo packed)
 
 // 1 tick = 1 minuto de juego. Baja este valor para probar mas rapido
 // (p. ej. 5000UL = las estadisticas caen 12x mas rapido).
@@ -185,6 +187,9 @@ public:
   // que aun no sabe: con hueco lo aprende ya; con 4, elige cual olvidar o no lo aprende
   uint8_t mv[4] = { 0, 0, 0, 0 };
   uint8_t pp[4] = { 0, 0, 0, 0 };
+  LifeLog life = {};           // ko12.4: diario de esta crianza (recuerdos del salon)
+  void lifeStart(uint8_t from);
+  void lifeMemory(MemRec &m, uint32_t endEpoch) const;  // lo que se guarda al despedirse
   uint8_t moveLv = 0;          // ultimo multiplo de 5 en que se ofrecio
   uint8_t moveOffer = 0;       // movimiento ofrecido pendiente de respuesta (0 = ninguno)
   uint8_t moveLearned = 0;     // aviso "새 기술 X을 배웠다!" (id, 0 = nada)

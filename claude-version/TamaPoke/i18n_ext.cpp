@@ -146,6 +146,12 @@ static const char *const XS[2][X_COUNT] = {
     "SWAMP", "DESERT", "RUINS", "GARDEN", "GRAVEYARD", "DRAGON VALE", "CITY", "MINE",
     "%s Rainbow Orb", "ATK/DEF +%u%%", "RAINBOW ORB!",
     "Rainbow orb didn't fit the new type: 10 candies", "Rainbow orb didn't fit the new type: 10 candies + 1 rare candy",
+    "MEMORIES", "Memories of %s", "Raised before memories were kept", "(they start with v1.17-ko12.4)", "%u days together",
+    "Hatched from an egg", "Came from the box", "Arrived by trade", "Diary started with the update",
+    "Evolved: %s  %s", "First win %s   Wild wins %u", "No wins yet", "Said goodbye at Lv.%u  %s", "Nickname: %s", "RECORDS",
+    "Meals %u   Snacks %u   Cleanups %u", "Pets %u   Play %u   Training %u", "Link wins %u   Daily %u",
+    "Badges +%u   Champion %u", "Bond %u   Mistakes %u   Medals %u", "Ball %u   Sack %u   Guard %u", "Speed %u   Volley %u in a row",
+    "Tap: next page",
   },
   // ---------------- KO ----------------
   {
@@ -286,6 +292,12 @@ static const char *const XS[2][X_COUNT] = {
     "늪", "사막", "유적", "꽃밭", "묘지", "용의 계곡", "도시", "광산",
     "%s 무지개구슬", "공격/방어 +%u%%", "무지개구슬 탄생!",
     "진화로 속성이 바뀌어 무지개구슬이 사탕 10개로", "진화로 속성이 바뀌어 무지개구슬이 사탕 10개 + 만능 사탕 1개로",
+    "추억", "%s의 추억", "추억 기록이 생기기 전에 키웠어요", "(v1.17-ko12.4부터 기록돼요)", "함께한 날 %u일",
+    "알에서 태어났어요", "보관함에서 함께하게 됐어요", "교환으로 왔어요", "기록은 업데이트한 날부터",
+    "진화: %s  %s", "첫 승리 %s   야생 승리 %u번", "아직 이긴 적이 없어요", "Lv.%u에서 작별  %s", "별명: %s", "기록",
+    "밥 %u   간식 %u   청소 %u", "쓰다듬기 %u   놀이 %u   훈련 %u", "통신 대전 승리 %u   오늘의 대전 %u",
+    "체육관 배지 +%u   챔피언 %u번", "친밀도 %u   돌봄 실수 %u   메달 %u개", "공놀이 %u   샌드백 %u   방어 %u", "속도 %u   배구 %u연승",
+    "탭: 다음 쪽",
   },
 };
 

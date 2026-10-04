@@ -1578,3 +1578,87 @@ TEST(items, lo_que_no_cabe_se_cambia) {
   CHECK_EQ(p.potions, (uint8_t)POTION_MAX);
   CHECK_EQ(p.rareShards, (uint16_t)1);
 }
+
+// ko12.4: diario de la crianza -> recuerdo del salon
+TEST(life, el_diario_cuenta_la_crianza) {
+  Pet p;
+  p.lastSeenEpoch = 1790000000UL;
+  makePet(p, 1);  // Bulbasaur
+  CHECK_EQ((int)p.life.from, (int)LF_EGG);
+  CHECK_EQ(p.life.firstDex, (int16_t)1);
+  p.life.start = 1790000000UL;
+  uint16_t w0 = p.wildWins;
+  CHECK_EQ(p.life.wins0, w0);
+  p.feedBerry(0); p.feedBerry(1);
+  p.feedCandy();
+  p.poops = 2; p.clean();
+  p.clean();  // sin cacas: no cuenta
+  p.caress(); p.caress(); p.caress();
+  p.play();
+  p.trainBonus(true, false);
+  CHECK_EQ(p.life.meals, (uint16_t)2);
+  CHECK_EQ(p.life.snacks, (uint16_t)1);
+  CHECK_EQ(p.life.cleans, (uint16_t)1);
+  CHECK_EQ(p.life.pets, (uint16_t)3);
+  CHECK_EQ(p.life.plays, (uint16_t)1);
+  CHECK_EQ(p.life.trains, (uint16_t)1);
+  CHECK_EQ(p.life.firstWin, (uint32_t)0);
+  p.lastSeenEpoch = 1790100000UL;
+  p.energy = 100; p.fullness = 100;
+  p.battleResult(BATTLE_WILD, true, false, false, 16, 5);
+  CHECK_EQ(p.life.firstWin, (uint32_t)1790100000UL);
+  p.lastSeenEpoch = 1790200000UL;
+  p.battleResult(BATTLE_WILD, true, false, false, 16, 5);
+  CHECK_EQ(p.life.firstWin, (uint32_t)1790100000UL);  // la primera se queda
+  // evolucion: al diario
+  p.exp = expForLevel(40);
+  for (int i = 0; i < 5 && p.canEvolveNow(); i++) p.evolve();
+  CHECK(p.life.evoDex[0] == 2);
+  CHECK(p.life.evoT[0] != 0);
+  // lo que se guarda al despedirse
+  strcpy(p.nick, "BULBY");
+  p.ageMinutes = 3 * 24 * 60 + 10;
+  MemRec m;
+  p.lifeMemory(m, 1790300000UL);
+  CHECK_EQ(m.days, (uint16_t)3);
+  CHECK_EQ(m.end, (uint32_t)1790300000UL);
+  CHECK(m.wins >= 2);
+  CHECK_EQ(m.life.meals, (uint16_t)2);
+  CHECK(strcmp(m.nick, "BULBY") == 0);
+  // el diario sobrevive a un reinicio
+  p.saveNow();
+  Pet q;
+  q.begin();
+  CHECK_EQ(q.life.meals, (uint16_t)2);
+  CHECK_EQ(q.life.firstWin, (uint32_t)1790100000UL);
+  CHECK(q.life.evoDex[0] == 2);
+}
+
+TEST(life, sin_diario_guardado_empieza_al_actualizar) {
+  Pet p;
+  makePet(p, 4);
+  p.saveNow();
+  { Preferences x; x.begin("tamapoke", false); x.remove("life"); x.end(); }  // como una partida de antes de ko12.4
+  Pet q;
+  q.begin();
+  CHECK_EQ((int)q.life.from, (int)LF_UPDATE);
+  CHECK_EQ(q.life.firstDex, (int16_t)4);
+}
+
+TEST(life, recuerdo_en_el_salon_ida_y_vuelta) {
+  mockNvsReset();
+  MemStore ms;
+  ms.begin();
+  MemRec a = {};
+  a.lvl = 42; a.days = 9; a.life.meals = 77; strcpy(a.nick, "PIKA");
+  CHECK(ms.put(1790000000UL, 25, a));
+  MemRec b;
+  CHECK(ms.get(1790000000UL, 25, b));
+  CHECK_EQ(b.lvl, (uint16_t)42);
+  CHECK_EQ(b.life.meals, (uint16_t)77);
+  CHECK(strcmp(b.nick, "PIKA") == 0);
+  CHECK(!ms.get(1790000000UL, 26, b));  // otro dex: otra ficha
+  CHECK(!ms.get(1790000001UL, 25, b));
+  ms.wipe();
+  CHECK(!ms.get(1790000000UL, 25, b));
+}

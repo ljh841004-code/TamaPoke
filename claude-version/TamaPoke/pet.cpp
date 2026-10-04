@@ -21,6 +21,45 @@ void Pet::begin() {
   lastTick = millis();
 }
 
+// ---- ko12.4: diario de la crianza ----
+static uint8_t popcount8(uint8_t v) { uint8_t c = 0; while (v) { c += v & 1; v >>= 1; } return c; }
+static uint8_t popcount16(uint16_t v) { uint8_t c = 0; while (v) { c += v & 1; v >>= 1; } return c; }
+
+void Pet::lifeStart(uint8_t from) {
+  memset(&life, 0, sizeof(life));
+  life.start = lastSeenEpoch;
+  life.from = from;
+  life.firstDex = speciesId;
+  life.wins0 = wildWins;
+  life.link0 = linkWins;
+  life.daily0 = dailyClears;
+  life.champ0 = champWins;
+  life.badges0 = popcount8(badges);
+}
+
+static uint16_t lifeDiff(uint16_t now, uint16_t at) { return now >= at ? (uint16_t)(now - at) : 0; }
+
+void Pet::lifeMemory(MemRec &m, uint32_t endEpoch) const {
+  memset(&m, 0, sizeof(m));
+  m.life = life;
+  m.end = endEpoch;
+  m.lvl = level();
+  uint32_t d = ageMinutes / (24 * 60);
+  m.days = d > 65535 ? 65535 : (uint16_t)d;
+  m.bond = bond;
+  m.mistakes = careMistakes;
+  m.medals = popcount16(medals);
+  uint8_t b = popcount8(badges);
+  m.badges = b > life.badges0 ? (uint8_t)(b - life.badges0) : 0;
+  m.wins = lifeDiff(wildWins, life.wins0);
+  m.link = lifeDiff(linkWins, life.link0);
+  m.daily = lifeDiff(dailyClears, life.daily0);
+  m.champ = lifeDiff(champWins, life.champ0);
+  m.gameHi = gameHi; m.strHi = strHi; m.defHi = defHi; m.speHi = speHi; m.vbBest = vbBest;
+  memcpy(m.nick, nick, sizeof(m.nick));
+  m.nick[sizeof(m.nick) - 1] = 0;
+}
+
 // ---- ko11.16: orbes de tipo ----
 bool Pet::orbFits(uint16_t o) const {
   return orbValid(o) && !isEgg() && speciesId >= 1 && orbType(o) == DEX_TBL[speciesId].ptype;
@@ -90,6 +129,7 @@ void Pet::newEgg() {
   if (shinyBase < 2) shinyBase = 2;
   eggShiny = (random(shinyBase) == 0);
   eggTaps = 0;
+  memset(&life, 0, sizeof(life));  // ko12.4: se escribe al nacer
   fullness = 80;
   joy = 80;
   energy = 80;
@@ -314,6 +354,7 @@ void Pet::flushSave() {
   prefs.putUShort("good", goodTicks);  // ko10.6: la racha sobrevive a un reinicio
   prefs.putBool("sleep", sleeping);
   prefs.putBool("aslp", autoSleep);  // ko12.2
+  prefs.putBytes("life", &life, sizeof(life));  // ko12.4
   prefs.putUChar("bond", bond);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
 }
@@ -556,6 +597,7 @@ void Pet::hatch() {
   newMedal = 0;
   nick[0] = 0;
   registerSpecies(speciesId);  // criado = registrado en la pokedex
+  lifeStart(LF_EGG);  // ko12.4
   checkMedals();     // por si nace ya en forma final (legendario)
   sfxPlay(SFX_HATCH);
   save();
@@ -629,6 +671,7 @@ void Pet::resetTrainRecords() {
 void Pet::trainBonus(bool scored, bool record) {
   lastTrainExp = 0;
   lastTrainCandy = 0;
+  if (!isEgg()) LIFE_INC(life.trains);  // ko12.4
   if (!scored || isEgg()) return;
   uint16_t L = level();
   if (L < LEVEL_MAX) {
@@ -747,6 +790,11 @@ void Pet::evolve() {
   else if (n > 1) next = opts[random(n)];
   speciesId = next;
   evolvedHere = true;  // ko11.9.2
+  {  // ko12.4: al diario (dos evoluciones como mucho; una tercera ocupa la ultima)
+    uint8_t k = life.evoDex[0] ? 1 : 0;
+    life.evoDex[k] = speciesId;
+    life.evoT[k] = lastSeenEpoch;
+  }
   // ko11.31: con la forma nueva, uno de los 3 ataques de su tipo de la nueva fase
   {
     uint8_t ty = DEX_TBL[speciesId].ptype, tr = moveTier(speciesId), v0 = (uint8_t)random(3);
@@ -786,6 +834,7 @@ void Pet::feedBerry(uint8_t color) {
     fullness = clamp100(fullness + 25);
   }
   eatUntil = millis() + EAT_ANIM_MS;
+  LIFE_INC(life.meals);  // ko12.4
   registerCare();
   save();
 }
@@ -800,6 +849,7 @@ uint8_t Pet::favFood() const {
 void Pet::feedCandy() {
   if (ceremony != CER_NONE) return;
   if (isEgg() || sleeping) return;
+  LIFE_INC(life.snacks);  // ko12.4
   if (lovesBerry(3)) {  // ko9: la chuche es su favorita: llena como la baya favorita
     fullness = clamp100(fullness + 35);
     joy = clamp100(joy + 12);
@@ -923,6 +973,7 @@ bool Pet::playResult(uint8_t score) {
   // energia (GAME_SMALL_ENERGY). Nunca cansa. El ejercicio si quema peso.
   int burn = (int)weight - score * 2;
   weight = burn > 0 ? burn : 0;
+  LIFE_INC(life.plays);  // ko12.4
   bool record = score > gameHi;
   lastAllTime = record && score > allGameHi;
   if (record) {
@@ -1048,6 +1099,7 @@ void Pet::play() {
   energy = clamp100(energy - 10);
   fullness = clamp100(fullness - 5);
   heartUntil = millis() + HEART_MS;
+  LIFE_INC(life.plays);  // ko12.4
   addBond(2);
   registerCare();
   save();
@@ -1063,6 +1115,7 @@ void Pet::toggleLight() {
 
 void Pet::clean() {
   if (ceremony != CER_NONE) return;
+  if (poops && !isEgg()) LIFE_INC(life.cleans);  // ko12.4
   poops = 0;
   hygiene = 100;
   addBond(1);
@@ -1076,6 +1129,7 @@ void Pet::caress() {
   joy = clamp100(joy + 5);
   heartUntil = millis() + HEART_MS;
   addBond(1);
+  LIFE_INC(life.pets);  // ko12.4
   registerCare();
 }
 
@@ -1152,6 +1206,7 @@ void Pet::save() {
   prefs.putUShort("good", goodTicks);  // ko10.6: la racha sobrevive a un reinicio
   prefs.putBool("sleep", sleeping);
   prefs.putBool("aslp", autoSleep);  // ko12.2
+  prefs.putBytes("life", &life, sizeof(life));  // ko12.4
   prefs.putUChar("lend", lastEnd);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
   prefs.putBytes("dexreg", dexReg, sizeof(dexReg));
@@ -1285,6 +1340,10 @@ void Pet::load(bool *migrated) {
   if (goodTicks >= GOOD_CARE_TICKS) goodTicks = 0;
   sleeping = prefs.getBool("sleep", false);
   autoSleep = sleeping && prefs.getBool("aslp", false);  // ko12.2
+  // ko12.4: el diario de la crianza; si ya se criaba antes de esta version, empieza hoy
+  memset(&life, 0, sizeof(life));
+  if (prefs.getBytesLength("life") == sizeof(life)) prefs.getBytes("life", &life, sizeof(life));
+  else if (!isEgg() && speciesId >= 1) lifeStart(LF_UPDATE);
   lastEnd = prefs.getUChar("lend", CER_NONE);
   prefs.getBytes("dexreg", dexReg, sizeof(dexReg));
   // ko10.5: familias criadas. Guardados de antes: lo registrado (criado) cuenta
@@ -1387,6 +1446,7 @@ void Pet::battleResult(uint8_t kind, bool won, bool fled, bool caught,
   // pelear cansa y da hambre
   energy = dropTo(energy, kind == BATTLE_WILD ? 8 : 6, 0);
   fullness = dropTo(fullness, 4, 0);
+  if ((won || caught) && !life.firstWin) life.firstWin = lastSeenEpoch ? lastSeenEpoch : 1;  // ko12.4
   if (won || caught) {
     // la batalla entrena las tres stats un poco (el saco y el minijuego siguen
     // siendo la forma rapida de subir FUE y VEL)
@@ -1560,6 +1620,7 @@ void Pet::adoptMon(int16_t dex, uint16_t lvl, bool isShiny, uint8_t gA, uint8_t 
   eatUntil = 0;
   heartUntil = millis() + HEART_MS;
   registerSpecies(speciesId);  // criado = registrado en la pokedex
+  lifeStart(LF_BOX);  // ko12.4
   checkMedals();
   sfxPlay(SFX_HATCH);
   save();
@@ -1637,10 +1698,13 @@ bool Pet::importTrade(const TradePet &t, uint16_t lvl) {
   eatUntil = heartUntil = 0;
   trades++;
   registerSpecies(speciesId);
+  lifeStart(LF_TRADE);  // ko12.4
   // evolucion por intercambio (Kadabra, Machoke, Graveler, Haunter y los de gen 2)
   if (tradeEvolves(speciesId)) {
     prevSpeciesId = speciesId;
     speciesId = tradeTarget(speciesId);
+    life.evoDex[0] = speciesId;  // ko12.4
+    life.evoT[0] = lastSeenEpoch;
     movesNew();  // ko11.31
     registerSpecies(speciesId);
     sfxPlay(SFX_EVOLVE);

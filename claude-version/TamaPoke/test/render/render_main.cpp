@@ -738,6 +738,32 @@ static void scenes(bool ko, const char *sfx) {
   boxSel = 0; render(); shot("11d_hall_detail"); boxSel = -1;  // ko11.17: escarapela
   for (int i = 0; i < hall.count(); i++) if (hall.at((uint8_t)i).flags & BOXF_PERFECT) boxSel = i;
   if (boxSel >= 0) { render(); shot("11e_hall_perfect"); }
+  {  // ko12.4: recuerdos de la cinta: una crianza con diario y una de antes (sin)
+    memStore.begin();
+    MemRec r = {};
+    r.life.start = gMockEpoch - 86400UL * 23; r.life.from = LF_EGG; r.life.firstDex = 172;
+    r.life.evoDex[0] = 25; r.life.evoT[0] = gMockEpoch - 86400UL * 20;
+    r.life.evoDex[1] = 26; r.life.evoT[1] = gMockEpoch - 86400UL * 6;
+    r.life.firstWin = gMockEpoch - 86400UL * 19;
+    r.life.meals = 214; r.life.snacks = 37; r.life.cleans = 96; r.life.pets = 512; r.life.plays = 64; r.life.trains = 41;
+    r.end = gMockEpoch; r.lvl = 50; r.days = 23; r.bond = 92; r.mistakes = 1; r.medals = 8; r.badges = 8;
+    r.wins = 133; r.link = 4; r.daily = 12; r.champ = 2;
+    r.gameHi = 31; r.strHi = 88; r.defHi = 47; r.speHi = 1320; r.vbBest = 9;
+    strcpy(r.nick, "PIKA");
+    for (int i = 0; i < hall.count(); i++)
+      if (hall.at((uint8_t)i).dex == 25) memStore.put(hall.at((uint8_t)i).epoch, 25, r);
+    for (int i = 0; i < hall.count(); i++) if (hall.at((uint8_t)i).dex == 25) boxSel = i;
+    render(); shot("11k_hall_mem_btn");
+    boxTap(150, 320);  // [추억]
+    navCheck("cinta: [추억] abre los recuerdos", memSel == boxSel && memPage == 0);
+    render(); shot("11l_hall_memory");
+    boxTap(CX, 200); render(); shot("11m_hall_memory2");
+    navCheck("cinta: tocar = la otra pagina", memPage == 1);
+    boxTap(30, NAV_Y); navCheck("cinta: <- vuelve a la ficha", memSel < 0 && boxSel >= 0);
+    for (int i = 0; i < hall.count(); i++) if (hall.at((uint8_t)i).dex == 6) boxSel = i;
+    boxTap(150, 320); render(); shot("11n_hall_memory_old");
+    memSel = -1;
+  }
   boxSel = -1; boxHall = false;
   {  // ko11.16: bolsa de orbes (tercera pestana)
     toastUntil = 0; boxOrb = true; render(); shot("11o_orb_bag_empty");
@@ -1266,6 +1292,8 @@ static void storyShots() {
   closeAll(); trainMenuOpen = true; trainMenuPage = 1; render(); shot("52_battle_page"); trainMenuOpen = false;
 }
 
+#include "preview_ideas.inc"  // ko12.4: maquetas de ideas
+
 int main(int argc, char **argv) {
   gSdRoot = argc > 1 ? argv[1] : "sd";
   mkdir("build/shots", 0755);
@@ -1285,6 +1313,7 @@ int main(int argc, char **argv) {
   pet.balls = 5; pet.potions = 2;
   ensureMon();
   navChecks();
+  previewShots();
   storyShots();
   scenes(true, "");
   scenes(false, "_en");

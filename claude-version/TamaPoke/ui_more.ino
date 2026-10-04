@@ -254,8 +254,110 @@ static void boxDate(uint32_t e, char *out, size_t n) {
   snprintf(out, n, "%02u/%02u", m, d);
 }
 
+// ko12.4: recuerdos de un criado (ficha de la cinta): 2 paginas, tocar = la otra
+int16_t memSel = -1;  // ficha de la cinta con los recuerdos abiertos (-1 = ninguna)
+uint8_t memPage = 0;
+extern MemStore memStore;
+static void memDate(uint32_t e, char *out, size_t n) {
+  if (!e || e < 86400UL * 365) { snprintf(out, n, "-"); return; }
+  int32_t z = (int32_t)(e / 86400) + 719468;  // civil_from_days
+  int32_t era = z / 146097, doe = z - era * 146097;
+  int32_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  int32_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100), mp = (5 * doy + 2) / 153;
+  unsigned d = doy - (153 * mp + 2) / 5 + 1, mo = mp < 10 ? mp + 3 : mp - 9;
+  unsigned y = (unsigned)(yoe + era * 400 + (mo <= 2 ? 1 : 0));
+  snprintf(out, n, "%04u.%02u.%02u", y, mo, d);
+}
+static void renderMemory(const BoxMon &bm) {
+  uiScreenBg();
+  MemRec r;
+  bool have = memStore.get(bm.epoch, bm.dex, r);
+  char l[96], d1[16], d2[16];
+  const char *nm = have && r.nick[0] ? r.nick : dexName(bm.dex);
+  snprintf(l, sizeof(l), XT(X_MEM_TITLE_FMT), nm);
+  drawFit(l, 40, 300, DEX_TBL[bm.dex].accent, 2);
+  drawRibbon(CX + 128, 50, 10);
+  if (!have) {
+    drawThumbAt(bm.dex, CX, 150, 3, false);
+    drawFit(XT(X_MEM_NONE), 230, 340, UI_INK, 2);
+    drawFit(XT(X_MEM_NONE2), 260, 340, 0x8410, 1);
+    memDate(bm.epoch, d1, sizeof(d1));
+    snprintf(l, sizeof(l), XT(X_MEM_END_FMT), (unsigned)bm.lvl, d1);
+    drawFit(l, 292, 340, UI_INK, 1);
+    drawNav(NAV_L, UI_INK);
+    uiFlush();
+    return;
+  }
+  int y = 74;
+  const int LH = 26;
+  if (memPage == 0) {  // la historia
+    // las formas por las que paso, de pequena a grande
+    int16_t forms[3] = { r.life.firstDex, r.life.evoDex[0], r.life.evoDex[1] };
+    int nf = 0;
+    for (int i = 0; i < 3; i++) if (forms[i] >= 1 && forms[i] <= DEX_COUNT) forms[nf++] = forms[i];
+    if (!nf) { forms[0] = bm.dex; nf = 1; }
+    for (int i = 0; i < nf; i++) {
+      int cx = CX + (i - (nf - 1) / 2.0f) * 96;
+      drawThumbAt(forms[i], cx, y + 30, 2, false);
+      if (i + 1 < nf) { gfx->fillTriangle(cx + 40, y + 24, cx + 40, y + 36, cx + 50, y + 30, 0x8410); }
+    }
+    y += 72;
+    memDate(r.life.start, d1, sizeof(d1));
+    memDate(r.end, d2, sizeof(d2));
+    snprintf(l, sizeof(l), XT(X_MEM_DAYS_FMT), (unsigned)r.days);
+    drawFit(l, y, 340, UI_INK, 2); y += LH + 2;
+    snprintf(l, sizeof(l), "%s ~ %s", d1, d2);
+    drawFit(l, y, 340, 0x8410, 1); y += LH - 4;
+    static const XId FROM[4] = { X_MEM_FROM_EGG, X_MEM_FROM_BOX, X_MEM_FROM_TRADE, X_MEM_FROM_UPD };
+    drawFit(XT(FROM[r.life.from < 4 ? r.life.from : 0]), y, 340, UI_INK, 1); y += LH - 4;
+    for (int i = 0; i < 2; i++) {
+      int16_t e = r.life.evoDex[i];
+      if (e < 1 || e > DEX_COUNT) continue;
+      memDate(r.life.evoT[i], d1, sizeof(d1));
+      snprintf(l, sizeof(l), XT(X_MEM_EVO_FMT), dexName(e), d1);
+      drawFit(l, y, 340, UI_INK, 1); y += LH - 4;
+    }
+    if (r.life.firstWin) {
+      memDate(r.life.firstWin, d1, sizeof(d1));
+      snprintf(l, sizeof(l), XT(X_MEM_WIN_FMT), d1, (unsigned)r.wins);
+    } else snprintf(l, sizeof(l), "%s", XT(X_MEM_NOWIN));
+    drawFit(l, y, 340, UI_INK, 1); y += LH - 4;
+    memDate(r.end, d1, sizeof(d1));
+    snprintf(l, sizeof(l), XT(X_MEM_END_FMT), (unsigned)r.lvl, d1);
+    drawFit(l, y, 340, UI_INK, 1); y += LH - 4;
+    if (r.nick[0]) { snprintf(l, sizeof(l), XT(X_MEM_NICK_FMT), r.nick); drawFit(l, y, 340, 0x8410, 1); }
+  } else {  // los numeros
+    drawFit(XT(X_MEM_P2), y, 300, UI_INK, 2); y += LH + 8;
+    snprintf(l, sizeof(l), XT(X_MEM_CARE_FMT), r.life.meals, r.life.snacks, r.life.cleans);
+    drawFit(l, y, 360, UI_INK, 1); y += LH;
+    snprintf(l, sizeof(l), XT(X_MEM_CARE2_FMT), r.life.pets, r.life.plays, r.life.trains);
+    drawFit(l, y, 360, UI_INK, 1); y += LH + 6;
+    snprintf(l, sizeof(l), XT(X_MEM_WIN_FMT), "", (unsigned)r.wins);
+    {  // solo "야생 승리 N번" (sin la fecha): lo que va despues de los espacios
+      const char *p = strstr(l, "   ");
+      drawFit(p ? p + 3 : l, y, 360, UI_INK, 1); y += LH;
+    }
+    snprintf(l, sizeof(l), XT(X_MEM_BATTLE_FMT), r.link, r.daily);
+    drawFit(l, y, 360, UI_INK, 1); y += LH;
+    snprintf(l, sizeof(l), XT(X_MEM_LEAGUE_FMT), r.badges, r.champ);
+    drawFit(l, y, 360, UI_INK, 1); y += LH + 6;
+    snprintf(l, sizeof(l), XT(X_MEM_BOND_FMT), r.bond, r.mistakes, r.medals);
+    drawFit(l, y, 360, UI_INK, 1); y += LH + 6;
+    snprintf(l, sizeof(l), XT(X_MEM_REC_FMT), r.gameHi, r.strHi, r.defHi);
+    drawFit(l, y, 360, 0x8410, 1); y += LH;
+    snprintf(l, sizeof(l), XT(X_MEM_REC2_FMT), r.speHi, r.vbBest);
+    drawFit(l, y, 360, 0x8410, 1);
+  }
+  snprintf(l, sizeof(l), "%u/2", memPage + 1u);
+  drawFit(l, 392, 80, UI_INK, 1);
+  drawFit(XT(X_MEM_TAP), 412, 220, 0x8410, 1);
+  drawNav(NAV_L, UI_INK);
+  uiFlush();
+}
+
 void renderBoxDetail() {
   const BoxMon &m = cb().at(boxSel);
+  if (boxHall && memSel == boxSel) { renderMemory(m); return; }  // ko12.4
   uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   char head[48];
   snprintf(head, sizeof(head), "%s%s", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex));
@@ -304,8 +406,9 @@ void renderBoxDetail() {
     drawFit(XT(boxHall ? X_HALL_NOTE : X_BOX_NEXT), 262, 360, UI_INK, 1);
   }
   bool conf = timeLeft(boxConfirmUntil) > 0;
-  if (boxHall) {  // ko10.5: los de corona son recuerdos: no se sueltan
-    drawBtn(165, 300, 136, 48, UI_TRACK, UI_INK, XT(X_CLOSE));
+  if (boxHall) {  // ko10.5: los de corona son recuerdos: no se sueltan. ko12.4: [추억] [닫기]
+    drawBtn(93, 300, 130, 48, C565(0xe8, 0x80, 0xa8), UI_WHITE, XT(X_MEM_BTN));
+    drawBtn(243, 300, 130, 48, UI_TRACK, UI_INK, XT(X_CLOSE));
   } else {  // ko11.7: [soltar] [explorar] [cerrar]
     drawBtn(73, 300, 100, 48, UI_BAR_BAD, UI_WHITE, XT(conf ? X_RELEASE_Q : X_RELEASE));
     bool away = pet.exped.on;
@@ -471,6 +574,13 @@ void orbBagTap(int16_t x, int16_t y);
 void boxTap(int16_t x, int16_t y) {
   if (boxOrb) { orbBagTap(x, y); return; }
   if (boxSel >= 0) {  // ficha: soltar (dos toques) o cerrar
+    if (boxHall && memSel == boxSel) {  // ko12.4: recuerdos: <- vuelve a la ficha, tocar = la otra pagina
+      if (navHit(NAV_L, x, y)) memSel = -1;
+      else memPage ^= 1;
+      sfxPlay(SFX_TAP);
+      return;
+    }
+    if (boxHall && inRect(x, y, 93, 300, 130, 48)) { memSel = boxSel; memPage = 0; sfxPlay(SFX_TAP); return; }
     if (!expPick && navHit(NAV_L, x, y)) { boxSel = -1; boxConfirmUntil = 0; sfxPlay(SFX_TAP); return; }  // ko11.8
     // ko9.1: tocar al Pokemon repite su grito
     if (y >= 80 && y < 200 && x >= 120 && x < 346) {
@@ -554,7 +664,7 @@ void boxTap(int16_t x, int16_t y) {
   int k = boxPage * BOX_ROWS + r;
   Box &bx = cb();
   boxSortView(bx);
-  if (k < bx.count()) { boxSel = boxView(k); expPick = false; audioCry(bx.at((uint8_t)boxSel).dex); }  // ko9.1: su grito
+  if (k < bx.count()) { boxSel = boxView(k); expPick = false; memSel = -1; audioCry(bx.at((uint8_t)boxSel).dex); }  // ko9.1: su grito
 }
 
 // ======================================================================
@@ -858,7 +968,13 @@ void onPetEnd(Pet &p, uint8_t how) {
     gNextPickPending = true;   // soltarlo lo decidimos nosotros: sin corona
     return;
   }
-  bool added = hall.addRaised(p.speciesId, p.level(), p.shiny, p.geneAtk, p.geneDef, p.geneSpe, clockEpoch(), p.mv);  // salon
+  uint32_t endE = clockEpoch();
+  bool added = hall.addRaised(p.speciesId, p.level(), p.shiny, p.geneAtk, p.geneDef, p.geneSpe, endE, p.mv);  // salon
+  if (added) {  // ko12.4: su diario, para verlo en la ficha de la cinta
+    MemRec mr;
+    p.lifeMemory(mr, endE);
+    memStore.put(endE, p.speciesId, mr);
+  }
   // ko11.21: con las 8 medallas = crianza perfecta (brilla en la cinta)
   const uint16_t all = (uint16_t)((1u << MED_COUNT) - 1);
   if (added && (p.medals & all) == all) hall.markFlag((uint8_t)(hall.count() - 1), BOXF_PERFECT);
@@ -1366,6 +1482,7 @@ void doResetGame() {
   pet.wipeGameKeepSettings();
   box.wipe();
   hall.wipe();  // ko10.5
+  memStore.wipe();  // ko12.4
   fame.wipe();  // ko10.11
   dexLog.wipe();
   // ko11.22: tambien la historia/expedicion, los usos de ayudantes y las fichas del salon de la liga

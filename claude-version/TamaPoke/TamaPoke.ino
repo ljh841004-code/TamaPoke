@@ -82,6 +82,7 @@ bool gCjkFont = false;
 Pet pet;
 Box box;        // fork KO (ko4): Pokemon ganados/capturados
 Box hall("tphall", HALL_MAX);  // ko10.5: los criados hasta el final (corona)
+MemStore memStore;             // ko12.4: sus recuerdos (por ficha del salon)
 Box fame("tpfame", BOX_MAX);   // ko10.11: salon de la fama de la liga (campeones), aparte de la corona
 DexLog dexLog;  // fork KO (ko4): historial de la pokedex
 
@@ -719,6 +720,7 @@ void setup() {
   box.begin();
   bootStep(BS_HALL);
   hall.begin();
+  memStore.begin();  // ko12.4
   bootStep(BS_FAME);
   fame.begin();  // ko10.11
   bootStep(BS_MIGRATE);
@@ -747,6 +749,7 @@ void setup() {
   pwrSetup();
   bootStep(BS_I2C);
   if (!safeMode) i2cFastMode();  // ko11.3
+  if (!safeMode) hwScan();       // ko12.4: sensor de movimiento / microfono (log)
   bootStep(BS_CLOCK);
   uint32_t e = rtcEpoch();
   gClockTrusted = e != 0;
@@ -1173,6 +1176,8 @@ void handleSerial() {
       if (pet.isRegistered(i)) Serial.printf(" %d", i);
     Serial.println();
     Serial.println("DONE");
+  } else if (line == "HW") {  // ko12.4: chips de la placa
+    hwScan();
   } else if (line == "HEALTH") {
     Serial.printf("up=%lus heap=%u min=%u sd=%d mon=%d\n",
                   (unsigned long)(millis() / 1000), (unsigned)ESP.getFreeHeap(),
@@ -1320,6 +1325,26 @@ uint16_t screenSig();
 static bool i2cProbe(uint8_t addr) {
   Wire.beginTransmission(addr);
   return Wire.endTransmission() == 0;
+}
+// ko12.4: que chips hay en el bus (para saber si la placa trae sensor de movimiento y microfono).
+// QMI8658 (6 ejes) en 0x6B/0x6A responde 0x05 en WHO_AM_I; ES7210 (microfonos) en 0x40-0x43
+void hwScan() {
+  char l[200];
+  int n = snprintf(l, sizeof(l), "HW i2c:");
+  for (uint8_t a = 0x08; a < 0x78 && n < (int)sizeof(l) - 6; a++)
+    if (i2cProbe(a)) n += snprintf(l + n, sizeof(l) - n, " %02X", a);
+  Serial.println(l);
+  int imu = 0;
+  for (uint8_t a : { (uint8_t)0x6B, (uint8_t)0x6A }) {
+    Wire.beginTransmission(a);
+    Wire.write(0x00);
+    if (Wire.endTransmission(false) != 0) continue;
+    if (Wire.requestFrom(a, (uint8_t)1) == 1 && Wire.read() == 0x05) { imu = a; break; }
+  }
+  int mic = 0;
+  for (uint8_t a = 0x40; a <= 0x43 && !mic; a++) if (i2cProbe(a)) mic = a;
+  Serial.printf("HW imu=%s%02X mic=%s%02X codec=%s\n", imu ? "QMI8658@" : "none ", imu, mic ? "ES7210@" : "none ", mic,
+                i2cProbe(0x18) ? "ES8311" : "none");
 }
 void i2cFastMode() {
   bool pmuWas = i2cProbe(0x34), rtcWas = i2cProbe(0x51);

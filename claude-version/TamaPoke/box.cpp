@@ -147,6 +147,25 @@ void Box::wipe() {
   n = 0;
 }
 
+// ---------------------------------------------------------------- recuerdos (ko12.4)
+
+void MemStore::begin() { prefs.begin("tpmem", false, bigPart()); }
+void MemStore::key(uint32_t epoch, int16_t dex, char out[16]) {
+  snprintf(out, 16, "m%08lx%03x", (unsigned long)epoch, (unsigned)(dex & 0xFFF));
+}
+bool MemStore::put(uint32_t epoch, int16_t dex, const MemRec &m) {
+  char k[16];
+  key(epoch, dex, k);
+  return prefs.putBytes(k, &m, sizeof(m)) == sizeof(m);
+}
+bool MemStore::get(uint32_t epoch, int16_t dex, MemRec &out) {
+  char k[16];
+  key(epoch, dex, k);
+  if (prefs.getBytesLength(k) != sizeof(out)) return false;
+  return prefs.getBytes(k, &out, sizeof(out)) == sizeof(out);
+}
+void MemStore::wipe() { prefs.clear(); }
+
 // ---------------------------------------------------------------- pokedex
 
 void DexLog::begin() {

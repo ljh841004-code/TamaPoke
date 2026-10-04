@@ -14,6 +14,7 @@ struct BakNs { const char *ns; bool big; };
 static const BakNs BAK_NS[] = {
   { "tamapoke", false }, { "tpbox", true }, { "tphall", true }, { "tpfame", true }, { "tpdex", true },
   { "tpteam", true },  // ko11.20: ayudantes de las victorias en equipo
+  { "tpmem", true },   // ko12.4: recuerdos del salon (cinta)
   { "tpstory", false },  // ko11.21: historia y expedicion
 };
 
