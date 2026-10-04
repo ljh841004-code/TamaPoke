@@ -4571,7 +4571,15 @@ int16_t galleryLoadWant = 0;
 void galleryLoadPending();
 void renderGallery() {
   if (galleryDetail) {  // vista detalle: se redibuja siempre (animada)
+#ifdef ESP_PLATFORM
+    uint32_t dt0 = millis();
     renderDexDetail();
+    uint32_t dtr = millis() - dt0;
+    if (dtr > 70) Serial.printf("PERF dexframe %lums fx=%u t=%lu sd=%d pend=%u\n", (unsigned long)dtr, (unsigned)dexMvFx,
+                                (unsigned long)(dexMvFx ? millis() - dexMvT0 : 0), (int)dexMvSd, (unsigned)dexMvPend);  // ko12.3.1
+#else
+    renderDexDetail();
+#endif
     if (galleryLoadWant) galleryLoadPending();  // ko11.31.3: ya se ve la ficha
     return;
   }
@@ -4680,6 +4688,9 @@ void galleryTap(int16_t x, int16_t y) {
         lastTap = 0;
         if (!dexLog.hasLearned(galleryDetail, mv[i])) { sfxPlay(SFX_DENY); return; }
         dexMvPend = 0;
+#ifdef ESP_PLATFORM
+        Serial.printf("DEX tap mv=%u ready=%d queued=%d\n", (unsigned)mv[i], (int)(fxFind(mv[i]) != nullptr), (int)fxQueued(mv[i]));  // ko12.3.1
+#endif
         if (fxFind(mv[i])) { dexMvStart(mv[i], true); return; }
         fxWant(mv[i]);  // ko12.2.1: delante en la cola; mientras, la SD sigue leyendo (dexFxPlaying = no)
         if (fxQueued(mv[i])) { dexMvPend = mv[i]; dexMvPendT0 = millis(); sfxPlay(SFX_TAP); }
