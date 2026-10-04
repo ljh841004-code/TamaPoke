@@ -1826,6 +1826,7 @@ static const FxAnim *bvFxNow(uint8_t &side) {
 }
 
 // ko11.31.5: un efecto de la SD se esta viendo: no leer otros de la SD mientras (el dibujo va justo)
+bool battleScreenOn() { return xScreen == XS_WILD; }  // ko12.1
 bool battleFxPlaying() {
   if (xScreen != XS_WILD) return false;
   uint8_t side;
@@ -2252,6 +2253,7 @@ static void drawAutoBanner() {
 
 // ko11.32: cuanto tarda cada fotograma del combate (por el USB, cada 10 s): "PERF bat n=.. avg=.. max=.. lentos=.."
 static uint32_t pfN = 0, pfSum = 0, pfMax = 0, pfSlow = 0, pfFxMax = 0, pfT0 = 0;
+extern uint32_t flushWaitUs;  // ko12.1 (TamaPoke.ino): espera al envio anterior
 static void renderBattleViewImpl();
 void renderBattleView() {
   uint32_t t0 = micros();
@@ -2264,10 +2266,11 @@ void renderBattleView() {
   uint32_t now = millis();
   if (!pfT0) pfT0 = now;
   if (now - pfT0 >= 10000) {
-    Serial.printf("PERF bat n=%u avg=%ums max=%ums fxmax=%ums >50ms=%u\n", (unsigned)pfN,
+    Serial.printf("PERF bat n=%u avg=%ums max=%ums fxmax=%ums >50ms=%u wait=%ums\n", (unsigned)pfN,
                   (unsigned)(pfSum / (pfN ? pfN : 1) / 1000), (unsigned)(pfMax / 1000), (unsigned)(pfFxMax / 1000),
-                  (unsigned)pfSlow);
+                  (unsigned)pfSlow, (unsigned)(flushWaitUs / (pfN ? pfN : 1) / 1000));
     pfN = pfSum = pfMax = pfSlow = pfFxMax = 0;
+    flushWaitUs = 0;
     pfT0 = now;
   }
 }

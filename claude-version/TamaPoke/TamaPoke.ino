@@ -44,12 +44,15 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.0.1"
+#define FW_VERSION "1.17-ko12.1"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
 bool battleFxPlaying();  // ko11.31.5 (ui_extra.ino)
 bool chargeCap90();       // ko11.23.3
+void flushPipeStop();     // ko12.1
+bool battleScreenOn();    // ko12.1 (ui_extra.ino): pantalla de combate (se repinta entera)
+void flushWaitIdle();
 __attribute__((used)) const char TP_VERSION_TAG[] = UPD_TAG FW_VERSION;
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
@@ -63,6 +66,9 @@ class TPCanvas : public Arduino_Canvas {
 public:
   using Arduino_Canvas::Arduino_Canvas;
   uint16_t ink() const { return textcolor; }
+  // ko12.1: dibujar en otro buffer mientras el anterior se manda a la pantalla (ver uiFlush)
+  uint16_t *fbuf() const { return _framebuffer; }
+  void setFbuf(uint16_t *p) { _framebuffer = p; }
 };
 TPCanvas *gfx = new TPCanvas(LCD_WIDTH, LCD_HEIGHT, panel);
 
@@ -860,6 +866,7 @@ void loop() {
   // ko11.31.4: efectos (combate / ficha del Pokedex): trozos de 8 KB, ~20 ms por vuelta como mucho;
   // ko11.31.5: nada mientras se ve un efecto de la SD
   if (!battleFxPlaying()) fxPump(12);
+  if (!battleScreenOn()) flushPipeStop();  // ko12.1: fuera del combate, un solo buffer otra vez
   uint32_t loopT0 = now, renderMs = 0;
   {  // ko11.9.2: en que pantalla estamos (si se reinicia, se ve al arrancar)
     uint8_t scr = vbOpen ? 1 : defOpen ? 2 : spdOpen ? 3 : gameOpen ? 4 : sackOpen ? 5 : trainMenuOpen ? 6
@@ -1042,6 +1049,7 @@ void updateBrightness(uint32_t now) {
   static uint8_t current = 255;
   if (target != current) {
     current = target;
+    flushWaitIdle();  // ko12.1: el panel puede estar recibiendo un fotograma del combate
     panel->setBrightness(target);
   }
 }
@@ -1765,7 +1773,72 @@ void uiShadeSpan(uint16_t *p, int n, uint32_t k) {
 void drawToast();
 // ko11.15: el aviso breve (toast) se pinta en TODAS las pantallas (antes solo en la
 // principal: al soltar en la caja el "caramelo +1" no se veia)
-void uiFlush() { drawToast(); gfx->flush(); }
+// ko12.1: en combate (todo el fotograma se repinta cada vez) el envio a la pantalla va en una tarea del
+// nucleo 0 y mientras tanto el bucle ya dibuja el siguiente en el otro buffer. Antes el bucle esperaba
+// parado todo el envio (466x466 por QSPI, ~25-35 ms de ~90 ms por fotograma, PERF del 2026-10-04).
+// Fuera del combate, como siempre (muchas pantallas solo repintan una parte sobre lo anterior)
+uint32_t flushWaitUs = 0;  // PERF: lo que el bucle espero a que acabara el envio anterior
+#ifdef ESP_PLATFORM
+static uint16_t *fbMain = nullptr, *fbAlt = nullptr;
+static QueueHandle_t flushQ = nullptr;
+static SemaphoreHandle_t flushFree = nullptr;  // dado = la tarea no esta enviando nada
+static bool flushPipe = false;
+static void flushTaskFn(void *) {
+  uint16_t *buf;
+  for (;;)
+    if (xQueueReceive(flushQ, &buf, portMAX_DELAY) == pdTRUE) {
+      panel->draw16bitRGBBitmap(0, 0, buf, LCD_WIDTH, LCD_HEIGHT);
+      xSemaphoreGive(flushFree);
+    }
+}
+// antes de hablar con el panel desde otro sitio (brillo): que no haya un envio a medias
+void flushWaitIdle() {
+  if (!flushFree) return;
+  xSemaphoreTake(flushFree, portMAX_DELAY);
+  xSemaphoreGive(flushFree);
+}
+static bool flushPipeStart() {
+  if (!fbMain) fbMain = gfx->fbuf();
+  if (!fbAlt) fbAlt = (uint16_t *)ps_malloc((size_t)LCD_WIDTH * LCD_HEIGHT * 2);
+  if (!fbAlt || !fbMain) return false;
+  if (!flushQ) {
+    flushQ = xQueueCreate(1, sizeof(uint16_t *));
+    flushFree = xSemaphoreCreateBinary();
+    if (!flushQ || !flushFree) return false;
+    xSemaphoreGive(flushFree);
+    if (xTaskCreatePinnedToCore(flushTaskFn, "flush", 4096, nullptr, 2, nullptr, 0) != pdPASS) return false;
+  }
+  flushPipe = true;
+  return true;
+}
+// vuelta al buffer de siempre (con lo ultimo dibujado), sin envios pendientes
+void flushPipeStop() {
+  if (!flushPipe) return;
+  flushWaitIdle();
+  uint16_t *cur = gfx->fbuf();
+  if (cur != fbMain) { memcpy(fbMain, cur, (size_t)LCD_WIDTH * LCD_HEIGHT * 2); gfx->setFbuf(fbMain); }
+  flushPipe = false;
+}
+#else
+void flushWaitIdle() {}
+void flushPipeStop() {}
+#endif
+void uiFlush() {
+  drawToast();
+#ifdef ESP_PLATFORM
+  if (battleScreenOn() && (flushPipe || flushPipeStart())) {
+    uint32_t t0 = micros();
+    xSemaphoreTake(flushFree, portMAX_DELAY);  // el anterior ya salio
+    flushWaitUs += micros() - t0;
+    uint16_t *cur = gfx->fbuf();
+    xQueueSend(flushQ, &cur, portMAX_DELAY);
+    gfx->setFbuf(cur == fbMain ? fbAlt : fbMain);  // el siguiente, en el otro (se repinta entero)
+    return;
+  }
+  flushPipeStop();
+#endif
+  gfx->flush();
+}
 
 // ======================================================================
 // ko11.16: orbes de tipo. Esfera de cristal del color del tipo (degradado hacia
