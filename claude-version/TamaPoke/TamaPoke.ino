@@ -1191,6 +1191,9 @@ void handleSerial() {
     Serial.println("DONE");
   } else if (line == "SICK") {  // ko12.6: pruebas: resfriado / visita / cumpleanos
     Serial.println(pet.catchCold() ? "SICK ok" : "SICK no");
+  } else if (line == "CURE") {  // ko12.6.1: pruebas: curar el resfriado al momento
+    if (pet.sick) { pet.sickDoses = 1; pet.sickWait = 0; pet.giveMedicine(); Serial.println("CURE ok"); }
+    else Serial.println("CURE: no estaba malo");
   } else if (line == "VISIT") {
     if (box.count()) { visitStart((uint8_t)random(box.count())); Serial.println("VISIT ok"); }
     else Serial.println("VISIT: caja vacia");
