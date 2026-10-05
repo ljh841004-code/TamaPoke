@@ -1838,3 +1838,72 @@ TEST(tama, quedarse_se_guarda) {
   CHECK_EQ(q.farewellDeclinedUntil(), (uint32_t)(5000 + 1440));
   CHECK_EQ(q.evolveDeclinedLevel(), p.level());
 }
+
+// ko12.6: resfriado: sucio y con cacas acaba malo; 1-2 tomas (30 min entre ellas); sin curar 2 h = descuido
+TEST(tama, resfriado_y_medicina) {
+  Pet p;
+  makePet(p, 4);
+  CHECK_EQ((int)p.giveMedicine(), 0);
+  int seen = 0;
+  for (int i = 0; i < 2000 && !seen; i++) { setStats(p, 15, 90, 90, 10); p.poops = 3; advance(p, 1); if (p.sick) seen = 1; }
+  CHECK(seen);
+  CHECK_EQ((int)p.sickNote, 1);
+  CHECK(p.sickDoses >= 1 && p.sickDoses <= 2);
+  CHECK(!p.catchCold());  // ya esta malo
+  CHECK_EQ((int)p.mood(), (int)MOOD_SAD);
+  // guardado
+  p.saveNow();
+  { Pet q; q.begin(); CHECK_EQ((int)q.sick, 1); CHECK_EQ((int)q.sickDoses, (int)p.sickDoses); }
+  // con 2 tomas: la segunda no se puede enseguida
+  p.sickDoses = 2;
+  CHECK_EQ((int)p.giveMedicine(), 1);
+  CHECK_EQ((int)p.giveMedicine(), 3);
+  setStats(p, 90, 90, 90, 90); p.poops = 0;
+  advance(p, SICK_DOSE_GAP);
+  CHECK_EQ((int)p.giveMedicine(), 2);
+  CHECK_EQ((int)p.sick, 0);
+  // sin curar: a las 2 h, un descuido
+  CHECK(p.catchCold());
+  uint8_t m0 = p.careMistakes;
+  for (int i = 0; i < SICK_MISTAKE_MIN; i++) { setStats(p, 90, 90, 90, 90); p.poops = 0; advance(p, 1); }
+  CHECK_EQ((int)p.careMistakes, m0 + 1);
+  CHECK_EQ((int)p.mistWhy, (int)MW_SICK);
+  CHECK_EQ((int)p.sickNote, 2);
+  // bien cuidado no se resfria
+  p.sickDoses = 1; p.sickWait = 0; p.giveMedicine();
+  for (int i = 0; i < 1500; i++) { setStats(p, 90, 90, 90, 90); p.poops = 0; advance(p, 1); }
+  CHECK_EQ((int)p.sick, 0);
+}
+
+// ko12.6: cumpleanos: ajuste que sobrevive a [nuevo comienzo]; regalo una vez por ano
+TEST(tama, cumpleanos) {
+  Pet p;
+  makePet(p, 4);
+  p.setBirthday(13, 1);
+  CHECK_EQ((int)p.bdayM, 0);
+  p.setBirthday(10, 5);
+  CHECK(p.isBirthday(10, 5));
+  CHECK(!p.isBirthday(10, 6));
+  uint16_t rc = p.rareCandy;
+  p.joy = 50;
+  CHECK(p.birthdayGift(2026));
+  CHECK(!p.birthdayGift(2026));
+  CHECK_EQ((int)p.rareCandy, rc + 1);
+  CHECK_EQ((int)p.joy, 80);
+  CHECK(p.birthdayGift(2027));
+  { Pet q; q.begin(); CHECK(q.isBirthday(10, 5)); CHECK_EQ((int)q.bdayYear, 2027); }
+  p.wipeGameKeepSettings();
+  { Pet q; q.begin(); CHECK(q.isBirthday(10, 5)); }
+}
+
+// ko12.6: jugar con el amigo de visita
+TEST(tama, jugar_con_la_visita) {
+  Pet p;
+  makePet(p, 4);
+  p.joy = 50;
+  p.friendPlay();
+  CHECK_EQ((int)p.joy, 60);
+  p.sleeping = true;
+  p.friendPlay();
+  CHECK_EQ((int)p.joy, 60);
+}

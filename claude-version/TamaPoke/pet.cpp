@@ -12,6 +12,8 @@ void Pet::begin() {
   prefs.begin("tamapoke", false);
   if (!prefs.getBool("init", false)) {
     prefs.putBool("init", true);
+    bdayM = prefs.getUChar("bdm", 0);  // ko12.6: ajuste que sobrevive a [nuevo comienzo]
+    bdayD = prefs.getUChar("bdd", 0);
     newEgg();
   } else {
     bool mig = false;
@@ -270,6 +272,8 @@ void Pet::newEgg() {
   mistEpoch = 0;
   sleeping = false;
   autoSleep = false;
+  sick = sickDoses = sickWait = 0;  // ko12.6
+  sickMin = 0;
   save();
 }
 
@@ -394,10 +398,27 @@ void Pet::tick() {
   routineToday();
   if (tantrum) {
     if (--tantrum == 0) discipline = dropTo(discipline, 3, 0);
-  } else if (fullness >= 40 && joy >= 40 && energy >= 40 && hygiene >= 40 && !poops) {
+  } else if (!sick && fullness >= 40 && joy >= 40 && energy >= 40 && hygiene >= 40 && !poops) {
     int pm = 7 - discipline / 20;                     // por mil y minuto: ~1 cada 2-5 h despierto
     if (personality() == PERS_CALM) pm = 2;
     if ((int)random(1000) < pm) tantrum = TANTRUM_MIN;
+  }
+
+  // ko12.6: resfriado. Riesgo por mil y minuto: sucio +3 (y +2 si ademas hay 2+ cacas), hambre +2
+  if (sick) {
+    if (sickWait) sickWait--;
+    if (ageMinutes & 1) joy = clamp100(joy - 1);
+    if (++sickMin >= SICK_MISTAKE_MIN) {
+      sickMin = 0;
+      careMistakes++;
+      mistWhy = MW_SICK;
+      mistEpoch = lastSeenEpoch;
+      if (bond > 1) bond--;
+      sickNote = 2;
+    }
+  } else {
+    int pm = (hygiene < 30 ? (poops > 1 ? 5 : 3) : 0) + (fullness < 20 ? 2 : 0);
+    if (pm && (int)random(1000) < pm) catchCold();
   }
 
   fullness = clamp100(fullness - 2);
@@ -411,7 +432,7 @@ void Pet::tick() {
 
   // la disciplina forja la defensa: 12 h seguidas bien cuidado = +1 DEF.
   // ko10.6: y ademas perdona un descuido (el buen cuidado repara el malo)
-  if (lowestStat() >= 40) {
+  if (lowestStat() >= 40 && !sick) {
     if (++goodTicks >= GOOD_CARE_TICKS) {
       goodTicks = 0;
       if (trDef < 100) trDef++;
@@ -494,6 +515,10 @@ void Pet::flushSave() {
   prefs.putBytes("walk", &walk, sizeof(walk));  // ko12.4
   prefs.putUChar("disc", discipline);  // ko12.5
   prefs.putUChar("tant", tantrum);
+  prefs.putUChar("sick", sick);  // ko12.6
+  prefs.putUChar("sickd", sickDoses);
+  prefs.putUShort("sickm", sickMin);
+  prefs.putUChar("sickw", sickWait);
   prefs.putUInt("rtd", rtDay);
   prefs.putUChar("rtb", rtBits);
   prefs.putUShort("rts", rtStreak);
@@ -777,6 +802,7 @@ void Pet::careTick() {
   uint16_t L = level();
   uint32_t per = careMinutesForLevel(L);
   if (!per || isEgg() || lowestStat() <= 10) return;
+  if (sick && (ageMinutes & 1)) return;  // ko12.6: malo: la mitad
   careAcc += expForLevel(L + 1) - expForLevel(L);
   if (careAcc >= per) {
     uint32_t q = careAcc / per;
@@ -1284,6 +1310,58 @@ void Pet::caress() {
   registerCare();
 }
 
+// ---- ko12.6: resfriado ----
+bool Pet::catchCold() {
+  if (isEgg() || sick || ceremony != CER_NONE || starterPick) return false;
+  sick = 1;
+  sickDoses = (uint8_t)(1 + random(2));
+  sickMin = 0;
+  tantrum = 0;
+  sickWait = 0;
+  sickNote = 1;
+  save();
+  return true;
+}
+
+void Pet::setBirthday(uint8_t m, uint8_t d) {
+  if (m < 1 || m > 12 || d < 1 || d > 31) m = d = 0;
+  bdayM = m;
+  bdayD = d;
+  save();
+}
+
+bool Pet::birthdayGift(uint16_t year) {
+  if (!bdayM || bdayYear == year) return false;
+  bdayYear = year;
+  if (!isEgg()) { joy = clamp100(joy + 30); addBond(2); }
+  if (rareCandy < CANDY_MAX) rareCandy++;
+  save();
+  return true;
+}
+
+uint8_t Pet::giveMedicine() {
+  if (!sick) return 0;
+  if (sickWait) return 3;
+  joy = clamp100(joy - 3);  // amarga
+  registerCare();
+  if (sickDoses > 1) { sickDoses--; sickWait = SICK_DOSE_GAP; sickMin = 0; save(); return 1; }
+  sick = sickDoses = sickWait = 0;
+  sickMin = 0;
+  heartUntil = millis() + HEART_MS;
+  addBond(1);
+  save();
+  return 2;
+}
+
+void Pet::friendPlay() {
+  if (isEgg() || sleeping || ceremony != CER_NONE) return;
+  joy = clamp100(joy + 10);
+  heartUntil = millis() + HEART_MS;
+  addBond(1);
+  registerCare();
+  save();
+}
+
 void Pet::eggTap() {
   if (!isEgg()) return;
   if (++eggTaps >= 3) hatch();
@@ -1293,7 +1371,7 @@ void Pet::eggTap() {
 PetMood Pet::mood() const {
   if (sleeping) return MOOD_SLEEPING;
   if (eating()) return MOOD_EATING;
-  if (lowestStat() < 25) return MOOD_SAD;
+  if (lowestStat() < 25 || sick) return MOOD_SAD;
   return MOOD_HAPPY;
 }
 
@@ -1361,6 +1439,10 @@ void Pet::save() {
   prefs.putBytes("walk", &walk, sizeof(walk));  // ko12.4
   prefs.putUChar("disc", discipline);  // ko12.5
   prefs.putUChar("tant", tantrum);
+  prefs.putUChar("sick", sick);  // ko12.6
+  prefs.putUChar("sickd", sickDoses);
+  prefs.putUShort("sickm", sickMin);
+  prefs.putUChar("sickw", sickWait);
   prefs.putUInt("rtd", rtDay);
   prefs.putUChar("rtb", rtBits);
   prefs.putUShort("rts", rtStreak);
@@ -1370,6 +1452,9 @@ void Pet::save() {
   prefs.putBytes("deco", deco, sizeof(deco));
   prefs.putUChar("lend", lastEnd);
   prefs.putUShort("evdl", evoDeclinedLv);  // ko12.5.1
+  prefs.putUChar("bdm", bdayM);  // ko12.6
+  prefs.putUChar("bdd", bdayD);
+  prefs.putUShort("bdy", bdayYear);
   prefs.putUInt("fdcl", farDeclinedAge);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
   prefs.putBytes("dexreg", dexReg, sizeof(dexReg));
@@ -1512,6 +1597,16 @@ void Pet::load(bool *migrated) {
   discipline = prefs.getUChar("disc", DISC_START);  // ko12.5
   tantrum = prefs.getUChar("tant", 0);
   if (tantrum > TANTRUM_MIN) tantrum = 0;
+  sick = prefs.getUChar("sick", 0) ? 1 : 0;  // ko12.6
+  sickDoses = prefs.getUChar("sickd", 0);
+  sickMin = prefs.getUShort("sickm", 0);
+  sickWait = prefs.getUChar("sickw", 0);
+  if (sickWait > SICK_DOSE_GAP) sickWait = SICK_DOSE_GAP;
+  bdayM = prefs.getUChar("bdm", 0);
+  bdayD = prefs.getUChar("bdd", 0);
+  bdayYear = prefs.getUShort("bdy", 0);
+  if (sick && !sickDoses) sickDoses = 1;
+  if (!sick) sickDoses = 0;
   rtDay = prefs.getUInt("rtd", 0);
   rtBits = prefs.getUChar("rtb", 0);
   rtStreak = prefs.getUShort("rts", 0);
@@ -1590,7 +1685,7 @@ void Pet::load(bool *migrated) {
 void Pet::wipeGameKeepSettings() {
   // ko11.8: "bgmMask" = fondos elegidos en la pantalla de sonido (tambien es ajuste)
   // ko11.23.3: "bri" (brillo) y "chg" (limite de carga) tambien son ajustes
-  static const char *const KEEP_U8[] = { "volBgm", "volCry", "volSfx", "lang", "bgmMask", "bri", "chg", "vib", "vibLv" };  // ko11.26: fuerza de la vibracion
+  static const char *const KEEP_U8[] = { "volBgm", "volCry", "volSfx", "lang", "bgmMask", "bri", "chg", "vib", "vibLv", "bdm", "bdd" };  // ko12.6: cumpleanos  // ko11.26: fuerza de la vibracion
   const int NK = sizeof(KEEP_U8) / sizeof(KEEP_U8[0]);
   uint8_t u8[NK];
   bool has[NK];

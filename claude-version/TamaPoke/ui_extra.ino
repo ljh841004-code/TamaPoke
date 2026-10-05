@@ -19,7 +19,7 @@ enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_
                  XS_SET,     // ko11.26: menu de ajustes
                  XS_STRAIN,
                  XS_CENTER,
-                 XS_ROOM, XS_WALK };  // ko12.4: decorar la habitacion, paseo  // ko11.31: centro pokemon (PP)  // ko11.28: combates de entrenamiento de la historia  // ko11.21: historia  // ko11.18: brillo  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
+                 XS_ROOM, XS_WALK, XS_BDAY };  // ko12.4: decorar la habitacion, paseo  // ko11.31: centro pokemon (PP)  // ko11.28: combates de entrenamiento de la historia  // ko11.21: historia  // ko11.18: brillo  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
 uint8_t xScreen = XS_NONE;
 
 // ko11.17: [<] vuelve a la pantalla DESDE LA QUE se abrio el menu (la ficha, el
@@ -4135,6 +4135,7 @@ bool extraRender() {
     case XS_CENTER: renderCenter(); return true;      // ko11.31
     case XS_ROOM: renderRoomMenu(); return true;      // ko12.4
     case XS_WALK: renderWalk(); return true;
+    case XS_BDAY: renderBday(); return true;  // ko12.6
     default: return false;
   }
 }
@@ -4168,6 +4169,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_CENTER: centerTap(x, y); return true;
     case XS_ROOM: roomTap(x, y); return true;  // ko12.4
     case XS_WALK: walkTap(x, y); return true;
+    case XS_BDAY: bdayTap(x, y); return true;
     default: return false;
   }
 }
@@ -4181,7 +4183,7 @@ bool extraSwipe() {
   if (xScreen == XS_BGM) { xScreen = XS_VOL; return true; }  // ko11.8
   if (xScreen == XS_BRIGHT || xScreen == XS_UPD) { xScreen = XS_SET; return true; }  // ko11.26
   if (xScreen == XS_SET) { goBack(); return true; }
-  if (xScreen == XS_ROOM || xScreen == XS_WALK) { goBack(); return true; }  // ko12.4
+  if (xScreen == XS_ROOM || xScreen == XS_WALK || xScreen == XS_BDAY) { goBack(); return true; }  // ko12.4
   if (xScreen == XS_STRAIN) { xScreen = XS_STORY; return true; }  // ko11.28
   if (xScreen == XS_CENTER) { xScreen = XS_REGION; return true; }  // ko11.31
   if (xScreen == XS_RESET) { goBack(); return true; }

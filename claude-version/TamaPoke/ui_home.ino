@@ -294,6 +294,8 @@ static void walkFlush() {
   walkPend = 0;
   uint32_t day = walkDay();
   if (!n || !day) return;
+  // ko12.6: andar bajo la lluvia (rachas largas) puede resfriarlo
+  if (n >= 16 && sceneWeather() == WX_RAIN && !pet.sleeping && (int)random(100) < SICK_RAIN_PCT && pet.catchCold()) pet.sickNote = 3;
   uint8_t got = pet.addSteps(n, day);
   if (got) walkReward(got);
 }
@@ -535,7 +537,9 @@ bool tantrumTap(int16_t x, int16_t y) {
   return false;
 }
 // avisos de la rutina (los pone Pet::routineDo)
+static void tama126Loop();
 void tamaLoop() {
+  tama126Loop();  // ko12.6
   if (!pet.rtNote) return;
   static const XId RT_T[3] = { X_RT_DONE_MEAL, X_RT_DONE_PLAY, X_RT_DONE_BED };
   uint8_t n = pet.rtNote;
@@ -576,4 +580,288 @@ void renderCardLife() {
   }
   snprintf(b, sizeof(b), XT(X_LIFE_STREAK_FMT), (unsigned)pet.rtStreak, (unsigned)pet.rtBest);
   drawFit(b, 318, 320, UI_INK, 1);
+}
+
+// ======================================================================
+// ko12.6: resfriado (y medicina), visitas de la caja y cumpleanos
+// ======================================================================
+extern Box box;
+
+// ---- resfriado: burbuja con un termometro junto a la cabeza (al otro lado que el berrinche) ----
+static bool sickDlg = false;
+#define SK_Y 140
+void sickMark(uint32_t now) {
+  if (!pet.sick || pet.sleeping || pet.isEgg()) return;
+  int x = CX - 64, y = 176 + (int)((now / 400) % 2) * 3;
+  gfx->fillCircle(x, y, 16, UI_WHITE);
+  gfx->drawCircle(x, y, 16, C565(0x3a, 0x8c, 0xe0));
+  gfx->fillTriangle(x + 10, y + 10, x + 2, y + 14, x + 14, y + 20, UI_WHITE);
+  // termometro inclinado
+  for (int k = -1; k <= 1; k++) gfx->drawLine(x - 7 + k, y + 7, x + 6 + k, y - 8, UI_INK);
+  gfx->drawLine(x - 7, y + 7, x - 1, y, UI_BAR_BAD);
+  gfx->fillCircle(x - 8, y + 8, 4, UI_BAR_BAD);
+}
+bool sickDraw() {
+  if (!sickDlg) return false;
+  if (!pet.sick) { sickDlg = false; return false; }
+  uiShade(0, 0, LCD_WIDTH, LCD_HEIGHT, 0, 9);
+  uiPanel(68, SK_Y, 330, 188, 20, UI_WHITE, UI_INK);
+  drawFit(XT(X_SICK_TITLE), SK_Y + 16, 300, C565(0x3a, 0x8c, 0xe0), 2);
+  char b[64];
+  if (pet.sickWait) snprintf(b, sizeof(b), XT(X_SICK_WAIT_FMT), (unsigned)pet.sickWait);
+  else snprintf(b, sizeof(b), XT(X_SICK_SUB_FMT), (unsigned)pet.sickDoses);
+  drawFit(b, SK_Y + 48, 300, 0x8410, 1);
+  drawBtn(90, SK_Y + 82, 136, 48, pet.sickWait ? UI_TRACK : C565(0x3a, 0x8c, 0xe0), pet.sickWait ? 0x8410 : UI_WHITE, XT(X_SICK_GIVE));
+  drawBtn(240, SK_Y + 82, 136, 48, UI_WHITE, UI_INK, XT(X_SICK_LATER));
+  drawFit(XT(X_SICK_HINT), SK_Y + 146, 300, 0x8410, 1);
+  return true;
+}
+bool sickTap(int16_t x, int16_t y) {
+  if (sickDlg) {
+    if (y >= SK_Y + 82 && y < SK_Y + 130 && x >= 90 && x < 226) {
+      uint8_t r = pet.giveMedicine();
+      if (r == 3) { sfxPlay(SFX_DENY); return true; }
+      sfxPlay(r == 2 ? SFX_MEDAL : SFX_EAT);
+      if (r) showToast(XT(r == 2 ? X_SICK_CURED : X_SICK_ONE_MORE));
+    } else if (!(y >= SK_Y + 82 && y < SK_Y + 130 && x >= 240 && x < 376) && y >= SK_Y && y <= SK_Y + 188) {
+      return true;  // dentro del panel pero fuera de los botones: nada
+    }
+    sickDlg = false;
+    return true;
+  }
+  if (pet.sick && !pet.sleeping && !pet.isEgg() && inPetZone(x, y)) { sickDlg = true; sfxPlay(SFX_TAP); return true; }
+  return false;
+}
+
+// ---- visitas: de vez en cuando uno de la caja viene a jugar un rato ----
+#define VISIT_MS (15UL * 60 * 1000)  // se queda 15 min
+#define VISIT_ODDS 240               // 1 de cada 240 minutos despierto (~1 cada 4 h)
+#define VISIT_MAX_DAY 3
+#define VISIT_X 344
+#define VISIT_Y 246
+int16_t visitDex = 0;
+static uint32_t visitUntil = 0, visitByeAt = 0, visitCheckT = 0, visitDay = 0;
+static uint8_t visitsToday = 0;
+static bool visitPlayed = false;
+static void visitName(char *out, size_t n) {
+  snprintf(out, n, "%s", dexName(visitDex));
+}
+static void visitEnd() {
+  char nm[32], b[96];
+  visitName(nm, sizeof(nm));
+  txFmt(b, sizeof(b), X_VISIT_BYE_FMT, nm);
+  showToast(b);
+  visitDex = 0;
+  visitUntil = visitByeAt = 0;
+}
+void visitStart(uint8_t boxIdx) {  // tambien la usa la consola serie / las pruebas
+  if (boxIdx >= box.count()) return;
+  visitDex = box.at(boxIdx).dex;
+  visitUntil = millis() + VISIT_MS;
+  if (!visitUntil) visitUntil = 1;
+  visitByeAt = 0;
+  visitPlayed = false;
+  char nm[32], b[96];
+  visitName(nm, sizeof(nm));
+  txFmt(b, sizeof(b), X_VISIT_FMT, nm);
+  showToast(b);
+  sfxPlay(SFX_HEART);
+}
+static void visitPoll(uint32_t now) {
+  if (visitDex) {
+    if (visitByeAt && (int32_t)(now - visitByeAt) >= 0) visitEnd();
+    else if (!visitByeAt && !timeLeft(visitUntil)) visitEnd();
+    else if (pet.sleeping || pet.isEgg() || pet.ceremony) { visitDex = 0; visitUntil = visitByeAt = 0; }
+    return;
+  }
+  if (now - visitCheckT < 60000UL) return;
+  visitCheckT = now;
+  uint32_t e = clockEpoch();
+  if (!e || pet.isEgg() || pet.sleeping || pet.ceremony || !box.count()) return;
+  uint32_t day = e / 86400UL;
+  if (day != visitDay) { visitDay = day; visitsToday = 0; }
+  uint8_t hr = (uint8_t)((e / 3600UL) % 24);
+  if (hr < 8 || hr >= 21 || visitsToday >= VISIT_MAX_DAY) return;
+  if (random(VISIT_ODDS)) return;
+  visitsToday++;
+  visitStart((uint8_t)random(box.count()));
+}
+void drawVisitor(uint32_t now) {
+  if (!visitDex || pet.sleeping || pet.isEgg()) return;
+  int hop = visitByeAt ? (int)((now / 120) % 2) * 6 : (int)((now / 500) % 2) * 3;
+  gfx->fillEllipse(VISIT_X, VISIT_Y + 40, 28, 7, lerp565(UI_INK, UI_BG_DAY, 10, 16));  // sombra
+  drawThumbAt(visitDex, VISIT_X, VISIT_Y - hop, 3, false);
+  if (visitByeAt || visitPlayed) drawMap(SPR_HEART, 32, VISIT_X - 16, VISIT_Y - 78 - hop, 1, false);
+}
+bool visitTap(int16_t x, int16_t y) {
+  if (!visitDex || visitByeAt || pet.sleeping) return false;
+  int dx = x - VISIT_X, dy = y - VISIT_Y;
+  if (dx * dx + dy * dy > 44 * 44) return false;
+  char nm[32], b[96];
+  visitName(nm, sizeof(nm));
+  if (!visitPlayed) {
+    visitPlayed = true;
+    pet.friendPlay();
+    txFmt(b, sizeof(b), X_VISIT_PLAY_FMT, nm);
+    showToast(b);
+    sfxPlay(SFX_PLAY);
+    audioCry(visitDex);
+    behPetted();
+  } else {
+    sfxPlay(SFX_HEART);
+  }
+  visitByeAt = millis() + 4000;  // juega un poco y se va contento
+  if (!visitByeAt) visitByeAt = 1;
+  return true;
+}
+
+// ---- cumpleanos: ajuste (mes / dia) y fiesta con fuegos artificiales ----
+static uint8_t bdM = 1, bdD = 1;
+static const uint8_t MDAYS[12] = { 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+void openBday() {
+  retMark();
+  if (pet.bdayM) { bdM = pet.bdayM; bdD = pet.bdayD; }
+  else {
+    uint8_t m = 1, d = 1;
+    uint32_t e = clockEpoch();
+    if (e) wxDate(e, nullptr, &m, &d, nullptr);
+    bdM = m; bdD = d;
+  }
+  xScreen = XS_BDAY;
+}
+#define BD_ROW1 150
+#define BD_ROW2 226
+static void bdStepper(int y, const char *val, uint16_t accent) {
+  drawBtn(96, y, 64, 56, UI_WHITE, UI_INK, "-");
+  uiPanel(170, y, 126, 56, 14, lerp565(accent, UI_WHITE, 12, 16), accent);
+  drawFitIn(val, 176, y + 14, 114, UI_INK, 2);
+  drawBtn(306, y, 64, 56, UI_WHITE, UI_INK, "+");
+}
+void renderBday() {
+  uiScreenBg();
+  drawFit(XT(X_BDAY_TITLE), 40, 300, UI_INK, 3);
+  char b[32];
+  if (pet.bdayM) snprintf(b, sizeof(b), XT(X_BDAY_FMT), pet.bdayM, pet.bdayD);
+  else snprintf(b, sizeof(b), "%s", XT(X_BDAY_NONE));
+  drawFit(b, 92, 300, 0x8410, 2);
+  char v[16];
+  snprintf(v, sizeof(v), XT(X_BDAY_M_FMT), bdM);
+  bdStepper(BD_ROW1, v, C565(0xf0, 0x60, 0x80));
+  snprintf(v, sizeof(v), XT(X_BDAY_D_FMT), bdD);
+  bdStepper(BD_ROW2, v, C565(0xf0, 0xa0, 0x30));
+  drawBtn(96, 304, 132, 50, C565(0xf0, 0x60, 0x80), UI_WHITE, XT(X_BDAY_SAVE));
+  drawBtn(238, 304, 132, 50, UI_WHITE, pet.bdayM ? UI_BAR_BAD : 0x8410, XT(X_BDAY_CLEAR));
+  drawFit(XT(X_BDAY_HINT), 372, 320, 0x8410, 1);
+  drawNav(NAV_L, UI_INK);
+  uiFlush();
+}
+void bdayTap(int16_t x, int16_t y) {
+  if (navHit(NAV_L, x, y)) { sfxPlay(SFX_TAP); goBack(); return; }
+  auto step = [&](int row, int dir) {
+    if (row == 0) { bdM = (uint8_t)((bdM + 11 + dir) % 12 + 1); if (bdD > MDAYS[bdM - 1]) bdD = MDAYS[bdM - 1]; }
+    else { uint8_t n = MDAYS[bdM - 1]; bdD = (uint8_t)((bdD + n - 1 + dir) % n + 1); }
+    sfxPlay(SFX_TAP);
+  };
+  for (int r = 0; r < 2; r++) {
+    int ry = r ? BD_ROW2 : BD_ROW1;
+    if (y < ry || y >= ry + 56) continue;
+    if (x >= 96 && x < 160) step(r, -1);
+    else if (x >= 306 && x < 370) step(r, +1);
+    return;
+  }
+  if (y >= 304 && y < 354) {
+    if (x >= 96 && x < 228) { pet.setBirthday(bdM, bdD); sfxPlay(SFX_MEDAL); showToast(XT(X_BDAY_SAVED)); goBack(); }
+    else if (x >= 238 && x < 370 && pet.bdayM) { pet.setBirthday(0, 0); sfxPlay(SFX_TAP); }
+  }
+}
+
+// fuegos artificiales: rafagas que nacen y se abren segun el tiempo (sin estado)
+static void fireworks(uint32_t now, int n, int yTop, int yBot) {
+  static const uint16_t FWC[6] = { C565(0xff, 0x50, 0x60), C565(0xff, 0xd0, 0x40), C565(0x50, 0xc0, 0xff),
+                                   C565(0x70, 0xe0, 0x70), C565(0xd0, 0x70, 0xff), C565(0xff, 0x90, 0x30) };
+  const uint32_t P = 1600;
+  for (int k = 0; k < n; k++) {
+    uint32_t t = now + (uint32_t)k * (P / n) * 7 / 5;
+    uint32_t cyc = t / P, ph = t % P;
+    uint32_t h = (cyc * 2654435761u) ^ (uint32_t)(k * 40503u);
+    int cx = 90 + (int)(h % 286), cy = yTop + (int)((h >> 9) % (uint32_t)(yBot - yTop));
+    uint16_t c = FWC[(h >> 17) % 6];
+    if (ph < 350) {  // sube la estela
+      int sy = cy + 120 - (int)(ph * 120 / 350);
+      gfx->fillRect(cx - 1, sy, 3, 8, c);
+      continue;
+    }
+    int r = (int)((ph - 350) * 54 / (P - 350));
+    uint16_t cc = ph > P - 400 ? lerp565(c, UI_WHITE, 6, 16) : c;
+    for (int a = 0; a < 12; a++) {
+      static const int8_t CS[12][2] = { { 16, 0 }, { 14, 8 }, { 8, 14 }, { 0, 16 }, { -8, 14 }, { -14, 8 },
+                                        { -16, 0 }, { -14, -8 }, { -8, -14 }, { 0, -16 }, { 8, -14 }, { 14, -8 } };
+      int px = cx + CS[a][0] * r / 16, py = cy + CS[a][1] * r / 16;
+      gfx->fillCircle(px, py, r > 40 ? 3 : 4, cc);
+    }
+  }
+}
+static bool bdayDlg = false;
+static uint32_t bdayDlgT = 0, bdayShownDay = 0;
+static bool bdayGot = false;
+bool birthdayToday() {
+  if (!pet.bdayM) return false;
+  uint32_t e = clockEpoch();
+  if (!e) return false;
+  uint8_t m, d;
+  wxDate(e, nullptr, &m, &d, nullptr);
+  return pet.isBirthday(m, d);
+}
+// en la pantalla principal del dia: fuegos de fondo y, la primera vez, la fiesta
+void bdayMain(uint32_t now) {
+  if (!birthdayToday() || pet.ceremony) return;
+  fireworks(now, 3, 70, 170);
+  uint32_t day = clockEpoch() / 86400UL;
+  if (bdayShownDay != day && !pet.isEgg()) {
+    bdayShownDay = day;
+    int y;
+    wxDate(clockEpoch(), &y, nullptr, nullptr, nullptr);
+    bdayGot = pet.birthdayGift((uint16_t)y);
+    bdayDlg = true;
+    bdayDlgT = now;
+    sfxPlay(SFX_MEDAL);
+    audioCry(pet.speciesId);
+  }
+}
+bool bdayDraw() {
+  if (!bdayDlg) return false;
+  uint32_t now = millis();
+  if (now - bdayDlgT > 20000UL) { bdayDlg = false; return false; }
+  uiShade(0, 0, LCD_WIDTH, LCD_HEIGHT, 0, 5);
+  fireworks(now, 5, 70, 200);
+  // abajo: el bicho se sigue viendo en medio
+  uiPanel(80, 296, 306, 110, 20, UI_WHITE, C565(0xf0, 0x60, 0x80));
+  drawFit(XT(X_BDAY_MSG), 306, 290, C565(0xf0, 0x60, 0x80), 3);
+  char nm[44], b[96];
+  snprintf(nm, sizeof(nm), "%s", pet.nick[0] ? pet.nick : dexName(pet.speciesId));
+  txFmt(b, sizeof(b), X_BDAY_SING_FMT, nm);
+  drawFit(b, 346, 290, UI_INK, 1);
+  drawFit(bdayGot ? XT(X_BDAY_GIFT) : XT(X_BDAY_TAP), 372, 290, bdayGot ? UI_BAR_OK : 0x8410, 1);
+  return true;
+}
+bool bdayTapDlg(int16_t x, int16_t y) {
+  if (!bdayDlg) return false;
+  (void)x; (void)y;
+  if (millis() - bdayDlgT < 1200) return true;  // que no se cierre con el toque que despierta
+  bdayDlg = false;
+  sfxPlay(SFX_TAP);
+  return true;
+}
+void bdayShowAgain() { bdayDlg = true; bdayDlgT = millis(); bdayGot = false; }  // consola serie
+
+// avisos del resfriado + visitas (lo llama tamaLoop)
+static void tama126Loop() {
+  uint32_t now = millis();
+  visitPoll(now);
+  if (pet.sickNote) {
+    uint8_t n = pet.sickNote;
+    pet.sickNote = 0;
+    showToast(XT(n == 3 ? X_SICK_RAIN : n == 2 ? X_SICK_MISS : X_SICK_GOT));
+    sfxPlay(n == 2 ? SFX_DENY : SFX_ALERT);
+  }
 }

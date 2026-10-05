@@ -169,6 +169,7 @@ static const char *const XS[2][X_COUNT] = {
     "Shows after more care", "Meals fill a bit more", "Playing cheers it up more", "Petting cheers it up more",
     "Training gives more EXP", "Cleaning cheers it up", "Rarely throws tantrums",
     "LIFE", "Personality: %s", "Discipline", "Throwing a tantrum now: tap it", "Today's routine", "Routine streak %u days (best %u)",
+    "Cold left untreated", "Has a cold...", "Achoo! It caught a cold. Tap it for medicine", "It walked in the rain and caught a cold!", "The cold went untreated too long (mistake +1)", "It has a cold", "Medicine needed: %u more", "Medicine", "Later", "Dirt, mess or hunger can bring a cold", "Next dose in %u min", "Gulp! One more dose in 30 min", "All better!", "{1} came to visit!", "Played with {1}! Joy +10", "{1} went back to the box", "Birthday", "My birthday", "Not set", "%u/%u", "That day your Pokemon celebrates with fireworks", "Clear", "Save", "Happy birthday!", "{1} is singing for you!", "Gift: joy +30, 1 rare candy", "Tap to close", "Birthday saved!", "Month %u", "Day %u",
   },
   // ---------------- KO ----------------
   {
@@ -332,6 +333,7 @@ static const char *const XS[2][X_COUNT] = {
     "더 돌보면 드러나요", "밥을 먹으면 조금 더 배불러요", "놀아 주면 더 기뻐해요", "쓰다듬으면 더 기뻐해요",
     "훈련 경험치가 더 많아요", "청소해 주면 기뻐해요", "떼를 거의 안 써요",
     "생활", "성격: %s", "훈육", "지금 떼쓰는 중: 포켓몬을 눌러 보세요", "오늘의 일과", "규칙적인 날 %u일 연속 (최고 %u일)",
+    "감기를 내버려 둠", "감기에 걸렸어요...", "에취! 감기에 걸렸어요. 포켓몬을 눌러 약을 주세요", "비를 맞으며 걸어서 감기에 걸렸어요!", "감기를 너무 오래 내버려 뒀어요 (실수 +1)", "감기에 걸렸어요", "약을 %u번 더 먹어야 나아요", "약 먹이기", "나중에", "더럽거나 배고프면 감기에 걸리기 쉬워요", "다음 약은 %u분 뒤에 먹을 수 있어요", "꿀꺽! 30분 뒤에 한 번 더 먹어요", "다 나았어요!", "{1}{이} 놀러 왔어요!", "{1}{와} 함께 놀았어요! 기분 +10", "{1}{은} 보관함으로 돌아갔어요", "내 생일", "내 생일", "설정 안 함", "%u월 %u일", "그날 포켓몬이 폭죽과 함께 축하해 줘요", "지우기", "저장", "생일 축하해요!", "{1}{이} 축하 노래를 불러요!", "선물: 기분 +30, 만능 사탕 1개", "눌러서 닫기", "생일을 저장했어요!", "%u월", "%u일",
   },
 };
 

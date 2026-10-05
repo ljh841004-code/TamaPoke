@@ -10,6 +10,11 @@
 #define DISC_START 30
 enum : uint8_t { RT_MEAL = 0, RT_PLAY, RT_BED, RT_COUNT };  // rutina: desayuno 6-11, jugar 12-19, acostarlo 20-24
 enum : uint8_t { PERS_NONE = 0, PERS_GLUTTON, PERS_PLAYFUL, PERS_CUDDLY, PERS_HARDWORK, PERS_TIDY, PERS_CALM, PERS_COUNT };
+// ko12.6: resfriado: sucio, con cacas o con hambre se puede poner malo; 1-2 tomas de medicina.
+// Malo: el animo baja mas y la EXP por tiempo va a la mitad; 2 h sin medicina = 1 descuido
+#define SICK_MISTAKE_MIN 120
+#define SICK_RAIN_PCT 5
+#define SICK_DOSE_GAP 30         // minutos entre una toma y la siguiente          // pasear con lluvia (cada racha de 16+ pasos)
 #define PERS_MIN_ACTS 30        // cuidados que hacen falta para que se vea el caracter
 uint8_t personalityOf(const LifeLog &l, uint8_t discipline);
 #define DECO_SLOTS 3   // ko12.4: izquierda, delante (derecha), derecha
@@ -58,7 +63,7 @@ static inline uint32_t timeLeft(uint32_t deadline) {
 // ceremonias de fin de ciclo
 enum : uint8_t { CER_NONE = 0, CER_FAREWELL, CER_RUNAWAY, CER_RELEASE };
 // ko10.9: causa del ultimo descuido
-enum : uint8_t { MW_NONE = 0, MW_FOOD, MW_JOY, MW_ENERGY, MW_HYGIENE };
+enum : uint8_t { MW_NONE = 0, MW_FOOD, MW_JOY, MW_ENERGY, MW_HYGIENE, MW_SICK };
 
 enum PetMood : uint8_t { MOOD_HAPPY, MOOD_SAD, MOOD_EATING, MOOD_SLEEPING };
 
@@ -215,6 +220,20 @@ public:
   void routineDo(uint8_t what);     // lo llaman comer / jugar / acostarse en su franja
   uint8_t routineToday();           // bits de hoy (rueda el dia)
   uint8_t personality() const { return personalityOf(life, discipline); }
+  // ko12.6: resfriado
+  uint8_t sick = 0;                 // 0 sano, 1 resfriado
+  uint8_t sickDoses = 0;            // tomas de medicina que faltan
+  uint16_t sickMin = 0;             // minutos despierto sin curar (a SICK_MISTAKE_MIN: descuido)
+  uint8_t sickWait = 0;             // minutos hasta poder dar la siguiente toma
+  uint8_t sickNote = 0;             // aviso pendiente: 1 se puso malo, 2 descuido por no curarlo (lo consume la UI)
+  bool catchCold();                 // false si no puede (huevo, ya malo, ceremonia)
+  uint8_t giveMedicine();           // 0 no estaba malo, 1 aun falta otra toma, 2 curado, 3 aun no toca
+  // ko12.6: cumpleanos del jugador (ajuste: sobrevive a [nuevo comienzo]); 0 = sin poner
+  uint8_t bdayM = 0, bdayD = 0;
+  uint16_t bdayYear = 0;            // ano del ultimo regalo de cumpleanos
+  void setBirthday(uint8_t m, uint8_t d);
+  bool isBirthday(uint8_t m, uint8_t d) const { return bdayM && bdayM == m && bdayD == d; }
+  bool birthdayGift(uint16_t year); // una vez por ano: animo +30, 1 caramelo raro (false si ya)
   void gaugeTap(uint8_t which);     // 0 comida, 1 animo, 2 energia, 3 limpieza: +GAUGE_TAP_GAIN
   uint8_t roomOn = 0;
   uint8_t bgAsked = 0;  // ko12.4.1: ya eligio fondo (paisaje / habitacion) en el aviso de una vez
@@ -388,6 +407,7 @@ public:
   bool wakeAuto() { if (!(sleeping && autoSleep)) return false; sleeping = false; autoSleep = false; save(); return true; }
   void clean();
   void caress();  // tocar al bicho
+  void friendPlay();  // ko12.6: jugar con un amigo que vino de visita (animo +10, vinculo +1)
   void eggTap();  // tocar el huevo: 3 toques y eclosiona
   void newEgg();   // empezar de cero con un inicial aleatorio
   void release();  // soltar (pulsacion larga + confirmar)

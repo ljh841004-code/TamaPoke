@@ -2424,10 +2424,11 @@ void partyPickTap(int16_t x, int16_t y) {
 #define SET_X1 66
 #define SET_X2 238
 #define SET_W 162
-#define SET_H 50
-#define SET_Y0 88
-#define SET_DY 60
-#define SET_N 10  // ko12.4: 5 filas (+ decorar, paseo)
+#define SET_H 48
+#define SET_Y0 80
+#define SET_DY 56
+#define SET_N 11  // ko12.4: 5 filas (+ decorar, paseo); ko12.6: + cumpleanos (sexta fila, centrado)
+#define SET_XC 152  // boton suelto de la ultima fila (la pantalla redonda se estrecha)
 static bool gClockFromSet = false;
 
 void openSettings() {
@@ -2459,13 +2460,14 @@ void renderSettings() {
     { XT(X_RESET_BTN), UI_WHITE, UI_BAR_BAD },
     { XT(X_ROOM_BTN), C565(0xe8, 0x80, 0xa8), UI_WHITE },  // ko12.4
     { XT(X_WALK_BTN), C565(0x8a, 0x5a, 0x3a), UI_WHITE },
+    { XT(X_BDAY_BTN), C565(0xf0, 0x60, 0x80), UI_WHITE },  // ko12.6
   };
   for (int i = 0; i < SET_N; i++)
-    drawBtn(i % 2 ? SET_X2 : SET_X1, SET_Y0 + (i / 2) * SET_DY, SET_W, SET_H, b[i].bg, b[i].fg, b[i].t);
+    drawBtn(i == 10 ? SET_XC : i % 2 ? SET_X2 : SET_X1, SET_Y0 + (i / 2) * SET_DY, SET_W, SET_H, b[i].bg, b[i].fg, b[i].t);
   // version del firmware (antes en la pantalla de la hora)
   char ver[40];
   snprintf(ver, sizeof(ver), "TamaPoke v%s", FW_VERSION);
-  int vy = SET_Y0 + 5 * SET_DY + 2;
+  int vy = SET_Y0 + 6 * SET_DY + 2;
   gfx->setTextColor(UI_INK);
   setSize(1);
   setCur(centerX(ver, 1), vy);
@@ -2479,8 +2481,9 @@ void settingsTap(int16_t x, int16_t y) {
   if (navHit(NAV_L, x, y) || y < 60) { sfxPlay(SFX_TAP); goBack(); return; }
   if (y < SET_Y0 || x < SET_X1 || x >= SET_X2 + SET_W) return;
   int row = (y - SET_Y0) / SET_DY;
-  if (row > SET_N / 2 - 1 || (y - SET_Y0) % SET_DY >= SET_H) return;
-  int i = row * 2 + (x >= SET_X2 - 5 ? 1 : 0);
+  if (row > SET_N / 2 || (y - SET_Y0) % SET_DY >= SET_H) return;
+  if (row == 5 && (x < SET_XC || x >= SET_XC + SET_W)) return;
+  int i = row == 5 ? 10 : row * 2 + (x >= SET_X2 - 5 ? 1 : 0);
   sfxPlay(SFX_TAP);
   switch (i) {
     case 0: xScreen = XS_NONE; gClockFromSet = true; openClock(); break;
@@ -2493,5 +2496,6 @@ void settingsTap(int16_t x, int16_t y) {
     case 7: openReset(); break;
     case 8: openRoom(); break;  // ko12.4
     case 9: openWalk(); break;
+    case 10: openBday(); break;  // ko12.6
   }
 }

@@ -1189,6 +1189,14 @@ void handleSerial() {
       if (pet.isRegistered(i)) Serial.printf(" %d", i);
     Serial.println();
     Serial.println("DONE");
+  } else if (line == "SICK") {  // ko12.6: pruebas: resfriado / visita / cumpleanos
+    Serial.println(pet.catchCold() ? "SICK ok" : "SICK no");
+  } else if (line == "VISIT") {
+    if (box.count()) { visitStart((uint8_t)random(box.count())); Serial.println("VISIT ok"); }
+    else Serial.println("VISIT: caja vacia");
+  } else if (line == "BDAY") {
+    bdayShowAgain();
+    Serial.println("BDAY ok");
   } else if (line == "HW") {  // ko12.4: chips de la placa
     hwScan();
   } else if (line == "HEALTH") {
@@ -1688,6 +1696,9 @@ void onTap(int16_t x, int16_t y) {
     return;
   }
   if (bgAskTap(x, y)) return;  // ko12.4.1: elegir el fondo (una vez)
+  if (bdayTapDlg(x, y)) return;  // ko12.6: cerrar la fiesta de cumpleanos
+  if (sickTap(x, y)) return;     // ko12.6: resfriado: medicina
+  if (visitTap(x, y)) return;    // ko12.6: jugar con el amigo de visita
   if (tantrumTap(x, y)) return;  // ko12.5: berrinche: reganar / consentir
   // ko12.4: el contador de pasos abre el paseo
   if (walkPillHit(x, y)) { sfxPlay(SFX_TAP); openWalk(); return; }
@@ -3007,6 +3018,7 @@ void render() {
   if (pet.roomOn) drawRoom(millis(), pet.sleeping);
   else drawScene(pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome, millis(), gNight);
   drawDecor(pet.roomOn ? pet.sleeping : gNight);  // ko12.4: los objetos del suelo
+  if (!pet.sleeping) bdayMain(millis());  // ko12.6: cumpleanos: fuegos artificiales
   if (!pet.ceremony) drawBigClock(gNight);  // fork KO (ko4): hora grande de fondo
 
   if (pet.ceremony) {
@@ -3050,8 +3062,10 @@ void render() {
     drawHeader(name, gNight ? UI_INK_NIGHT : d.accent, statusMsg());
     drawStreakBadge();
     drawWalkPill();  // ko12.4: pasos de hoy (si la placa tiene sensor)
+    drawVisitor(millis());  // ko12.6: amigo de visita (detras del bicho)
     drawPet();
     tantrumMark(millis());  // ko12.5
+    sickMark(millis());     // ko12.6
     drawBath();
     drawPoops();
     // panel inferior: base limpia para barras y botones sobre el paisaje
@@ -3121,7 +3135,7 @@ void render() {
   }
 
   // dialogo de decision (evolucionar/mantener, despedirse/quedaros)
-  if (!choiceKind && !confirmUntil && !feedMenuUntil) { if (!bgAskDraw()) tantrumDraw(); }  // ko12.4.1 / ko12.5
+  if (!choiceKind && !confirmUntil && !feedMenuUntil) { if (!bgAskDraw() && !bdayDraw() && !sickDraw()) tantrumDraw(); }  // ko12.4.1 / ko12.5 / ko12.6
   if (choiceKind) {
     if (!timeLeft(choiceUntil)) { if (choiceKind == 3) pet.moveDecline(); choiceKind = 0; }  // ko11.31: sin respuesta = se queda el suyo
     else drawChoiceDialog();
@@ -4019,7 +4033,7 @@ void renderCardProgress() {
     char hl[96];
     if (timeLeft(mistWhyUntil)) {
       // ko10.9: causa y hora del ultimo descuido (se ve 5 s al tocar "Fallos")
-      static const XId WHY[5] = { X_MW_NONE, X_MW_FOOD, X_MW_JOY, X_MW_ENERGY, X_MW_HYGIENE };
+      static const XId WHY[6] = { X_MW_NONE, X_MW_FOOD, X_MW_JOY, X_MW_ENERGY, X_MW_HYGIENE, X_MW_SICK };
       char when[16];
       when[0] = 0;
       if (pet.mistWhy && pet.mistEpoch) {
@@ -4028,7 +4042,7 @@ void renderCardProgress() {
         uint32_t sod = pet.mistEpoch % 86400u;
         snprintf(when, sizeof(when), "(%u/%u %02u:%02u)", mo, dd, (unsigned)(sod / 3600), (unsigned)(sod / 60 % 60));
       }
-      snprintf(hl, sizeof(hl), XT(X_MW_LAST_FMT), XT(WHY[pet.mistWhy < 5 ? pet.mistWhy : 0]), when);
+      snprintf(hl, sizeof(hl), XT(X_MW_LAST_FMT), XT(WHY[pet.mistWhy < 6 ? pet.mistWhy : 0]), when);
       drawFit(hl, 228, 360, UI_BAR_BAD, 2);
       return;
     }
@@ -5682,6 +5696,7 @@ const char *eggMsg() {
 const char *statusMsg() {
   if (pet.evolving()) return T(S_EVOLVING);
   if (pet.tantrum && !pet.sleeping) return XT(X_TANTRUM_MSG);  // ko12.5
+  if (pet.sick && !pet.sleeping) return XT(X_SICK_MSG);  // ko12.6
   if (bathUntil) return "Splish splash!";  // onomatopeya universal
   if (pet.sleeping) return "Zzz...";
   if (pet.eating()) return T(S_EATING);

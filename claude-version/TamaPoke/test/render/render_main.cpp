@@ -26,6 +26,7 @@ static void closeAll() {
   xScreen = XS_NONE;
   toastUntil = 0;
   feedMenuUntil = 0;
+  sickDlg = bdayDlg = false;  // ko12.6
 }
 
 static void scenes(bool ko, const char *sfx) {
@@ -66,6 +67,40 @@ static void scenes(bool ko, const char *sfx) {
       navCheck("decision: quedarse = 24 h sin preguntar", choiceKind == 0 && pet.farewellDeclinedUntil() == a0 + 1440);
       choiceKind = 1; choiceUntil = millis() + 12000; render(); shot("01p_choice_evolve");
       choiceKind = 0;
+    }
+    {  // ko12.6: resfriado, visita de la caja y cumpleanos
+      navCheck("resfriado: se pone malo", pet.catchCold());
+      pet.sickDoses = 2; toastUntil = 0; render(); shot("01s_sick");
+      onTap(CX, PET_CY);
+      navCheck("resfriado: tocar al bicho abre la medicina", sickDlg);
+      render(); shot("01s_sick_dlg");
+      onTap(150, SK_Y + 100);
+      navCheck("resfriado: 1a toma (falta otra)", !sickDlg && pet.sick && pet.sickDoses == 1 && pet.sickWait);
+      onTap(CX, PET_CY); render(); shot("01s_sick_wait");
+      onTap(150, SK_Y + 100);
+      navCheck("resfriado: la 2a toma aun no", sickDlg && pet.sick);
+      pet.sickWait = 0; onTap(150, SK_Y + 100);
+      navCheck("resfriado: curado", !sickDlg && !pet.sick);
+      uint8_t n0 = box.count();
+      box.add(25, 18, false, true, gMockEpoch);
+      visitStart(box.count() - 1); render(); shot("01v_visit");
+      uint8_t j0 = pet.joy > 80 ? 80 : pet.joy; pet.joy = j0;
+      onTap(VISIT_X, VISIT_Y);
+      navCheck("visita: tocar al amigo = jugar", pet.joy == j0 + 10 && visitByeAt);
+      render(); shot("01v_visit_play");
+      tick(4100); tamaLoop();
+      navCheck("visita: se va al rato", visitDex == 0);
+      box.release(box.count() - 1);
+      navCheck("visita: la caja queda igual", box.count() == n0);
+      uint8_t bm, bd;
+      wxDate(gMockEpoch, nullptr, &bm, &bd, nullptr);
+      pet.setBirthday(bm, bd); pet.bdayYear = 0;
+      toastUntil = 0; render(); render(); shot("01b_bday_party");
+      navCheck("cumpleanos: la fiesta sale sola el dia", bdayDlg && bdayGot);
+      tick(1500); onTap(CX, 300);
+      navCheck("cumpleanos: tocar cierra", !bdayDlg);
+      render(); shot("01b_bday_main");
+      pet.setBirthday(0, 0);
     }
     pet.bgAsked = 0; render(); shot("01q_main_bg_ask");
     onTap(320, BGQ_Y + 160);  // [방]
@@ -1053,7 +1088,7 @@ static void navChecks() {
   navCheck("ficha -> tongsin -> [<]", xScreen == XS_NONE && cardOpen);
   // ko11.26: menu de ajustes (flecha de arriba); cada boton y su [<]
   const int SX[2] = { 147, 319 };
-  auto setBtn = [&](int i) { settingsTap(SX[i % 2], SET_Y0 + (i / 2) * SET_DY + SET_H / 2); };  // ko12.4: 5 filas
+  auto setBtn = [&](int i) { settingsTap(i == 10 ? SET_XC + SET_W / 2 : SX[i % 2], SET_Y0 + (i / 2) * SET_DY + SET_H / 2); };  // ko12.6: 6 filas
   closeAll(); tick(3000); onTap(233, 20);
   navCheck("principal: flecha de arriba = ajustes", xScreen == XS_SET && !clockOpen);
   closeAll(); onSwipeV(1);
@@ -1081,6 +1116,14 @@ static void navChecks() {
   { Lang l0 = gLang; closeAll(); openSettings(); setBtn(6);
     navCheck("ajustes -> [언어] cambia el idioma", gLang != l0 && xScreen == XS_SET);
     while (gLang != l0) setBtn(6); }
+  closeAll(); openSettings(); render(); shot("90_settings_ko126");
+  setBtn(10); bool bdo = xScreen == XS_BDAY;
+  bdayTap(306 + 30, BD_ROW1 + 28); render(); shot("90b_birthday_set");
+  bdayTap(96 + 60, 304 + 25);
+  navCheck("ajustes -> [내 생일] -> +1 mes -> [저장] = ajustes", bdo && xScreen == XS_SET && pet.bdayM != 0);
+  pet.setBirthday(0, 0);
+  closeAll(); openSettings(); setBtn(10); bdayTap(LX, LY);
+  navCheck("ajustes -> cumpleanos -> [<] = ajustes", xScreen == XS_SET);
   closeAll(); openSettings(); setBtn(7); bool rs = xScreen == XS_RESET; resetTap(LX, LY);
   navCheck("ajustes -> reinicio -> [<]", rs && xScreen == XS_SET);
   settingsTap(LX, LY);
