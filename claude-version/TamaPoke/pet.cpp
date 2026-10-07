@@ -249,6 +249,7 @@ void Pet::newEgg() {
   speciesId = -1;
   prevSpeciesId = -1;
   eggTarget = pickEggSpecies();  // especie oculta segun rareza y pokedex
+  if (legEligible()) legDry = DEX_TBL[eggTarget].rarity == R_LEGENDARIO ? 0 : (uint8_t)(legDry < 255 ? legDry + 1 : 255);  // ko12.6.1
   starterPick = (registeredCount() == 0);  // primera partida: el jugador elige inicial
   // sorteo shiny: 1/48 base, mejor con despedida y con racha/vinculo altos
   int shinyBase = (lastEnd == CER_FAREWELL ? 24 : 48) - careBonus();
@@ -561,28 +562,41 @@ int16_t Pet::pickEggSpecies() {
   if (lastEnd != CER_RUNAWAY) {
     bool blessed = (lastEnd == CER_FAREWELL);
     int rare = (blessed ? 45 : 27) + careBonus();
-    int leg = (registeredCount() >= 25) ? (blessed ? 10 : 3) + careBonus() / 3 : 0;
+    int leg = legEligible() ? (blessed ? 10 : 3) + careBonus() / 3 : 0;
     int r = random(100);
     if (r < leg) tier = R_LEGENDARIO;
     else if (r < leg + rare) tier = R_RARO;
+    if (legEligible() && legDry >= EGG_LEG_PITY) tier = R_LEGENDARIO;  // ko12.6.1: techo
   }
 
   // candidatos del tier con linea incompleta; si no hay, baja de tier;
   // si la pokedex del tier esta completa, vale cualquiera del tier
   // ko10.5: pases 0-1 sin familias ya criadas; el 2 (todo criado) sin limite
-  for (int pass = 0; pass < 3; pass++) {
-    for (int t = tier; t >= R_COMUN; t--) {
-      int16_t cand[DEX_COUNT];
-      int n = 0;
-      for (int16_t d = 1; d <= DEX_COUNT; d++) {
-        if (DEX_TBL[d].rarity != t) continue;
-        if (pass < 2 && isFamRaised(d)) continue;
-        if (pass == 0 && !lineHasUnregistered(d)) continue;
-        cand[n++] = d;
-      }
-      if (n > 0) return cand[random(n)];
+  // ko12.6.1: si el tier que salio ya esta todo criado, primero SUBE (asi al final salen
+  // todas las familias, raras y legendarias incluidas) y luego baja. Tras una escapada
+  // no sube mas alla de raro
+  int top = lastEnd == CER_RUNAWAY ? R_RARO : R_LEGENDARIO;
+  int order[4], no = 0;
+  for (int t = tier; t <= top; t++) order[no++] = t;
+  for (int t = tier - 1; t >= R_COMUN; t--) order[no++] = t;
+  auto pick = [&](int t, int pass) -> int16_t {
+    int16_t cand[DEX_COUNT];
+    int n = 0;
+    for (int16_t d = 1; d <= DEX_COUNT; d++) {
+      if (DEX_TBL[d].rarity != t) continue;
+      if (pass < 2 && isFamRaised(d)) continue;
+      if (pass == 0 && !lineHasUnregistered(d)) continue;
+      cand[n++] = d;
     }
-  }
+    return n > 0 ? cand[random(n)] : 0;
+  };
+  // en cada tier: primero las lineas con huecos en la pokedex, luego cualquier familia sin criar
+  for (int k = 0; k < no; k++)
+    for (int pass = 0; pass < 2; pass++)
+      if (int16_t d = pick(order[k], pass)) return d;
+  // todo criado: vale cualquiera (del tier que salio o de mas abajo)
+  for (int t = tier; t >= R_COMUN; t--)
+    if (int16_t d = pick(t, 2)) return d;
   return CLASSIC_DEX[random(NUM_CLASSIC_DEX)];  // inalcanzable, por si acaso
 }
 
@@ -1453,6 +1467,7 @@ void Pet::save() {
   prefs.putBytes("deco", deco, sizeof(deco));
   prefs.putUChar("lend", lastEnd);
   prefs.putUShort("evdl", evoDeclinedLv);  // ko12.5.1
+  prefs.putUChar("ldry", legDry);  // ko12.6.1
   prefs.putUChar("bdm", bdayM);  // ko12.6
   prefs.putUChar("bdd", bdayD);
   prefs.putUShort("bdy", bdayYear);
@@ -1603,6 +1618,7 @@ void Pet::load(bool *migrated) {
   sickMin = prefs.getUShort("sickm", 0);
   sickWait = prefs.getUChar("sickw", 0);
   if (sickWait > SICK_DOSE_GAP) sickWait = SICK_DOSE_GAP;
+  legDry = prefs.getUChar("ldry", 0);  // ko12.6.1
   bdayM = prefs.getUChar("bdm", 0);
   bdayD = prefs.getUChar("bdd", 0);
   bdayYear = prefs.getUShort("bdy", 0);

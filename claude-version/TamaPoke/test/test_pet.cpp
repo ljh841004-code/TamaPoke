@@ -1907,3 +1907,57 @@ TEST(tama, jugar_con_la_visita) {
   p.friendPlay();
   CHECK_EQ((int)p.joy, 60);
 }
+
+// ko12.6.1: con todas las comunes criadas, una tirada "comun" sube a rara/legendaria sin criar
+TEST(egg, tier_agotado_sube) {
+  Pet p;
+  makePet(p, 4);
+  p.lastEnd = CER_FAREWELL;
+  for (int16_t d = 1; d <= DEX_COUNT; d++) p.dexReg[(d - 1) >> 3] |= (uint8_t)(1 << ((d - 1) & 7));
+  for (int16_t d = 1; d <= DEX_COUNT; d++) if (DEX_TBL[d].rarity == R_COMUN) p.markFamRaised(d);
+  for (int seed = 1; seed <= 300; seed++) {
+    randomSeed(seed);
+    int16_t d = p.pickEggSpecies();
+    CHECK_MSG(!p.isFamRaised(d), "quedando familias sin criar, nunca repite");
+    CHECK(DEX_TBL[d].rarity == R_RARO || DEX_TBL[d].rarity == R_LEGENDARIO);
+  }
+  // raras tambien criadas: solo legendarias
+  for (int16_t d = 1; d <= DEX_COUNT; d++) if (DEX_TBL[d].rarity == R_RARO) p.markFamRaised(d);
+  for (int seed = 1; seed <= 100; seed++) { randomSeed(seed); CHECK_EQ((int)DEX_TBL[p.pickEggSpecies()].rarity, (int)R_LEGENDARIO); }
+  // tras una escapada no sube hasta legendario: vuelve a una comun ya criada
+  p.lastEnd = CER_RUNAWAY;
+  for (int seed = 1; seed <= 50; seed++) { randomSeed(seed); CHECK_EQ((int)DEX_TBL[p.pickEggSpecies()].rarity, (int)R_COMUN); }
+}
+
+// ko12.6.1: techo: 12 huevos seguidos sin legendario -> el siguiente lo es (y se guarda)
+TEST(egg, techo_de_legendario) {
+  Pet p;
+  makePet(p, 4);
+  p.lastEnd = CER_FAREWELL;
+  for (int16_t d = 1; d <= 30; d++) p.dexReg[(d - 1) >> 3] |= (uint8_t)(1 << ((d - 1) & 7));
+  CHECK(p.legEligible());
+  p.legDry = EGG_LEG_PITY;
+  for (int seed = 1; seed <= 50; seed++) { randomSeed(seed); CHECK_EQ((int)DEX_TBL[p.pickEggSpecies()].rarity, (int)R_LEGENDARIO); }
+  // sin pokedex suficiente no cuenta ni aplica
+  Pet q;
+  makePet(q, 4);
+  q.lastEnd = CER_FAREWELL;
+  q.legDry = 50;
+  CHECK(!q.legEligible());
+  for (int seed = 1; seed <= 50; seed++) { randomSeed(seed); CHECK(DEX_TBL[q.pickEggSpecies()].rarity != R_LEGENDARIO); }
+  // la cuenta: newEgg suma si no salio legendario y vuelve a 0 si salio
+  p.legDry = 0;
+  int maxDry = 0, legs = 0;
+  for (int i = 0; i < 200; i++) {
+    randomSeed(1000 + i);
+    p.lastEnd = CER_FAREWELL;
+    p.newEgg();
+    if (DEX_TBL[p.eggSpecies()].rarity == R_LEGENDARIO) { legs++; CHECK_EQ((int)p.legDry, 0); }
+    if (p.legDry > maxDry) maxDry = p.legDry;
+  }
+  CHECK(legs > 0);
+  CHECK(maxDry <= EGG_LEG_PITY);
+  p.saveNow();
+  Pet r; r.begin();
+  CHECK_EQ((int)r.legDry, (int)p.legDry);
+}

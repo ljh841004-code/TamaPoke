@@ -15,6 +15,8 @@ enum : uint8_t { PERS_NONE = 0, PERS_GLUTTON, PERS_PLAYFUL, PERS_CUDDLY, PERS_HA
 #define SICK_MISTAKE_MIN 120
 #define SICK_RAIN_PCT 5
 #define SICK_DOSE_GAP 3          // minutos entre una toma y la siguiente (ko12.6.1: antes 30)          // pasear con lluvia (cada racha de 16+ pasos)
+#define EGG_LEG_MIN_REG 25   // ko12.6.1: el legendario sale en los huevos con 25+ registrados
+#define EGG_LEG_PITY 12      // ... y tras 12 huevos seguidos sin el, el siguiente lo es
 #define PERS_MIN_ACTS 30        // cuidados que hacen falta para que se vea el caracter
 uint8_t personalityOf(const LifeLog &l, uint8_t discipline);
 #define DECO_SLOTS 3   // ko12.4: izquierda, delante (derecha), derecha
@@ -461,7 +463,11 @@ public:
   uint16_t registeredCount() const;
   bool lineHasUnregistered(int16_t base) const;
   uint8_t eggRarity() const;       // rareza del huevo actual (sin revelar especie)
-  int16_t pickEggSpecies();        // publica para poder simular tiradas (EGGS)
+  int16_t pickEggSpecies();        // publica para poder simular tiradas (EGGS); no cambia el estado
+  // ko12.6.1: techo de legendario: huevos seguidos sin legendario (con la pokedex ya en 25+)
+  uint8_t legDry = 0;
+  bool legEligible() const { return lastEnd != CER_RUNAWAY && registeredCount() >= EGG_LEG_MIN_REG; }
+  int16_t eggSpecies() const { return eggTarget; }  // la especie oculta del huevo (pruebas)
   uint16_t goodCareTicks() const { return goodTicks; }
   // ko10.9: dia de crianza por FECHA (hoy - dia en que empezo + 1). Antes eran
   // bloques de 24 h de edad: empezar a las 15 h y mirar al dia siguiente a las 9 h
