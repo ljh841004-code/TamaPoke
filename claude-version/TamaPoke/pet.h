@@ -14,7 +14,7 @@ enum : uint8_t { PERS_NONE = 0, PERS_GLUTTON, PERS_PLAYFUL, PERS_CUDDLY, PERS_HA
 // Malo: el animo baja mas y la EXP por tiempo va a la mitad; 2 h sin medicina = 1 descuido
 #define SICK_MISTAKE_MIN 120
 #define SICK_RAIN_PCT 5
-#define SICK_DOSE_GAP 30         // minutos entre una toma y la siguiente          // pasear con lluvia (cada racha de 16+ pasos)
+#define SICK_DOSE_GAP 3          // minutos entre una toma y la siguiente (ko12.6.1: antes 30)          // pasear con lluvia (cada racha de 16+ pasos)
 #define PERS_MIN_ACTS 30        // cuidados que hacen falta para que se vea el caracter
 uint8_t personalityOf(const LifeLog &l, uint8_t discipline);
 #define DECO_SLOTS 3   // ko12.4: izquierda, delante (derecha), derecha
@@ -225,7 +225,7 @@ public:
   uint8_t sickDoses = 0;            // tomas de medicina que faltan
   uint16_t sickMin = 0;             // minutos despierto sin curar (a SICK_MISTAKE_MIN: descuido)
   uint8_t sickWait = 0;             // minutos hasta poder dar la siguiente toma
-  uint8_t sickNote = 0;             // aviso pendiente: 1 se puso malo, 2 descuido por no curarlo (lo consume la UI)
+  uint8_t sickNote = 0;             // aviso pendiente: 1 se puso malo, 2 descuido, 3 lluvia, 4 ya toca la medicina (lo consume la UI)
   bool catchCold();                 // false si no puede (huevo, ya malo, ceremonia)
   uint8_t giveMedicine();           // 0 no estaba malo, 1 aun falta otra toma, 2 curado, 3 aun no toca
   // ko12.6: cumpleanos del jugador (ajuste: sobrevive a [nuevo comienzo]); 0 = sin poner

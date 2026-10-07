@@ -386,6 +386,7 @@ void Pet::tick() {
     }
     if (ageMinutes % 3 == 0) hygiene = dropTo(hygiene, 1, 45);
     careTick();  // ko9: dormir tambien es tiempo de crianza
+    if (sick && sickWait) sickWait--;  // ko12.6.1: la espera de la medicina corre tambien dormido (sin aviso)
     checkMedals();
     // ko12.2: dormida sola: se despierta con hambre (y si nadie la cuida, ya no vuelve a dormirse)
     if (autoSleep && fullness <= AUTO_SLEEP_MIN_FULL) { sleeping = false; autoSleep = false; }
@@ -406,7 +407,7 @@ void Pet::tick() {
 
   // ko12.6: resfriado. Riesgo por mil y minuto: sucio +3 (y +2 si ademas hay 2+ cacas), hambre +2
   if (sick) {
-    if (sickWait) sickWait--;
+    if (sickWait && --sickWait == 0) sickNote = 4;  // ko12.6.1: aviso "ya toca"
     if (ageMinutes & 1) joy = clamp100(joy - 1);
     if (++sickMin >= SICK_MISTAKE_MIN) {
       sickMin = 0;

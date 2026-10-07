@@ -861,6 +861,13 @@ static void tama126Loop() {
   if (pet.sickNote) {
     uint8_t n = pet.sickNote;
     pet.sickNote = 0;
+    if (n == 4) {  // ko12.6.1: ya toca la segunda toma (dormido: sin ruido)
+      if (pet.sick && !pet.sleeping) {
+        showToast(XT(X_SICK_READY));
+        if (audioEnabled()) sfxPlay(SFX_ALERT); else vibPulse(250, 2, 180);
+      }
+      return;
+    }
     showToast(XT(n == 3 ? X_SICK_RAIN : n == 2 ? X_SICK_MISS : X_SICK_GOT));
     sfxPlay(n == 2 ? SFX_DENY : SFX_ALERT);
   }
