@@ -256,6 +256,7 @@ void Pet::newEgg() {
   if (shinyBase < 8) shinyBase = 8;
   eggCharm = shinyCharm;  // ko10.10: se recuerda para devolverlo si no llega a nacer
   if (shinyCharm) { shinyBase /= 4; shinyCharm = false; }  // ko10.4: caramelos x10
+  if (lap) shinyBase /= 2;  // ko12.7: viaje brillante: el doble de shinies
   if (shinyBase < 2) shinyBase = 2;
   eggShiny = (random(shinyBase) == 0);
   eggTaps = 0;
@@ -349,7 +350,17 @@ void Pet::update(uint32_t nowMs) {
     // ko10.5: despedida o soltarlo = criado (su familia no vuelve en los huevos);
     // la escapada no cuenta. La interfaz lo guarda en la caja y deja elegir
     uint8_t how = ceremony;
-    if (how != CER_RUNAWAY && !isEgg() && !(how == CER_RELEASE && shortRelease)) markFamRaised(speciesId);
+    if (how != CER_RUNAWAY && !isEgg() && !(how == CER_RELEASE && shortRelease)) {
+      markFamRaised(speciesId);
+      // ko12.7: final del viaje
+      if (lap && shiny) markFamShiny(speciesId);
+      if (lap && how == CER_FAREWELL && ++lapFarewells >= ENDING_PICK_EVERY) {
+        lapFarewells = 0;
+        if (pickTokens < 9) pickTokens++;
+      }
+      if (!lap && !(endSeen & 1) && allFamsRaised()) pendingEnding = 1;
+      else if (lap && !(endSeen & 2) && allFamsShiny()) pendingEnding = 2;
+    }
     if (endHook) endHook(*this, how);
     shortRelease = false;
     newEgg();
@@ -584,7 +595,7 @@ int16_t Pet::pickEggSpecies() {
     int n = 0;
     for (int16_t d = 1; d <= DEX_COUNT; d++) {
       if (DEX_TBL[d].rarity != t) continue;
-      if (pass < 2 && isFamRaised(d)) continue;
+      if (pass < 2 && famDone(d)) continue;  // ko12.7: 2a vuelta = sin criar en shiny
       if (pass == 0 && !lineHasUnregistered(d)) continue;
       cand[n++] = d;
     }
@@ -616,6 +627,49 @@ void Pet::markFamRaised(int16_t dex) {
 bool Pet::allFamsRaised() const {
   for (int16_t d = 1; d <= DEX_COUNT; d++)
     if (DEX_FAM[d] == d && !isFamRaised(d)) return false;
+  return true;
+}
+
+// ---- ko12.7: final del viaje ----
+bool Pet::isFamShiny(int16_t dex) const {
+  if (dex < 1 || dex > DEX_COUNT) return false;
+  int f = DEX_FAM[dex];
+  return famShiny[(f - 1) >> 3] & (1 << ((f - 1) & 7));
+}
+void Pet::markFamShiny(int16_t dex) {
+  if (dex < 1 || dex > DEX_COUNT) return;
+  int f = DEX_FAM[dex];
+  famShiny[(f - 1) >> 3] |= (uint8_t)(1 << ((f - 1) & 7));
+  pendingSave = true;
+}
+bool Pet::allFamsShiny() const {
+  for (int16_t d = 1; d <= DEX_COUNT; d++)
+    if (DEX_FAM[d] == d && !isFamShiny(d)) return false;
+  return true;
+}
+uint16_t Pet::famsRaisedCount() const {
+  uint16_t n = 0;
+  for (int16_t d = 1; d <= DEX_COUNT; d++) if (DEX_FAM[d] == d && isFamRaised(d)) n++;
+  return n;
+}
+uint16_t Pet::famsShinyCount() const {
+  uint16_t n = 0;
+  for (int16_t d = 1; d <= DEX_COUNT; d++) if (DEX_FAM[d] == d && isFamShiny(d)) n++;
+  return n;
+}
+void Pet::endingDone(uint8_t which) {
+  if (which < 1 || which > 2) return;
+  endSeen |= (uint8_t)(1 << (which - 1));
+  if (which == 1) lap = 1;
+  if (pendingEnding == which) pendingEnding = 0;
+  save();
+}
+bool Pet::chooseEgg(int16_t dex) {
+  if (!pickTokens || !isEgg() || starterPick || dex < 1 || dex > DEX_COUNT) return false;
+  if (DEX_TBL[dex].rarity == R_EVO) return false;
+  pickTokens--;
+  eggTarget = dex;
+  save();
   return true;
 }
 
@@ -781,6 +835,7 @@ void Pet::hatch() {
   nick[0] = 0;
   registerSpecies(speciesId);  // criado = registrado en la pokedex
   lifeStart(LF_EGG);  // ko12.4
+  if (!journeyStart) journeyStart = lastSeenEpoch;  // ko12.7
   checkMedals();     // por si nace ya en forma final (legendario)
   sfxPlay(SFX_HATCH);
   save();
@@ -1468,6 +1523,13 @@ void Pet::save() {
   prefs.putUChar("lend", lastEnd);
   prefs.putUShort("evdl", evoDeclinedLv);  // ko12.5.1
   prefs.putUChar("ldry", legDry);  // ko12.6.1
+  prefs.putUChar("lap", lap);  // ko12.7
+  prefs.putUChar("ends", endSeen);
+  prefs.putUChar("endp", pendingEnding);
+  prefs.putBytes("fshy", famShiny, sizeof(famShiny));
+  prefs.putUChar("ptok", pickTokens);
+  prefs.putUChar("lapf", lapFarewells);
+  prefs.putUInt("jst", journeyStart);
   prefs.putUChar("bdm", bdayM);  // ko12.6
   prefs.putUChar("bdd", bdayD);
   prefs.putUShort("bdy", bdayYear);
@@ -1619,6 +1681,13 @@ void Pet::load(bool *migrated) {
   sickWait = prefs.getUChar("sickw", 0);
   if (sickWait > SICK_DOSE_GAP) sickWait = SICK_DOSE_GAP;
   legDry = prefs.getUChar("ldry", 0);  // ko12.6.1
+  lap = prefs.getUChar("lap", 0);  // ko12.7
+  endSeen = prefs.getUChar("ends", 0);
+  pendingEnding = prefs.getUChar("endp", 0);
+  if (prefs.getBytes("fshy", famShiny, sizeof(famShiny)) != sizeof(famShiny)) memset(famShiny, 0, sizeof(famShiny));
+  pickTokens = prefs.getUChar("ptok", 0);
+  lapFarewells = prefs.getUChar("lapf", 0);
+  journeyStart = prefs.getUInt("jst", 0);
   bdayM = prefs.getUChar("bdm", 0);
   bdayD = prefs.getUChar("bdd", 0);
   bdayYear = prefs.getUShort("bdy", 0);

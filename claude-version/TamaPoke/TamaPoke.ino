@@ -731,6 +731,13 @@ void setup() {
   bootStep(BS_HALL);
   hall.begin();
   memStore.begin();  // ko12.4
+  if (!pet.journeyStart) {  // ko12.7: partidas de antes: el viaje empezo con el primero del salon
+    for (uint8_t i = 0; i < hall.count(); i++) {
+      uint32_t e = hall.at(i).epoch;
+      if (e && (!pet.journeyStart || e < pet.journeyStart)) pet.journeyStart = e;
+    }
+    if (pet.journeyStart) pet.saveNow();
+  }
   bootStep(BS_FAME);
   fame.begin();  // ko10.11
   bootStep(BS_MIGRATE);
@@ -1197,6 +1204,9 @@ void handleSerial() {
   } else if (line == "VISIT") {
     if (box.count()) { visitStart((uint8_t)random(box.count())); Serial.println("VISIT ok"); }
     else Serial.println("VISIT: caja vacia");
+  } else if (line == "ENDING" || line == "ENDING2") {  // ko12.7: ver el final (no cambia la partida)
+    openEnding(line == "ENDING2" ? 2 : 1, true);
+    Serial.println("ENDING ok");
   } else if (line == "BDAY") {
     bdayShowAgain();
     Serial.println("BDAY ok");
@@ -3063,6 +3073,7 @@ void render() {
     const char *base = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
     snprintf(name, sizeof(name), T(S_NAME_FMT), pet.shiny ? "*" : "", base, pet.level());
     drawHeader(name, gNight ? UI_INK_NIGHT : d.accent, statusMsg());
+    drawMasterCrown(centerX(name, 3) - 20, 60);  // ko12.7: tras el final del viaje
     drawStreakBadge();
     drawWalkPill();  // ko12.4: pasos de hoy (si la placa tiene sensor)
     drawVisitor(millis());  // ko12.6: amigo de visita (detras del bicho)

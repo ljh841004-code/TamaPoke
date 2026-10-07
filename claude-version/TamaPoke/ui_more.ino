@@ -986,7 +986,9 @@ void onPetEnd(Pet &p, uint8_t how) {
 }
 
 // se puede elegir si su familia no se ha criado (o si ya se criaron todas)
-static bool nextPickable(const BoxMon &m) { return pet.allFamsRaised() || !pet.isFamRaised(m.dex); }
+static bool nextPickable(const BoxMon &m) {  // ko12.7: en el viaje brillante cuenta lo criado en shiny
+  return (pet.lap ? pet.allFamsShiny() : pet.allFamsRaised()) || !pet.famDone(m.dex);
+}
 
 
 static uint8_t nextPages() { return box.count() ? (box.count() + NP_ROWS - 1) / NP_ROWS : 1; }
@@ -1026,11 +1028,16 @@ void renderNextPick() {
     snprintf(pg, sizeof(pg), "%u/%u", nextPage + 1, nextPages());
     drawFit(pg, NP_NAV_Y + 8, 100, UI_INK, 2);
   }
-  drawFit(XT(X_NEXT_HINT), 392, 300, 0x8410, 1);
+  if (pet.pickTokens && pet.isEgg()) {  // ko12.7: vale de huevo a eleccion
+    char b[40];
+    snprintf(b, sizeof(b), XT(X_PICK_BTN_FMT), pet.pickTokens);
+    drawBtn(123, 386, 220, 40, C565(0xff, 0xd0, 0x40), UI_INK, b);
+  } else drawFit(XT(X_NEXT_HINT), 392, 300, 0x8410, 1);
   uiFlush();
 }
 
 void nextPickTap(int16_t x, int16_t y) {
+  if (pet.pickTokens && pet.isEgg() && inRect(x, y, 123, 386, 220, 40)) { sfxPlay(SFX_TAP); openEggPick(); return; }  // ko12.7
   if (inRect(x, y, 93, NP_EGG_Y, 280, 48)) {  // el huevo que ya esta puesto
     sfxPlay(SFX_TAP);
     xScreen = XS_NONE;
@@ -1065,7 +1072,7 @@ void nextPickTap(int16_t x, int16_t y) {
 void nextPickPoll() {
   if (!gNextPickPending || xScreen != XS_NONE) return;
   gNextPickPending = false;
-  if (!pet.isEgg() || !box.count()) return;  // sin caja: huevo y ya
+  if (!pet.isEgg() || (!box.count() && !pet.pickTokens)) return;  // sin caja: huevo y ya (ko12.7: salvo vale)
   nextPage = 0;
   xScreen = XS_NEXTPICK;
 }
@@ -2429,6 +2436,9 @@ void partyPickTap(int16_t x, int16_t y) {
 #define SET_DY 56
 #define SET_N 11  // ko12.4: 5 filas (+ decorar, paseo); ko12.6: + cumpleanos (sexta fila, centrado)
 #define SET_XC 152  // boton suelto de la ultima fila (la pantalla redonda se estrecha)
+#define SET_HX1 100  // ko12.7: ... o dos medios botones (tras el final)
+#define SET_HX2 236
+#define SET_HW 130
 static bool gClockFromSet = false;
 
 void openSettings() {
@@ -2462,8 +2472,14 @@ void renderSettings() {
     { XT(X_WALK_BTN), C565(0x8a, 0x5a, 0x3a), UI_WHITE },
     { XT(X_BDAY_BTN), C565(0xf0, 0x60, 0x80), UI_WHITE },  // ko12.6
   };
-  for (int i = 0; i < SET_N; i++)
+  for (int i = 0; i < SET_N; i++) {
+    if (i == 10 && pet.endSeen) {  // ko12.7: tras el final, [내 생일] y [엔딩 다시 보기] a medias
+      drawBtn(SET_HX1, SET_Y0 + 5 * SET_DY, SET_HW, SET_H, b[i].bg, b[i].fg, b[i].t);
+      drawBtn(SET_HX2, SET_Y0 + 5 * SET_DY, SET_HW, SET_H, C565(0xf0, 0xc0, 0x30), UI_INK, XT(X_END_BTN));
+      continue;
+    }
     drawBtn(i == 10 ? SET_XC : i % 2 ? SET_X2 : SET_X1, SET_Y0 + (i / 2) * SET_DY, SET_W, SET_H, b[i].bg, b[i].fg, b[i].t);
+  }
   // version del firmware (antes en la pantalla de la hora)
   char ver[40];
   snprintf(ver, sizeof(ver), "TamaPoke v%s", FW_VERSION);
@@ -2482,7 +2498,10 @@ void settingsTap(int16_t x, int16_t y) {
   if (y < SET_Y0 || x < SET_X1 || x >= SET_X2 + SET_W) return;
   int row = (y - SET_Y0) / SET_DY;
   if (row > SET_N / 2 || (y - SET_Y0) % SET_DY >= SET_H) return;
-  if (row == 5 && (x < SET_XC || x >= SET_XC + SET_W)) return;
+  if (row == 5 && pet.endSeen) {  // ko12.7
+    if (x >= SET_HX2 && x < SET_HX2 + SET_HW) { sfxPlay(SFX_TAP); openEnding((pet.endSeen & 2) ? 2 : 1, true); return; }
+    if (x < SET_HX1 || x >= SET_HX1 + SET_HW) return;
+  } else if (row == 5 && (x < SET_XC || x >= SET_XC + SET_W)) return;
   int i = row == 5 ? 10 : row * 2 + (x >= SET_X2 - 5 ? 1 : 0);
   sfxPlay(SFX_TAP);
   switch (i) {

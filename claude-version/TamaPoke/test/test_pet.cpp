@@ -1961,3 +1961,78 @@ TEST(egg, techo_de_legendario) {
   Pet r; r.begin();
   CHECK_EQ((int)r.legDry, (int)p.legDry);
 }
+
+// ko12.7: cada familia tiene una especie que puede salir de un huevo (si no, el 100% seria imposible)
+TEST(ending, todas_las_familias_salen_de_huevo) {
+  int fams = 0;
+  for (int16_t f = 1; f <= DEX_COUNT; f++) {
+    if (DEX_FAM[f] != f) continue;
+    fams++;
+    bool ok = false;
+    for (int16_t d = 1; d <= DEX_COUNT; d++) if (DEX_FAM[d] == f && DEX_TBL[d].rarity != R_EVO) ok = true;
+    CHECK_MSG(ok, "familia sin especie de huevo");
+  }
+  CHECK_EQ(fams, 129);  // 137 especies de huevo, pero 8 comparten familia (Pichu-Pikachu, Tyrogue-Hitmonlee...)
+}
+
+static void endCycle(Pet &p, uint8_t how) {
+  if (how == CER_FAREWELL) p.startFarewell(); else p.release();
+  mockAdvanceMillis(CEREMONY_MS + 10);
+  p.update(millis());
+}
+
+// ko12.7: la ultima familia criada dispara el final 1; luego la 2a vuelta (shiny) y el final 2
+TEST(ending, final_1_y_viaje_brillante) {
+  Pet p;
+  makePet(p, 4);
+  for (int16_t d = 1; d <= DEX_COUNT; d++) if (DEX_FAM[d] != DEX_FAM[4]) p.markFamRaised(d);
+  CHECK(!p.allFamsRaised());
+  CHECK_EQ((int)p.famsRaisedCount(), 128);
+  endCycle(p, CER_FAREWELL);
+  CHECK_EQ((int)p.pendingEnding, 1);
+  { Pet q; q.begin(); CHECK_EQ((int)q.pendingEnding, 1); }  // sobrevive a un corte
+  p.endingDone(1);
+  CHECK_EQ((int)p.lap, 1);
+  CHECK_EQ((int)p.pendingEnding, 0);
+  CHECK(p.endSeen & 1);
+  // 2a vuelta: los huevos buscan familias aun no criadas en shiny
+  randomSeed(3);
+  for (int i = 0; i < 50; i++) CHECK(!p.isFamShiny(p.pickEggSpecies()));
+  // despedirse 5 veces = 1 huevo a eleccion; solo cuenta shiny para el viaje brillante
+  for (int i = 0; i < ENDING_PICK_EVERY; i++) {
+    p.eggTap(); p.eggTap(); p.eggTap();
+    p.shiny = (i == 0);
+    int16_t sp = p.speciesId;
+    endCycle(p, CER_FAREWELL);
+    if (i == 0) CHECK(p.isFamShiny(sp));
+  }
+  CHECK_EQ((int)p.pickTokens, 1);
+  CHECK_EQ((int)p.famsShinyCount(), 1);
+  CHECK(p.chooseEgg(150));
+  CHECK_EQ((int)p.eggSpecies(), 150);
+  CHECK_EQ((int)p.pickTokens, 0);
+  CHECK(!p.chooseEgg(151));
+  // ultima familia shiny -> final 2
+  for (int16_t d = 1; d <= DEX_COUNT; d++) if (DEX_FAM[d] != DEX_FAM[150]) p.markFamShiny(d);
+  p.eggTap(); p.eggTap(); p.eggTap();
+  CHECK_EQ((int)p.speciesId, 150);
+  p.shiny = true;
+  endCycle(p, CER_FAREWELL);
+  CHECK_EQ((int)p.pendingEnding, 2);
+  p.endingDone(2);
+  CHECK_EQ((int)p.endSeen, 3);
+  Pet q; q.begin();
+  CHECK_EQ((int)q.lap, 1);
+  CHECK_EQ((int)q.famsShinyCount(), 129);
+}
+
+// ko12.7: escaparse no cuenta para el final
+TEST(ending, la_escapada_no_acaba_el_viaje) {
+  Pet p;
+  makePet(p, 4);
+  for (int16_t d = 1; d <= DEX_COUNT; d++) if (DEX_FAM[d] != DEX_FAM[4]) p.markFamRaised(d);
+  p.startRunaway();
+  mockAdvanceMillis(CEREMONY_MS + 10);
+  p.update(millis());
+  CHECK_EQ((int)p.pendingEnding, 0);
+}

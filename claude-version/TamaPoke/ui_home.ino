@@ -57,6 +57,11 @@ static void decoTrophy(int cx, int cy, int s, bool night) {
   gfx->fillRect(cx - 7 * s, cy - 3 * s, 14 * s, 5 * s, nightDim(C565(0x8a, 0x5a, 0x3a), night));
   gfx->drawRoundRect(cx - 8 * s, cy - 22 * s, 16 * s, 12 * s, 5 * s, dk);
   gfx->fillCircle(cx - 3 * s, cy - 18 * s, s, nightDim(UI_WHITE, night));
+  if (pet.endSeen) {  // ko12.7: trofeo de maestro: estrella encima
+    uint16_t st = nightDim(C565(0xff, 0xe8, 0x80), night);
+    gfx->fillTriangle(cx - 5 * s, cy - 24 * s, cx + 5 * s, cy - 24 * s, cx, cy - 31 * s, st);
+    gfx->fillTriangle(cx - 5 * s, cy - 28 * s, cx + 5 * s, cy - 28 * s, cx, cy - 21 * s, st);
+  }
 }
 static void decoDoll(int cx, int cy, int s, bool night) {  // muneco de peluche (osito)
   uint16_t b = nightDim(C565(0xc8, 0x8a, 0x58), night), dk = uiLerp(b, UI_INK, 8, 16);
@@ -580,6 +585,12 @@ void renderCardLife() {
   }
   snprintf(b, sizeof(b), XT(X_LIFE_STREAK_FMT), (unsigned)pet.rtStreak, (unsigned)pet.rtBest);
   drawFit(b, 318, 320, UI_INK, 1);
+  // ko12.7: cuanto falta del viaje
+  uint16_t tot = 0;
+  for (int16_t d = 1; d <= DEX_COUNT; d++) if (DEX_FAM[d] == d) tot++;
+  if (pet.lap) snprintf(b, sizeof(b), XT(X_LIFE_SHINY_FMT), pet.famsShinyCount(), tot);
+  else snprintf(b, sizeof(b), XT(X_LIFE_JOURNEY_FMT), pet.famsRaisedCount(), tot);
+  drawFit(b, 344, 320, pet.lap ? C565(0xd0, 0x90, 0x10) : 0x8410, 1);
 }
 
 // ======================================================================
@@ -871,4 +882,254 @@ static void tama126Loop() {
     showToast(XT(n == 3 ? X_SICK_RAIN : n == 2 ? X_SICK_MISS : X_SICK_GOT));
     sfxPlay(n == 2 ? SFX_DENY : SFX_ALERT);
   }
+}
+
+// ======================================================================
+// ko12.7: final del viaje (todas las familias criadas) y viaje brillante
+// ======================================================================
+static uint8_t endWhich = 0, endPhase = 0;
+static bool endReplay = false;
+static uint32_t endT0 = 0;
+static uint8_t endOrder[HALL_MAX];
+static uint16_t endN = 0;
+#define END_TITLE_MS 4500UL
+#define END_PARADE_GAP 96
+#define END_PARADE_PXS 150      // pixeles por segundo
+#define END_CREDIT_LINE 40
+#define END_CREDIT_PXS 32
+#define END_CR_MAX 14
+static char endCr[END_CR_MAX][72];
+static uint8_t endCrN = 0;
+
+static uint32_t endParadeMs() { return (uint32_t)(endN * END_PARADE_GAP + LCD_WIDTH + 120) * 1000UL / END_PARADE_PXS; }
+static uint32_t endCreditMs() { return (uint32_t)(endCrN * END_CREDIT_LINE + LCD_HEIGHT + 60) * 1000UL / END_CREDIT_PXS; }
+
+static void endBuildCredits() {
+  endCrN = 0;
+  auto add = [&](const char *s) { if (endCrN < END_CR_MAX) snprintf(endCr[endCrN++], sizeof(endCr[0]), "%s", s); };
+  char b[72];
+  add(XT(X_END_CR_TITLE));
+  add("");
+  uint32_t now = clockEpoch();
+  if (pet.journeyStart) {
+    int y; uint8_t m, d;
+    wxDate(pet.journeyStart, &y, &m, &d, nullptr);
+    snprintf(b, sizeof(b), XT(X_END_CR_START_FMT), (unsigned)y, m, d); add(b);
+    if (now > pet.journeyStart) { snprintf(b, sizeof(b), XT(X_END_CR_DAYS_FMT), (unsigned long)((now - pet.journeyStart) / 86400UL + 1)); add(b); }
+  }
+  snprintf(b, sizeof(b), XT(X_END_CR_HALL_FMT), hall.count()); add(b);
+  snprintf(b, sizeof(b), XT(X_END_CR_DEX_FMT), dexDiscoveredCount()); add(b);
+  uint16_t sh = 0;
+  for (uint8_t i = 0; i < hall.count(); i++) if (hall.at(i).flags & BOXF_SHINY) sh++;
+  snprintf(b, sizeof(b), XT(X_END_CR_SHINY_FMT), sh); add(b);
+  char st[20];
+  fmtSteps(st, sizeof(st), pet.walk.total);
+  snprintf(b, sizeof(b), XT(X_END_CR_STEPS_FMT), st); add(b);
+  snprintf(b, sizeof(b), XT(X_END_CR_WILD_FMT), pet.wildWins); add(b);
+  snprintf(b, sizeof(b), XT(X_END_CR_CHAMP_FMT), pet.champWins); add(b);
+  snprintf(b, sizeof(b), XT(X_END_CR_LINK_FMT), pet.linkWins, pet.trades); add(b);
+  uint8_t bd = 0;
+  for (int i = 0; i < 8; i++) if (pet.badges & (1 << i)) bd++;
+  snprintf(b, sizeof(b), XT(X_END_CR_BADGE_FMT), bd); add(b);
+  add("");
+  add(XT(X_END_CR_THANKS));
+}
+
+void openEnding(uint8_t which, bool replay) {
+  if (which < 1 || which > 2) return;
+  endWhich = which;
+  endReplay = replay;
+  endPhase = 0;
+  endT0 = millis();
+  // el salon por orden de llegada (el primero = el primer companero que llego al final)
+  endN = hall.count();
+  for (uint16_t i = 0; i < endN; i++) endOrder[i] = (uint8_t)i;
+  for (uint16_t i = 1; i < endN; i++) {
+    uint8_t k = endOrder[i];
+    uint32_t e = hall.at(k).epoch;
+    int j = (int)i - 1;
+    while (j >= 0 && hall.at(endOrder[j]).epoch > e) { endOrder[j + 1] = endOrder[j]; j--; }
+    endOrder[j + 1] = k;
+  }
+  endBuildCredits();
+  retMark();
+  xScreen = XS_ENDING;
+  sfxPlay(SFX_MEDAL);
+}
+
+// lo abre el bucle principal cuando la ultima familia se despide
+void endingPoll() {
+  if (!pet.pendingEnding || xScreen != XS_NONE || pet.ceremony || cardOpen || clockOpen) return;
+  openEnding(pet.pendingEnding, false);
+}
+
+static void endFinish() {
+  if (!endReplay) pet.endingDone(endWhich);
+  xScreen = XS_NONE;
+  if (endReplay) goBack();
+}
+
+static void endSky(uint32_t now) {
+  gfx->fillScreen(C565(0x10, 0x16, 0x30));
+  for (int i = 0; i < 60; i++) {  // estrellas que titilan
+    int x = (i * 97 + 31) % LCD_WIDTH, y = (i * 53 + 17) % 300;
+    bool on = ((now / 300) + i) % 5 != 0;
+    if (on) gfx->fillRect(x, y, (i % 7) ? 2 : 3, (i % 7) ? 2 : 3, (i % 3) ? UI_WHITE : C565(0xff, 0xe0, 0x80));
+  }
+  gfx->fillRect(0, 300, LCD_WIDTH, LCD_HEIGHT - 300, C565(0x24, 0x3a, 0x2c));
+}
+
+static void endSparkle(int cx, int cy, uint32_t now, uint16_t c) {
+  for (int a = 0; a < 4; a++) {
+    int k = (int)((now / 120 + a * 3) % 8);
+    int dx = (a & 1 ? 1 : -1) * (14 + k * 2), dy = (a & 2 ? 1 : -1) * (12 + k);
+    gfx->drawFastHLine(cx + dx - 3, cy + dy, 7, c);
+    gfx->drawFastVLine(cx + dx, cy + dy - 3, 7, c);
+  }
+}
+
+void renderEnding() {
+  uint32_t now = millis(), t = now - endT0;
+  uint16_t gold = C565(0xff, 0xd0, 0x40);
+  if (endPhase == 0 && t > END_TITLE_MS) { endPhase = 1; endT0 = now; t = 0; }
+  if (endPhase == 1 && t > endParadeMs()) { endPhase = 2; endT0 = now; t = 0; }
+  if (endPhase == 2 && t > endCreditMs()) { endPhase = 3; endT0 = now; t = 0; }
+  endSky(now);
+  if (endPhase == 0) {
+    fireworks(now, 4, 70, 220);
+    drawFit(XT(endWhich == 2 ? X_END_T2 : X_END_T1), 236, 400, gold, 2);
+    char b[48];
+    uint16_t tot = 0;  // todas las familias (al llegar aqui ya estan todas)
+    for (int16_t d = 1; d <= DEX_COUNT; d++) if (DEX_FAM[d] == d) tot++;
+    snprintf(b, sizeof(b), XT(X_END_SUB_FMT), (unsigned)tot);
+    drawFit(b, 272, 360, UI_WHITE, 2);
+  } else if (endPhase == 1) {
+    drawFit(XT(X_END_PARADE), 120, 300, gold, 2);
+    int off = (int)((uint64_t)t * END_PARADE_PXS / 1000);
+    int center = -1, best = 9999;
+    for (uint16_t i = 0; i < endN; i++) {
+      int x = LCD_WIDTH + 60 + (int)i * END_PARADE_GAP - off;
+      if (x < -60 || x > LCD_WIDTH + 60) continue;
+      const BoxMon &m = hall.at(endOrder[i]);
+      int hop = ((now / 180) + i) % 2 ? 4 : 0;
+      drawThumbAt(m.dex, x, 250 - hop, 2, false);
+      if ((m.flags & BOXF_SHINY) || endWhich == 2) endSparkle(x, 240, now + i * 70, gold);
+      int dc = abs(x - CX);
+      if (dc < best) { best = dc; center = i; }
+    }
+    if (center >= 0 && best < END_PARADE_GAP / 2) {
+      const BoxMon &m = hall.at(endOrder[center]);
+      char b[48];
+      snprintf(b, sizeof(b), XT(X_END_NO_FMT), (unsigned)(center + 1));
+      drawFit(b, 312, 200, C565(0xb0, 0xc0, 0xd0), 1);
+      snprintf(b, sizeof(b), "%s%s", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex));
+      drawFit(b, 336, 300, UI_WHITE, 2);
+    }
+  } else if (endPhase == 2) {
+    int y0 = LCD_HEIGHT - (int)((uint64_t)t * END_CREDIT_PXS / 1000);
+    for (uint8_t i = 0; i < endCrN; i++) {
+      int y = y0 + i * END_CREDIT_LINE;
+      if (y < 40 || y > LCD_HEIGHT - 40 || !endCr[i][0]) continue;
+      drawFit(endCr[i], y, 380, i == 0 || i + 1 == endCrN ? gold : UI_WHITE, 2);
+    }
+  } else {
+    fireworks(now, 3, 60, 160);
+    int16_t first = endN ? dexFirstForm(hall.at(endOrder[0]).dex) : (pet.isEgg() ? 1 : pet.speciesId);
+    int hop = (now / 300) % 2 ? 6 : 0;
+    drawThumbAt(first, CX, 210 - hop, 4, false);
+    if (endWhich == 2) endSparkle(CX, 200, now, gold);
+    drawFit(XT(endWhich == 2 ? X_END_MSG2 : X_END_MSG1), 292, 380, UI_WHITE, 1);
+    drawFit(XT(endWhich == 2 ? X_END_MSG2B : X_END_MSG1B), 316, 380, UI_WHITE, 1);
+    drawFit(XT(endWhich == 2 ? X_END_RW2 : X_END_RW1), 352, 360, gold, 1);
+    if (t > 1500) drawFit(XT(X_END_TAP), 392, 300, C565(0xb0, 0xc0, 0xd0), 1);
+  }
+  if (endPhase < 3) drawFit(XT(X_END_SKIP), 420, 200, C565(0x70, 0x80, 0x98), 1);
+  uiFlush();
+}
+
+void endingTap(int16_t x, int16_t y) {
+  (void)x; (void)y;
+  uint32_t t = millis() - endT0;
+  if (t < 600) return;  // que un toque suelto no se salte nada sin querer
+  sfxPlay(SFX_TAP);
+  if (endPhase < 3) { endPhase++; endT0 = millis(); return; }
+  if (t > 1500) endFinish();
+}
+
+// ---- recompensas: corona junto al nombre ----
+void drawMasterCrown(int cx, int cy) {
+  if (!pet.endSeen) return;
+  uint16_t g = (pet.endSeen & 2) ? C565(0xff, 0xe8, 0x80) : C565(0xf0, 0xc0, 0x30), dk = C565(0x8a, 0x60, 0x10);
+  gfx->fillRect(cx - 11, cy, 22, 7, g);
+  gfx->fillTriangle(cx - 11, cy, cx - 11, cy - 10, cx - 4, cy, g);
+  gfx->fillTriangle(cx - 5, cy, cx, cy - 13, cx + 5, cy, g);
+  gfx->fillTriangle(cx + 11, cy, cx + 11, cy - 10, cx + 4, cy, g);
+  gfx->drawRect(cx - 11, cy, 22, 7, dk);
+  gfx->fillCircle(cx, cy - 13, 2, (pet.endSeen & 2) ? C565(0x80, 0xd0, 0xff) : C565(0xe0, 0x40, 0x50));
+}
+
+// ---- 2a vuelta: elegir el huevo (con un vale) ----
+#define EP_COLS 3
+#define EP_ROWS 3
+#define EP_X0 83
+#define EP_Y0 92
+#define EP_W 100
+#define EP_H 74
+#define EP_NAV_Y 330
+static int16_t epList[DEX_COUNT];
+static uint16_t epN = 0, epPage = 0;
+static void epBuild() {  // una especie de huevo por familia aun sin hacer (la mas baja)
+  epN = 0;
+  for (int16_t d = 1; d <= DEX_COUNT; d++) {
+    if (DEX_TBL[d].rarity == R_EVO || pet.famDone(d)) continue;
+    bool dup = false;
+    for (uint16_t k = 0; k < epN && !dup; k++) dup = DEX_FAM[epList[k]] == DEX_FAM[d];
+    if (!dup) epList[epN++] = d;
+  }
+}
+static uint16_t epPages() { return epN ? (epN + EP_COLS * EP_ROWS - 1) / (EP_COLS * EP_ROWS) : 1; }
+void openEggPick() { retMark(); epBuild(); epPage = 0; xScreen = XS_EGGPICK; }
+void renderEggPick() {
+  uiScreenBg();
+  drawFit(XT(X_PICK_TITLE), 36, 300, UI_INK, 2);
+  drawFit(XT(X_PICK_HINT), 66, 330, 0x8410, 1);
+  if (!epN) drawFit(XT(X_PICK_NONE), 200, 300, UI_INK, 2);
+  for (int i = 0; i < EP_COLS * EP_ROWS; i++) {
+    int k = epPage * EP_COLS * EP_ROWS + i;
+    if (k >= epN) break;
+    int x = EP_X0 + (i % EP_COLS) * EP_W, y = EP_Y0 + (i / EP_COLS) * EP_H;
+    uiButton(x + 4, y + 4, EP_W - 8, EP_H - 8, 12, UI_WHITE, UI_INK);
+    drawThumbAt(epList[k], x + EP_W / 2, y + 28, 1, false);
+    drawFitIn(dexName(epList[k]), x + 8, y + 48, EP_W - 16, UI_INK, 1);
+  }
+  if (epPages() > 1) {
+    drawBtn(113, EP_NAV_Y, 60, 34, epPage ? UI_WHITE : UI_TRACK, UI_INK, "<");
+    drawBtn(293, EP_NAV_Y, 60, 34, epPage + 1 < epPages() ? UI_WHITE : UI_TRACK, UI_INK, ">");
+    char pg[16];
+    snprintf(pg, sizeof(pg), "%u/%u", epPage + 1, epPages());
+    drawFit(pg, EP_NAV_Y + 8, 100, UI_INK, 2);
+  }
+  char b[40];
+  snprintf(b, sizeof(b), XT(X_PICK_BTN_FMT), pet.pickTokens);
+  drawFit(b, 380, 300, 0x8410, 1);
+  drawNav(NAV_L, UI_INK);
+  uiFlush();
+}
+void eggPickTap(int16_t x, int16_t y) {
+  if (navHit(NAV_L, x, y)) { sfxPlay(SFX_TAP); goBack(); return; }
+  if (epPages() > 1 && y >= EP_NAV_Y && y < EP_NAV_Y + 34) {
+    if (x < CX && epPage > 0) epPage--;
+    else if (x >= CX && epPage + 1 < epPages()) epPage++;
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  if (x < EP_X0 || x >= EP_X0 + EP_COLS * EP_W || y < EP_Y0 || y >= EP_Y0 + EP_ROWS * EP_H) return;
+  int k = epPage * EP_COLS * EP_ROWS + ((y - EP_Y0) / EP_H) * EP_COLS + (x - EP_X0) / EP_W;
+  if (k >= epN) return;
+  if (!pet.chooseEgg(epList[k])) { sfxPlay(SFX_DENY); return; }
+  char b[80];
+  txFmt(b, sizeof(b), X_PICK_DONE_FMT, dexName(epList[k]));
+  showToast(b);
+  sfxPlay(SFX_MEDAL);
+  xScreen = XS_NONE;
 }

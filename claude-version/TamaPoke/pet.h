@@ -17,6 +17,7 @@ enum : uint8_t { PERS_NONE = 0, PERS_GLUTTON, PERS_PLAYFUL, PERS_CUDDLY, PERS_HA
 #define SICK_DOSE_GAP 3          // minutos entre una toma y la siguiente (ko12.6.1: antes 30)          // pasear con lluvia (cada racha de 16+ pasos)
 #define EGG_LEG_MIN_REG 25   // ko12.6.1: el legendario sale en los huevos con 25+ registrados
 #define EGG_LEG_PITY 12      // ... y tras 12 huevos seguidos sin el, el siguiente lo es
+#define ENDING_PICK_EVERY 5   // ko12.7: 2a vuelta: cada 5 despedidas, 1 huevo a eleccion
 #define PERS_MIN_ACTS 30        // cuidados que hacen falta para que se vea el caracter
 uint8_t personalityOf(const LifeLog &l, uint8_t discipline);
 #define DECO_SLOTS 3   // ko12.4: izquierda, delante (derecha), derecha
@@ -385,6 +386,23 @@ public:
   bool isFamRaised(int16_t dex) const;
   void markFamRaised(int16_t dex);
   bool allFamsRaised() const;
+  // ko12.7: final del viaje. 1a vuelta: criar todas las familias -> final 1 y empieza la 2a
+  // ("viaje brillante": criar cada familia en version shiny) -> final 2
+  uint8_t lap = 0;                    // 0 primera vuelta, 1 viaje brillante
+  uint8_t endSeen = 0;                // bit0 final 1 visto, bit1 final 2 visto
+  uint8_t pendingEnding = 0;          // final que toca ensenar (0 ninguno, 1, 2): lo consume la UI
+  uint8_t famShiny[PET_DEX_BYTES] = { 0 };  // familias criadas en version shiny (2a vuelta)
+  uint8_t pickTokens = 0;             // huevos a eleccion (2a vuelta: 1 cada ENDING_PICK_EVERY despedidas)
+  uint8_t lapFarewells = 0;
+  uint32_t journeyStart = 0;          // cuando empezo todo (para los creditos)
+  bool isFamShiny(int16_t dex) const;
+  void markFamShiny(int16_t dex);
+  bool allFamsShiny() const;
+  uint16_t famsRaisedCount() const;   // familias criadas (de FAM_TOTAL)
+  uint16_t famsShinyCount() const;
+  void endingDone(uint8_t which);     // la UI acabo de ensenar el final (1 -> empieza la 2a vuelta)
+  bool chooseEgg(int16_t dex);        // gasta un huevo a eleccion: el huevo puesto pasa a ser de esa especie
+  bool famDone(int16_t dex) const { return lap ? isFamShiny(dex) : isFamRaised(dex); }  // "ya criada" segun la vuelta
   void exportTrade(TradePet &t) const;
   bool importTrade(const TradePet &t, uint16_t lvl = 1);  // recibe el Pokemon del otro (evoluciona si toca)
   // evolucion por intercambio: a que especie (0 = ninguna). Gen 1: Kadabra,

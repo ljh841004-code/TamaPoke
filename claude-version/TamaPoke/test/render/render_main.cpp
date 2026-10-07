@@ -102,6 +102,39 @@ static void scenes(bool ko, const char *sfx) {
       render(); shot("01b_bday_main");
       pet.setBirthday(0, 0);
     }
+    {  // ko12.7: final del viaje
+      uint8_t h0 = hall.count();
+      const int16_t HD[6] = { 1, 25, 133, 143, 149, 151 };
+      for (int i = 0; i < 6; i++) hall.addRaised(HD[i], 50, i == 2, 100, 100, 100, gMockEpoch - (6 - i) * 86400, nullptr);
+      pet.journeyStart = gMockEpoch - 400UL * 86400;
+      pet.pendingEnding = 1; closeAll();
+      endingPoll();
+      navCheck("final: se abre solo", xScreen == XS_ENDING && endWhich == 1);
+      render(); shot("02e_ending_title");
+      tick(800); endingTap(CX, CX);
+      tick(2600); render(); shot("02e_ending_parade");
+      tick(800); endingTap(CX, CX);
+      tick(9000); render(); shot("02e_ending_credits");
+      tick(800); endingTap(CX, CX);
+      tick(2000); render(); shot("02e_ending_final");
+      endingTap(CX, CX);
+      navCheck("final: al acabar empieza la 2a vuelta", xScreen == XS_NONE && pet.lap == 1 && pet.endSeen == 1 && !pet.pendingEnding);
+      toastUntil = 0; render(); shot("02e_main_crown");
+      cardOpen = true; cardPage = 5; render(); shot("02e_card_journey"); cardOpen = false; cardPage = 0;
+      pet.pickTokens = 2;
+      bool egg0 = pet.isEgg();
+      if (!egg0) { pet.speciesId = -1; }
+      openEggPick(); render(); shot("02e_eggpick");
+      eggPickTap(EP_X0 + 50, EP_Y0 + 30);
+      navCheck("vale: elegir el huevo", xScreen == XS_NONE && pet.pickTokens == 1);
+      if (!egg0) pet.speciesId = 4;
+      openEnding(2, true); tick(3000); render(); shot("02e_ending2_title");
+      endPhase = 3; endT0 = millis(); tick(2000); render(); shot("02e_ending2_final");
+      endingTap(CX, CX);
+      navCheck("final 2 visto de nuevo: no cambia la partida", pet.endSeen == 1);
+      while (hall.count() > h0) hall.release(hall.count() - 1);
+      pet.lap = 0; pet.endSeen = 0; pet.pickTokens = 0; closeAll();
+    }
     pet.bgAsked = 0; render(); shot("01q_main_bg_ask");
     onTap(320, BGQ_Y + 160);  // [방]
     navCheck("fondo: elegir habitacion una vez", pet.roomOn == 1 && pet.bgAsked == 1);
@@ -1122,6 +1155,12 @@ static void navChecks() {
   bdayTap(96 + 60, 304 + 25);
   navCheck("ajustes -> [내 생일] -> +1 mes -> [저장] = ajustes", bdo && xScreen == XS_SET && pet.bdayM != 0);
   pet.setBirthday(0, 0);
+  pet.endSeen = 1; closeAll(); openSettings(); render(); shot("90c_settings_master");
+  settingsTap(236 + 60, SET_Y0 + 5 * SET_DY + 20);
+  navCheck("ajustes -> [엔딩 다시 보기]", xScreen == XS_ENDING && endReplay);
+  closeAll(); openSettings(); settingsTap(100 + 60, SET_Y0 + 5 * SET_DY + 20);
+  navCheck("ajustes (maestro) -> [내 생일]", xScreen == XS_BDAY);
+  pet.endSeen = 0;
   closeAll(); openSettings(); setBtn(10); bdayTap(LX, LY);
   navCheck("ajustes -> cumpleanos -> [<] = ajustes", xScreen == XS_SET);
   closeAll(); openSettings(); setBtn(7); bool rs = xScreen == XS_RESET; resetTap(LX, LY);
