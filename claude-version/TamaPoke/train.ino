@@ -279,15 +279,17 @@ void drawTrainResult(const char *score, const char *gain, uint16_t gainCol, bool
   uiFlush();
 }
 
-// ko11.3: medida del minijuego, pequena (para ver de donde vienen los tirones)
+// ko11.3: medida del minijuego (para ver de donde vienen los tirones). ko12.8: ya no se pinta en el
+// resultado (era texto de desarrollo y se salia por abajo): va a la consola serie, una vez por partida
 extern uint16_t perfRenderMax, perfStallMax;
 extern uint32_t perfFrames, perfRenderSum;
 void drawPerfLine(int y, uint16_t ink) {
-  if (!perfFrames) return;
-  char p[48];
-  snprintf(p, sizeof(p), XT(X_PERF_FMT), (unsigned)(perfRenderSum / perfFrames), (unsigned)perfRenderMax,
-           (unsigned)perfStallMax);
-  drawFit(p, y, 300, ink, 1);
+  (void)y; (void)ink;
+  static uint32_t shownFrames = 0;
+  if (!perfFrames || perfFrames == shownFrames) return;
+  shownFrames = perfFrames;
+  Serial.printf("PERF juego: media %u max %u ms, parada max %u ms\n", (unsigned)(perfRenderSum / perfFrames),
+                (unsigned)perfRenderMax, (unsigned)perfStallMax);
 }
 
 void drawTimeBar(uint32_t left, uint32_t total, int y) {

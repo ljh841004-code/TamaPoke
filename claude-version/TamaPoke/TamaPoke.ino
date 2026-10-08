@@ -2143,7 +2143,17 @@ void uiGradRRect(int x, int y, int w, int h, int r, uint16_t top, uint16_t bot) 
 }
 
 // boton con relieve: sombra, degradado, brillo arriba, labio oscuro, borde
+// ko12.8: en el PC (test/render, -DUI_GEOM_CHECK) se comprueba que botones, paneles y textos
+// caben en la pantalla redonda; en la placa no hace nada
+#ifdef UI_GEOM_CHECK
+void uiGeomCheck(char kind, int x, int y, int w, int h, int r, const char *s);
+#define UI_GEOM(k, x, y, w, h, r, s) uiGeomCheck(k, x, y, w, h, r, s)
+#else
+#define UI_GEOM(k, x, y, w, h, r, s) ((void)0)
+#endif
+
 void uiButton(int x, int y, int w, int h, int r, uint16_t bg, uint16_t edge) {
+  UI_GEOM('B', x, y, w, h, r, nullptr);
   uiShadow(x, y, w, h, r);
   uint16_t lip = uiLerp(bg, UI_INK, 5, 16);
   gfx->fillRoundRect(x, y, w, h, r, lip);                          // labio (abajo)
@@ -2155,6 +2165,7 @@ void uiButton(int x, int y, int w, int h, int r, uint16_t bg, uint16_t edge) {
 
 // ventana/panel: sombra, fondo casi blanco con degradado suave, borde
 void uiPanel(int x, int y, int w, int h, int r, uint16_t bg, uint16_t edge) {
+  UI_GEOM('P', x, y, w, h, r, nullptr);
   uiShadow(x, y, w, h, r);
   uiGradRRect(x, y, w, h, r, bg, uiLerp(bg, C565(0xc0, 0xc0, 0xc0), 4, 16));
   gfx->drawRoundRect(x, y, w, h, r, edge);
@@ -3008,12 +3019,16 @@ void printT(const char *s) {
   if (koNoto()) {  // fork KO (ko8): Noto suavizada, hangul y ASCII
     uint16_t col = gfx->ink();
     int x = gfx->getCursorX(), base = gfx->getCursorY();
+    const char *s0 = s;
+    int x0 = x;
     while (*s) {
       uint32_t cp;
       s += utf8Next(s, &cp);
       x += fkoChar(cp, x, base, true, col);
     }
     gfx->setCursor(x, base);
+    UI_GEOM('T', x0, base - fkoTier().base, x - x0, fkoTier().px, 0, s0);
+    (void)s0;
     return;
   }
   if (gCjkFont) {
@@ -3794,17 +3809,22 @@ void clockTap(int16_t x, int16_t y) {
   if (y >= CLK_OK_Y && y <= CLK_OK_Y + 48 && x >= 133 && x <= 333) { applyClock(); return; }
 }
 
-// llama + numero de racha arriba a la izquierda
+// llama + numero de racha. ko12.8: en una placa a la izquierda de la flecha de arriba (como la
+// bateria a la derecha); antes iba en la esquina (26,16), fuera de la pantalla redonda
 void drawStreakBadge() {
   if (pet.streak < 1) return;
-  int x = 26, y = 16;
-  gfx->fillTriangle(x + 8, y, x + 1, y + 17, x + 15, y + 17, UI_BAR_BAD);
-  gfx->fillTriangle(x + 8, y + 7, x + 4, y + 17, x + 12, y + 17, UI_BAR_WARN);
   char s[6];
   snprintf(s, sizeof(s), "%u", pet.streak);
+  int pw = 6 + 12 + 5 + textW(s, 1) + 6, y = 20;
+  int x = CX - 18 - pw;
+  gfx->fillRoundRect(x, y, pw, 21, 8, gNight ? INK_K : UI_WHITE);
+  gfx->drawRoundRect(x, y, pw, 21, 8, inkColor());
+  int fx = x + 6, fy = y + 3;
+  gfx->fillTriangle(fx + 6, fy, fx, fy + 15, fx + 12, fy + 15, UI_BAR_BAD);
+  gfx->fillTriangle(fx + 6, fy + 6, fx + 3, fy + 15, fx + 9, fy + 15, UI_BAR_WARN);
   gfx->setTextColor(inkColor());
-  setSize(2);
-  setCur(x + 22, y + 2);
+  setSize(1);
+  setCur(fx + 17, y + 2);
   printT(s);
 }
 
@@ -3981,9 +4001,9 @@ void renderCardMedals() {
   printT(head);
 
   for (int i = 0; i < MED_COUNT; i++) {
-    int x = 28 + (i % 2) * 206, y = 104 + (i / 2) * 54;
+    int x = 44 + (i % 2) * 192, y = 104 + (i / 2) * 54;  // ko12.8: 28/206/196 -> la 1a fila se salia del circulo
     bool g = pet.hasMedal(1 << i);
-    gfx->fillRoundRect(x, y, 196, 44, 10, g ? UI_BAR_OK : UI_TRACK);
+    gfx->fillRoundRect(x, y, 182, 44, 10, g ? UI_BAR_OK : UI_TRACK);
     if (g) {  // marca de conseguida
       gfx->fillCircle(x + 22, y + 22, 11, UI_BG_DAY);
       gfx->setTextColor(UI_BAR_OK);
@@ -3991,10 +4011,7 @@ void renderCardMedals() {
       setCur(x + 16, y + 13);
       printT("v");
     }
-    gfx->setTextColor(g ? UI_BG_DAY : 0x4208);
-    setSize(2);
-    setCur(x + 44, y + 14);
-    printT(medalDesc(i));
+    drawFitIn(medalDesc(i), x + 40, y + 12, 182 - 46, g ? UI_BG_DAY : 0x4208, 2);
   }
 }
 
@@ -4998,9 +5015,9 @@ void drawCeremony() {
 }
 
 // ko11.31: "X은 Y을 배우고 싶다! 기술은 4개까지. 어떤 기술을 잊을까?" + sus 4 + el nuevo + [배우지 않는다]
-#define LD_X0 58
+#define LD_X0 80   // ko12.8: 58/236/172 -> la ventana se salia del circulo por abajo
 #define LD_X1 236
-#define LD_W 172
+#define LD_W 150
 #define LD_H 52
 #define LD_Y0 182
 #define LD_Y1 240
@@ -5008,12 +5025,12 @@ void drawCeremony() {
 #define LD_NO_Y 360
 void drawLearnDialog() {
   uiShade(0, 0, LCD_WIDTH, LCD_HEIGHT, 0, 5);
-  uiPanel(40, 112, 386, 304, 16, UI_WHITE, UI_INK);
+  uiPanel(70, 110, 326, 296, 16, UI_WHITE, UI_INK);
   const char *nm = pet.nick[0] ? pet.nick : dexName(pet.speciesId);
   char q[96];
   txFmt(q, sizeof(q), X_MV_WANT_FMT, nm, moveNameId(pet.moveOffer));
-  drawFit(q, 124, 350, UI_INK, 2);
-  drawFit(XT(X_MV_WHICH), 154, 350, 0x8410, 1);
+  drawFit(q, 124, 300, UI_INK, 2);
+  drawFit(XT(X_MV_WHICH), 154, 300, 0x8410, 1);
   for (uint8_t i = 0; i < 4; i++)
     drawMoveBtn(i & 1 ? LD_X1 : LD_X0, i & 2 ? LD_Y1 : LD_Y0, LD_W, LD_H, pet.mv[i], pet.pp[i], 0);
   uint8_t id = pet.moveOffer;

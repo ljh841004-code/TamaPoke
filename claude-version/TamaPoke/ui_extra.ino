@@ -2159,8 +2159,8 @@ void drawTypeGlyph(int x, int y, uint8_t t, bool status, uint16_t bg) {
 #define MV_H 50
 #define MV_Y0 270
 #define MV_Y1 328
-#define MV_BACK_X 30
-#define MV_BACK_W 32
+#define MV_BACK_X 36  // ko12.8: 30/32 y mas alto: la esquina de abajo se salia del circulo
+#define MV_BACK_W 30
 enum : int { BMH_FIGHT = 100, BMH_AUTO, BMH_COUNT, BMH_BACK };
 
 // boton de un movimiento: nombre, y debajo tipo + PP (en rojo si quedan pocos)
@@ -2209,7 +2209,7 @@ void drawBattleMenu() {
   snprintf(ball, sizeof(ball), XT(X_BALL_FMT), pet.balls);
   int x0 = BM_X, x1 = BM_X + BM_W + BM_GAP, x2 = BM_X + 2 * (BM_W + BM_GAP);
   if (bMoveMenu) {  // ko11.31: los 4 movimientos (2x2) y [◀]
-    uiButton(MV_BACK_X, MV_Y0 + 6, MV_BACK_W, MV_Y1 + MV_H - MV_Y0 - 12, 10, UI_TRACK, UI_INK);
+    uiButton(MV_BACK_X, MV_Y0 + 12, MV_BACK_W, MV_Y1 + MV_H - MV_Y0 - 28, 10, UI_TRACK, UI_INK);
     drawFitIn("<", MV_BACK_X, MV_Y0 + (MV_Y1 + MV_H - MV_Y0) / 2 - 10, MV_BACK_W, UI_INK, 2);
     for (uint8_t i = 0; i < 4; i++) {
       drawMoveBtn(i & 1 ? MV_X1 : MV_X0, i & 2 ? MV_Y1 : MV_Y0, MV_W, MV_H, bMe.mv[i], bMe.pp[i], moveMarkFor(bMe, bFoe, i));
@@ -3990,6 +3990,7 @@ void renderLinkSearch(const char *title) {
   drawFit(XT(X_LINK_SEARCH), 336, 340, UI_INK, 2);
   drawFit(XT(X_LINK_HINT), 100, 340, UI_INK, 2);
   drawFit(XT(X_TAP_CLOSE), 400, 300, UI_INK, 2);
+  drawNav(NAV_L, UI_INK);  // ko12.8: como en las demas pantallas, [<] cancela
 }
 
 #define LT_YES_X 103
@@ -4054,7 +4055,7 @@ void linkTap(int16_t x, int16_t y) {
   // tras aceptar ya no se cancela a mano: el otro podria haberlo completado
   // (se resuelve solo al llegar su respuesta o por silencio a los 8 s)
   if (st == LS_TRADE_WAIT) return;
-  if (y < 72 || y > 380) closeLink();
+  if (y < 72 || y > 380 || (st == LS_SEARCH && navHit(NAV_L, x, y))) closeLink();
 }
 
 void updateLink() {

@@ -1029,7 +1029,7 @@ void renderEnding() {
     int y0 = LCD_HEIGHT - (int)((uint64_t)t * END_CREDIT_PXS / 1000);
     for (uint8_t i = 0; i < endCrN; i++) {
       int y = y0 + i * END_CREDIT_LINE;
-      if (y < 40 || y > LCD_HEIGHT - 40 || !endCr[i][0]) continue;
+      if (y < 90 || y > 380 || !endCr[i][0]) continue;  // ko12.8: arriba y abajo el circulo se estrecha (y abajo esta [skip])
       drawFit(endCr[i], y, 380, i == 0 || i + 1 == endCrN ? gold : UI_WHITE, 2);
     }
   } else {

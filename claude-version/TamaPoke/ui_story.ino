@@ -5,9 +5,9 @@
 // Cada capitulo se juega cuando se quiera; un combate necesita al Pokemon con fuerzas
 // (si esta cansado se guarda el punto y se vuelve luego). Retratos: /mons/story.bin
 
-#define ST_BOX_X 48
+#define ST_BOX_X 52  // ko12.8: 48/370 -> 52/362 (las esquinas de abajo rozaban el borde)
 #define ST_BOX_Y 272
-#define ST_BOX_W 370
+#define ST_BOX_W 362
 #define ST_BOX_H 112
 #define ST_LINE_W 336
 #define ST_LINES 3
@@ -634,7 +634,7 @@ static bool stTyping() {
 #define SP_CW 104
 #define SP_CH 92
 #define SP_X0 69
-#define SP_Y0 60
+#define SP_Y0 66  // ko12.8: 60 -> 66 (las esquinas de arriba tocaban el borde)
 static int stPickCard(int16_t x, int16_t y) {
   for (int i = 0; i < stJoinCount(); i++) {
     int cx = SP_X0 + (i % 3) * (SP_CW + 8), cy = SP_Y0 + (i / 3) * (SP_CH + 8);

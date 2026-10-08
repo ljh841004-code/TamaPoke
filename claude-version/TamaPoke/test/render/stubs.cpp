@@ -98,12 +98,14 @@ bool esp_qrcode_get_module(esp_qrcode_handle_t q, int x, int y) { return q[1 + y
 const char *netApName() { return "TamaPoke-3F2A"; }
 uint32_t netPoll(uint32_t) { return 0; }
 bool netSerialCommand(const String &) { return false; }
-static LinkPet gLp;
+LinkPet gLp;
+LinkState gStubLinkState = LS_OFF;  // las pruebas lo cambian para pintar las pantallas del enlace
+LinkMode gStubLinkMode = LINK_NONE;
 void linkStart(LinkMode, const LinkPet &) {}
 void linkStop() {}
 bool linkActive() { return false; }
-LinkState linkState() { return LS_OFF; }
-LinkMode linkMode() { return LINK_NONE; }
+LinkState linkState() { return gStubLinkState; }
+LinkMode linkMode() { return gStubLinkMode; }
 const LinkPet &linkPartner() { return gLp; }
 void linkSetClock(uint32_t, bool) {}
 bool linkPartnerClock(uint32_t *) { return false; }

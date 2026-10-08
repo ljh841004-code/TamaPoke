@@ -1,8 +1,49 @@
 // test/render: dibuja pantallas del firmware en el PC y las guarda como .raw
 // (RGB565 466x466). run.sh las convierte a PNG. Usa el MISMO codigo de dibujo
 // que la placa (Arduino_GFX real); solo el hardware es de mentira (stubs.cpp).
+#define UI_GEOM_CHECK  // ko12.8: botones / paneles / textos fuera de la pantalla redonda
 #include "build/sketch.cpp"
 #include <sys/stat.h>
+#include <map>
+#include <set>
+#include <string>
+#include <cmath>
+
+// ---- ko12.8: comprobacion de la pantalla redonda ----
+// Cada boton, panel y texto que se pinta se mira contra el circulo (centro 233, radio 233): si
+// una esquina (las redondeadas, por dentro de su radio) queda fuera, se apunta y se dice en que
+// capturas pasa. Lo que esta fuera del todo del lienzo (animaciones que entran) no cuenta.
+static std::map<std::string, std::string> gGeomPending;      // clave -> descripcion (desde la ultima captura)
+static std::map<std::string, std::set<std::string>> gGeomHits;  // clave -> capturas
+static std::map<std::string, std::string> gGeomDesc;
+static bool geomOut(double px, double py, double tol) {
+  double dx = px - (LCD_WIDTH - 1) / 2.0, dy = py - (LCD_HEIGHT - 1) / 2.0;
+  return std::sqrt(dx * dx + dy * dy) > LCD_WIDTH / 2.0 + tol;
+}
+void uiGeomCheck(char kind, int x, int y, int w, int h, int r, const char *s) {
+  if (w <= 0 || h <= 0) return;
+  if (x >= LCD_WIDTH || y >= LCD_HEIGHT || x + w <= 0 || y + h <= 0) return;
+  if (kind == 'T' && (!s || !*s)) return;
+  double in = r * 0.2929, tol = kind == 'T' ? 1.0 : -1.0;  // cajas: al menos 1 px dentro
+  double xs[2] = { x + in, x + w - 1 - in }, ys[2] = { y + in, y + h - 1 - in };
+  if (kind == 'T') { ys[0] = y + 3; ys[1] = y + h - 4; }  // la caja de la letra tiene aire arriba y abajo
+  bool out = false;
+  for (double px : xs) for (double py : ys) out = out || geomOut(px, py, tol);
+  if (!out) return;
+  char key[200];
+  snprintf(key, sizeof(key), "%c %d,%d %dx%d %s", kind, x, y, w, h, s ? s : "");
+  gGeomPending[key] = key;
+}
+static void geomShot(const char *name) {
+  for (auto &kv : gGeomPending) gGeomHits[kv.first].insert(name);
+  gGeomPending.clear();
+}
+static void geomReport() {
+  printf("\n== pantalla redonda: %zu elementos se salen ==\n", gGeomHits.size());
+  for (auto &kv : gGeomHits) {
+    printf("  GEOM %s  <- %zu: %s\n", kv.first.c_str(), kv.second.size(), kv.second.begin()->c_str());
+  }
+}
 
 extern uint32_t gMockMillis, gMockEpoch;
 extern bool gMockPortal;
@@ -16,6 +57,7 @@ static void shot(const char *name) {
   fwrite(gfx->getFramebuffer(), 2, LCD_WIDTH * LCD_HEIGHT, f);
   fclose(f);
   printf("  %s\n", name);
+  geomShot(name);
 }
 
 static void tick(uint32_t ms) { gMockMillis += ms; }
@@ -145,7 +187,7 @@ static void scenes(bool ko, const char *sfx) {
     pet.roomOn = 0; render(); shot("01r_main_outdoor_deco");
     pet.bestStreak = 9; pet.allGameHi = 25;
     openSettings(); render(); shot("01s_settings");
-    settingsTap(150, SET_Y0 + 4 * SET_DY + 10);  // [방 꾸미기]
+    settingsTap(150, SET_Y0 + 3 * SET_DY + 10);  // [방 꾸미기]
     navCheck("ajustes -> decorar", xScreen == XS_ROOM);
     render(); shot("01t_room_menu");
     roomTap(300, ROOM_TOG_Y + 10);  // [방]
@@ -158,7 +200,7 @@ static void scenes(bool ko, const char *sfx) {
     roomTap(300, ROOM_GRID_Y + 2 * 52 + 10);  // muneco: bloqueado
     navCheck("decorar: bloqueado no se elige", roomSel < 0);
     roomTap(30, NAV_Y); navCheck("decorar: <- vuelve", xScreen == XS_SET);
-    settingsTap(320, SET_Y0 + 4 * SET_DY + 10);  // [산책]
+    settingsTap(320, SET_Y0 + 3 * SET_DY + 10);  // [산책]
     navCheck("ajustes -> paseo", xScreen == XS_WALK);
     render(); shot("01v_walk_nosensor");
     imuAddr = 0x6B;  // como si la placa tuviera el sensor
@@ -317,6 +359,16 @@ static void scenes(bool ko, const char *sfx) {
     confirmUntil = 0; wasPressed = false;
   }
   closeAll(); openLinkMenu(); render(); shot("24_link_menu");
+  {  // ko12.8: pantallas del enlace (buscar, cambio, final)
+    extern LinkPet gLp; extern LinkState gStubLinkState; extern LinkMode gStubLinkMode;
+    gLp.t.dex = 133; gLp.lvl = 21; strcpy(gLp.t.nick, "EVE");
+    closeAll(); xScreen = XS_LINK; gStubLinkState = LS_SEARCH; gStubLinkMode = LINK_BATTLE;
+    render(); shot("24b_link_search");
+    gStubLinkState = LS_READY; gStubLinkMode = LINK_TRADE; render(); shot("24c_link_trade");
+    gStubLinkState = LS_TRADE_WAIT; render(); shot("24d_link_trade_wait");
+    linkEndAt = millis() + 3000; linkEndMsg = XT(X_TRADE_DONE); render(); shot("24e_link_end");
+    linkEndAt = 0; linkEndMsg = nullptr; gStubLinkState = LS_OFF; gStubLinkMode = LINK_NONE; closeAll();
+  }
   closeAll(); cardOpen = true; cardPage = 0; openKeyboard(); nameBuf[0] = 0; nameLen = 0;
   for (uint8_t k : { CJI_K_B, CJI_K_B, CJI_K_I, CJI_K_DOT, CJI_K_O, CJI_K_I, CJI_K_N, CJI_K_N })
     cjiPress(kbCji, k);
@@ -877,7 +929,7 @@ static void scenes(bool ko, const char *sfx) {
   // ko11.7: expedicion
   expPick = true; render(); shot("11e_exp_pick"); expPick = false;
   expSend(1, 4); boxSel = -1; render(); shot("11f_exp_away");
-  pet.exped.end = gMockEpoch; render(); shot("11g_exp_back");
+  pet.exped.end = clockEpoch(); render(); shot("11g_exp_back");
   expCollect(); render(); shot("11h_exp_result"); expResOpen = false;
   // ko10.5: fin de un ciclo -> criado a la caja (corona) y eleccion del siguiente
   boxSel = -1;
@@ -1038,7 +1090,7 @@ static void scenes(bool ko, const char *sfx) {
     closeAll();
   }
   // ko10: gen 2 en la pokedex
-  galleryDetail = 0; galleryPage = 10; galleryDirty = true;
+  closeAll(); galleryOpen = true; galleryDetail = 0; galleryPage = 10; galleryDirty = true;
   for (int16_t d : { 172, 175, 176, 179, 181, 196, 197, 208, 212 }) dexLog.seen(d, gMockEpoch);
   render(); shot("30_dex_gen2_grid");
   galleryPage = 9; galleryDirty = true; render(); shot("31b_dex_gen1_last");
@@ -1133,7 +1185,11 @@ static void navChecks() {
   navCheck("ficha -> tongsin -> [<]", xScreen == XS_NONE && cardOpen);
   // ko11.26: menu de ajustes (flecha de arriba); cada boton y su [<]
   const int SX[2] = { 147, 319 };
-  auto setBtn = [&](int i) { settingsTap(i == 10 ? SET_XC + SET_W / 2 : SX[i % 2], SET_Y0 + (i / 2) * SET_DY + SET_H / 2); };  // ko12.6: 6 filas
+  auto setBtn = [&](int a) {  // a = accion (0 hora ... 10 cumpleanos); ko12.8: busca su casilla en SET_ORDER
+    int i = 0;
+    while (i < SET_N - 1 && SET_ORDER[i] != a) i++;
+    settingsTap(i == 10 ? SET_XC + SET_W / 2 : SX[i % 2], SET_Y0 + (i / 2) * SET_DY + SET_H / 2);
+  };
   closeAll(); tick(3000); onTap(233, 20);
   navCheck("principal: flecha de arriba = ajustes", xScreen == XS_SET && !clockOpen);
   closeAll(); onSwipeV(1);
@@ -1187,9 +1243,11 @@ static void navChecks() {
     navCheck("SD 파일 점검 -> [<] = SD 업데이트", xScreen == XS_UPD);
   }
   pet.endSeen = 1; closeAll(); openSettings(); render(); shot("90c_settings_master");
-  settingsTap(236 + 60, SET_Y0 + 5 * SET_DY + 20);
+  settingsTap(100 + 60, SET_Y0 + 5 * SET_DY + 20);
   navCheck("ajustes -> [엔딩 다시 보기]", xScreen == XS_ENDING && endReplay);
-  closeAll(); openSettings(); settingsTap(100 + 60, SET_Y0 + 5 * SET_DY + 20);
+  closeAll(); openSettings(); settingsTap(236 + 60, SET_Y0 + 5 * SET_DY + 20);
+  navCheck("ajustes (maestro) -> [새로 시작]", xScreen == XS_RESET);
+  closeAll(); openSettings(); setBtn(10);
   navCheck("ajustes (maestro) -> [내 생일]", xScreen == XS_BDAY);
   pet.endSeen = 0;
   closeAll(); openSettings(); setBtn(10); bdayTap(LX, LY);
@@ -1505,5 +1563,6 @@ int main(int argc, char **argv) {
   storyShots();
   scenes(true, "");
   scenes(false, "_en");
+  geomReport();
   return 0;
 }

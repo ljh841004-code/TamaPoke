@@ -14,8 +14,8 @@
 // pantalla redonda se cortaban las esquinas)
 // ko11.16: tres pestanas [caja] [corona] [orbe], algo mas abajo (y=48: la pantalla
 // redonda deja 92..374 de ancho arriba)
-#define BOX_TAB_Y 48      // ko10.5: pestanas [caja] [corona]
-#define BOX_TAB_H 38
+#define BOX_TAB_Y 52      // ko10.5: pestanas [caja] [corona] (ko12.8: 48/38 -> 52/36, las esquinas se salian)
+#define BOX_TAB_H 36
 #define BOX_TAB_W 104
 #define BOX_TAB_X1 80
 #define BOX_TAB_X2 188
@@ -548,7 +548,7 @@ void renderBox() {
       snprintf(el, sizeof(el), XT(X_EXP_AWAY_FMT), dexName(pet.exped.dex), (unsigned)(left / 3600),
                (unsigned)(left / 60 % 60));
     }
-    drawBtn(88, EXP_STRIP_Y, 290, 30, back ? UI_BAR_OK : C565(0xd8, 0xea, 0xff), back ? UI_WHITE : UI_INK, el);
+    drawBtn(98, EXP_STRIP_Y, 270, 30, back ? UI_BAR_OK : C565(0xd8, 0xea, 0xff), back ? UI_WHITE : UI_INK, el);
   }
   drawNav(NAV_L, UI_INK);  // ko11.8: salir con la flecha (antes solo tocando abajo)
   if (expResOpen) drawExpResult();
@@ -647,7 +647,7 @@ void boxTap(int16_t x, int16_t y) {
     return;
   }
   if (expResOpen) { expResOpen = false; sfxPlay(SFX_TAP); return; }  // ko11.7: cerrar el resultado
-  if (pet.exped.on && inRect(x, y, 88, EXP_STRIP_Y, 290, 30)) {  // ko11.7: recoger
+  if (pet.exped.on && inRect(x, y, 98, EXP_STRIP_Y, 270, 30)) {  // ko11.7: recoger
     if (clockEpoch() >= pet.exped.end) expCollect();
     else sfxPlay(SFX_TAP);
     return;
@@ -2097,8 +2097,8 @@ void openBackup() {
 #define BAK_CR_W 230
 #define BAK_CR_H 34
 static void drawCrashView() {
-  uiPanel(40, 84, 386, 300, 22, UI_WHITE, UI_INK);
-  drawFit(XT(X_CRASH_TITLE), 100, 300, UI_BAR_BAD, 3);
+  uiPanel(56, 96, 354, 286, 22, UI_WHITE, UI_INK);  // ko12.8: antes 40,84,386,300 (se salia)
+  drawFit(XT(X_CRASH_TITLE), 106, 300, UI_BAR_BAD, 3);
   char l[64], when[24] = "-";
   if (crashEpoch > 1000000000UL) {
     int y;
@@ -2442,6 +2442,10 @@ void partyPickTap(int16_t x, int16_t y) {
 #define SET_HX1 100  // ko12.7: ... o dos medios botones (tras el final)
 #define SET_HX2 236
 #define SET_HW 130
+// ko12.8: orden en pantalla (accion de cada casilla): ajustes del aparato, luego la vida diaria
+// (idioma, cumpleanos, habitacion, paseo), la SD y las copias, y abajo del todo [새로 시작]
+// (con el final visto, a medias con [엔딩 다시 보기])
+static const uint8_t SET_ORDER[SET_N] = { 0, 1, 2, 3, 6, 10, 8, 9, 4, 5, 7 };
 static bool gClockFromSet = false;
 
 void openSettings() {
@@ -2475,13 +2479,14 @@ void renderSettings() {
     { XT(X_WALK_BTN), C565(0x8a, 0x5a, 0x3a), UI_WHITE },
     { XT(X_BDAY_BTN), C565(0xf0, 0x60, 0x80), UI_WHITE },  // ko12.6
   };
-  for (int i = 0; i < SET_N; i++) {
-    if (i == 10 && pet.endSeen) {  // ko12.7: tras el final, [내 생일] y [엔딩 다시 보기] a medias
-      drawBtn(SET_HX1, SET_Y0 + 5 * SET_DY, SET_HW, SET_H, b[i].bg, b[i].fg, b[i].t);
-      drawBtn(SET_HX2, SET_Y0 + 5 * SET_DY, SET_HW, SET_H, C565(0xf0, 0xc0, 0x30), UI_INK, XT(X_END_BTN));
+  for (int s = 0; s < SET_N; s++) {
+    const auto &k = b[SET_ORDER[s]];
+    if (s == 10 && pet.endSeen) {  // ko12.7: tras el final, [엔딩 다시 보기] y [새로 시작] a medias
+      drawBtn(SET_HX1, SET_Y0 + 5 * SET_DY, SET_HW, SET_H, C565(0xf0, 0xc0, 0x30), UI_INK, XT(X_END_BTN));
+      drawBtn(SET_HX2, SET_Y0 + 5 * SET_DY, SET_HW, SET_H, k.bg, k.fg, k.t);
       continue;
     }
-    drawBtn(i == 10 ? SET_XC : i % 2 ? SET_X2 : SET_X1, SET_Y0 + (i / 2) * SET_DY, SET_W, SET_H, b[i].bg, b[i].fg, b[i].t);
+    drawBtn(s == 10 ? SET_XC : s % 2 ? SET_X2 : SET_X1, SET_Y0 + (s / 2) * SET_DY, SET_W, SET_H, k.bg, k.fg, k.t);
   }
   // version del firmware (antes en la pantalla de la hora)
   char ver[40];
@@ -2502,10 +2507,10 @@ void settingsTap(int16_t x, int16_t y) {
   int row = (y - SET_Y0) / SET_DY;
   if (row > SET_N / 2 || (y - SET_Y0) % SET_DY >= SET_H) return;
   if (row == 5 && pet.endSeen) {  // ko12.7
-    if (x >= SET_HX2 && x < SET_HX2 + SET_HW) { sfxPlay(SFX_TAP); openEnding((pet.endSeen & 2) ? 2 : 1, true); return; }
-    if (x < SET_HX1 || x >= SET_HX1 + SET_HW) return;
+    if (x >= SET_HX1 && x < SET_HX1 + SET_HW) { sfxPlay(SFX_TAP); openEnding((pet.endSeen & 2) ? 2 : 1, true); return; }
+    if (x < SET_HX2 || x >= SET_HX2 + SET_HW) return;
   } else if (row == 5 && (x < SET_XC || x >= SET_XC + SET_W)) return;
-  int i = row == 5 ? 10 : row * 2 + (x >= SET_X2 - 5 ? 1 : 0);
+  int i = SET_ORDER[row == 5 ? 10 : row * 2 + (x >= SET_X2 - 5 ? 1 : 0)];
   sfxPlay(SFX_TAP);
   switch (i) {
     case 0: xScreen = XS_NONE; gClockFromSet = true; openClock(); break;
