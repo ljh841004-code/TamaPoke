@@ -2037,6 +2037,9 @@ void bakAutoLoop(uint32_t now) {
   if (!bakPending && lastCheck && now - lastCheck < 60000) return;
   if (!sdReady || safeMode || bakAsk || pet.awaitingStarter() || fastGameNow() || screenOff) return;
   if (xScreen == XS_WILD || xScreen == XS_LINK || xScreen == XS_UPD) return;  // en plena batalla / actualizacion
+  // ko12.8.2: la copia escribe en la SD de una vez (la pantalla se para un momento): esperar a que
+  // la placa este quieta en la pantalla principal, no justo al salir un huevo / elegir companero
+  if (xScreen != XS_NONE || pet.ceremony != CER_NONE || gNextPickPending || (int32_t)(now - lastInteract) < 8000) return;
   if (bakLastT && now - bakLastT < 60000) return;
   lastCheck = now;
   bool due = bakPending;

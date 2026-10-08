@@ -71,6 +71,7 @@ void pakUnload() {
 
 bool pakLoad() {
   pakUnload();
+  uint32_t t0 = millis();
   File f = SD_MMC.open(PAK_PATH, FILE_READ);
   if (!f) return false;
   uint8_t h[PAK_HDR];
@@ -103,7 +104,7 @@ bool pakLoad() {
     return false;
   }
   gState = 1;
-  Serial.printf("PAK: %u ficheros (%u MB)\n", (unsigned)gIdx.n, (unsigned)(gSize >> 20));
+  Serial.printf("PAK: %u ficheros (%u MB) en %u ms\n", (unsigned)gIdx.n, (unsigned)(gSize >> 20), (unsigned)(millis() - t0));
   return true;
 }
 
