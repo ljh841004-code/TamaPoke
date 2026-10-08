@@ -10,6 +10,7 @@
 #include "sdmon.h"
 #include "audio.h"
 #include "mbedtls/aes.h"
+#include "ff.h"
 
 static PakAes gAes;              // clave (comprobacion y respaldo)
 static mbedtls_aes_context gMb;  // el mismo AES por hardware para los datos
@@ -219,7 +220,7 @@ bool monsForEachName(void (*cb)(const char *, void *), void *ctx) {
     char rel[64];
     while ((e = readdir(d)) != nullptr) {
       if (e->d_type == DT_DIR || e->d_name[0] == '.') continue;
-      snprintf(rel, sizeof(rel), "%s%s", sub, e->d_name);
+      snprintf(rel, sizeof(rel), "%s%.59s", sub, e->d_name);
       cb(rel, ctx);
     }
     closedir(d);
@@ -237,12 +238,74 @@ static bool skipName(const char *n) {
   return !strcmp(n, "update.bin") || !strcmp(n, "update_done.bin");
 }
 
+// ko12.8.1: nombres y tamanos en UNA pasada con FatFs (f_readdir ya trae el tamano). Con stat()
+// por fichero, FatFs recorre la carpeta desde el principio cada vez: con ~1300 ficheros en /mons y
+// la SD en modo 1-bit, abrir la pantalla de 묶기 tardaba minutos y parecia colgado
+static bool fatListMons(BItem *v, uint32_t &n, uint32_t cap) {
+  static FILINFO fi;  // ~270 bytes: fuera de la pila (solo la usa el bucle principal)
+  for (int drv = 0; drv < FF_VOLUMES; drv++) {
+    char base[12];
+    snprintf(base, sizeof(base), "%d:/mons", drv);
+    FF_DIR d;
+    if (f_opendir(&d, base) != FR_OK) continue;  // unidad sin montar o sin carpeta mons
+    f_closedir(&d);
+    const char *sub[8] = { "" };
+    char subBuf[7][24];
+    int ns = 1;
+    bool ok = true;
+    n = 0;
+    for (int s = 0; s < ns && ok; s++) {
+      char dir[48];
+      snprintf(dir, sizeof(dir), "%s/%s", base, sub[s]);
+      size_t dl = strlen(dir);
+      if (dl > 1 && dir[dl - 1] == '/') dir[dl - 1] = 0;
+      if (f_opendir(&d, dir) != FR_OK) { if (s == 0) ok = false; continue; }
+      FRESULT r;
+      while ((r = f_readdir(&d, &fi)) == FR_OK && fi.fname[0]) {
+        if (fi.fattrib & AM_DIR) {
+          if (s == 0 && fi.fname[0] != '.' && ns < 8 && strlen(fi.fname) < 20) {
+            snprintf(subBuf[ns - 1], sizeof(subBuf[0]), "%.19s/", fi.fname);  // strlen < 20 (arriba)
+            sub[ns] = subBuf[ns - 1];
+            ns++;
+          }
+          continue;
+        }
+        if (n >= cap || skipName(fi.fname)) continue;
+        char rel[64];
+        if (snprintf(rel, sizeof(rel), "%s%s", sub[s], fi.fname) > PAK_NAME_MAX) continue;
+        snprintf(v[n].name, sizeof(v[n].name), "%.40s", rel);  // <= PAK_NAME_MAX (arriba)
+        v[n].size = (uint32_t)fi.fsize;
+        n++;
+      }
+      if (r != FR_OK) ok = false;
+      f_closedir(&d);
+    }
+    if (ok) return true;
+  }
+  n = 0;
+  return false;
+}
+
+static int cmpItem(const void *a, const void *b) {
+  const BItem *x = (const BItem *)a, *y = (const BItem *)b;
+  size_t lx = strlen(x->name), ly = strlen(y->name);
+  int c = memcmp(x->name, y->name, lx < ly ? lx : ly);
+  return c ? c : (int)lx - (int)ly;
+}
+
 // lista /mons y sus subcarpetas (un nivel: fx/), ordenada por nombre
 static BItem *listMons(uint32_t &n) {
   n = 0;
   uint32_t cap = 2048;
   BItem *v = (BItem *)ps_malloc(sizeof(BItem) * cap);
   if (!v) return nullptr;
+  uint32_t t0 = millis();
+  if (fatListMons(v, n, cap)) {
+    qsort(v, n, sizeof(BItem), cmpItem);
+    Serial.printf("PAK lista: %u ficheros en %u ms\n", (unsigned)n, (unsigned)(millis() - t0));
+    return v;
+  }
+  Serial.println("PAK lista: FatFs no, stat() (lento)");
   const char *sub[8] = { "" };
   int ns = 1;
   char subBuf[7][24];
@@ -252,7 +315,7 @@ static BItem *listMons(uint32_t &n) {
     struct dirent *e;
     while ((e = readdir(d)) != nullptr) {
       if (e->d_type == DT_DIR && e->d_name[0] != '.' && ns < 8 && strlen(e->d_name) < 20) {
-        snprintf(subBuf[ns - 1], sizeof(subBuf[0]), "%s/", e->d_name);
+        snprintf(subBuf[ns - 1], sizeof(subBuf[0]), "%.19s/", e->d_name);
         sub[ns] = subBuf[ns - 1];
         ns++;
       }
@@ -273,18 +336,14 @@ static BItem *listMons(uint32_t &n) {
       snprintf(full, sizeof(full), "/sdcard/mons/%s", rel);
       struct stat st;
       if (stat(full, &st) != 0) continue;
-      snprintf(v[n].name, sizeof(v[n].name), "%s", rel);
+      snprintf(v[n].name, sizeof(v[n].name), "%.40s", rel);  // <= PAK_NAME_MAX (arriba)
       v[n].size = (uint32_t)st.st_size;
       n++;
     }
     closedir(d);
   }
-  qsort(v, n, sizeof(BItem), [](const void *a, const void *b) {
-    const BItem *x = (const BItem *)a, *y = (const BItem *)b;
-    size_t lx = strlen(x->name), ly = strlen(y->name);
-    int c = memcmp(x->name, y->name, lx < ly ? lx : ly);
-    return c ? c : (int)lx - (int)ly;
-  });
+  qsort(v, n, sizeof(BItem), cmpItem);
+  Serial.printf("PAK lista: %u ficheros en %u ms (stat)\n", (unsigned)n, (unsigned)(millis() - t0));
   return v;
 }
 
