@@ -67,6 +67,7 @@ static void closeAll() {
   defOpen = spdOpen = sackOpen = gameOpen = vbOpen = false;
   xScreen = XS_NONE;
   toastUntil = 0;
+  while (pet.showMedal()) gMockMillis += 500;  // el cartel de medalla no tapa otras capturas
   feedMenuUntil = 0;
   sickDlg = bdayDlg = false;  // ko12.6
 }

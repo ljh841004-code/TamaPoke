@@ -1,0 +1,62 @@
+/* 다마포케 손바닥 가이드 — A7 (74 x 105 mm) 한 쪽 = .pg 하나. 중철(가운데 스테이플) + 위쪽 모서리 구멍(고리) */
+@page { size: 74mm 105mm; margin: 0; }
+:root { --ink:#2c2a33; --sub:#6d6875; --paper:#fbf6ef; --c:#e3350d; --c2:#fde3dc; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: #777; }
+body { font-family: 'Noto Sans KR', sans-serif; color: var(--ink); font-size: 6.6pt; line-height: 1.36;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; word-break: keep-all; }
+@media screen { .pg { margin: 4mm auto; box-shadow: 0 2px 8px rgba(0,0,0,.4); } }
+.pg { width: 74mm; height: 105mm; position: relative; overflow: hidden; background: var(--paper);
+  page-break-after: always; break-after: page; }
+/* 홀수 쪽 = 오른쪽 쪽(제본은 왼쪽), 짝수 쪽 = 왼쪽 쪽(제본은 오른쪽). 구멍은 위쪽, 제본 쪽 모서리 */
+.hd { position: absolute; top: 0; left: 0; right: 0; height: 9.5mm; background: var(--c); color: #fff; }
+.hd .t { position: absolute; top: 1.9mm; font-weight: 900; font-size: 8.6pt; white-space: nowrap; }
+.hd .ch { position: absolute; top: 2.6mm; font-weight: 700; font-size: 5.6pt; opacity: .9; }
+.odd .hd .t { left: 12mm; } .odd .hd .ch { right: 3.5mm; }
+.even .hd .t { left: 3.5mm; } .even .hd .ch { right: 12mm; }
+.hole { position: absolute; top: 2.25mm; width: 5mm; height: 5mm; border-radius: 50%;
+  border: .3mm dashed rgba(255,255,255,.75); }
+.odd .hole { left: 3.5mm; } .even .hole { right: 3.5mm; }
+.in { position: absolute; top: 11mm; left: 4mm; right: 4mm; bottom: 5.5mm; overflow: hidden; }
+.ft { position: absolute; bottom: 1.6mm; font-size: 5pt; color: var(--sub); }
+.odd .ft { right: 4mm; } .even .ft { left: 4mm; }
+.shot { display: block; width: 40mm; height: 40mm; border-radius: 50%; overflow: hidden; margin: .2mm auto 1.2mm;
+  border: .7mm solid #222; }
+.shot img { width: 100%; height: 100%; display: block; }
+.two { display: flex; justify-content: space-around; margin-bottom: 1mm; }
+.two .shot { margin: 0; width: 31mm; height: 31mm; }
+.cap { text-align: center; font-size: 5pt; color: var(--sub); margin-top: -.6mm; }
+ul { margin: .4mm 0 0; padding-left: 3.2mm; } li { margin: .35mm 0; }
+p { margin: .5mm 0; }
+b { color: var(--c); font-weight: 700; }
+.k { font-weight: 900; }
+.tip { background: var(--c2); border-radius: 1.6mm; padding: 1mm 1.6mm; margin-top: 1.2mm; font-size: 6.1pt; }
+table { width: 100%; border-collapse: collapse; font-size: 6.1pt; margin-top: .6mm; }
+td, th { border-bottom: .2mm solid #e3d8ca; padding: .55mm .6mm; text-align: left; vertical-align: top; }
+th { color: var(--c); font-weight: 700; white-space: nowrap; }
+.lab { position: absolute; font-size: 5.2pt; font-weight: 700; background: #fff; border: .25mm solid var(--c);
+  border-radius: 1.2mm; padding: 0 .9mm; white-space: nowrap; }
+.mapbox { position: relative; height: 37mm; }
+.mapbox .shot { position: absolute; left: 50%; top: 3.4mm; margin: 0 0 0 -16mm; width: 32mm; height: 32mm; }
+/* 장 색 */
+.c1 { --c:#e3350d; --c2:#fde3dc; } .c2 { --c:#2f9e5a; --c2:#dcf3e4; } .c3 { --c:#139a9a; --c2:#d8f1f1; }
+.c4 { --c:#ee8a1c; --c2:#fdebd3; } .c5 { --c:#d63c6b; --c2:#fbdfe8; } .c6 { --c:#2f6fd0; --c2:#dce8fa; }
+.c7 { --c:#7c4fc4; --c2:#ebe1f8; } .c8 { --c:#3f51b5; --c2:#e0e4f7; } .c9 { --c:#8a5a3a; --c2:#f1e4d8; }
+.c10 { --c:#5d6470; --c2:#e6e8ec; }
+/* 표지 */
+/* 그라데이션은 PDF 무늬(pattern)가 되어 A4 배열에서 어긋나요 -> 단색 띠 */
+.cover::before, .back::before { content: ''; position: absolute; left: 0; right: 0; background: #e3350d; }
+.cover::before { top: 0; height: 34mm; }
+.cover .big { position: absolute; top: 9mm; left: 0; right: 0; text-align: center; color: #fff; }
+.cover .big .a { font-size: 6pt; letter-spacing: .5mm; opacity: .9; font-weight: 700; }
+.cover .big .b { font-size: 17pt; font-weight: 900; line-height: 1.15; }
+.cover .big .c { font-size: 8pt; font-weight: 700; }
+.cover .shot { position: absolute; top: 29mm; left: 50%; margin-left: -20mm; width: 40mm; height: 40mm; border-width: 1mm; }
+.cover .tags { position: absolute; top: 73mm; left: 5mm; right: 5mm; text-align: center; font-size: 5.8pt; color: var(--sub); }
+.cover .ver { position: absolute; bottom: 4mm; left: 0; right: 0; text-align: center; font-size: 5.4pt; color: var(--sub); }
+.cover .holemark { position: absolute; top: 3.5mm; left: 3.5mm; width: 5mm; height: 5mm; border-radius: 50%;
+  border: .3mm dashed #fff; }
+.cover .holetxt { position: absolute; top: 4.6mm; left: 9.6mm; font-size: 4.6pt; color: #fff; opacity: .85; }
+.back::before { top: 70mm; bottom: 0; }
+.toc td { padding: .35mm .5mm; } .toc td:last-child { text-align: right; color: var(--sub); }
+.toc .dot { display: inline-block; width: 2.2mm; height: 2.2mm; border-radius: .6mm; vertical-align: -.3mm; margin-right: 1mm; }
