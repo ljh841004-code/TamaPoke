@@ -1390,6 +1390,7 @@ void openUpdate() {
   sfxPlay(SFX_TAP);
 }
 
+#define UPD_PAK_Y (updState == UPD_OK ? 318 : 270)  // ko12.8: [SD 파일 하나로 묶기] (debajo de los botones / entre el aviso y [뒤로])
 static void updScreenBase() {
   gfx->fillScreen(UI_BG_DAY);  // ko11.13: liso, que no frene la escritura  // ko11.6.1: sin pasar por negro (parpadeo)
   drawFit(XT(X_UPD_TITLE), 48, 300, UI_INK, 3);
@@ -1439,12 +1440,14 @@ void renderUpdate() {
     drawFit(XT(X_UPD_HINT), 206, 380, UI_INK, 1);
     drawBtn(133, 330, 200, 48, UI_TRACK, UI_INK, T(S_BACK));
   }
+  if (updResult == 0 && sdReady) drawBtn(113, UPD_PAK_Y, 240, 40, C565(0x6a, 0x4c, 0xf0), UI_WHITE, XT(X_PAK_BTN));  // ko12.8
   if (updResult == 0) drawNav(NAV_L, UI_INK);  // ko11.17: volver a la red
   uiFlush();
 }
 
 void updateTap(int16_t x, int16_t y) {
   if (updResult > 0) return;  // ya reiniciando
+  if (updResult == 0 && sdReady && inRect(x, y, 113, UPD_PAK_Y, 240, 40)) { sfxPlay(SFX_TAP); openPak(); return; }  // ko12.8
   if (updResult == 0 && updState == UPD_OK) {
     if (y >= 250 && y < 302 && x >= 88 && x < 228) {  // actualizar
       pet.saveNow();  // el estado queda guardado antes de reiniciar

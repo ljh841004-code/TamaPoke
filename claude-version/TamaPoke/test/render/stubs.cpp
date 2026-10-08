@@ -188,3 +188,19 @@ bool bakRestore(uint8_t) { return false; }
 bool bakCrashLog(const char *) { return false; }
 bool panicTake(uint32_t *, uint8_t *n, uint32_t *) { *n = 0; return false; }
 void panicRecBegin() {}
+
+// ko12.8: mons.pak en el PC: sin paquete, se lee la carpeta de siempre
+#include "../../pak.h"
+bool pakLoad() { return false; }
+void pakUnload() {}
+bool pakActive() { return false; }
+uint32_t pakCount() { return 0; }
+int8_t pakState() { return 0; }
+File monsOpen(const char *path) { return SD_MMC.open(path, FILE_READ); }
+bool monsExists(const char *path) { return SD_MMC.exists(path); }
+bool monsIsDir(const char *path) { File d = SD_MMC.open(path); bool r = d && d.isDirectory(); if (d) d.close(); return r; }
+void pakForEach(void (*)(const char *, uint32_t, void *), void *) {}
+void pakSetPass(const char *) {}
+const char *pakPassLabel() { return ""; }
+bool pakScan(PakBuildInfo &out) { out.files = 1007; out.bytes = 268ull << 20; return true; }
+uint8_t pakBuild(void (*progress)(uint64_t, uint64_t, uint32_t, uint32_t)) { if (progress) progress(1, 2, 500, 1007); return 0; }

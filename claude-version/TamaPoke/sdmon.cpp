@@ -4,6 +4,7 @@
 #include <SD_MMC.h>
 #include "sd_lock.h"
 #include "audio.h"
+#include "pak.h"  // ko12.8
 
 SemaphoreHandle_t sdMutex = nullptr;
 
@@ -32,7 +33,7 @@ void sdMarkMissing(const char *path) {
 void sdForgetMissing() { gMissN = 0; }
 File sdOpenKnown(const char *path) {
   if (!sdMaybe(path)) return File();
-  File f = SD_MMC.open(path, FILE_READ);
+  File f = monsOpen(path);  // ko12.8: primero el .pak
   if (!f) sdMarkMissing(path);
   return f;
 }
@@ -158,7 +159,7 @@ bool SdThumbs::load() {
   if (!sdReady) return false;
   SdCardLock lock;
   if (!lock) return false;
-  File f = SD_MMC.open(path, FILE_READ);
+  File f = monsOpen(path);  // ko12.8
   if (!f) {
     Serial.println("sin thumbs.bin (galeria sin miniaturas)");
     return false;
@@ -210,6 +211,7 @@ static bool sdMount(int khz) {
   if (sdReady) {
     Serial.printf("SD montada (%d kHz): %llu MB\n", khz, SD_MMC.cardSize() / (1024ULL * 1024ULL));
     SD_MMC.mkdir("/mons");
+    pakLoad();  // ko12.8: si hay /mons.pak, los ficheros salen de ahi
   } else {
     Serial.printf("SD no detectada a %d kHz\n", khz);
   }
@@ -258,10 +260,10 @@ bool SdMon::load(uint8_t dexNum, bool shiny) {
 
   char path[24];
   snprintf(path, sizeof(path), "/mons/%s%03u.bin", shiny ? "s" : "", dexNum);
-  File f = SD_MMC.open(path, FILE_READ);
+  File f = monsOpen(path);
   if (!f && shiny) {  // sin variante shiny: usa la normal
     snprintf(path, sizeof(path), "/mons/%03u.bin", dexNum);
-    f = SD_MMC.open(path, FILE_READ);
+    f = monsOpen(path);
   }
   if (!f) {
     Serial.printf("no existe %s\n", path);
@@ -405,6 +407,7 @@ bool sdSerialCommand(const String &line) {
       }
       dir.close();
     }
+    if (pakActive()) Serial.printf("(mons.pak: %u ficheros)\n", (unsigned)pakCount());  // ko12.8
     Serial.println("DONE");
     return true;
   }

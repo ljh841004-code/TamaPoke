@@ -1133,3 +1133,73 @@ void eggPickTap(int16_t x, int16_t y) {
   sfxPlay(SFX_MEDAL);
   xScreen = XS_NONE;
 }
+
+// ======================================================================
+// ko12.8: SD 파일 묶기: la carpeta /mons entera -> /mons.pak (un fichero cifrado)
+// ======================================================================
+static PakBuildInfo pakInfo;
+static bool pakScanned = false;
+static int8_t pakResult = -1;  // -1 nada, 0 ok, 1 sin espacio, 2 error, 3 vacio
+void openPak() {  // se abre desde la pantalla de SD 업데이트 y [<] vuelve alli
+  pakScanned = pakScan(pakInfo);
+  pakResult = -1;
+  xScreen = XS_PAK;
+}
+static void pakScreenBase() {
+  gfx->fillScreen(UI_BG_DAY);
+  drawFit(XT(X_PAK_TITLE), 48, 300, UI_INK, 3);
+}
+static void pakProgress(uint64_t done, uint64_t total, uint32_t nf, uint32_t tf) {
+  static uint32_t last = 0;
+  uint32_t now = millis();
+  if (nf < tf && now - last < 300) return;
+  last = now;
+  pakScreenBase();
+  drawFit(XT(X_PAK_WORKING), 160, 360, UI_INK, 2);
+  int w = 300, fw = (int)((uint64_t)(w - 4) * done / (total ? total : 1));
+  gfx->fillRoundRect(CX - w / 2, 206, w, 24, 8, UI_TRACK);
+  if (fw > 0) gfx->fillRoundRect(CX - w / 2 + 2, 208, fw, 20, 7, C565(0x6a, 0x4c, 0xf0));
+  char b[48];
+  snprintf(b, sizeof(b), "%u%%", (unsigned)(done * 100 / (total ? total : 1)));
+  drawFit(b, 244, 200, UI_INK, 2);
+  snprintf(b, sizeof(b), XT(X_PAK_PROG_FMT), (unsigned)nf, (unsigned)tf);
+  drawFit(b, 280, 300, 0x8410, 1);
+  gfx->flush();
+}
+void renderPak() {
+  pakScreenBase();
+  char b[64];
+  int8_t st = pakState();
+  if (st == 1) snprintf(b, sizeof(b), XT(X_PAK_NOW_FMT), (unsigned)pakCount());
+  else snprintf(b, sizeof(b), "%s", XT(st == -1 ? X_PAK_BADPASS : st == -2 ? X_PAK_BROKEN : X_PAK_NONE));
+  drawFit(b, 96, 340, st == 1 ? UI_BAR_OK : st < 0 ? UI_BAR_BAD : 0x8410, 1);
+  if (pakScanned) {
+    snprintf(b, sizeof(b), XT(X_PAK_SCAN_FMT), (unsigned)pakInfo.files, (unsigned)(pakInfo.bytes >> 20));
+    drawFit(b, 136, 340, UI_INK, 2);
+  }
+  drawFit(XT(X_PAK_DESC), 180, 360, UI_INK, 1);
+  drawFit(XT(X_PAK_DESC2), 204, 360, 0x8410, 1);
+  if (pakResult >= 0) {
+    static const XId R[4] = { X_PAK_DONE, X_PAK_ERR_SPACE, X_PAK_ERR_SD, X_PAK_ERR_EMPTY };
+    drawFit(XT(R[pakResult < 4 ? pakResult : 2]), 244, 360, pakResult == 0 ? UI_BAR_OK : UI_BAR_BAD, 2);
+  }
+  bool can = pakScanned && pakInfo.files > 0;
+  drawBtn(113, 300, 240, 52, can ? C565(0x6a, 0x4c, 0xf0) : UI_TRACK, can ? UI_WHITE : 0x8410, XT(X_PAK_GO));
+  drawNav(NAV_L, UI_INK);
+  uiFlush();
+}
+void pakTap(int16_t x, int16_t y) {
+  if (pakBusy) return;
+  if (navHit(NAV_L, x, y)) { sfxPlay(SFX_TAP); xScreen = XS_UPD; return; }
+  if (inRect(x, y, 113, 300, 240, 52) && pakScanned && pakInfo.files > 0) {
+    sfxPlay(SFX_TAP);
+    pet.saveNow();
+    pakBusy = true;
+    pakProgress(0, 1, 0, pakInfo.files);
+    pakResult = (int8_t)pakBuild(pakProgress);
+    pakBusy = false;
+    sdDirty = true;  // recargar sprite / miniaturas (ahora del .pak)
+    sfxPlay(pakResult == 0 ? SFX_MEDAL : SFX_DENY);
+    lastInteract = millis();
+  }
+}

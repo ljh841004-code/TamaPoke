@@ -11,6 +11,7 @@
 #include "wav_stream.h"
 #include "sd_lock.h"
 #include "music_route.h"
+#include "pak.h"  // ko12.8
 
 // ---------------------------------------------------------------------------
 // Audio del TamaPoke: códec ES8311 (DAC -> amplificador PA -> altavoz) por I2S.
@@ -183,7 +184,7 @@ static void audioTask(void *) {
     if (noFileGen != reload || (upload & 1u)) { noFileN = 0; noFileGen = reload; }
     auto haveFile = [&](const char *p) {
       for (uint8_t i = 0; i < noFileN; i++) if (noFile[i] == p) return false;
-      bool ok = SD_MMC.exists(p);
+      bool ok = monsExists(p);  // ko12.8: tambien dentro del .pak
       if (!ok && noFileN < 12) noFile[noFileN++] = p;
       return ok;
     };
@@ -244,11 +245,11 @@ static void audioTask(void *) {
                 audioBgmPath(bgmIdx, bgmPathBuf, sizeof(bgmPathBuf));  // ko11.8
                 path = bgmPathBuf;
               }
-              bool opened = music.open(SD_MMC.open(path, FILE_READ), resume);
+              bool opened = music.open(monsOpen(path), resume);
               if (!opened && path != base) {  // ko11: sin ese fichero, la de siempre
                 path = base;
                 if (!(request & 1u) && tr == MT_NORMAL) bgmIdx = 0;
-                opened = music.open(SD_MMC.open(path, FILE_READ), resume);
+                opened = music.open(monsOpen(path), resume);
               }
               bgmNowA.store(opened && !(request & 1u) && tr == MT_NORMAL ? (int8_t)bgmIdx : (int8_t)-1);
               if (!opened)
@@ -322,7 +323,7 @@ static void queueWav(const char *path, uint8_t kind) {
   if (!gReady || !gQ) return;
   SdCardLock lock;
   if (!lock) return;
-  File f = SD_MMC.open(path, FILE_READ);
+  File f = monsOpen(path);  // ko12.8
   uint8_t h[44];
   if (!f || f.read(h, 44) != 44) return;
   auto u16 = [&](int p) { return (uint16_t)(h[p] | h[p+1] << 8); };
@@ -358,6 +359,17 @@ void audioScanBgm() {
   {
     SdCardLock lock(pdMS_TO_TICKS(2000));
     if (lock) {
+      // ko12.8: primero los del .pak (bgm*.wav en la raiz del paquete)
+      struct Ctx { char (*found)[48]; bool *exactF; } ctx = { found, exactF };
+      pakForEach([](const char *nm, uint32_t, void *c) {
+        Ctx *x = (Ctx *)c;
+        if (strchr(nm, '/')) return;
+        bool ex;
+        int k = bgmSlotFromName(nm, &ex);
+        if (k < 0 || (x->found[k][0] && (x->exactF[k] || !ex))) return;
+        if (snprintf(x->found[k], 48, "/mons/%s", nm) >= 48) { x->found[k][0] = 0; return; }
+        x->exactF[k] = ex;
+      }, &ctx);
       for (int d = 0; d < 2; d++) {
         char vdir[24];
         snprintf(vdir, sizeof(vdir), "/sdcard%s", DIRS[d]);
@@ -384,7 +396,7 @@ void audioScanBgm() {
     if (!found[i][0]) continue;
     SdCardLock lock(pdMS_TO_TICKS(500));
     if (!lock) continue;
-    File f = SD_MMC.open(found[i], FILE_READ);
+    File f = monsOpen(found[i]);  // ko12.8
     uint32_t bytes = 0;
     bool ok = f && wavInfo(f, &bytes, titles[i], sizeof(titles[i]));
     if (f) f.close();

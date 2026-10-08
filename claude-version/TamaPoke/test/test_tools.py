@@ -458,5 +458,36 @@ class TestCadenasDelFork(unittest.TestCase):
                     for chunk in code.split('"')[1::2]:
                         self.assertTrue(chunk.isascii(), f'{nombre}:{n}: {chunk!r}')
 
+
+class TestMakePak(unittest.TestCase):
+    """ko12.8: tools/make_pak.py: empaquetar, comprobar y sacar de vuelta (igual que el firmware)"""
+
+    def test_ida_y_vuelta(self):
+        sys.path.insert(0, os.path.join(ROOT, 'tools'))
+        import make_pak as m
+        with tempfile.TemporaryDirectory() as d:
+            mons = os.path.join(d, 'mons')
+            os.makedirs(os.path.join(mons, 'fx'))
+            files = {'p001.bin': os.urandom(5000), 'bgm.wav': os.urandom(70000), 'fx/f0100.bin': b'fx',
+                     'update.bin': b'no', 'thumbs.bin': b''}
+            for k, v in files.items():
+                with open(os.path.join(mons, *k.split('/')), 'wb') as f:
+                    f.write(v)
+            pak = os.path.join(d, 'mons.pak')
+            ents = m.build(mons, pak, 'frase', quiet=True)
+            self.assertNotIn('update.bin', [e[0] for e in ents])  # la actualizacion no va dentro
+            with open(pak, 'rb') as f:
+                raw = f.read()
+            self.assertNotIn(files['p001.bin'][:64], raw)  # cifrado de verdad
+            c, salt, idx = m.read_index(pak, 'frase')
+            self.assertEqual([e[0] for e in idx], sorted(e[0] for e in idx))
+            for name, o, s in idx:
+                self.assertEqual(c.crypt(salt, o, raw[o:o + s]), files[name])
+            # el AES en Python puro da lo mismo que la libreria
+            py = m.Cipher(m.derive_key('frase'), force_py=True)
+            self.assertEqual(py.crypt(salt, idx[0][1], raw[idx[0][1]:idx[0][1] + 100]), c.crypt(salt, idx[0][1], raw[idx[0][1]:idx[0][1] + 100]))
+            with self.assertRaises(SystemExit):
+                m.read_index(pak, 'otra')
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

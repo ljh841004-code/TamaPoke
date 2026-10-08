@@ -6,6 +6,7 @@
 #include <SD_MMC.h>
 #include "battle.h"
 #include "audio.h"
+#include "pak.h"  // ko12.8
 
 // ko11.31: cache de efectos ya leidos (se llena al empezar el combate, nunca a mitad de un
 // golpe: leer de la SD mientras suena la musica la hacia cortarse)
@@ -42,10 +43,7 @@ static File fxOpen(uint8_t id) {
   // estan en ningun sitio (sin animacion) se recuerdan: cada intento recorria la carpeta mons entera
   File f;
   if (sdMaybe("/mons/fx")) {
-    File d = SD_MMC.open("/mons/fx");
-    bool dir = d && d.isDirectory();
-    if (d) d.close();
-    if (!dir) sdMarkMissing("/mons/fx");
+    if (!monsIsDir("/mons/fx")) sdMarkMissing("/mons/fx");  // ko12.8: carpeta o prefijo fx/ del .pak
   }
   if (sdMaybe("/mons/fx")) {
     snprintf(path, sizeof(path), "/mons/fx/%s", name);

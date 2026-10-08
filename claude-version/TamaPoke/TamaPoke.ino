@@ -32,7 +32,8 @@
 #include "weather.h"    // fork KO (ko10.1): estaciones y tiempo segun la fecha
 #include "box.h"        // fork KO (ko4): bogwanham y registro de la pokedex
 #include "panicrec.h"   // ko11.9.3: direccion del codigo en un panic
-#include "sdupdate.h"   // fork KO (ko5): actualizar desde /update.bin de la SD
+#include "sdupdate.h"
+#include "pak.h"        // ko12.8: mons.pak (toda la carpeta mons en un fichero cifrado)
 #include "savebak.h"    // ko11.6: copia de la partida en la SD
 #include "story.h"      // ko11.21: modo historia (guiones en story_ko.cpp)
 #ifdef ESP_PLATFORM
@@ -282,6 +283,7 @@ bool gRtcWasLost = false;  // el RTC arranco sin hora: el NTP aplicara el tiempo
 bool gClockTrusted = false;
 void IRAM_ATTR touchIsr() { gTouchIrq = true; }
 uint32_t lastRender = 0;
+bool pakBusy = false;  // ko12.8: empaquetando /mons -> mons.pak (pantalla bloqueada)
 // proteccion del AMOLED: atenuado por inactividad
 uint32_t lastInteract = 0;
 uint8_t dimStage = 0;        // 0 despierto, 1 atenuado (90s), 2 casi apagado (5min)
@@ -1207,6 +1209,13 @@ void handleSerial() {
   } else if (line == "ENDING" || line == "ENDING2") {  // ko12.7: ver el final (no cambia la partida)
     openEnding(line == "ENDING2" ? 2 : 1, true);
     Serial.println("ENDING ok");
+  } else if (line.startsWith("PAKPASS")) {  // ko12.8: frase de mons.pak (sin nada = la de siempre)
+    String pw = line.length() > 8 ? line.substring(8) : String("");
+    pw.trim();
+    pakSetPass(pw.c_str());
+    Serial.printf("PAKPASS %s -> %s\n", pw.length() ? "custom" : "default", pakActive() ? "ok" : "sin pak / no coincide");
+  } else if (line == "PAKINFO") {
+    Serial.printf("PAK state=%d files=%u\n", pakState(), (unsigned)pakCount());
   } else if (line == "BDAY") {
     bdayShowAgain();
     Serial.println("BDAY ok");
