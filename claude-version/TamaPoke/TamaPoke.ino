@@ -46,7 +46,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.6"
+#define FW_VERSION "1.17-ko12.8"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -3028,7 +3028,7 @@ void printT(const char *s) {
     }
     gfx->setCursor(x, base);
     UI_GEOM('T', x0, base - fkoTier().base, x - x0, fkoTier().px, 0, s0);
-    (void)s0;
+    (void)s0; (void)x0;
     return;
   }
   if (gCjkFont) {
