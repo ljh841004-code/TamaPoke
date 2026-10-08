@@ -1780,11 +1780,14 @@ void Pet::wipeGameKeepSettings() {
     u8[i] = prefs.getUChar(KEEP_U8[i], 0);
   }
   bool hasSnd = prefs.isKey("snd"), snd = prefs.getBool("snd", true);
+  char pakpw[48] = "";  // ko12.8: la frase de mons.pak tambien es ajuste
+  if (prefs.isKey("pakpw")) prefs.getString("pakpw", pakpw, sizeof(pakpw));
   uint32_t seen = prefs.getUInt("seen", 0);
   prefs.clear();
   for (int i = 0; i < NK; i++)
     if (has[i]) prefs.putUChar(KEEP_U8[i], u8[i]);
   if (hasSnd) prefs.putBool("snd", snd);
+  if (pakpw[0]) prefs.putString("pakpw", pakpw);
   if (seen) prefs.putUInt("seen", seen);
 }
 
