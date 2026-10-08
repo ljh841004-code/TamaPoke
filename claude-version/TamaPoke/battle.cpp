@@ -3,6 +3,7 @@
 #include "dex.h"
 #include "weather.h"
 #include "moves_data.h"
+#include "dex_special.h"
 #include <string.h>
 
 // Tabla de tipos de gen 2 (atacante x defensor), en mitades: 0 inmune, 1 poco
@@ -527,6 +528,28 @@ void movesFillPP(Battler &b) {
   for (uint8_t i = 0; i < 4; i++) b.pp[i] = b.mv[i] ? movePP(b.mv[i]) : 0;
 }
 
+bool moveIsSpecial(uint8_t id) {
+  return id < MOVE_N && id != MOVE_STRUGGLE && ((MOVE_SPECIAL[id / 8] >> (id % 8)) & 1);
+}
+
+// ko12.8: hay en mv otro del mismo tipo (y clase) que lo deja sin sentido (pega mas o igual,
+// acierta mas o igual, sin pegas propias; y este no tiene nada extra: estado, retroceso, critico...)
+bool moveDominated(const uint8_t mv[4], uint8_t id) {
+  if (!id || moveIsStatus(id)) return false;
+  const MoveDef &c = moveDef(id);
+  if (c.flags || c.ail || c.stD || c.flinch || c.prio) return false;
+  for (uint8_t i = 0; i < 4; i++) {
+    uint8_t o = mv[i];
+    if (!o || o == id || moveIsStatus(o)) continue;
+    const MoveDef &e = moveDef(o);
+    if (e.type != c.type || moveIsSpecial(o) != moveIsSpecial(id)) continue;
+    if (e.flags & (MF_RECOIL | MF_RECHARGE | MF_SELFCNF | MF_FIX | MF_FIXLVL)) continue;
+    if (e.stSelf && e.stD < 0) continue;
+    if (e.pow >= c.pow && e.acc >= c.acc) return true;
+  }
+  return false;
+}
+
 void movesDefault(int16_t dex, uint16_t lvl, uint8_t out[4]) {
   memset(out, 0, 4);
   if (dex < 1 || dex > DEX_COUNT) return;
@@ -552,16 +575,30 @@ void movesDefault(int16_t dex, uint16_t lvl, uint8_t out[4]) {
       }
   }
   uint8_t nc = cov[2] ? 3 : cov[1] ? 2 : cov[0] ? 1 : 0;
-  if (nc) add(cov[(h >> 4) % nc]);
+  uint8_t c1 = nc ? cov[(h >> 4) % nc] : 0;
+  add(c1);
   // uno de estado (si aprende alguno), 2 de cada 3
   uint8_t sts[MOVE_N - MOVE_STATUS0];
   uint8_t ns = 0;
   for (uint16_t id = MOVE_STATUS0; id < MOVE_N; id++)
     if (lvLearn((uint8_t)id)) sts[ns++] = (uint8_t)id;
   if (ns && (h >> 9) % 3) add(sts[(h >> 11) % ns]);
-  // el resto: los de su tipo (su fase y las anteriores) y placaje
+  // ko12.8: otro de otro tipo (mejor si es de un tipo distinto al primero) antes que repetir el suyo
+  for (uint8_t k = 0; k < nc; k++)
+    if (cov[k] != c1 && moveDef(cov[k]).type != moveDef(c1).type) { add(cov[k]); break; }
+  // el resto: los de su tipo (su fase y las anteriores) y placaje. ko12.8: sin los que no
+  // sirven de nada al lado de otro suyo (mismo tipo, mas flojo y sin efecto extra)
   for (int s = tier; s >= 0 && n < 4; s--)
-    for (uint8_t v = 0; v < 3 && n < 4; v++) add(moveIdTyped(type, (uint8_t)s, (uint8_t)((v + h) % 3)));
+    for (uint8_t v = 0; v < 3 && n < 4; v++) {
+      uint8_t id = moveIdTyped(type, (uint8_t)s, (uint8_t)((v + h) % 3));
+      if (movesHas(out, id) || moveDominated(out, id)) continue;
+      // y si es este el que deja sin sentido a uno que ya tenia, lo cambia por el
+      const uint8_t one[4] = { id, 0, 0, 0 };
+      bool swapped = false;
+      for (uint8_t i = 0; i < n && !swapped; i++)
+        if (moveDominated(one, out[i])) { out[i] = id; swapped = true; }
+      if (!swapped) add(id);
+    }
   add(MOVE_TACKLE);
 }
 
@@ -605,6 +642,19 @@ uint8_t moveEffAgainst(uint8_t id, const Battler &df) {
   return typeEff(moveDef(id).type, df.type);
 }
 
+// ko12.8: ataque / defensa especial. No se guardan: salen del ataque / defensa que ya tiene
+// (con su entrenamiento, genes, orbes y ajustes) en la proporcion de su especie, a su nivel:
+// v * (base especial + L) / (base fisica + L). Asi Alakazam (atq 50, at.esp 135) pega fuerte
+// con lo psiquico y nada de lo de antes (orbes, historia, enlace) tiene que cambiar
+uint32_t spStat(const Battler &b, uint32_t v, bool defense) {
+  if (b.dex < 1 || b.dex > DEX_COUNT) return v;
+  uint32_t L = lvlCap(b.lvl);
+  uint32_t phys = defense ? DEX_TBL[b.dex].bDef : DEX_TBL[b.dex].bAtk;
+  uint32_t sp = defense ? DEX_SPD[b.dex] : DEX_SPA[b.dex];
+  uint32_t r = v * (sp + L) / (phys + L);
+  return r ? r : 1;
+}
+
 // dano base de un movimiento (sin aleatorio ni critico), para la IA y el calculo
 static uint32_t rawDamageId(const Battler &at, const Battler &df, uint8_t mid, uint8_t *effOut) {
   const MoveDef &m = moveDef(mid);
@@ -616,26 +666,35 @@ static uint32_t rawDamageId(const Battler &at, const Battler &df, uint8_t mid, u
   if (m.flags & MF_FIXLVL) return eff ? lvlCap(at.lvl) : 0;
   if (m.flags & MF_FIX) return eff ? m.pow : 0;
   uint32_t L = lvlCap(at.lvl);
-  uint32_t atk = stgMul(at.atk, at.stg[0]);
-  if (at.st == ST_BRN) atk /= 2;
-  uint32_t def = stgMul(df.def, df.stg[1]);
+  bool sp = moveIsSpecial(mid);  // ko12.8: especial -> at. esp. contra def. esp. (la quemadura no lo baja)
+  uint32_t atk = stgMul(sp ? spStat(at, at.atk, false) : at.atk, at.stg[0]);
+  if (at.st == ST_BRN && !sp) atk /= 2;
+  uint32_t def = stgMul(sp ? spStat(df, df.def, true) : df.def, df.stg[1]);
   uint32_t d = ((2 * L / 5 + 2) * m.pow * atk / (def ? def : 1)) / 50 + 2;
   if (mtype == at.type && mid != MOVE_STRUGGLE) d = d * 3 / 2;  // STAB
   d = d * weatherMul(sBattleWx, mtype) / 2;  // ko10.4: lluvia / sol / nieve
   return d * eff / 2;
 }
 
+bool battleResting(const Battler &b, uint8_t id) { return id && b.restT && b.restMv == id; }
+
 // accion -> movimiento que se usa (y su casilla, -1 = fuera de la lista: sin PP)
 static uint8_t actMove(const Battler &b, BAct a, int8_t *slot) {
   // BA_TACKLE / BA_TYPE (codigo y tests de antes): ese movimiento, sin gastar PP
-  if (a == BA_TACKLE || a == BA_TYPE) { *slot = -1; return a == BA_TACKLE ? (uint8_t)MOVE_TACKLE : movesMain(b); }
+  if (a == BA_TACKLE || a == BA_TYPE) {
+    *slot = -1;
+    if (a == BA_TACKLE || battleResting(b, movesMain(b))) return MOVE_TACKLE;
+    return movesMain(b);
+  }
   int8_t k = battleSlot(b, a);
   *slot = k;
   if (k >= 0) {
-    if (b.pp[k]) return b.mv[k];
+    if (b.pp[k] && !battleResting(b, b.mv[k])) return b.mv[k];
     if (!battleHasPP(b)) return MOVE_STRUGGLE;
-    for (uint8_t i = 0; i < 4; i++)  // sin PP en ese: el primero que tenga
-      if (b.mv[i] && b.pp[i]) { *slot = (int8_t)i; return b.mv[i]; }
+    for (uint8_t i = 0; i < 4; i++)  // sin PP en ese (o descansando): el primero que tenga
+      if (b.mv[i] && b.pp[i] && !battleResting(b, b.mv[i])) { *slot = (int8_t)i; return b.mv[i]; }
+    *slot = -1;  // solo le queda el que descansa: placaje sin gastar PP
+    return MOVE_TACKLE;
   }
   if (moveCount(b.mv) && !battleHasPP(b)) return MOVE_STRUGGLE;
   return a == BA_TACKLE ? (uint8_t)MOVE_TACKLE : movesMain(b);
@@ -646,7 +705,7 @@ static uint32_t aiDamage(const Battler &self, const Battler &foe, uint8_t id) {
   uint32_t raw = rawDamageId(self, foe, id, nullptr);
   uint32_t d = raw * m.acc;
   if (raw >= foe.hp) return d * 2;  // lo deja fuera de combate: sin pegas que valgan
-  if (m.flags & MF_RECHARGE) d = d * 55 / 100;   // pierde el turno siguiente
+  if (m.flags & MF_RECHARGE) d = d * 85 / 100;   // ko12.8: el turno siguiente no lo puede repetir
   if (m.flags & MF_SELFCNF) d = d * 80 / 100;    // acaba confuso
   if (m.stSelf && m.stD < 0 && m.stCh >= 100) d = d * 85 / 100;  // se baja algo a si mismo
   return d;
@@ -686,7 +745,7 @@ BAct battleAi(const Battler &self, const Battler &foe, BRng &rng, uint8_t whim) 
   if (!battleHasPP(self)) return BA_M0;  // forcejeo
   uint32_t sc[4] = { 0, 0, 0, 0 }, best = 0;
   for (uint8_t i = 0; i < 4; i++) {
-    if (!self.mv[i] || !self.pp[i] || moveIsStatus(self.mv[i])) continue;
+    if (!self.mv[i] || !self.pp[i] || moveIsStatus(self.mv[i]) || battleResting(self, self.mv[i])) continue;
     sc[i] = aiDamage(self, foe, self.mv[i]);
     if (sc[i] > best) best = sc[i];
   }
@@ -717,7 +776,7 @@ BAct battleAi(const Battler &self, const Battler &foe, BRng &rng, uint8_t whim) 
   }
   if (pick == 0xFF)
     for (uint8_t i = 0; i < 4; i++)
-      if (self.mv[i] && self.pp[i] && (pick == 0xFF || sc[i] > sc[pick])) pick = i;
+      if (self.mv[i] && self.pp[i] && !battleResting(self, self.mv[i]) && (pick == 0xFF || sc[i] > sc[pick])) pick = i;
   return (BAct)(BA_M0 + (pick == 0xFF ? 0 : pick));
 }
 
@@ -754,11 +813,6 @@ static void statChange(Battler &who, uint8_t ws, uint8_t idx, int8_t d, BEvent *
 
 // ¿puede moverse este turno? (sueno, congelado, retroceso, paralisis, confusion)
 static bool canAct(Battler &me, uint8_t s, BRng &rng, BEvent *ev, int maxEv, int &n, Battler &a, Battler &b) {
-  if (me.recharge) {  // tras un golpe como hiperrayo: descansa un turno
-    me.recharge = false;
-    push(ev, maxEv, n, s, EV_CANT, BA_M0, 2, false, 0, a, b, 0, ST_RECHARGE);
-    return false;
-  }
   if (me.st == ST_SLP) {
     if (me.stT) me.stT--;
     if (me.stT) { push(ev, maxEv, n, s, EV_CANT, BA_M0, 2, false, 0, a, b, 0, ST_SLP); return false; }
@@ -839,8 +893,11 @@ static bool doMove(Battler &at, Battler &df, BAct act, uint8_t side, bool first,
   if (d > df.hp) d = df.hp;
   df.hp -= (uint16_t)d;
   if (landed) *landed = d > 0;
-  push(ev, maxEv, n, side, EV_HIT, mv, eff, crit, (uint16_t)d, a, b, mid);
-  if (m.flags & MF_RECHARGE) at.recharge = true;
+  // ko12.8: tras un golpe como hiperrayo, ese movimiento descansa un turno (si lo tumbo, no)
+  bool rest = (m.flags & MF_RECHARGE) && df.hp;
+  if (rest) { at.restMv = mid; at.restT = 2; }
+  push(ev, maxEv, n, side, EV_HIT, mv, eff, crit, (uint16_t)d, a, b, mid,
+       (int8_t)((df.guard && d ? HIT_GUARDED : 0) | (rest ? HIT_REST : 0)));
   // drenaje / retroceso
   if (d && (m.flags & MF_DRAIN) && at.hp < at.maxHp) {
     uint32_t h = d * m.drain / 100;
@@ -932,6 +989,10 @@ static void endOfTurn(Battler &a, Battler &b, BRng &rng, BEvent *ev, int maxEv, 
   }
 }
 
+static void restTick(Battler &b) {
+  if (b.restT && !--b.restT) b.restMv = 0;
+}
+
 int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
                BEvent *ev, int maxEv, bool canRun) {
   int n = 0;
@@ -1013,6 +1074,7 @@ int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
   if (!over && a.hp && b.hp) endOfTurn(a, b, rng, ev, maxEv, n);
   a.flinch = b.flinch = false;
   a.guard = b.guard = false;
+  restTick(a); restTick(b);
   return n < maxEv ? n : maxEv;
 }
 
@@ -1025,13 +1087,14 @@ int battleFoeOnly(Battler &a, Battler &b, BAct actB, BRng &rng, BEvent *ev, int 
   doMove(b, a, actB, 1, true, rng, ev, maxEv, n, a, b, &landed);
   a.flinch = b.flinch = false;
   a.guard = b.guard = false;
+  restTick(a); restTick(b);
   return n < maxEv ? n : maxEv;
 }
 
 // ko11.31: al acabar la batalla se pasan los estados y los cambios de caracteristicas
 void battleClearVolatile(Battler &b) {
   b.st = b.stT = b.cnf = 0;
-  b.recharge = false;
+  b.restMv = b.restT = 0;
   b.flinch = b.guard = false;
   b.stg[0] = b.stg[1] = b.stg[2] = 0;
 }

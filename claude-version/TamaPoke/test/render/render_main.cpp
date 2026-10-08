@@ -441,6 +441,18 @@ static void scenes(bool ko, const char *sfx) {
     navCheck("batalla: [싸운다] abre los movimientos", bMoveMenu);
     bMe.pp[1] = 2;
     render(); shot("08m_fight_moves");
+    {  // ko12.8: marcas: descansa (gris), no le hace nada (aspa), muy eficaz (*), poco eficaz (triangulo)
+      Battler keepMe = bMe; uint8_t keepT = bFoe.type;
+      const uint8_t mv[4] = { 7, 41, 22, 66 };
+      memcpy(bMe.mv, mv, 4); movesFillPP(bMe);
+      bFoe.type = PT_GROUND; bMe.restMv = 7; bMe.restT = 1;
+      navCheck("ko12.8: marca descanso", moveMarkFor(bMe, bFoe, 0) == MVK_REST);
+      navCheck("ko12.8: marca inmune", moveMarkFor(bMe, bFoe, 1) == MVK_NONE);
+      navCheck("ko12.8: marca muy eficaz", moveMarkFor(bMe, bFoe, 2) == MVK_SUPER);
+      navCheck("ko12.8: marca poco eficaz", moveMarkFor(bMe, bFoe, 3) == MVK_WEAK);
+      render(); shot("08m2_fight_marks");
+      bMe = keepMe; bFoe.type = keepT;
+    }
     onTap(MV_BACK_X + 10, MV_Y0 + 40);
     navCheck("batalla: [<] vuelve al menu", !bMoveMenu);
     bFoe.st = ST_PAR; bMe.st = ST_PSN;

@@ -820,22 +820,121 @@ TEST(battle, caracteristicas_suben_y_bajan) {
   CHECK_EQ(b.stg[0], (int8_t)0);
 }
 
+// ko12.8: tras hiperrayo NO pierde el turno: solo ese movimiento descansa uno (los demas valen)
+static uint8_t firstRecharge() {
+  for (uint8_t id = 1; id < MOVE_N; id++) if (moveDef(id).flags & MF_RECHARGE) return id;
+  return 0;
+}
 TEST(battle, hiperrayo_descansa) {
-  uint8_t hb = 0;
-  for (uint8_t id = 1; id < MOVE_N; id++) if (moveDef(id).flags & MF_RECHARGE) { hb = id; break; }
+  uint8_t hb = firstRecharge();
   CHECK(hb != 0);
-  Battler a = withMoves(143, hb), b = makeBattler(19, 60, 60, 400, 60);
+  Battler a = withMoves(143, hb, MOVE_TACKLE), b = makeBattler(19, 60, 60, 400, 60);
   b.maxHp = b.hp = 60000;
   a.spe = 999;
   BRng rng(11);
   BEvent ev[BATTLE_MAX_EVENTS];
-  for (int t = 0; t < 6; t++) battleTurn(a, b, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
-  int n = 0, rests = 0;
+  uint8_t used[6] = {};
   for (int t = 0; t < 6; t++) {
-    n = battleTurn(a, b, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
-    for (int i = 0; i < n; i++) if (ev[i].kind == EV_CANT && ev[i].val == ST_RECHARGE) rests++;
+    int n = battleTurn(a, b, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+    for (int i = 0; i < n; i++) {
+      CHECK(!(ev[i].kind == EV_CANT && ev[i].side == 0));  // nunca se queda sin moverse
+      if (ev[i].side == 0 && (ev[i].kind == EV_HIT || ev[i].kind == EV_MISS)) used[t] = ev[i].mid;
+    }
   }
-  CHECK(rests >= 2);
+  for (int t = 0; t < 6; t++) CHECK_EQ(used[t], t % 2 ? (uint8_t)MOVE_TACKLE : hb);  // alterna
+  CHECK_EQ(a.pp[1], (uint8_t)(movePP(MOVE_TACKLE) - 3));  // el placaje elegido por el, gasta PP
+}
+
+TEST(battle, hiperrayo_sin_otro_placaje_gratis) {
+  uint8_t hb = firstRecharge();
+  Battler a = withMoves(143, hb), b = makeBattler(19, 60, 60, 400, 60);
+  b.maxHp = b.hp = 60000;
+  a.spe = 999;
+  BRng rng(5);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  battleTurn(a, b, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK(battleResting(a, hb));
+  uint8_t pp = a.pp[0];
+  int n = battleTurn(a, b, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+  bool tackled = false;
+  for (int i = 0; i < n; i++) if (ev[i].side == 0 && ev[i].kind == EV_HIT && ev[i].mid == MOVE_TACKLE) tackled = true;
+  CHECK(tackled);
+  CHECK_EQ(a.pp[0], pp);  // no gasta el PP del que descansa
+  CHECK(!battleResting(a, hb));
+}
+
+TEST(battle, hiperrayo_que_tumba_no_descansa) {
+  uint8_t hb = firstRecharge();
+  Battler a = withMoves(143, hb), b = makeBattler(19, 5, 10, 10, 10);
+  a.spe = 999;
+  BRng rng(3);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  for (int t = 0; t < 4 && b.hp; t++) battleTurn(a, b, BA_M0, BA_TACKLE, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK_EQ(b.hp, (uint16_t)0);
+  CHECK(!battleResting(a, hb));
+}
+
+TEST(battle, ia_no_elige_el_que_descansa) {
+  uint8_t hb = firstRecharge();
+  Battler a = withMoves(143, hb, MOVE_TACKLE), b = makeBattler(19, 60, 60, 400, 60);
+  b.maxHp = b.hp = 60000;
+  a.restMv = hb; a.restT = 1;
+  for (uint32_t s = 1; s < 50; s++) {
+    BRng rng(s);
+    CHECK(battleAi(a, b, rng, 30) != BA_M0);
+  }
+  battleClearVolatile(a);
+  CHECK(!battleResting(a, hb));
+}
+
+// ko12.8: ataque / defensa especial (proporcion de la especie)
+TEST(battle, especial_alakazam_y_machamp) {
+  Battler ala = makeBattler(65, 50, 120, 90, 150), mach = makeBattler(68, 50, 150, 110, 80);
+  CHECK(spStat(ala, ala.atk, false) > ala.atk * 17 / 10);   // atq 50 / at.esp 135
+  CHECK(spStat(mach, mach.atk, false) < mach.atk * 8 / 10); // atq 130 / at.esp 65
+  CHECK(spStat(ala, ala.def, true) > ala.def);              // def 45 / def.esp 95
+  int sp = 0;
+  for (uint8_t id = 1; id < MOVE_N; id++) if (moveIsSpecial(id)) { sp++; CHECK(!moveIsStatus(id)); }
+  CHECK(sp > 30 && sp < 120);
+  CHECK(!moveIsSpecial(MOVE_TACKLE));
+  CHECK(!moveIsSpecial(MOVE_STRUGGLE));
+}
+
+TEST(battle, especial_pega_mas_con_alakazam) {
+  uint8_t psy = 0, phy = 0;  // uno especial y uno fisico de la misma potencia
+  for (uint8_t a = 1; a < MOVE_N && !(psy && phy); a++)
+    for (uint8_t b = 1; b < MOVE_N; b++)
+      if (moveIsSpecial(a) && !moveIsSpecial(b) && !moveIsStatus(b) && moveDef(a).pow == moveDef(b).pow &&
+          moveDef(a).pow >= 60 && moveDef(a).type == moveDef(b).type && !(moveDef(a).flags & (MF_FIX | MF_FIXLVL)) &&
+          !(moveDef(b).flags & (MF_FIX | MF_FIXLVL))) { psy = a; phy = b; break; }
+  CHECK(psy && phy);
+  Battler ala = withMoves(65, psy, phy), foe = makeBattler(19, 50, 90, 90, 90);
+  foe.maxHp = foe.hp = 60000;
+  uint32_t ds = 0, dp = 0;
+  for (uint32_t seed = 1; seed < 40; seed++) {
+    Battler a = ala, b = foe;
+    BRng r1(seed), r2(seed);
+    BEvent ev[BATTLE_MAX_EVENTS];
+    int n = battleTurn(a, b, BA_M0, BA_GUARD, r1, ev, BATTLE_MAX_EVENTS, false);
+    for (int i = 0; i < n; i++) if (ev[i].kind == EV_HIT && ev[i].side == 0) ds += ev[i].dmg;
+    a = ala; b = foe;
+    n = battleTurn(a, b, BA_M1, BA_GUARD, r2, ev, BATTLE_MAX_EVENTS, false);
+    for (int i = 0; i < n; i++) if (ev[i].kind == EV_HIT && ev[i].side == 0) dp += ev[i].dmg;
+  }
+  CHECK(ds > dp * 3 / 2);
+}
+
+TEST(battle, golpe_protegido_lo_marca) {
+  Battler a = withMoves(25, MOVE_TACKLE), b = makeBattler(19, 60, 60, 400, 60);
+  b.maxHp = b.hp = 60000;
+  BRng rng(9);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  bool seen = false;
+  for (int t = 0; t < 5; t++) {
+    int n = battleTurn(a, b, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+    for (int i = 0; i < n; i++) if (ev[i].kind == EV_HIT && ev[i].dmg) { CHECK(ev[i].val & HIT_GUARDED); seen = true; }
+  }
+  CHECK(seen);
 }
 
 TEST(battle, movimientos_por_defecto_validos) {

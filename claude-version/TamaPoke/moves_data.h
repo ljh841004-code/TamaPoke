@@ -45,7 +45,7 @@ static const MoveDef MOVE_TBL[MOVE_N] = {
   { 3, 55, 95, 25, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0 },  // 31 razor-leaf
   { 3, 75, 100, 10, 0, 2, 0, 0, 0, 0, 0, 0, 0, 50 },  // 32 giga-drain
   { 3, 120, 100, 10, 0, 128, 0, 0, 0, 0, 0, 0, 0, 0 },  // 33 petal-dance
-  { 3, 120, 100, 10, 0, 64, 0, 0, 0, 0, 0, 0, 0, 0 },  // 34 solar-beam
+  { 3, 120, 100, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },  // 34 solar-beam
   { 3, 150, 90, 5, 0, 64, 0, 0, 0, 0, 0, 0, 0, 0 },  // 35 frenzy-plant
   { 3, 130, 90, 5, 0, 0, 0, 0, 0, -2, 1, 100, 0, 0 },  // 36 leaf-storm
   { 4, 40, 100, 30, 0, 0, 3, 10, 0, 0, 0, 0, 0, 0 },  // 37 thunder-shock
@@ -98,7 +98,7 @@ static const MoveDef MOVE_TBL[MOVE_N] = {
   { 9, 80, 90, 15, 0, 0, 0, 0, 0, 0, 0, 0, 20, 0 },  // 84 zen-headbutt
   { 9, 65, 100, 20, 0, 0, 6, 10, 0, 0, 0, 0, 0, 0 },  // 85 psybeam
   { 9, 70, 100, 20, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0 },  // 86 psycho-cut
-  { 9, 120, 100, 10, 0, 64, 0, 0, 0, 0, 0, 0, 0, 0 },  // 87 future-sight
+  { 9, 120, 100, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },  // 87 future-sight
   { 9, 90, 100, 10, 0, 0, 0, 0, 1, -1, 0, 10, 0, 0 },  // 88 psychic
   { 9, 140, 90, 5, 0, 0, 0, 0, 0, -2, 1, 100, 0, 0 },  // 89 psycho-boost
   { 9, 80, 100, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },  // 90 psyshock
@@ -127,7 +127,7 @@ static const MoveDef MOVE_TBL[MOVE_N] = {
   { 12, 70, 100, 15, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0 },  // 113 shadow-claw
   { 12, 60, 100, 5, 0, 0, 0, 10, 0, 1, 1, 10, 0, 0 },  // 114 ominous-wind
   { 12, 80, 100, 15, 0, 0, 0, 0, 1, -1, 0, 20, 0, 0 },  // 115 shadow-ball
-  { 12, 120, 100, 5, 0, 64, 0, 0, 0, 0, 0, 0, 0, 0 },  // 116 shadow-force
+  { 12, 120, 100, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },  // 116 shadow-force
   { 12, 65, 100, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },  // 117 hex
   { 13, 40, 100, 20, 0, 0, 0, 0, 0, 0, 0, 0, 20, 0 },  // 118 twister
   { 13, 60, 100, 20, 0, 0, 3, 30, 0, 0, 0, 0, 0, 0 },  // 119 dragon-breath
@@ -184,6 +184,9 @@ static const MoveDef MOVE_TBL[MOVE_N] = {
   { 0, 0, 55, 20, 0, 32, 6, 0, 0, 0, 0, 0, 0, 0 },  // 170 supersonic
   { 0, 0, 75, 10, 0, 32, 6, 0, 0, 0, 0, 0, 0, 0 },  // 171 sweet-kiss
 };
+
+// ko12.8: especiales (ataque especial contra defensa especial); bit i = id i
+static const uint8_t MOVE_SPECIAL[22] = { 0x80, 0x6c, 0xdf, 0x26, 0x3f, 0x6d, 0x5a, 0x90, 0x6a, 0x0b, 0xae, 0x07, 0x85, 0x01, 0xed, 0x4a, 0x88, 0x24, 0x00, 0x00, 0x00, 0x00 };
 
 // nombres de los que no son de tipo (145.. : placaje y los de estado)
 static const char *const MOVE_X_KO[MOVE_N - MOVE_TACKLE] = {

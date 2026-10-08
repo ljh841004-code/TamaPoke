@@ -58,9 +58,10 @@ ACC_FIX = {'fissure': 55}   # un golpe KO no encaja: fuerte y poco preciso
 
 F_HICRIT, F_DRAIN, F_RECOIL, F_FIXLVL, F_FIX, F_RECHARGE, F_SELFCNF = 1, 2, 4, 8, 16, 64, 128
 # pierden un turno: recargar despues (hiperrayo...) o cargar antes / golpe retardado (aqui: despues)
-RECHARGE = {'hyper-beam', 'giga-impact', 'blast-burn', 'hydro-cannon', 'frenzy-plant', 'rock-wrecker',
-            'solar-beam', 'future-sight', 'shadow-force', 'sky-attack', 'skull-bash', 'razor-wind', 'fly',
-            'dig', 'dive', 'bounce'}
+RECHARGE = {'hyper-beam', 'giga-impact', 'blast-burn', 'hydro-cannon', 'frenzy-plant', 'rock-wrecker'}
+# ko12.8: los que en los juegos se CARGAN antes (solar-beam, future-sight, shadow-force, fly, dig...)
+# ya no descansan despues: aqui son golpes normales (antes perdian el turno siguiente y salian
+# peores que uno de 90 de potencia)
 # se descontrolan unos turnos y acaban confusos (aqui: confusos al momento)
 SELFCNF = {'petal-dance', 'outrage', 'thrash'}
 
@@ -157,7 +158,7 @@ def mdef(d, our_type=None):
     flinch = meta.get('flinch_chance') or 0
     return dict(type=t, pow=min(pow_ * hits, 250), acc=acc, pp=d['pp'] or 10, prio=d['priority'],
                 flags=flags, ail=ail, ailch=ail_ch, st=st_idx, std=st_d, stself=st_self, stch=st_ch,
-                flinch=flinch, drain=abs(drain), status=(cat == 'status'))
+                flinch=flinch, drain=abs(drain), status=(cat == 'status'), special=(cat == 'special'))
 
 
 def main():
@@ -205,6 +206,13 @@ def main():
             m['type'], m['pow'], m['acc'], m['pp'], m['prio'], fl, m['ail'], m['ailch'], m['st'],
             m['std'], m['stself'], m['stch'], m['flinch'], m['drain'], i, names[i][0]))
     L.append('};')
+    L.append('')
+    L.append('// ko12.8: especiales (ataque especial contra defensa especial); bit i = id i')
+    sp = [0] * ((nmov + 7) // 8)
+    for i in range(1, nmov):
+        if moves[i].get('special'):
+            sp[i // 8] |= 1 << (i % 8)
+    L.append('static const uint8_t MOVE_SPECIAL[%d] = { %s };' % (len(sp), ', '.join('0x%02x' % b for b in sp)))
     L.append('')
     L.append('// nombres de los que no son de tipo (145.. : placaje y los de estado)')
     L.append('static const char *const MOVE_X_KO[MOVE_N - MOVE_TACKLE] = {')

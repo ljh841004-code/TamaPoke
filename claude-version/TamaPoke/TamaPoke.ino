@@ -4988,7 +4988,7 @@ void drawLearnDialog() {
   drawFit(q, 124, 350, UI_INK, 2);
   drawFit(XT(X_MV_WHICH), 154, 350, 0x8410, 1);
   for (uint8_t i = 0; i < 4; i++)
-    drawMoveBtn(i & 1 ? LD_X1 : LD_X0, i & 2 ? LD_Y1 : LD_Y0, LD_W, LD_H, pet.mv[i], pet.pp[i], false);
+    drawMoveBtn(i & 1 ? LD_X1 : LD_X0, i & 2 ? LD_Y1 : LD_Y0, LD_W, LD_H, pet.mv[i], pet.pp[i], 0);
   uint8_t id = pet.moveOffer;
   uint16_t nc = typeColor(moveType(id));
   uiButton(LD_X0, LD_NEW_Y, LD_X1 + LD_W - LD_X0, LD_H, 12, lerp565(nc, UI_WHITE, 9, 16), nc);

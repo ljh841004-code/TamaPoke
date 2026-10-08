@@ -41,6 +41,8 @@ enum BEvKind : uint8_t {
 };
 
 // ko11.31: estados alterados (val de los eventos). Los de batalla se quitan al terminar
+// ko12.8: val de EV_HIT (bits): el otro se protegia (dano a la mitad) / ese movimiento descansa
+enum : uint8_t { HIT_GUARDED = 1, HIT_REST = 2 };
 enum : uint8_t { ST_NONE = 0, ST_PSN, ST_BRN, ST_PAR, ST_SLP, ST_FRZ, ST_CNF, ST_FLINCH, ST_RECHARGE };
 
 struct Battler {
@@ -57,7 +59,9 @@ struct Battler {
   uint8_t st = 0, stT = 0;      // estado (ST_PSN..ST_FRZ) y turnos de sueno
   uint8_t cnf = 0;              // turnos de confusion
   bool flinch = false;
-  bool recharge = false;        // tras hiperrayo y similares: pierde el turno siguiente
+  // ko12.8: tras hiperrayo y similares (si el otro sigue en pie): ESE movimiento no se puede
+  // usar el turno siguiente (los demas y protegerse, si). restT: turnos que le quedan
+  uint8_t restMv = 0, restT = 0;
 };
 
 struct BEvent {
@@ -289,6 +293,10 @@ uint8_t movesMain(const Battler &b);
 // accion -> casilla (0..3) o -1; BA_TYPE/BA_TACKLE buscan ese movimiento entre los suyos
 int8_t battleSlot(const Battler &b, BAct a);
 bool battleHasPP(const Battler &b);                 // false: solo puede forcejear
+bool moveIsSpecial(uint8_t id);
+bool moveDominated(const uint8_t mv[4], uint8_t id);  // ko12.8: otro suyo del mismo tipo lo deja sin sentido                    // ko12.8: usa at. esp. / def. esp.
+uint32_t spStat(const Battler &b, uint32_t v, bool defense);  // ko12.8: v (atq o def) -> su especial
+bool battleResting(const Battler &b, uint8_t id);   // ko12.8: ese movimiento descansa este turno (tras hiperrayo)
 // dano esperado de un movimiento (para la IA y para marcar "muy eficaz" en el menu)
 uint8_t moveEffAgainst(uint8_t id, const Battler &df);
 void battleClearVolatile(Battler &b);  // al terminar: fuera estados y cambios

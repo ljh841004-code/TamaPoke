@@ -757,9 +757,11 @@ void evMessages(const BEvent &e) {
       if (e.mid == MOVE_STRUGGLE) strncpy(bvL2, XT(X_STRUGGLE_NOTE), sizeof(bvL2) - 1);
       else if (e.kind == EV_MISS) strncpy(bvL2, XT(X_MISSED), sizeof(bvL2) - 1);
       else if (e.eff == 0) strncpy(bvL2, XT(X_NOEFFECT), sizeof(bvL2) - 1);
-      else if (e.eff == 4) strncpy(bvL2, XT(X_SUPER), sizeof(bvL2) - 1);
-      else if (e.eff == 1) strncpy(bvL2, XT(X_NOTVERY), sizeof(bvL2) - 1);
+      else if (e.eff == 4) strncpy(bvL2, XT(e.val & HIT_GUARDED ? X_SUPER_GUARD : X_SUPER), sizeof(bvL2) - 1);
+      else if (e.eff == 1) strncpy(bvL2, XT(e.val & HIT_GUARDED ? X_NOTVERY_GUARD : X_NOTVERY), sizeof(bvL2) - 1);
+      else if (e.val & HIT_GUARDED) strncpy(bvL2, XT(X_GUARD_HALF), sizeof(bvL2) - 1);  // ko12.8: por que pego flojo
       else if (e.crit) strncpy(bvL2, XT(X_CRIT), sizeof(bvL2) - 1);
+      else if ((e.val & HIT_REST) && evIsMe(e.side)) strncpy(bvL2, XT(X_REST_NOTE), sizeof(bvL2) - 1);
       break;
     case EV_GUARD: txFmt(bvL1, sizeof(bvL1), X_GUARDS, who); break;
     case EV_COUNTER:  // ko11.8: se protegio y devuelve el golpe
@@ -2162,17 +2164,43 @@ void drawTypeGlyph(int x, int y, uint8_t t, bool status, uint16_t bg) {
 enum : int { BMH_FIGHT = 100, BMH_AUTO, BMH_COUNT, BMH_BACK };
 
 // boton de un movimiento: nombre, y debajo tipo + PP (en rojo si quedan pocos)
-void drawMoveBtn(int x, int y, int w, int h, uint8_t id, uint8_t pp, bool star) {
+// mark (ko12.8): 0 nada, MVK_SUPER muy eficaz (*), MVK_WEAK poco eficaz (triangulo hacia abajo),
+// MVK_NONE no le hace nada (aspa), MVK_REST descansa este turno (gris, "쉬는 중")
+enum : uint8_t { MVK_0 = 0, MVK_SUPER, MVK_WEAK, MVK_NONE, MVK_REST };
+uint8_t moveMarkFor(const Battler &me, const Battler &foe, uint8_t i) {
+  uint8_t id = me.mv[i];
+  if (!id) return MVK_0;
+  if (battleResting(me, id)) return MVK_REST;
+  if (moveIsStatus(id)) return MVK_0;
+  uint8_t e = moveEffAgainst(id, foe);
+  return e >= 4 ? MVK_SUPER : e == 1 ? MVK_WEAK : e == 0 ? MVK_NONE : MVK_0;
+}
+void drawMoveBtn(int x, int y, int w, int h, uint8_t id, uint8_t pp, uint8_t mark) {
   if (!id) { uiButton(x, y, w, h, 12, UI_TRACK, UI_INK); return; }
   uint8_t t = moveType(id);
-  bool empty = pp == 0;
+  bool empty = pp == 0 || mark == MVK_REST;
   uint16_t bg = empty ? UI_TRACK : typeColor(t);
   uiButton(x, y, w, h, 12, bg, UI_INK);
   uint16_t ink = empty ? 0x8410 : UI_WHITE;
-  drawFitIn(moveNameId(id), x + 6, y + 4, w - 12, ink, 2);
-  char sub[32];
-  snprintf(sub, sizeof(sub), "%s  %u/%u%s", moveIsStatus(id) ? XT(X_MV_STATUS) : typeName(t), pp, movePP(id), star ? " *" : "");
-  drawFitIn(sub, x + 6, y + h - 20, w - 12, pp * 4 <= movePP(id) ? C565(0xff, 0xe0, 0xe0) : ink, 1);
+  int iw = (mark == MVK_WEAK || mark == MVK_NONE) ? 18 : 0;  // sitio del icono (arriba a la derecha)
+  drawFitIn(moveNameId(id), x + 6, y + 4, w - 12 - iw, ink, 2);
+  char sub[40];
+  if (mark == MVK_REST)
+    snprintf(sub, sizeof(sub), "%s  %u/%u", XT(X_MV_REST), pp, movePP(id));
+  else
+    snprintf(sub, sizeof(sub), "%s  %u/%u%s", moveIsStatus(id) ? XT(X_MV_STATUS) : typeName(t), pp, movePP(id),
+             mark == MVK_SUPER ? " *" : "");
+  drawFitIn(sub, x + 6, y + h - 20, w - 12, !empty && pp * 4 <= movePP(id) ? C565(0xff, 0xe0, 0xe0) : ink, 1);
+  int cx = x + w - 15, cy = y + 13;
+  if (mark == MVK_WEAK) {  // poco eficaz: triangulo hacia abajo con borde
+    gfx->fillTriangle(cx - 8, cy - 6, cx + 8, cy - 6, cx, cy + 7, UI_INK);
+    gfx->fillTriangle(cx - 5, cy - 4, cx + 5, cy - 4, cx, cy + 3, UI_WHITE);
+  } else if (mark == MVK_NONE) {  // no le hace nada: aspa
+    for (int k = -2; k <= 2; k++) {
+      gfx->drawLine(cx - 7 + k, cy - 7, cx + 7 + k, cy + 7, k ? UI_WHITE : UI_INK);
+      gfx->drawLine(cx + 7 + k, cy - 7, cx - 7 + k, cy + 7, k ? UI_WHITE : UI_INK);
+    }
+  }
 }
 
 void drawBattleMenu() {
@@ -2184,9 +2212,7 @@ void drawBattleMenu() {
     uiButton(MV_BACK_X, MV_Y0 + 6, MV_BACK_W, MV_Y1 + MV_H - MV_Y0 - 12, 10, UI_TRACK, UI_INK);
     drawFitIn("<", MV_BACK_X, MV_Y0 + (MV_Y1 + MV_H - MV_Y0) / 2 - 10, MV_BACK_W, UI_INK, 2);
     for (uint8_t i = 0; i < 4; i++) {
-      uint8_t id = bMe.mv[i];
-      bool star = id && !moveIsStatus(id) && moveEffAgainst(id, bFoe) >= 4;
-      drawMoveBtn(i & 1 ? MV_X1 : MV_X0, i & 2 ? MV_Y1 : MV_Y0, MV_W, MV_H, id, bMe.pp[i], star);
+      drawMoveBtn(i & 1 ? MV_X1 : MV_X0, i & 2 ? MV_Y1 : MV_Y0, MV_W, MV_H, bMe.mv[i], bMe.pp[i], moveMarkFor(bMe, bFoe, i));
     }
     if (!battleHasPP(bMe)) drawFit(XT(X_NO_PP), MV_Y1 + MV_H + 8, 300, UI_BAR_BAD, 1);
     return;
@@ -3378,6 +3404,7 @@ void wildTap(int16_t x, int16_t y) {
   if (a == BMH_FIGHT) { bMoveMenu = true; sfxPlay(SFX_TAP); return; }  // ko11.31
   if (a == BMH_BACK) { bMoveMenu = false; sfxPlay(SFX_TAP); return; }
   if (a >= BA_M0 && a <= BA_M3 && battleHasPP(bMe) && !bMe.pp[a - BA_M0]) { sfxPlay(SFX_DENY); return; }  // sin PP
+  if (a >= BA_M0 && a <= BA_M3 && battleResting(bMe, bMe.mv[a - BA_M0])) { sfxPlay(SFX_DENY); return; }  // ko12.8: descansa
   if (a == BMH_AUTO) {  // ko11.19: [자동]
     if (!autoAllowed()) { sfxPlay(SFX_DENY); return; }
     if (autoCount > autoRemaining() || autoCount < 1) autoCount = autoRemaining();
