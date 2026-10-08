@@ -71,6 +71,19 @@ size_t mockNvsKeyCount(const char *ns) {
   return it == gStore.end() ? 0 : it->second.size();
 }
 
+size_t mockNvsEntries(const char *ns) {
+  // como la NVS real: 1 entrada de 32 bytes por numero; cadenas y blobs 1 cabecera + datos
+  // (+1 indice en los blobs, ~)
+  std::map<std::string, KV>::iterator it = gStore.find(ns);
+  if (it == gStore.end()) return 0;
+  size_t n = 0;
+  for (KV::iterator k = it->second.begin(); k != it->second.end(); ++k) {
+    size_t l = k->second.size();
+    n += l <= 8 ? 1 : 2 + (l + 31) / 32;
+  }
+  return n;
+}
+
 bool Preferences::begin(const char *name, bool readOnly, const char *partition) {
   // ko11.6: otra particion NVS = otro espacio ("nvs2:tphall")
   ns_ = partition ? std::string(partition) + ":" + name : std::string(name);

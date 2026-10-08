@@ -34,6 +34,7 @@
 #include "panicrec.h"   // ko11.9.3: direccion del codigo en un panic
 #include "sdupdate.h"
 #include "pak.h"        // ko12.8: mons.pak (toda la carpeta mons en un fichero cifrado)
+#include "sdcheck.h"    // ko12.8: SD 파일 점검
 #include "savebak.h"    // ko11.6: copia de la partida en la SD
 #include "story.h"      // ko11.21: modo historia (guiones en story_ko.cpp)
 #ifdef ESP_PLATFORM
@@ -1214,6 +1215,25 @@ void handleSerial() {
     pw.trim();
     pakSetPass(pw.c_str());
     Serial.printf("PAKPASS %s -> %s\n", pw.length() ? "custom" : "default", pakActive() ? "ok" : "sin pak / no coincide");
+  } else if (line == "SDCHECK") {  // ko12.8: que ficheros faltan en /mons (o mons.pak)
+    static SdInv inv;
+    inv = SdInv();
+    if (!monsForEachName([](const char *rel, void *ctx) { ((SdInv *)ctx)->add(rel); }, &inv)) {
+      Serial.println("SDCHECK: sin SD");
+    } else {
+      static const char *const CN[SDC_CATS] = { "p", "ps", "r", "rs", "cry", "fx", "thumbs", "story", "music" };
+      for (uint8_t c = 0; c < SDC_CATS; c++) {
+        Serial.printf("%-7s %3u/%3u", CN[c], (unsigned)inv.have(c), (unsigned)SdInv::need(c));
+        SdInv probe = inv;  // lista hasta 8 que faltan
+        char nm[24];
+        for (int k = 0; k < 8 && probe.firstMissing(c, nm, sizeof(nm)); k++) {
+          Serial.printf(" %s", nm);
+          probe.add(nm);
+        }
+        Serial.println();
+      }
+    }
+    Serial.println("DONE");
   } else if (line == "PAKINFO") {
     Serial.printf("PAK state=%d files=%u\n", pakState(), (unsigned)pakCount());
   } else if (line == "BDAY") {
@@ -1225,6 +1245,13 @@ void handleSerial() {
     Serial.printf("up=%lus heap=%u min=%u sd=%d mon=%d\n",
                   (unsigned long)(millis() / 1000), (unsigned)ESP.getFreeHeap(),
                   (unsigned)ESP.getMinFreeHeap(), sdReady, pmd.loaded || mon.loaded);
+#ifdef ESP_PLATFORM
+    // ko12.8: pila que nunca se ha usado (bytes) en cada tarea: si baja de ~500, subirla
+    Serial.printf("stack libre: loop=%u", (unsigned)uxTaskGetStackHighWaterMark(nullptr));
+    for (const char *tn : { "audio", "touch", "flush" })
+      if (TaskHandle_t h = xTaskGetHandle(tn)) Serial.printf(" %s=%u", tn, (unsigned)uxTaskGetStackHighWaterMark(h));
+    Serial.println();
+#endif
     Serial.println("DONE");
   } else if (line == "STATS") {
     Serial.printf("spec=%d nv=%u com=%u fel=%u ene=%u lim=%u desc=%u sd=%d mon=%d bat=%d usb=%d rtc=%u\n",
@@ -5512,7 +5539,7 @@ void drawPetPMD() {
     act = PMD_HURT;
   } else {
     // contento: el planificador decide (idle / paseo / gesto)
-    if (now > beh.until) behNext();
+    if ((int32_t)(now - beh.until) > 0) behNext();  // a prueba de vuelta de millis()
     if (beh.mode == 1) {
       float d = beh.targetX - beh.x;
       if (fabsf(d) < 4) {

@@ -1184,14 +1184,16 @@ void renderPak() {
     drawFit(XT(R[pakResult < 4 ? pakResult : 2]), 244, 360, pakResult == 0 ? UI_BAR_OK : UI_BAR_BAD, 2);
   }
   bool can = pakScanned && pakInfo.files > 0;
-  drawBtn(113, 300, 240, 52, can ? C565(0x6a, 0x4c, 0xf0) : UI_TRACK, can ? UI_WHITE : 0x8410, XT(X_PAK_GO));
+  drawBtn(113, 290, 240, 52, can ? C565(0x6a, 0x4c, 0xf0) : UI_TRACK, can ? UI_WHITE : 0x8410, XT(X_PAK_GO));
+  drawBtn(133, 354, 200, 40, UI_WHITE, UI_INK, XT(X_SDC_BTN));  // ko12.8: SD 파일 점검
   drawNav(NAV_L, UI_INK);
   uiFlush();
 }
 void pakTap(int16_t x, int16_t y) {
   if (pakBusy) return;
   if (navHit(NAV_L, x, y)) { sfxPlay(SFX_TAP); xScreen = XS_UPD; return; }
-  if (inRect(x, y, 113, 300, 240, 52) && pakScanned && pakInfo.files > 0) {
+  if (inRect(x, y, 133, 354, 200, 40)) { sfxPlay(SFX_TAP); openSdCheck(); return; }
+  if (inRect(x, y, 113, 290, 240, 52) && pakScanned && pakInfo.files > 0) {
     sfxPlay(SFX_TAP);
     pet.saveNow();
     pakBusy = true;
@@ -1202,4 +1204,71 @@ void pakTap(int16_t x, int16_t y) {
     sfxPlay(pakResult == 0 ? SFX_MEDAL : SFX_DENY);
     lastInteract = millis();
   }
+}
+
+// ======================================================================
+// ko12.8: SD 파일 점검: cuantos ficheros de cada clase hay en /mons (o en mons.pak)
+// ======================================================================
+static SdInv sdcInv;
+static bool sdcOk = false;
+#define SDC_ROW_Y0 90
+#define SDC_ROW_DY 34
+void openSdCheck() {
+  sdcInv = SdInv();
+  sdcOk = monsForEachName([](const char *rel, void *ctx) { ((SdInv *)ctx)->add(rel); }, &sdcInv);
+  xScreen = XS_SDCHK;
+}
+void renderSdCheck() {
+  uiScreenBg();
+  drawFit(XT(X_SDC_TITLE), 40, 300, UI_INK, 2);
+  if (!sdcOk) {
+    drawFit(XT(X_SDC_NOSD), 200, 300, UI_BAR_BAD, 2);
+    drawNav(NAV_L, UI_INK);
+    uiFlush();
+    return;
+  }
+  struct Row { XId label; uint8_t a, b; bool optional; };
+  static const Row ROWS[7] = {
+    { X_SDC_SPR, SDC_SPR, SDC_SPRS, false }, { X_SDC_BAT, SDC_BAT, SDC_BATS, false },
+    { X_SDC_FX, SDC_FX, 0xFF, false },       { X_SDC_CRY, SDC_CRY, 0xFF, false },
+    { X_SDC_THUMB, SDC_THUMB, 0xFF, false }, { X_SDC_STORY, SDC_STORY, 0xFF, false },
+    { X_SDC_MUSIC, SDC_MUSIC, 0xFF, true },
+  };
+  char miss[24] = "";
+  uint16_t missN = 0;
+  for (uint8_t r = 0; r < 7; r++) {
+    const Row &w = ROWS[r];
+    uint16_t have = sdcInv.have(w.a), need = SdInv::need(w.a);
+    if (w.b != 0xFF) { have += sdcInv.have(w.b); need += SdInv::need(w.b); }
+    int y = SDC_ROW_Y0 + r * SDC_ROW_DY;
+    bool full = have >= need;
+    uint16_t c = full ? UI_BAR_OK : w.optional ? 0x8410 : UI_BAR_BAD;
+    gfx->fillCircle(86, y + 10, 6, c);
+    drawFitIn(XT(w.label), 100, y, 190, UI_INK, 1);
+    char n[16];
+    snprintf(n, sizeof(n), "%u/%u", (unsigned)have, (unsigned)need);
+    drawFitIn(n, 296, y, 92, c, 1);
+    if (!w.optional && !full) {
+      missN += need - have;
+      if (!miss[0] && !sdcInv.firstMissing(w.a, miss, sizeof(miss)) && w.b != 0xFF)
+        sdcInv.firstMissing(w.b, miss, sizeof(miss));
+    }
+  }
+  int yMsg = SDC_ROW_Y0 + 7 * SDC_ROW_DY + 8;
+  if (!missN) drawFit(XT(X_SDC_OK), yMsg, 330, UI_BAR_OK, 1);
+  else {
+    char b[64];
+    snprintf(b, sizeof(b), XT(X_SDC_MISS_FMT), miss, (unsigned)(missN - 1));
+    drawFit(b, yMsg, 330, UI_BAR_BAD, 1);
+  }
+  if (pakActive()) {
+    char b[48];
+    snprintf(b, sizeof(b), XT(X_SDC_PAK_FMT), (unsigned)pakCount());
+    drawFit(b, yMsg + 26, 300, 0x8410, 1);
+  }
+  drawNav(NAV_L, UI_INK);
+  uiFlush();
+}
+void sdCheckTap(int16_t x, int16_t y) {
+  if (navHit(NAV_L, x, y)) { sfxPlay(SFX_TAP); xScreen = XS_UPD; }
 }

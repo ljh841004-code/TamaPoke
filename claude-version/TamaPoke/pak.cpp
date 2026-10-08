@@ -199,6 +199,34 @@ void pakForEach(void (*cb)(const char *, uint32_t, void *), void *ctx) {
   }
 }
 
+bool monsForEachName(void (*cb)(const char *, void *), void *ctx) {
+  SdCardLock lock(pdMS_TO_TICKS(3000));
+  if (!lock || !sdReady) return false;
+  if (gState == 1) {
+    char nm[PAK_NAME_MAX + 1];
+    for (uint32_t i = 0; i < gIdx.n; i++) {
+      snprintf(nm, sizeof(nm), "%.*s", (int)gIdx.e[i].len, gIdx.e[i].name);
+      cb(nm, ctx);
+    }
+  }
+  static const char *const DIRS[2] = { "", "fx/" };
+  for (const char *sub : DIRS) {
+    char dir[32];
+    snprintf(dir, sizeof(dir), "/sdcard/mons/%s", sub);
+    DIR *d = opendir(dir);
+    if (!d) continue;
+    struct dirent *e;
+    char rel[64];
+    while ((e = readdir(d)) != nullptr) {
+      if (e->d_type == DT_DIR || e->d_name[0] == '.') continue;
+      snprintf(rel, sizeof(rel), "%s%s", sub, e->d_name);
+      cb(rel, ctx);
+    }
+    closedir(d);
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------- empaquetar en el aparato
 struct BItem { char name[PAK_NAME_MAX + 1]; uint32_t size; };
 

@@ -1,3 +1,4 @@
+#include <string>
 // Stubs de hardware para test/render: reloj, red, tongsin, audio, PMU, USB.
 #include <string.h>
 #include <Arduino.h>
@@ -200,6 +201,20 @@ File monsOpen(const char *path) { return SD_MMC.open(path, FILE_READ); }
 bool monsExists(const char *path) { return SD_MMC.exists(path); }
 bool monsIsDir(const char *path) { File d = SD_MMC.open(path); bool r = d && d.isDirectory(); if (d) d.close(); return r; }
 void pakForEach(void (*)(const char *, uint32_t, void *), void *) {}
+#include <dirent.h>
+bool monsForEachName(void (*cb)(const char *, void *), void *ctx) {
+  for (const char *sub : { "", "fx/" }) {
+    std::string dir = std::string(gSdRoot) + "/mons/" + sub;
+    DIR *d = opendir(dir.c_str());
+    if (!d) continue;
+    while (struct dirent *e = readdir(d)) {
+      if (e->d_name[0] == '.' || e->d_type == DT_DIR) continue;
+      cb((std::string(sub) + e->d_name).c_str(), ctx);
+    }
+    closedir(d);
+  }
+  return true;
+}
 void pakSetPass(const char *) {}
 const char *pakPassLabel() { return ""; }
 bool pakScan(PakBuildInfo &out) { out.files = 1007; out.bytes = 268ull << 20; return true; }

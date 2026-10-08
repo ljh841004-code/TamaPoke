@@ -1173,11 +1173,18 @@ static void navChecks() {
     navCheck("SD 업데이트 -> [SD 파일 하나로 묶기]", xScreen == XS_PAK);
     render(); shot("91b_pak");
     pakProgress(120ull << 20, 268ull << 20, 450, 1007); shot("91c_pak_progress");
-    pakTap(113 + 100, 320);
+    pakTap(113 + 100, 310);
     navCheck("묶기: 끝나면 완료 표시", xScreen == XS_PAK && pakResult == 0);
     render(); shot("91d_pak_done");
     pakTap(LX, LY);
     navCheck("묶기 -> [<] = SD 업데이트", xScreen == XS_UPD);
+    // ko12.8: SD 파일 점검
+    openPak(); pakTap(133 + 100, 354 + 20);
+    navCheck("묶기 -> [SD 파일 점검]", xScreen == XS_SDCHK);
+    navCheck("SD 파일 점검: pNNN 251개", sdcInv.have(SDC_SPR) == 251 && sdcInv.have(SDC_BAT) == 251);
+    render(); shot("91e_sd_check");
+    sdCheckTap(LX, LY);
+    navCheck("SD 파일 점검 -> [<] = SD 업데이트", xScreen == XS_UPD);
   }
   pet.endSeen = 1; closeAll(); openSettings(); render(); shot("90c_settings_master");
   settingsTap(236 + 60, SET_Y0 + 5 * SET_DY + 20);

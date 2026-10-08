@@ -17,6 +17,9 @@ bool monsIsDir(const char *path);      // "/mons/fx": carpeta en la SD o prefijo
 // recorre los nombres del .pak (relativos a /mons/, p. ej. "bgm2.wav")
 void pakForEach(void (*cb)(const char *name, uint32_t size, void *ctx), void *ctx);
 
+// ko12.8: todos los nombres de /mons (del .pak y de la carpeta, con fx/), para "SD 파일 점검"
+bool monsForEachName(void (*cb)(const char *rel, void *ctx), void *ctx);
+
 // frase (la por defecto, o la guardada con PAKPASS)
 void pakSetPass(const char *pass);     // "" = volver a la por defecto
 const char *pakPassLabel();            // "기본" o "사용자 지정" lo pone la UI segun esto: "" = por defecto

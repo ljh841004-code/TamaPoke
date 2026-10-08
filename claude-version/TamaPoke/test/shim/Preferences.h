@@ -44,3 +44,4 @@ private:
 // helpers de test: borra toda la "NVS" simulada
 void mockNvsReset();
 size_t mockNvsKeyCount(const char *ns);
+size_t mockNvsEntries(const char *ns);  // entradas de 32 bytes aproximadas que ocuparia en la NVS

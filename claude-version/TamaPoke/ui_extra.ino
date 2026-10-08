@@ -19,7 +19,7 @@ enum : uint8_t { XS_NONE = 0, XS_NET, XS_WILD, XS_LINKMENU, XS_LINK, XS_BOX, XS_
                  XS_SET,     // ko11.26: menu de ajustes
                  XS_STRAIN,
                  XS_CENTER,
-                 XS_ROOM, XS_WALK, XS_BDAY, XS_ENDING, XS_EGGPICK, XS_PAK };  // ko12.4: decorar la habitacion, paseo  // ko11.31: centro pokemon (PP)  // ko11.28: combates de entrenamiento de la historia  // ko11.21: historia  // ko11.18: brillo  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
+                 XS_ROOM, XS_WALK, XS_BDAY, XS_ENDING, XS_EGGPICK, XS_PAK, XS_SDCHK };  // ko12.4: decorar la habitacion, paseo  // ko11.31: centro pokemon (PP)  // ko11.28: combates de entrenamiento de la historia  // ko11.21: historia  // ko11.18: brillo  // ko11.8: elegir los fondos normales  // ko11.6: copia en la SD         // ko11.1: salon de la fama (campeones de la liga)
 uint8_t xScreen = XS_NONE;
 
 // ko11.17: [<] vuelve a la pantalla DESDE LA QUE se abrio el menu (la ficha, el
@@ -4168,6 +4168,7 @@ bool extraRender() {
     case XS_ENDING: renderEnding(); return true;  // ko12.7
     case XS_EGGPICK: renderEggPick(); return true;
     case XS_PAK: renderPak(); return true;  // ko12.8
+    case XS_SDCHK: renderSdCheck(); return true;
     default: return false;
   }
 }
@@ -4205,6 +4206,7 @@ bool extraTap(int16_t x, int16_t y) {
     case XS_ENDING: endingTap(x, y); return true;  // ko12.7
     case XS_EGGPICK: eggPickTap(x, y); return true;
     case XS_PAK: pakTap(x, y); return true;
+    case XS_SDCHK: sdCheckTap(x, y); return true;
     default: return false;
   }
 }
@@ -4217,7 +4219,8 @@ bool extraSwipe() {
   if (xScreen == XS_VOL) { goBack(); return true; }
   if (xScreen == XS_BGM) { xScreen = XS_VOL; return true; }  // ko11.8
   if (xScreen == XS_BRIGHT || xScreen == XS_UPD) { xScreen = XS_SET; return true; }
-  if (xScreen == XS_PAK) { if (!pakBusy) xScreen = XS_UPD; return true; }  // ko12.8  // ko11.26
+  if (xScreen == XS_PAK) { if (!pakBusy) xScreen = XS_UPD; return true; }
+  if (xScreen == XS_SDCHK) { xScreen = XS_UPD; return true; }  // ko12.8  // ko11.26
   if (xScreen == XS_SET) { goBack(); return true; }
   if (xScreen == XS_ROOM || xScreen == XS_WALK || xScreen == XS_BDAY || xScreen == XS_EGGPICK) { goBack(); return true; }
   if (xScreen == XS_ENDING) return true;  // ko12.7: el final no se cierra deslizando  // ko12.4

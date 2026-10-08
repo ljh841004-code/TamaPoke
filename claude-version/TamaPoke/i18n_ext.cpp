@@ -173,6 +173,7 @@ static const char *const XS[2][X_COUNT] = {
     "Congratulations! You raised every Pokemon", "Congratulations! Every one, shining", "%u families raised", "Everyone you raised", "No. %u", "Our journey", "Journey began  %04u.%02u.%02u", "Days together  %lu", "Hall of Fame  %u", "Pokedex  %u / 251", "Shiny friends  %u", "Steps walked  %s", "Wild wins  %u", "Champion  %u times", "Link wins %u  Trades %u", "Badges  %u / 8", "And... thank you.", "From the day we met until today, thank you.", "Now let's start a shining journey together!", "Every shining moment with you, I'll never forget.", "You are a true Pokemon Master.", "Title: Pokemon Master / Shiny odds x2 from now", "Title: Shining Pokemon Master", "Tap to continue", "Tap: next", "Ending", "Choose an egg (%u)", "Choose your next egg", "Families not yet raised shiny", "The egg will be {1}!", "Nothing left to choose", "Journey %u/%u families", "Shining journey %u/%u",
     "Pack SD files", "Pack SD files", "%u files / %u MB", "Makes one encrypted file: mons.pak", "Copy only mons.pak to the other SD", "Start", "In use: mons.pak (%u files)", "mons.pak: wrong passphrase", "mons.pak is damaged", "Packing... keep it on", "Done! mons.pak is ready", "Not enough free space on the SD", "Failed (SD error)", "No files in the mons folder", "%u / %u files", "No mons.pak yet (loose files)",
     "It guarded: damage halved!", "Super effective, but guarded: halved!", "Not very effective, and guarded...", "That move must rest next turn", "Resting",
+    "Check SD files", "SD files", "Pokemon pictures", "Battle pictures", "Move effects", "Cries", "Small pictures", "Story people", "Music (optional)", "Everything is there!", "Missing: %s (+%u more)", "No SD card", "In mons.pak: %u files",
   },
   // ---------------- KO ----------------
   {
@@ -340,6 +341,7 @@ static const char *const XS[2][X_COUNT] = {
     "축하해요! 모든 포켓몬을 키웠어요", "축하해요! 모두 반짝이는 모습으로 키웠어요", "%u계열 모두 함께했어요", "함께한 친구들", "%u번째 친구", "함께한 여정", "여정을 시작한 날  %04u.%02u.%02u", "함께한 날  %lu일", "명예의 전당  %u마리", "도감  %u / 251", "색이 다른 친구  %u마리", "함께 걸은 걸음  %s", "야생 배틀 승리  %u번", "챔피언  %u번", "통신 대전 승리 %u번  교환 %u번", "체육관 배지  %u / 8", "그리고, 정말 고마워요.", "처음 만난 날부터 오늘까지 정말 고마워.", "이제 반짝이는 여정을 함께 떠나자!", "반짝이는 모두와 함께한 시간, 잊지 않을게.", "너는 진짜 포켓몬 마스터야.", "칭호: 포켓몬 마스터 / 이제 색이 다른 포켓몬 2배", "칭호: 빛나는 포켓몬 마스터", "눌러서 계속", "누르면 다음으로", "엔딩 다시 보기", "원하는 알 고르기 (%u)", "원하는 알 고르기", "아직 반짝이는 모습으로 키우지 않은 계열", "{1}의 알이 됐어요!", "고를 계열이 없어요", "여정 %u/%u계열", "반짝이는 여정 %u/%u계열",
     "SD 파일 하나로 묶기", "SD 파일 묶기", "파일 %u개 · %uMB", "암호화된 파일 하나(mons.pak)로 만들어요", "다른 SD에는 mons.pak 하나만 복사하면 돼요", "묶기 시작", "사용 중: mons.pak (파일 %u개)", "mons.pak 암호가 맞지 않아요", "mons.pak가 손상됐어요", "묶는 중... 전원을 끄지 마세요", "완료! mons.pak을 만들었어요", "SD 남은 공간이 부족해요", "SD 오류로 실패했어요", "mons 폴더에 파일이 없어요", "%u / %u개", "아직 mons.pak 없음 (낱개 파일 사용 중)",
     "막아서 피해가 절반이 됐다!", "효과가 굉장했지만 막아서 절반!", "효과가 별로인 데다 막혀 버렸다...", "다음 턴엔 이 기술을 쉬어야 해요", "쉬는 중",
+    "SD 파일 점검", "SD 파일 점검", "포켓몬 그림", "배틀 그림", "기술 이펙트", "울음소리", "작은 그림", "스토리 인물", "음악 (없어도 됨)", "필요한 파일이 모두 있어요!", "없는 파일: %s 외 %u개", "SD카드가 없어요", "mons.pak 안에서 확인 (파일 %u개)",
   },
 };
 

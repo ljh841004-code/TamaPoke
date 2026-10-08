@@ -73,6 +73,17 @@ ALIAS = {
 }
 
 
+# ko12.8: sin animacion en PokeRogue (o demasiado grande): una parecida que NO use otro
+# movimiento de la lista (para que no se repitan efectos). Se prueban en orden
+FALLBACK = {
+    'confusion': ['extrasensory', 'stored-power'],
+    'psychic': ['expanding-force', 'psystrike', 'luster-purge'],
+    'heat-wave': ['burning-jealousy', 'lava-plume', 'incinerate'],
+    'fissure': ['precipice-blades', 'headlong-rush', 'scorching-sands'],
+    'tail-whip': ['baby-doll-eyes', 'tearful-look', 'play-nice', 'charm'],
+}
+
+
 def slug(name):
     if name in ALIAS:
         return ALIAS[name]
@@ -409,6 +420,18 @@ EXTRA = ['tackle'] + ['swords-dance', 'iron-defense', 'agility', 'growth', 'hard
                       'spore', 'will-o-wisp', 'confuse-ray', 'supersonic', 'sweet-kiss']
 
 
+def pack_or_fallback(t, s, v, name, fname=None):
+    r = pack(t, s, v, name, fname)
+    if r not in (None, 'empty'):
+        return r
+    for alt in FALLBACK.get(slug(name), []):
+        r = pack(t, s, v, alt, fname)
+        if r not in (None, 'empty'):
+            print('  (%s: usa la animacion de %s)' % (name, alt))
+            return r
+    return r
+
+
 def main():
     types = {int(a) for a in sys.argv[1:] if a.isdigit()} if len(sys.argv) > 1 else None
     miss = []
@@ -416,7 +439,7 @@ def main():
     if types is None or 'extra' in sys.argv:
         for k, sl in enumerate(EXTRA):
             mid = 145 + k
-            r = pack(0, 0, 0, sl, 'm%03d.bin' % mid)
+            r = pack_or_fallback(0, 0, 0, sl, 'm%03d.bin' % mid)
             if r is None or r == 'empty':
                 miss.append(sl)
                 print('  -- sin animacion:', sl)
@@ -428,7 +451,7 @@ def main():
     for t, s, v, name in move_names():
         if types is not None and t not in types:
             continue
-        r = pack(t, s, v, name)
+        r = pack_or_fallback(t, s, v, name)
         if r is None or r == 'empty':
             miss.append('%s (%s)' % (name, slug(name)))
             print('  -- sin animacion:', name)

@@ -4,6 +4,9 @@
 #include "weather.h"
 #include "moves_data.h"
 #include "dex_special.h"
+#include "sdcheck.h"
+#include <string.h>
+static_assert(SDC_FX_N == MOVE_N - 1, "sdcheck.h: SDC_FX_N = numero de movimientos");
 #include <string.h>
 
 // Tabla de tipos de gen 2 (atacante x defensor), en mitades: 0 inmune, 1 poco
@@ -390,7 +393,7 @@ uint16_t wildPermil(int16_t dex, uint8_t region, uint16_t petLvl, uint8_t hour, 
 // region: 4 montana, 1 playa, 6 central, 2 bosque, 8 pantano, 10 ruinas, 3 volcan, 9 desierto
 const GymDef GYMS[GYM_COUNT] = {
   { 4, 2, { 74, 95, 0 }, { 12, 14, 0 } },      // Brock: Geodude, Onix
-  { 1, 2, { 120, 121, 0 }, { 18, 21, 0 } },    // Misty: Staryu, Starmie
+  { 1, 2, { 120, 121, 0 }, { 17, 19, 0 } },    // Misty: Staryu, Starmie (ko12.8: -1/-2 nv: con at. especial Starmie pega mucho mas)
   { 6, 2, { 100, 26, 0 }, { 21, 24, 0 } },     // Lt. Surge: Voltorb, Raichu
   { 2, 2, { 114, 45, 0 }, { 29, 32, 0 } },     // Erika: Tangela, Vileplume
   { 8, 3, { 109, 89, 110 }, { 37, 39, 43 } },  // Koga: Koffing, Muk, Weezing

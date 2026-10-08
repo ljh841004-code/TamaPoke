@@ -2036,3 +2036,21 @@ TEST(ending, la_escapada_no_acaba_el_viaje) {
   p.update(millis());
   CHECK_EQ((int)p.pendingEnding, 0);
 }
+
+// la NVS pequena ("nvs", 20 KB = 5 paginas de 126 entradas, 1 libre para limpiar) guarda la
+// partida y los ajustes: que no se llene al ir anadiendo claves
+TEST(save, cabe_en_la_nvs_pequena) {
+  mockNvsReset();
+  Pet p;
+  p.begin();
+  p.saveNow();
+  Preferences x;  // lo que guardan otros (ajustes, red, frase del .pak) en el mismo espacio
+  x.begin("tamapoke", false);
+  x.putString("nick", "1234567890123456789012");
+  x.putString("pakpw", "0123456789012345678901234567890123456789");
+  x.end();
+  size_t used = mockNvsEntries("tamapoke") + mockNvsEntries("tpnet") + mockNvsEntries("tpstory") +
+                mockNvsEntries("tpparty") + mockNvsEntries("tpdiag");
+  printf("    nvs: %zu entradas (claves tamapoke %zu)\n", used, mockNvsKeyCount("tamapoke"));
+  CHECK(used < 330);  // 4 x 126 = 504: deja sitio a las versiones viejas antes de limpiar
+}
