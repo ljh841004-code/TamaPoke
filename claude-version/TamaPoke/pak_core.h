@@ -82,7 +82,7 @@ struct PakFatGeo {
   uint32_t nFatent;   // clusteres + 2
 };
 // recorre la cadena desde sclust para un fichero de 'size' bytes. Devuelve el numero de tramos
-// (<= maxOut) o -1 si la cadena no cuadra (rota, en bucle, corta) o no caben los tramos.
+// (<= maxOut), -1 si la cadena no cuadra (rota, en bucle, corta) o -2 si no caben en maxOut.
 // 'win' es un buffer de 8 sectores (4 KB) para leer la FAT por ventanas.
 int pakChainExtents(const PakFatGeo &g, uint32_t sclust, uint32_t size, PakSectorRead rd, void *ctx, uint8_t *win,
                     PakExt *out, int maxOut);

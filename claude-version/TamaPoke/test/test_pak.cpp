@@ -230,7 +230,7 @@ TEST(pak, mapa_cadena_rota) {
   // mas trozos que sitio para tramos
   std::vector<uint32_t> sp = { 100, 300, 500, 700 };
   simFile(k, g, sp, 4 * 2048, 2);
-  CHECK(pakChainExtents(g, 100, 4 * 2048, SimDisk::rd, &k, win, ex, 3) == -1);
+  CHECK(pakChainExtents(g, 100, 4 * 2048, SimDisk::rd, &k, win, ex, 3) == -2);  // no caben: pedir mas
   CHECK(pakChainExtents(g, 100, 4 * 2048, SimDisk::rd, &k, win, ex, 4) == 4);
 }
 

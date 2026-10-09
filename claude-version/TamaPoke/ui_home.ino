@@ -1182,6 +1182,14 @@ void renderPak() {
   if (pakResult >= 0) {
     static const XId R[4] = { X_PAK_DONE, X_PAK_ERR_SPACE, X_PAK_ERR_SD, X_PAK_ERR_EMPTY };
     drawFit(XT(R[pakResult < 4 ? pakResult : 2]), 244, 360, pakResult == 0 ? UI_BAR_OK : UI_BAR_BAD, 2);
+  } else {  // ko12.8.4: diagnostico (solo ASCII): modo de lectura del .pak y pasos lentos del arranque
+    void bootDiagLine(char *out, size_t n);
+    char d[120];
+    pakDiag(d, sizeof(d));
+    char *bar = strchr(d, '|');
+    if (bar) { *bar = 0; drawFit(d, 228, 340, 0x8410, 1); drawFit(bar + 2, 246, 340, 0x8410, 1); }
+    bootDiagLine(d, sizeof(d));
+    drawFit(d, 264, 340, 0x8410, 1);
   }
   bool can = pakScanned && pakInfo.files > 0;
   drawBtn(113, 290, 240, 52, can ? C565(0x6a, 0x4c, 0xf0) : UI_TRACK, can ? UI_WHITE : 0x8410, XT(X_PAK_GO));

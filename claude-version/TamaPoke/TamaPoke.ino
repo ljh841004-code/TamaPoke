@@ -439,7 +439,22 @@ static void bootDrawStatus(const char *line1) {
   }
   uiFlush();
 }
+// ko12.8.4: cuanto duro cada paso del arranque (ms), para verlo en pantalla (SD 파일 묶기) sin consola
+static uint16_t bootDurMs[BS_OK + 1];
+static uint32_t bootStepT = 0;
+static uint8_t bootStepCur = 0;
+uint32_t bootSpriteMs = 0;  // el primer sprite de la mascota (ensureMon)
+void bootDiagLine(char *out, size_t n) {
+  size_t k = (size_t)snprintf(out, n, "boot");
+  for (uint8_t i = 1; i <= BS_RUN && k < n; i++)
+    if (bootDurMs[i] >= 300) k += (size_t)snprintf(out + k, n - k, " %u:%u.%us", i, bootDurMs[i] / 1000, bootDurMs[i] % 1000 / 100);
+  if (k < n) snprintf(out + k, n - k, " spr %ums", (unsigned)bootSpriteMs);
+}
 void bootStep(uint8_t s) {
+  uint32_t now = millis();
+  if (bootStepCur && bootStepCur <= BS_OK) bootDurMs[bootStepCur] = (uint16_t)(now - bootStepT > 65535 ? 65535 : now - bootStepT);
+  bootStepCur = s;
+  bootStepT = now;
   rbStep = s;
   Serial.printf("BOOT %u %s\n", s, BOOT_NAMES[s]);
   if (s < BS_FRAME) {
@@ -824,8 +839,10 @@ void ensureMon() {
   beh.mode = 0;
   beh.until = 0;
   if (pet.speciesId >= 1 && pet.speciesId <= DEX_COUNT) {
+    uint32_t t0 = millis();
     pmd.load(pet.speciesId, pet.shiny);          // principal: PMD
     if (!pmd.loaded) mon.load(pet.speciesId, pet.shiny);  // respaldo: B/N
+    bootSpriteMs = millis() - t0;  // ko12.8.4 (el ultimo cargado)
   }
 }
 
@@ -1236,6 +1253,11 @@ void handleSerial() {
     Serial.println("DONE");
   } else if (line == "PAKINFO") {
     Serial.printf("PAK state=%d files=%u\n", pakState(), (unsigned)pakCount());
+    char d[120];
+    pakDiag(d, sizeof(d));
+    Serial.println(d);
+    bootDiagLine(d, sizeof(d));
+    Serial.println(d);
   } else if (line == "BDAY") {
     bdayShowAgain();
     Serial.println("BDAY ok");

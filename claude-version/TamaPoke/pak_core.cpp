@@ -246,7 +246,7 @@ int pakChainExtents(const PakFatGeo &g, uint32_t sclust, uint32_t size, PakSecto
     if (n && out[n - 1].sect + out[n - 1].nsect == sect) {
       out[n - 1].nsect += g.csize;
     } else {
-      if (n >= maxOut) return -1;
+      if (n >= maxOut) return -2;
       out[n].off = k * cbytes;
       out[n].sect = sect;
       out[n].nsect = g.csize;

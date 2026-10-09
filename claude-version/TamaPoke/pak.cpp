@@ -69,6 +69,11 @@ static int gExtN = 0;
 static uint8_t gPdrv = 0, gLdrv = 0;
 static uint8_t *gBounce = nullptr;  // 8 sectores en RAM interna con DMA (tambien ventana de la FAT)
 static uint32_t gGen = 1;           // cambia al recargar: los ficheros abiertos del .pak viejo dejan de leer
+// ko12.8.4: diagnostico en pantalla (SD 파일 묶기) y por serie (PAKINFO): por que no hay mapa,
+// cuanto tardo, y en que se va el tiempo de lectura (SD / descifrar)
+static uint8_t gFastWhy = 0;  // 0 ok, 1 sin RAM DMA, 2 no se abre por FatFs, 3 tipo de FAT, 4 demasiado grande,
+                              // 5 sin PSRAM, 6 candado, 7 cadena rota
+static uint32_t gFastMs = 0, gCluKB = 0, gIoUs = 0, gAesUs = 0, gIoKB = 0, gReads = 0;
 static bool rawRead(uint32_t s, uint32_t c, uint8_t *buf, void *) { return disk_read(gPdrv, buf, s, c) == RES_OK; }
 static void fastUnload() {
   if (!gExt) return;
@@ -79,11 +84,12 @@ static void fastUnload() {
   if (held) ff_mutex_give(gLdrv);
 }
 // recorre la cadena del .pak una vez (FatFs directo; la VFS no da el cluster de inicio)
-static bool fastBuild() {
+static bool fastBuildIn() {
   fastUnload();
   if (!gBounce) gBounce = (uint8_t *)heap_caps_malloc(4096, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
-  if (!gBounce) return false;
+  if (!gBounce) { gFastWhy = 1; return false; }
   static FIL fil;  // ~4 KB: fuera de la pila
+  gFastWhy = 2;
   for (int v = 0; v < FF_VOLUMES; v++) {
     char p[16];
     snprintf(p, sizeof(p), "%d:/mons.pak", v);
@@ -100,23 +106,41 @@ static bool fastBuild() {
       g.nFatent = fs->n_fatent;
       gPdrv = fs->pdrv;
       gLdrv = fs->ldrv;
+      gCluKB = g.csize / 2;
     }
     f_close(&fil);
-    if (!ok) return false;
+    if (!ok) { gFastWhy = 3; return false; }
     uint32_t need = (uint32_t)(((uint64_t)size + g.csize * 512u - 1) / (g.csize * 512u));
-    if (!need || need > 200000) return false;
-    PakExt *e = (PakExt *)ps_malloc(sizeof(PakExt) * need);  // lo peor: un tramo por cluster
-    if (!e) return false;
-    if (!ff_mutex_take(gLdrv)) { free(e); return false; }
-    int n = pakChainExtents(g, sclust, size, rawRead, nullptr, gBounce, e, (int)need);
-    ff_mutex_give(gLdrv);
-    if (n <= 0) { free(e); return false; }
+    if (!need || need > 1000000) { gFastWhy = 4; return false; }
+    // ko12.8.4: se empieza con pocos tramos y se crece si hace falta (antes: uno por cluster)
+    int cap = need < 256 ? (int)need : 256, n = -2;
+    PakExt *e = nullptr;
+    while (n == -2) {
+      PakExt *t = (PakExt *)(e ? realloc(e, sizeof(PakExt) * cap) : ps_malloc(sizeof(PakExt) * cap));
+      if (!t) { free(e); gFastWhy = 5; return false; }
+      e = t;
+      if (!ff_mutex_take(gLdrv)) { free(e); gFastWhy = 6; return false; }
+      n = pakChainExtents(g, sclust, size, rawRead, nullptr, gBounce, e, cap);
+      ff_mutex_give(gLdrv);
+      if (n == -2) {
+        if ((uint32_t)cap >= need) { n = -1; break; }
+        cap = (uint32_t)cap * 8 > need ? (int)need : cap * 8;
+      }
+    }
+    if (n <= 0) { free(e); gFastWhy = 7; return false; }
     PakExt *t = (PakExt *)realloc(e, sizeof(PakExt) * n);
     gExt = t ? t : e;
     gExtN = n;
+    gFastWhy = 0;
     return true;
   }
   return false;
+}
+static bool fastBuild() {
+  uint32_t t0 = millis();
+  bool ok = fastBuildIn();
+  gFastMs = millis() - t0;
+  return ok;
 }
 // lee del .pak (posicion absoluta) por el mapa; 0 si no hay mapa
 static uint32_t fastRead(uint32_t abs, uint8_t *buf, uint32_t n) {
@@ -185,6 +209,12 @@ bool pakLoad() {
 }
 
 bool pakActive() { return gState == 1; }
+// ko12.8.4: "read FAST 3x 32K map 120ms | io 850ms 2400KB 610rd aes 90ms" (o "read SLOW why=2 ...")
+void pakDiag(char *out, size_t n) {
+  snprintf(out, n, "read %s %dx %uK map %ums | io %ums %uKB %urd aes %ums",
+           gExtN ? "FAST" : "SLOW", gExtN ? gExtN : -(int)gFastWhy, (unsigned)gCluKB, (unsigned)gFastMs,
+           (unsigned)(gIoUs / 1000), (unsigned)gIoKB, (unsigned)gReads, (unsigned)(gAesUs / 1000));
+}
 uint32_t pakCount() { return gState == 1 ? gIdx.n : 0; }
 int8_t pakState() { return gState; }
 
@@ -214,13 +244,19 @@ public:
     if (pos >= sz || gen != gGen) return 0;  // el .pak se recargo (otro fichero)
     if (n > sz - pos) n = sz - pos;
     size_t got;
+    uint32_t t0 = micros();
     if (fast) {
       got = fastRead(off + pos, buf, (uint32_t)n);
     } else {
       if (base.position() != off + pos && !base.seek(off + pos)) return 0;
       got = base.read(buf, n);
     }
+    uint32_t t1 = micros();
     crypt(off + pos, buf, got);
+    gIoUs += t1 - t0;
+    gAesUs += micros() - t1;
+    gIoKB += (uint32_t)(got / 1024);
+    gReads++;
     pos += got;
     return got;
   }

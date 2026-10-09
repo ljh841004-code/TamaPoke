@@ -8,6 +8,7 @@
 
 bool pakLoad();                        // la llama sdmon al montar la SD (con el cerrojo ya cogido o al arrancar)
 void pakUnload();
+void pakDiag(char *out, size_t n);  // ko12.8.4: modo de lectura y tiempos (pantalla de 묶기 / PAKINFO)
 bool pakActive();                      // hay un mons.pak valido y la frase es la buena
 uint32_t pakCount();
 int8_t pakState();                     // 0 no hay .pak, 1 cargado, -1 frase incorrecta, -2 roto
