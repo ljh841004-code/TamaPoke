@@ -73,7 +73,64 @@ static uint32_t gGen = 1;           // cambia al recargar: los ficheros abiertos
 // cuanto tardo, y en que se va el tiempo de lectura (SD / descifrar)
 static uint8_t gFastWhy = 0;  // 0 ok, 1 sin RAM DMA, 2 no se abre por FatFs, 3 tipo de FAT, 4 demasiado grande,
                               // 5 sin PSRAM, 6 candado, 7 cadena rota
-static uint32_t gFastMs = 0, gCluKB = 0, gIoUs = 0, gAesUs = 0, gIoKB = 0, gReads = 0;
+static uint32_t gFastMs = 0, gCluB = 0, gIoUs = 0, gAesUs = 0, gIoKB = 0, gReads = 0;
+static bool gMapCached = false;
+// ko12.8.5: el mapa se guarda en la SD (/mons.pak.map) y se reutiliza mientras el .pak sea el mismo
+// (misma sal, tamano, cluster de inicio y geometria). Con clusteres de 512 bytes recorrer la FAT de
+// un .pak de 350 MB eran ~1 s en cada arranque
+#define PAK_MAP_PATH "/mons.pak.map"
+struct PakMapHdr {
+  char magic[4];
+  uint8_t ver, fat32;
+  uint16_t csize;
+  uint8_t salt[8];
+  uint32_t size, sclust, fatbase, database, nFatent, n;
+};
+static bool mapMatch(const PakMapHdr &h, const PakFatGeo &g, uint32_t sclust, uint32_t size) {
+  return !memcmp(h.magic, "TPMP", 4) && h.ver == 1 && h.fat32 == (g.fat32 ? 1 : 0) && h.csize == g.csize &&
+         !memcmp(h.salt, gHdr.salt, 8) && h.size == size && h.sclust == sclust && h.fatbase == g.fatbase &&
+         h.database == g.database && h.nFatent == g.nFatent && h.n > 0 && h.n <= 1000000;
+}
+// los tramos tienen que encadenarse desde 0 y cubrir el fichero dentro del volumen
+static bool mapSane(const PakExt *e, uint32_t n, const PakFatGeo &g, uint32_t size) {
+  uint64_t at = 0, end = (uint64_t)g.database + (uint64_t)(g.nFatent - 2) * g.csize;
+  for (uint32_t i = 0; i < n; i++) {
+    if (e[i].off != at || !e[i].nsect || e[i].nsect % g.csize || e[i].sect < g.database ||
+        (uint64_t)e[i].sect + e[i].nsect > end || (e[i].sect - g.database) % g.csize)
+      return false;
+    at += (uint64_t)e[i].nsect * 512u;
+  }
+  return at >= size;
+}
+static bool mapLoad(const PakFatGeo &g, uint32_t sclust, uint32_t size) {
+  File f = SD_MMC.open(PAK_MAP_PATH, FILE_READ);
+  if (!f) return false;
+  PakMapHdr h;
+  bool ok = f.read((uint8_t *)&h, sizeof(h)) == sizeof(h) && mapMatch(h, g, sclust, size);
+  PakExt *e = ok ? (PakExt *)ps_malloc(sizeof(PakExt) * h.n) : nullptr;
+  ok = ok && e && f.read((uint8_t *)e, sizeof(PakExt) * h.n) == sizeof(PakExt) * h.n && mapSane(e, h.n, g, size);
+  f.close();
+  if (!ok) { free(e); return false; }
+  gExt = e;
+  gExtN = (int)h.n;
+  return true;
+}
+static void mapSave(const PakFatGeo &g, uint32_t sclust, uint32_t size) {
+  PakMapHdr h{};
+  memcpy(h.magic, "TPMP", 4);
+  h.ver = 1;
+  h.fat32 = g.fat32 ? 1 : 0;
+  h.csize = (uint16_t)g.csize;
+  memcpy(h.salt, gHdr.salt, 8);
+  h.size = size; h.sclust = sclust; h.fatbase = g.fatbase; h.database = g.database; h.nFatent = g.nFatent;
+  h.n = (uint32_t)gExtN;
+  File f = SD_MMC.open(PAK_MAP_PATH, FILE_WRITE);
+  if (!f) return;
+  bool ok = f.write((const uint8_t *)&h, sizeof(h)) == sizeof(h) &&
+            f.write((const uint8_t *)gExt, sizeof(PakExt) * gExtN) == sizeof(PakExt) * gExtN;
+  f.close();
+  if (!ok) SD_MMC.remove(PAK_MAP_PATH);
+}
 static bool rawRead(uint32_t s, uint32_t c, uint8_t *buf, void *) { return disk_read(gPdrv, buf, s, c) == RES_OK; }
 static void fastUnload() {
   if (!gExt) return;
@@ -106,10 +163,12 @@ static bool fastBuildIn() {
       g.nFatent = fs->n_fatent;
       gPdrv = fs->pdrv;
       gLdrv = fs->ldrv;
-      gCluKB = g.csize / 2;
+      gCluB = g.csize * 512u;
     }
     f_close(&fil);
     if (!ok) { gFastWhy = 3; return false; }
+    gMapCached = mapLoad(g, sclust, size);  // ko12.8.5
+    if (gMapCached) { gFastWhy = 0; return true; }
     uint32_t need = (uint32_t)(((uint64_t)size + g.csize * 512u - 1) / (g.csize * 512u));
     if (!need || need > 1000000) { gFastWhy = 4; return false; }
     // ko12.8.4: se empieza con pocos tramos y se crece si hace falta (antes: uno por cluster)
@@ -132,6 +191,7 @@ static bool fastBuildIn() {
     gExt = t ? t : e;
     gExtN = n;
     gFastWhy = 0;
+    mapSave(g, sclust, size);  // ko12.8.5: el proximo arranque no recorre la FAT
     return true;
   }
   return false;
@@ -186,6 +246,18 @@ bool pakLoad() {
   bool fast = fastBuild();  // ko12.8.3
   bool ok = gTbl != nullptr;
   if (ok && fast) ok = fastRead(gHdr.indexOff, gTbl, gHdr.indexSize) == gHdr.indexSize;
+  if (ok && fast && gMapCached) {  // ko12.8.5: el mapa guardado no cuadra con la tabla -> rehacerlo
+    uint8_t *tmp = (uint8_t *)ps_malloc(gHdr.indexSize ? gHdr.indexSize : 1);
+    PakIndex chk;
+    bool good = tmp && (memcpy(tmp, gTbl, gHdr.indexSize), crypt(gHdr.indexOff, tmp, gHdr.indexSize),
+                        chk.parse(tmp, gHdr.indexSize, gHdr.count, gSize));
+    free(tmp);
+    if (!good) {
+      SD_MMC.remove(PAK_MAP_PATH);
+      fast = fastBuild();
+      ok = !fast || fastRead(gHdr.indexOff, gTbl, gHdr.indexSize) == gHdr.indexSize;
+    }
+  }
   if (ok && !fast) {
     File g = SD_MMC.open(PAK_PATH, FILE_READ);
     ok = g && g.seek(gHdr.indexOff) && g.read(gTbl, gHdr.indexSize) == gHdr.indexSize;
@@ -211,8 +283,9 @@ bool pakLoad() {
 bool pakActive() { return gState == 1; }
 // ko12.8.4: "read FAST 3x 32K map 120ms | io 850ms 2400KB 610rd aes 90ms" (o "read SLOW why=2 ...")
 void pakDiag(char *out, size_t n) {
-  snprintf(out, n, "read %s %dx %uK map %ums | io %ums %uKB %urd aes %ums",
-           gExtN ? "FAST" : "SLOW", gExtN ? gExtN : -(int)gFastWhy, (unsigned)gCluKB, (unsigned)gFastMs,
+  snprintf(out, n, "read %s %dx clu%u map %ums%s | io %ums %uKB %urd aes %ums",
+           gExtN ? "FAST" : "SLOW", gExtN ? gExtN : -(int)gFastWhy, (unsigned)gCluB, (unsigned)gFastMs,
+           gMapCached ? " (saved)" : "",
            (unsigned)(gIoUs / 1000), (unsigned)gIoKB, (unsigned)gReads, (unsigned)(gAesUs / 1000));
 }
 uint32_t pakCount() { return gState == 1 ? gIdx.n : 0; }
@@ -498,6 +571,7 @@ uint8_t pakBuild(void (*progress)(uint64_t, uint64_t, uint32_t, uint32_t)) {
     if (total + (uint64_t)n * 64 + (1u << 20) > freeB || total > 0xF0000000ull) { free(v); return 1; }
     pakUnload();  // se va a reemplazar
     SD_MMC.remove("/mons.pak.tmp");
+    SD_MMC.remove(PAK_MAP_PATH);  // ko12.8.5
   }
   setKeyFromPass();
   memset(&gHdr, 0, sizeof(gHdr));

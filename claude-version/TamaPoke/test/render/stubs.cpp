@@ -200,6 +200,7 @@ bool pakActive() { return false; }
 uint32_t pakCount() { return 0; }
 int8_t pakState() { return 0; }
 void pakDiag(char *out, size_t n) { snprintf(out, n, "read FAST 3x 32K map 120ms | io 850ms 2400KB 610rd aes 90ms"); }  // ko12.8.4
+uint32_t gBgmScanMs = 0;  // ko12.8.5 (audio.cpp)
 File monsOpen(const char *path) { return SD_MMC.open(path, FILE_READ); }
 bool monsExists(const char *path) { return SD_MMC.exists(path); }
 bool monsIsDir(const char *path) { File d = SD_MMC.open(path); bool r = d && d.isDirectory(); if (d) d.close(); return r; }

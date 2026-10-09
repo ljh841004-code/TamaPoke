@@ -351,7 +351,9 @@ void audioBgmPath(uint8_t i, char *out, size_t n) {
 // ko11.8.1: se busca en /mons (y en la raiz, por si se copio ahi desde el PC)
 // cualquier bgm*.wav, aunque el nombre venga cambiado ("bgm2 (1).wav"). Antes solo
 // se miraba el nombre exacto y un fichero renombrado al descargarlo no aparecia.
+uint32_t gBgmScanMs = 0;  // ko12.8.4: diagnostico del arranque
 void audioScanBgm() {
+  uint32_t scanT0 = millis();
   static char found[BGM_MAX][48];
   bool exactF[BGM_MAX] = {};
   for (uint8_t i = 0; i < BGM_MAX; i++) found[i][0] = 0;
@@ -414,7 +416,8 @@ void audioScanBgm() {
     memcpy(bgmTitles[i], titles[i], sizeof(bgmTitles[i]));
   }
   bgmAvail = av ? av : 1;  // sin ninguna valida: se intenta bgm.wav como siempre
-  Serial.printf("BGM avail=0x%02x mask=0x%02x\n", av, bgmMaskA.load());
+  gBgmScanMs = millis() - scanT0;
+  Serial.printf("BGM avail=0x%02x mask=0x%02x (%u ms)\n", av, bgmMaskA.load(), (unsigned)gBgmScanMs);
 }
 uint8_t audioBgmAvail() { return bgmAvail.load(); }
 uint8_t audioBgmMask() { return bgmMaskA.load(); }

@@ -444,11 +444,15 @@ static uint16_t bootDurMs[BS_OK + 1];
 static uint32_t bootStepT = 0;
 static uint8_t bootStepCur = 0;
 uint32_t bootSpriteMs = 0;  // el primer sprite de la mascota (ensureMon)
+uint32_t bootLoopT0 = 0, bootLoop1Ms = 0, bootDraw1Ms = 0;  // ko12.8.5: primera vuelta de loop() y primer dibujo
+extern uint32_t gBgmScanMs;
 void bootDiagLine(char *out, size_t n) {
   size_t k = (size_t)snprintf(out, n, "boot");
   for (uint8_t i = 1; i <= BS_RUN && k < n; i++)
     if (bootDurMs[i] >= 300) k += (size_t)snprintf(out + k, n - k, " %u:%u.%us", i, bootDurMs[i] / 1000, bootDurMs[i] % 1000 / 100);
-  if (k < n) snprintf(out + k, n - k, " spr %ums", (unsigned)bootSpriteMs);
+  if (k < n)
+    snprintf(out + k, n - k, " bgm%u lp%u dr%u spr%u", (unsigned)gBgmScanMs, (unsigned)bootLoop1Ms, (unsigned)bootDraw1Ms,
+             (unsigned)bootSpriteMs);
 }
 void bootStep(uint8_t s) {
   uint32_t now = millis();
@@ -494,7 +498,7 @@ static void bootDiagBegin() {
 // en loop(): marca el primer frame y, a los 20 s estable, arranque correcto
 void bootDiagLoop() {
   static uint8_t phase = 0;
-  if (phase == 0) { bootStep(BS_FRAME); phase = 1; return; }
+  if (phase == 0) { bootLoop1Ms = millis() - bootLoopT0; bootStep(BS_FRAME); phase = 1; return; }
   if (phase == 1) { bootStep(BS_RUN); phase = 2; return; }
   if (phase == 2 && millis() > 20000) { rbStep = BS_OK; rbFails = 0; phase = 3; Serial.println("BOOT ok"); }
 }
@@ -905,6 +909,7 @@ static bool petHoldAllowed();  // ko12.2
 bool mainNavAllowed();
 void loop() {
   uint32_t now = millis();
+  if (!bootLoopT0) bootLoopT0 = now ? now : 1;  // ko12.8.5
   vibLoop(now);  // ko11.25
   moveLearnLoop();  // ko11.31
   centerPoll();     // ko11.31: el centro pokemon termina aunque no se mire
@@ -1031,6 +1036,7 @@ void loop() {
     bootDiagLoop();  // ko11.5
     render();
     renderMs = millis() - r0;
+    if (!bootDraw1Ms) bootDraw1Ms = renderMs ? renderMs : 1;  // ko12.8.5
   }
   if (fastGameNow()) {
     uint32_t stall = millis() - loopT0 - renderMs;
