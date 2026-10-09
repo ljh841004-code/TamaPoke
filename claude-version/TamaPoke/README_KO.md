@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko12.8.5)
+# TamaPoke KO (v1.17-ko12.9)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko12.9: 진단 sd(시도)x(연결 ms) pak(ms), 진단 줄 두 줄로, /mons 있으면 mkdir 안 함, 새 보드 설치 안내(0x0 통합 이미지 + FAT32 SD에 mons.pak)
 - ✅ ko12.8.5: /mons.pak.map (TPMP: 솔트·크기·시작 클러스터·FAT 형태가 같을 때만 재사용, 구간 연결 검사, 목록이 안 맞으면 지우고 다시 만듦, 묶을 때 삭제), 진단 bgm/lp/dr/spr ms
 - ✅ ko12.8.4: update.bin = TamaPoke.ino.bin(앱 그대로), sdupdate updAppOffset(0xe000 파일 = +0x2000), 발행 파일 전체 검사 테스트, pakDiag(빠른 읽기 여부·이유·io/aes 시간)·bootDurMs(단계별 ms) 묶기 화면·PAKINFO, 구간 버퍼 늘려 가며
 - ✅ ko12.8.3: pak_core pakChainExtents/pakExtRead(FAT16/32 체인 → 연속 구간, 테스트 4개), pak.cpp fastBuild(f_open 직접 → sclust·geo, ff_mutex + disk_read) / PakFileImpl 직접 읽기, sdRemount 전에 pakUnload

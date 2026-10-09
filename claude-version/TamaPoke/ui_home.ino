@@ -1187,9 +1187,11 @@ void renderPak() {
     char d[120];
     pakDiag(d, sizeof(d));
     char *bar = strchr(d, '|');
-    if (bar) { *bar = 0; drawFit(d, 228, 340, 0x8410, 1); drawFit(bar + 2, 246, 340, 0x8410, 1); }
+    if (bar) { *bar = 0; drawFit(d, 222, 340, 0x8410, 1); drawFit(bar + 2, 238, 340, 0x8410, 1); }
     bootDiagLine(d, sizeof(d));
-    drawFit(d, 264, 340, 0x8410, 1);
+    bar = strchr(d, '|');  // ko12.9: pasos lentos | tiempos de SD y del primer dibujo
+    if (bar) { bar[-1] = 0; drawFit(bar + 2, 270, 340, 0x8410, 1); }
+    drawFit(d, 254, 340, 0x8410, 1);
   }
   bool can = pakScanned && pakInfo.files > 0;
   drawBtn(113, 290, 240, 52, can ? C565(0x6a, 0x4c, 0xf0) : UI_TRACK, can ? UI_WHITE : 0x8410, XT(X_PAK_GO));

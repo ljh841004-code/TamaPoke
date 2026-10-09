@@ -204,14 +204,23 @@ const uint8_t *SdThumbs::get(int16_t dex) const {
   return data + off;
 }
 
+// ko12.9: tiempos del montaje para la linea de diagnostico (intentos, ms de la tarjeta, ms del .pak)
+uint8_t gSdTries;
+uint16_t gSdMountMs, gSdPakMs;
+
 static bool sdMount(int khz) {
   SD_MMC.setPins(SDMMC_CLK, SDMMC_CMD, SDMMC_DATA);
+  uint32_t t0 = millis();
+  gSdTries++;
   sdReady = SD_MMC.begin("/sdcard", true /* modo 1-bit */, false /* preserve existing card if mounting fails */,
                          khz);
+  gSdMountMs = (uint16_t)(millis() - t0);
   if (sdReady) {
     Serial.printf("SD montada (%d kHz): %llu MB\n", khz, SD_MMC.cardSize() / (1024ULL * 1024ULL));
-    SD_MMC.mkdir("/mons");
+    if (!SD_MMC.exists("/mons")) SD_MMC.mkdir("/mons");
+    t0 = millis();
     pakLoad();  // ko12.8: si hay /mons.pak, los ficheros salen de ahi
+    gSdPakMs = (uint16_t)(millis() - t0);
   } else {
     Serial.printf("SD no detectada a %d kHz\n", khz);
   }

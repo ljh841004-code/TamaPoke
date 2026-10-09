@@ -1,4 +1,4 @@
-TamaPoke KO  v1.17-ko12.8.5  정리 (클로드 버전)
+TamaPoke KO  v1.17-ko12.9  정리 (클로드 버전)
 ========================================
 보드: Waveshare ESP32-S3-Touch-AMOLED-1.75
 바탕: socquique/TamaPoke v1.17 + 기능 추가
@@ -15,6 +15,14 @@ TamaPoke KO  v1.17-ko12.8.5  정리 (클로드 버전)
 - SD카드 소리 (ko2) : 배경음, 배틀 배경음, 포켓몬 울음소리
 - ko4 : 큰 시계, 보관함, 도감 기록, 소리 설정, 훈련 3종, 실시간 저장,
         배틀 아이템(물약/포켓볼), 검정 글자 + 깔끔한 한글, 게이지 숫자
+
+
+[ko12.9 : 최종 점검 / 새 보드 설치]
+- 진단 줄에 SD 연결 시간 추가: sd(시도 횟수)x(카드 연결 ms) pak(mons.pak 준비 ms). 진단 줄은 두 줄로 나눔
+- 새 보드: esptool 115200, 주소 0x0에 tamapoke-ko-v1.17-ko12.9.bin 하나 (Erase Flash 필요 없음)
+  SD는 FAT32(할당 단위 32KB 추천), 맨 위에 mons.pak 복사. 첫 부팅 때 mons.pak.map 자동 생성
+  음악은 선택: SD에 mons 폴더를 만들고 bgm.wav 등을 넣으면 같이 씀
+- 이미 쓰는 보드: SD 업데이트(update.bin) 또는 0xe000 파일 (저장 그대로)
 
 
 [ko12.8.5 : mons.pak 지도 저장]

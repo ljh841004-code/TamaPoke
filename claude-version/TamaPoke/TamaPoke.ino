@@ -46,7 +46,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.8.5"
+#define FW_VERSION "1.17-ko12.9"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -446,13 +446,15 @@ static uint8_t bootStepCur = 0;
 uint32_t bootSpriteMs = 0;  // el primer sprite de la mascota (ensureMon)
 uint32_t bootLoopT0 = 0, bootLoop1Ms = 0, bootDraw1Ms = 0;  // ko12.8.5: primera vuelta de loop() y primer dibujo
 extern uint32_t gBgmScanMs;
+extern uint8_t gSdTries;
+extern uint16_t gSdMountMs, gSdPakMs;
 void bootDiagLine(char *out, size_t n) {
   size_t k = (size_t)snprintf(out, n, "boot");
   for (uint8_t i = 1; i <= BS_RUN && k < n; i++)
     if (bootDurMs[i] >= 300) k += (size_t)snprintf(out + k, n - k, " %u:%u.%us", i, bootDurMs[i] / 1000, bootDurMs[i] % 1000 / 100);
   if (k < n)
-    snprintf(out + k, n - k, " bgm%u lp%u dr%u spr%u", (unsigned)gBgmScanMs, (unsigned)bootLoop1Ms, (unsigned)bootDraw1Ms,
-             (unsigned)bootSpriteMs);
+    snprintf(out + k, n - k, " | sd%ux%u pak%u bgm%u lp%u dr%u spr%u", (unsigned)gSdTries, (unsigned)gSdMountMs,
+             (unsigned)gSdPakMs, (unsigned)gBgmScanMs, (unsigned)bootLoop1Ms, (unsigned)bootDraw1Ms, (unsigned)bootSpriteMs);
 }
 void bootStep(uint8_t s) {
   uint32_t now = millis();
