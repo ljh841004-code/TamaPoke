@@ -380,6 +380,8 @@ TEST(save, cada_minuto_queda_guardado_y_sobrevive_a_un_corte) {
 
 // ---------------------------------------------------------------- ko5
 #include "../sdupdate.h"
+#include <dirent.h>
+#include <string>
 #include <vector>
 
 static std::vector<uint8_t> readFile(const char *path) {
@@ -412,15 +414,62 @@ TEST(sdupdate, clasifica_cabeceras) {
   CHECK_EQ(updClassify(app.data(), 8, 1800000), UPD_BAD);                     // cabecera cortada
 }
 
+// los ficheros reales de la carpeta claude-version. ko12.8.4: antes este test se saltaba solo si
+// faltaba la imagen de ko6.2 (ya no estaba), y nadie vio que update.bin era el fichero de 0xe000
+static std::vector<std::string> releaseBins() {
+  std::vector<std::string> v;
+  if (DIR *d = opendir("../..")) {
+    while (dirent *e = readdir(d)) {
+      std::string n = e->d_name;
+      if (n.rfind("tamapoke-ko-v1.17-", 0) == 0 && n.size() > 4 && n.compare(n.size() - 4, 4, ".bin") == 0)
+        v.push_back("../../" + n);
+    }
+    closedir(d);
+  }
+  return v;
+}
+static UpdCheck classifyFile(const std::vector<uint8_t> &f, uint32_t *off) {
+  size_t h = f.size() < UPD_HEAD_LEN ? f.size() : UPD_HEAD_LEN;
+  *off = updAppOffset(f.data(), h);
+  return updClassify(f.data() + *off, h - *off, (uint32_t)f.size() - *off);
+}
 TEST(sdupdate, los_bin_publicados_se_clasifican_bien) {
-  // los ficheros reales de la carpeta claude-version (si estan)
   std::vector<uint8_t> app = readFile("../../update.bin");
-  std::vector<uint8_t> full = readFile("../../tamapoke-ko-v1.17-ko6.2.bin");
-  if (app.empty() || full.empty()) return;
-  size_t ha = app.size() < UPD_HEAD_LEN ? app.size() : UPD_HEAD_LEN;
-  size_t hf = full.size() < UPD_HEAD_LEN ? full.size() : UPD_HEAD_LEN;
-  CHECK_EQ(updClassify(app.data(), ha, (uint32_t)app.size()), UPD_OK);
-  CHECK_EQ(updClassify(full.data(), hf, (uint32_t)full.size()), UPD_FULLIMG);
+  if (app.empty()) return;  // sin la carpeta de publicacion (otro checkout)
+  uint32_t off;
+  CHECK_EQ(classifyFile(app, &off), UPD_OK);
+  CHECK_EQ(off, 0u);  // update.bin = la app tal cual (como web/firmware/tamapoke.bin)
+  CHECK(app[0] == 0xE9);
+  int nApp = 0, nFull = 0;
+  for (const std::string &p : releaseBins()) {
+    std::vector<uint8_t> f = readFile(p.c_str());
+    UpdCheck c = classifyFile(f, &off);
+    if (p.find("-app-0xe000.bin") != std::string::npos) {
+      CHECK_EQ(c, UPD_OK);  // ko12.8.4: tambien sirve en la SD
+      CHECK_EQ(off, (uint32_t)UPD_E000_OFS);
+      CHECK(f.size() == app.size() + UPD_E000_OFS && !memcmp(f.data() + UPD_E000_OFS, app.data(), app.size()));
+      nApp++;
+    } else {
+      CHECK_EQ(c, UPD_FULLIMG);
+      nFull++;
+    }
+  }
+  CHECK(nApp == 1 && nFull == 1);
+}
+
+TEST(sdupdate, fichero_de_0xe000) {
+  std::vector<uint8_t> f(UPD_E000_OFS + 0x9000, 0xFF);
+  f[0] = 0x01;  // boot_app0
+  f[UPD_E000_OFS] = 0xE9; f[UPD_E000_OFS + 12] = 9; f[UPD_E000_OFS + 13] = 0;
+  uint32_t off;
+  CHECK_EQ(classifyFile(f, &off), UPD_OK);
+  CHECK_EQ(off, (uint32_t)UPD_E000_OFS);
+  std::vector<uint8_t> app(0x9000, 0);
+  app[0] = 0xE9; app[12] = 9;
+  CHECK_EQ(classifyFile(app, &off), UPD_OK);
+  CHECK_EQ(off, 0u);
+  std::vector<uint8_t> junk(0x9000, 0x01);  // ni app ni 0xe000
+  CHECK_EQ(classifyFile(junk, &off), UPD_BAD);
 }
 
 TEST(sdupdate, busca_la_marca_de_version) {

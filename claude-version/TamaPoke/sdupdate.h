@@ -32,6 +32,15 @@ static inline UpdCheck updClassify(const uint8_t *head, size_t headLen, uint32_t
   return UPD_OK;
 }
 
+// ko12.8.4: el fichero de esptool para 0xe000 (8 KB de boot_app0 + la app) tambien vale para la
+// SD: la app empieza 0x2000 mas alla. Antes se rechazaba como "no hay fichero" (y durante varias
+// versiones el update.bin publicado era justo ese fichero)
+#define UPD_E000_OFS 0x2000
+static inline uint32_t updAppOffset(const uint8_t *head, size_t headLen) {
+  if (headLen > UPD_E000_OFS + 16 && head[0] != 0xE9 && head[UPD_E000_OFS] == 0xE9) return UPD_E000_OFS;
+  return 0;
+}
+
 // ko6.2: marca de version dentro del firmware ("TPVER:" + FW_VERSION). La
 // pantalla de actualizacion la busca en update.bin para ensenar que version trae.
 #define UPD_TAG "TPVER:"

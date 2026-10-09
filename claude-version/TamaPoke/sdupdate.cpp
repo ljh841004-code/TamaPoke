@@ -10,6 +10,7 @@ static uint8_t head[UPD_HEAD_LEN];
 // ko5.1: tambien en /mons/: el instalador web (PUT por serie) solo escribe ahi
 static const char *const UPD_PATHS[2] = { "/update.bin", "/mons/update.bin" };
 static const char *updPath = UPD_PATHS[0];
+static uint32_t updOff = 0;  // ko12.8.4: 0x2000 con el fichero de 0xe000
 
 UpdCheck sdUpdateCheck(uint32_t *size) {
   if (size) *size = 0;
@@ -25,8 +26,10 @@ UpdCheck sdUpdateCheck(uint32_t *size) {
   uint32_t sz = f.size();
   size_t n = f.read(head, sizeof(head));
   f.close();
-  if (size) *size = sz;
-  return updClassify(head, n, sz);
+  updOff = updAppOffset(head, n);
+  if (updOff >= sz) updOff = 0;
+  if (size) *size = sz - updOff;  // lo que se escribe: la app
+  return updClassify(head + updOff, n - updOff, sz - updOff);
 }
 
 bool sdUpdateRun(void (*progress)(uint32_t done, uint32_t total)) {
@@ -39,6 +42,7 @@ bool sdUpdateRun(void (*progress)(uint32_t done, uint32_t total)) {
   if (!lock) return false;
   File f = SD_MMC.open(updPath, FILE_READ);
   if (!f) return false;
+  if (updOff && !f.seek(updOff)) { f.close(); return false; }
   if (!Update.begin(size, U_FLASH)) {
     Serial.printf("UPD begin: %s\n", Update.errorString());
     f.close();
