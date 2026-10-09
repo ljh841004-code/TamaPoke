@@ -98,7 +98,7 @@ uint8_t personalityOf(const LifeLog &l, uint8_t discipline) {
   };
   uint8_t best = 0;
   for (uint8_t i = 1; i < 5; i++) if (c[i].v > c[best].v) best = i;
-  return c[best].v * 4 >= total ? c[best].p : PERS_NONE;  // nada destaca: aun no se sabe
+  return c[best].v * 4 >= total ? c[best].p : (uint8_t)PERS_NONE;  // nada destaca: aun no se sabe
 }
 
 // ---- ko12.4: habitacion y paseo ----
