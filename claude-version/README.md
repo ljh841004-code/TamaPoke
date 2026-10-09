@@ -1,4 +1,4 @@
-# TamaPoke KO v1.17-ko12.8.2 (클로드 버전)
+# TamaPoke KO v1.17-ko12.8.3 (클로드 버전)
 
 > 이 폴더는 **클로드(Claude) 버전**이에요. 저장소 루트의 TamaPoke v1.23과는 따로 관리하는 별도 갈래예요.
 > v1.23의 어드벤처·컬렉션 기능은 이 버전에 없어요. (소리와 한글 글꼴은 옮겨 왔어요)
@@ -14,9 +14,9 @@
 | 파일 | 내용 |
 |---|---|
 | `update.bin` | **SD카드 업데이트용**. 웹 설치 페이지로 보내고 [SD 업데이트] (아래 A) |
-| `tamapoke-ko-v1.17-ko12.8.2-app-0xe000.bin` | **esptool 업데이트용**. 주소 **0xe000**. 포켓몬은 그대로 남아요 |
-| `tamapoke-ko-v1.17-ko12.8.2.bin` | **새로 설치용** 통합 이미지. 주소 **0x0**. 저장 데이터가 초기화돼요 |
-| `TamaPoke_v1.17-ko12.8.2_정리.txt` | 기능·사용법 요약 메모 |
+| `tamapoke-ko-v1.17-ko12.8.3-app-0xe000.bin` | **esptool 업데이트용**. 주소 **0xe000**. 포켓몬은 그대로 남아요 |
+| `tamapoke-ko-v1.17-ko12.8.3.bin` | **새로 설치용** 통합 이미지. 주소 **0x0**. 저장 데이터가 초기화돼요 |
+| `TamaPoke_v1.17-ko12.8.3_정리.txt` | 기능·사용법 요약 메모 |
 | `TamaPoke/` | 전체 소스 (Arduino 스케치 폴더). 자세한 설명은 `TamaPoke/README_KO.md` |
 
 ## SD카드에 파일 넣기 (울음소리, 배경음, update.bin)
@@ -50,11 +50,11 @@
 
 ### B. esptool로
 1. Chrome/Edge에서 [ESP Tool (esptool-js)](https://espressif.github.io/esptool-js/) → Baudrate **115200** → Connect → 포트 선택
-2. 주소 **`0xe000`**에 `tamapoke-ko-v1.17-ko12.8.2-app-0xe000.bin` → Program (**Erase Flash 누르지 않기**)
+2. 주소 **`0xe000`**에 `tamapoke-ko-v1.17-ko12.8.3-app-0xe000.bin` → Program (**Erase Flash 누르지 않기**)
    (0x10000이 아니라 0xe000: SD 업데이트 뒤에도 esptool로 올린 펌웨어가 켜지게 부팅 선택 정보를 같이 써요.
    이 파일을 0x10000이나 0x0에 올리면 켜지지 않아요)
-3. 처음 설치하거나 초기화하고 싶다면: 주소 `0x0`에 `tamapoke-ko-v1.17-ko12.8.2.bin`
-4. 끝나면 USB를 뽑고 전원 버튼을 6초 눌러 껐다 켜기. 설정 화면(메인 위쪽 화살표) 아래쪽에 `v1.17-ko12.8.2`이 보이면 성공
+3. 처음 설치하거나 초기화하고 싶다면: 주소 `0x0`에 `tamapoke-ko-v1.17-ko12.8.3.bin`
+4. 끝나면 USB를 뽑고 전원 버튼을 6초 눌러 껐다 켜기. 설정 화면(메인 위쪽 화살표) 아래쪽에 `v1.17-ko12.8.3`이 보이면 성공
 
 > **ko3~ko5.1에서 ko6으로 올릴 때만** esptool이 바로 연결되지 않아요 (그 버전들의 USB 방식 때문).
 > 장치 관리자에서 COM 번호 확인 → esptool 창을 닫고 PowerShell에서
@@ -86,6 +86,10 @@
 얼음: 냉동빔과 얼음 결정, 독: 거품, 땅: 진흙과 흙먼지, 에스퍼: 고리, 벌레: 바늘, 바위: 떨어지는 돌,
 고스트: 그림자, 드래곤: 푸른 불꽃, 노말·격투·몸통박치기: 충격). **급소**는 화면이 흔들리고,
 **효과가 굉장했다**는 흰 충격파가 퍼져요. 모습은 `screenshots/21_battle_fx.png`.
+
+## ko12.8.3: mons.pak 켤 때 멈춤 수정
+
+- mons.pak을 쓰면 켤 때 19/22에서 오래 멈추던 문제: 켤 때 mons.pak 위치 지도를 한 번 만들고 SD를 바로 읽음 (파일마다 270MB를 처음부터 따라가지 않음)
 
 ## ko12.8.2: 새 알·부화 때 멈춤 줄이기
 
@@ -222,7 +226,7 @@ ko8 ~ ko11.32의 버전별 설명(바뀐 점, 화면 모습)은 [`버전기록.m
 2. **Espressif Flash Download Tool** (Windows 프로그램, 인터넷 필요 없음): ESP32-S3 선택 →
    파일과 주소(위 표) 입력 → START
 3. **esptool (파이썬)**: `pip install esptool` →
-   `esptool --chip esp32s3 write-flash 0xe000 tamapoke-ko-v1.17-ko12.8.2-app-0xe000.bin`
+   `esptool --chip esp32s3 write-flash 0xe000 tamapoke-ko-v1.17-ko12.8.3-app-0xe000.bin`
 4. **Arduino IDE**로 `TamaPoke/` 소스를 직접 올리기 (`TamaPoke/README_KO.md`의 설정 참고)
 5. **SD카드에 파일 보내기**: SD카드를 빼서 PC에 꽂고 `mons` 폴더에 직접 복사하거나,
    `.bin` 파일(update.bin 등)은 `TamaPoke/tools/sdcard/mons/`에 두고
@@ -246,6 +250,7 @@ SD카드 `mons` 폴더에 `bgm.wav`(평소), `battle_wild.wav`(배틀 중), `cry
 
 한 줄 요약 전체는 [`버전기록.md`](버전기록.md) 맨 위에 있어요. 최근 버전:
 
+- **ko12.8.3** – mons.pak을 쓰면 켤 때 19/22에서 오래 멈추던 문제: 켤 때 mons.pak 위치 지도를 한 번 만들고 SD를 바로 읽음 (파일마다 270MB를 처음부터 따라가지 않음)
 - **ko12.8.2** – 새 알을 꺼내거나 부화할 때 잠깐 멈추던 문제: 자동 세이브 백업을 기본 화면에서 8초 동안 안 만질 때로 미룸. 켤 때 mons.pak 목록 읽는 시간을 시리얼에 표시
 - **ko12.8.1** – [SD 파일 하나로 묶기] 화면에 들어가면 멈추던 문제: SD 파일 목록을 한 번에 읽도록 (파일마다 폴더 전체를 다시 찾느라 1비트 SD에서 아주 오래 걸렸음)
 - **ko12.8** – 최종 점검판: 강한 기술은 그 기술만 한 턴 쉬기, 특수공격·특수방어, 약해진 이유 표시, 129계열 엔딩·2회차 반짝이는 여정, 알 전설 천장, 감기 약 3분, SD 파일 점검·mons.pak 묶기, 둥근 화면 UI·설정 메뉴 정리
