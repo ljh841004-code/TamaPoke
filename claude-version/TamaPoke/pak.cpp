@@ -11,6 +11,8 @@
 #include "audio.h"
 #include "mbedtls/aes.h"
 #include "ff.h"
+#include "diskio.h"
+#include "esp_heap_caps.h"
 
 static PakAes gAes;              // clave (comprobacion y respaldo)
 static mbedtls_aes_context gMb;  // el mismo AES por hardware para los datos
@@ -61,7 +63,72 @@ static void crypt(uint32_t abs, uint8_t *buf, size_t n) {
   mbedtls_aes_crypt_ctr(&gMb, n, &off, ctr, stream, buf, buf);
 }
 
+// ---- ko12.8.3: lectura directa por sectores (ver PakExt en pak_core.h) ----
+static PakExt *gExt = nullptr;
+static int gExtN = 0;
+static uint8_t gPdrv = 0, gLdrv = 0;
+static uint8_t *gBounce = nullptr;  // 8 sectores en RAM interna con DMA (tambien ventana de la FAT)
+static uint32_t gGen = 1;           // cambia al recargar: los ficheros abiertos del .pak viejo dejan de leer
+static bool rawRead(uint32_t s, uint32_t c, uint8_t *buf, void *) { return disk_read(gPdrv, buf, s, c) == RES_OK; }
+static void fastUnload() {
+  if (!gExt) return;
+  bool held = ff_mutex_take(gLdrv);  // que ninguna lectura (tarea de audio) lo este usando
+  free(gExt);
+  gExt = nullptr;
+  gExtN = 0;
+  if (held) ff_mutex_give(gLdrv);
+}
+// recorre la cadena del .pak una vez (FatFs directo; la VFS no da el cluster de inicio)
+static bool fastBuild() {
+  fastUnload();
+  if (!gBounce) gBounce = (uint8_t *)heap_caps_malloc(4096, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+  if (!gBounce) return false;
+  static FIL fil;  // ~4 KB: fuera de la pila
+  for (int v = 0; v < FF_VOLUMES; v++) {
+    char p[16];
+    snprintf(p, sizeof(p), "%d:/mons.pak", v);
+    if (f_open(&fil, p, FA_READ) != FR_OK) continue;
+    FATFS *fs = fil.obj.fs;
+    bool ok = fs && (fs->fs_type == FS_FAT32 || fs->fs_type == FS_FAT16) && fs->ssize == 512 && fs->csize;
+    PakFatGeo g{};
+    uint32_t sclust = fil.obj.sclust, size = (uint32_t)fil.obj.objsize;
+    if (ok) {
+      g.fat32 = fs->fs_type == FS_FAT32;
+      g.fatbase = (uint32_t)fs->fatbase;
+      g.database = (uint32_t)fs->database;
+      g.csize = fs->csize;
+      g.nFatent = fs->n_fatent;
+      gPdrv = fs->pdrv;
+      gLdrv = fs->ldrv;
+    }
+    f_close(&fil);
+    if (!ok) return false;
+    uint32_t need = (uint32_t)(((uint64_t)size + g.csize * 512u - 1) / (g.csize * 512u));
+    if (!need || need > 200000) return false;
+    PakExt *e = (PakExt *)ps_malloc(sizeof(PakExt) * need);  // lo peor: un tramo por cluster
+    if (!e) return false;
+    if (!ff_mutex_take(gLdrv)) { free(e); return false; }
+    int n = pakChainExtents(g, sclust, size, rawRead, nullptr, gBounce, e, (int)need);
+    ff_mutex_give(gLdrv);
+    if (n <= 0) { free(e); return false; }
+    PakExt *t = (PakExt *)realloc(e, sizeof(PakExt) * n);
+    gExt = t ? t : e;
+    gExtN = n;
+    return true;
+  }
+  return false;
+}
+// lee del .pak (posicion absoluta) por el mapa; 0 si no hay mapa
+static uint32_t fastRead(uint32_t abs, uint8_t *buf, uint32_t n) {
+  if (!gExtN || !ff_mutex_take(gLdrv)) return 0;
+  uint32_t got = gExtN ? pakExtRead(gExt, gExtN, abs, buf, n, rawRead, nullptr, gBounce) : 0;
+  ff_mutex_give(gLdrv);
+  return got;
+}
+
 void pakUnload() {
+  fastUnload();
+  gGen++;
   gIdx.clear();
   free(gTbl);
   gTbl = nullptr;
@@ -91,8 +158,15 @@ bool pakLoad() {
     return false;
   }
   gTbl = (uint8_t *)ps_malloc(gHdr.indexSize ? gHdr.indexSize : 1);
-  bool ok = gTbl && f.seek(gHdr.indexOff) && f.read(gTbl, gHdr.indexSize) == gHdr.indexSize;
   f.close();
+  bool fast = fastBuild();  // ko12.8.3
+  bool ok = gTbl != nullptr;
+  if (ok && fast) ok = fastRead(gHdr.indexOff, gTbl, gHdr.indexSize) == gHdr.indexSize;
+  if (ok && !fast) {
+    File g = SD_MMC.open(PAK_PATH, FILE_READ);
+    ok = g && g.seek(gHdr.indexOff) && g.read(gTbl, gHdr.indexSize) == gHdr.indexSize;
+    if (g) g.close();
+  }
   if (ok) {
     crypt(gHdr.indexOff, gTbl, gHdr.indexSize);
     ok = gIdx.parse(gTbl, gHdr.indexSize, gHdr.count, gSize);
@@ -104,7 +178,9 @@ bool pakLoad() {
     return false;
   }
   gState = 1;
-  Serial.printf("PAK: %u ficheros (%u MB) en %u ms\n", (unsigned)gIdx.n, (unsigned)(gSize >> 20), (unsigned)(millis() - t0));
+  Serial.printf("PAK: %u ficheros (%u MB) en %u ms, %s\n", (unsigned)gIdx.n, (unsigned)(gSize >> 20), (unsigned)(millis() - t0),
+                gExtN ? "lectura directa" : "por FatFs (lento)");
+  if (gExtN) Serial.printf("PAK: %d tramo(s) en la SD\n", gExtN);
   return true;
 }
 
@@ -125,19 +201,25 @@ void pakSetPass(const char *pass) {
 
 // ---- un fichero del .pak visto como un File normal (solo lectura) ----
 class PakFileImpl : public fs::FileImpl {
-  File base;
-  uint32_t off, sz, pos = 0;
+  File base;  // solo sin mapa (lectura por FatFs)
+  uint32_t off, sz, pos = 0, gen;
+  bool fast;
   char pth[PAK_NAME_MAX + 8];
 public:
-  PakFileImpl(File b, const PakEntry &e) : base(b), off(e.off), sz(e.size) {
+  PakFileImpl(File b, const PakEntry &e, bool f) : base(b), off(e.off), sz(e.size), gen(gGen), fast(f) {
     snprintf(pth, sizeof(pth), "/mons/%.*s", (int)e.len, e.name);
   }
   size_t write(const uint8_t *, size_t) override { return 0; }
   size_t read(uint8_t *buf, size_t n) override {
-    if (pos >= sz) return 0;
+    if (pos >= sz || gen != gGen) return 0;  // el .pak se recargo (otro fichero)
     if (n > sz - pos) n = sz - pos;
-    if (base.position() != off + pos && !base.seek(off + pos)) return 0;
-    size_t got = base.read(buf, n);
+    size_t got;
+    if (fast) {
+      got = fastRead(off + pos, buf, (uint32_t)n);
+    } else {
+      if (base.position() != off + pos && !base.seek(off + pos)) return 0;
+      got = base.read(buf, n);
+    }
     crypt(off + pos, buf, got);
     pos += got;
     return got;
@@ -151,7 +233,7 @@ public:
   }
   size_t position() const override { return pos; }
   size_t size() const override { return sz; }
-  bool setBufferSize(size_t s) override { return base.setBufferSize(s); }
+  bool setBufferSize(size_t s) override { return fast ? true : base.setBufferSize(s); }
   void close() override { if (base) base.close(); }
   time_t getLastWrite() override { return 0; }
   const char *path() const override { return pth; }
@@ -162,7 +244,7 @@ public:
   String getNextFileName() override { return String(); }
   String getNextFileName(bool *isDir) override { if (isDir) *isDir = false; return String(); }
   void rewindDirectory() override {}
-  operator bool() override { return (bool)base; }
+  operator bool() override { return fast ? gen == gGen : (bool)base; }
 };
 
 static const PakEntry *lookup(const char *path) {
@@ -172,8 +254,9 @@ static const PakEntry *lookup(const char *path) {
 
 File monsOpen(const char *path) {
   if (const PakEntry *e = lookup(path)) {
+    if (gExtN) return File(std::make_shared<PakFileImpl>(File(), *e, true));  // ko12.8.3: sin abrir nada
     File b = SD_MMC.open(PAK_PATH, FILE_READ);
-    if (b) return File(std::make_shared<PakFileImpl>(b, *e));
+    if (b) return File(std::make_shared<PakFileImpl>(b, *e, false));
   }
   return SD_MMC.open(path, FILE_READ);
 }

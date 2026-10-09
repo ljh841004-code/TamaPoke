@@ -227,3 +227,75 @@ bool PakIndex::hasPrefix(const char *prefix) const {
     if (e[i].len > l && memcmp(e[i].name, prefix, l) == 0) return true;
   return false;
 }
+
+// ---------------------------------------------------------------- ko12.8.3: mapa de sectores
+int pakChainExtents(const PakFatGeo &g, uint32_t sclust, uint32_t size, PakSectorRead rd, void *ctx, uint8_t *win,
+                    PakExt *out, int maxOut) {
+  if (!g.csize || !rd || !win || !out || maxOut < 1) return -1;
+  const uint32_t cbytes = g.csize * 512u;
+  const uint32_t need = size ? (uint32_t)(((uint64_t)size + cbytes - 1) / cbytes) : 0;
+  if (!need) return 0;
+  if (sclust < 2 || sclust >= g.nFatent) return -1;
+  const uint32_t esz = g.fat32 ? 4 : 2, eoc = g.fat32 ? 0x0FFFFFF8u : 0xFFF8u;
+  uint32_t winSect = 0xFFFFFFFFu;  // primer sector cargado en win (8 seguidos)
+  int n = 0;
+  uint32_t c = sclust;
+  for (uint32_t k = 0; k < need; k++) {
+    if (c < 2 || c >= g.nFatent) return -1;  // rota (o mas corta que el fichero)
+    uint32_t sect = g.database + (c - 2) * g.csize;
+    if (n && out[n - 1].sect + out[n - 1].nsect == sect) {
+      out[n - 1].nsect += g.csize;
+    } else {
+      if (n >= maxOut) return -1;
+      out[n].off = k * cbytes;
+      out[n].sect = sect;
+      out[n].nsect = g.csize;
+      n++;
+    }
+    if (k + 1 == need) break;  // el ultimo: no hace falta leer su siguiente
+    uint32_t byteOff = c * esz, fs = g.fatbase + byteOff / 512;
+    if (fs < winSect || fs >= winSect + 8) {
+      if (!rd(fs, 8, win, ctx)) return -1;
+      winSect = fs;
+    }
+    const uint8_t *p = win + (fs - winSect) * 512 + byteOff % 512;
+    uint32_t nx = g.fat32 ? ((uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24) & 0x0FFFFFFFu
+                          : (uint32_t)p[0] | (uint32_t)p[1] << 8;
+    if (nx >= eoc) return -1;  // se acaba antes que el fichero
+    c = nx;
+  }
+  return n;
+}
+
+const PakExt *pakExtFind(const PakExt *e, int n, uint32_t off) {
+  int lo = 0, hi = n;  // ultimo tramo con e.off <= off
+  while (lo < hi) {
+    int mid = (lo + hi) / 2;
+    if (e[mid].off <= off) lo = mid + 1; else hi = mid;
+  }
+  if (lo == 0) return nullptr;
+  const PakExt *x = &e[lo - 1];
+  return (uint64_t)off < (uint64_t)x->off + (uint64_t)x->nsect * 512u ? x : nullptr;
+}
+
+uint32_t pakExtRead(const PakExt *e, int n, uint32_t off, uint8_t *dst, uint32_t len, PakSectorRead rd, void *ctx,
+                    uint8_t *bounce) {
+  uint32_t done = 0;
+  while (done < len) {
+    uint32_t at = off + done;
+    const PakExt *x = pakExtFind(e, n, at);
+    if (!x) break;
+    uint32_t inExt = at - x->off, sec = x->sect + inExt / 512, skip = inExt % 512;
+    uint32_t extLeft = x->nsect - inExt / 512;  // sectores que quedan en el tramo
+    uint32_t want = len - done;
+    uint32_t nsec = (skip + want + 511) / 512;
+    if (nsec > 8) nsec = 8;
+    if (nsec > extLeft) nsec = extLeft;
+    if (!rd(sec, nsec, bounce, ctx)) break;
+    uint32_t avail = nsec * 512 - skip;
+    uint32_t take = want < avail ? want : avail;
+    memcpy(dst + done, bounce + skip, take);
+    done += take;
+  }
+  return done;
+}

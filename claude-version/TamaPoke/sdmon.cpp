@@ -243,7 +243,7 @@ bool sdRemount() {
   if (!sdMutex) return false;
   SdCardLock lock;
   if (!lock) return false;
-  if (sdReady) SD_MMC.end();
+  if (sdReady) { pakUnload(); SD_MMC.end(); }  // ko12.8.3: el mapa del .pak antes de desmontar
   sdReady = false;
   bool ok = sdTryMount();
   if (ok) sdDirty = true;  // recargar sprite y miniaturas

@@ -61,3 +61,34 @@ struct PakIndex {
   bool hasPrefix(const char *prefix) const;     // p. ej. "fx/"
   ~PakIndex() { clear(); }
 };
+
+// ---- ko12.8.3: mapa de sectores del .pak (lectura sin recorrer la cadena FAT) ----
+// FatFs (sin "fast seek" en este core) recorre la cadena de clusteres desde el principio en cada
+// fichero abierto y en cada salto atras: en un .pak de 270 MB con clusteres pequenos eso son
+// cientos de sectores de la FAT por fichero (el arranque se quedaba en 19/22). La cadena se
+// recorre UNA vez al montar y se guarda como tramos contiguos; luego cada lectura va directa.
+struct PakExt {
+  uint32_t off;    // byte del fichero donde empieza el tramo (multiplo del cluster)
+  uint32_t sect;   // primer sector del tramo
+  uint32_t nsect;  // sectores seguidos
+};
+// lee 'count' sectores de 512 bytes a partir de 'sector'; true si fue bien
+typedef bool (*PakSectorRead)(uint32_t sector, uint32_t count, uint8_t *buf, void *ctx);
+struct PakFatGeo {
+  bool fat32;         // si no, FAT16 (FAT12 / exFAT: no soportado)
+  uint32_t fatbase;   // primer sector de la FAT
+  uint32_t database;  // primer sector del cluster 2
+  uint32_t csize;     // sectores por cluster
+  uint32_t nFatent;   // clusteres + 2
+};
+// recorre la cadena desde sclust para un fichero de 'size' bytes. Devuelve el numero de tramos
+// (<= maxOut) o -1 si la cadena no cuadra (rota, en bucle, corta) o no caben los tramos.
+// 'win' es un buffer de 8 sectores (4 KB) para leer la FAT por ventanas.
+int pakChainExtents(const PakFatGeo &g, uint32_t sclust, uint32_t size, PakSectorRead rd, void *ctx, uint8_t *win,
+                    PakExt *out, int maxOut);
+// tramo que contiene el byte 'off' (nullptr si fuera)
+const PakExt *pakExtFind(const PakExt *e, int n, uint32_t off);
+// lee 'len' bytes desde 'off' por los tramos, usando 'bounce' (8 sectores, 4 KB) para leer sectores
+// enteros. Devuelve los bytes leidos (len si fue bien)
+uint32_t pakExtRead(const PakExt *e, int n, uint32_t off, uint8_t *dst, uint32_t len, PakSectorRead rd, void *ctx,
+                    uint8_t *bounce);

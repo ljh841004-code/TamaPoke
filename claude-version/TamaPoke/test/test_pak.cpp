@@ -130,3 +130,119 @@ TEST(pak, montar_y_leer) {
   magic[0] = 'X';
   CHECK(!pakParseHeader(magic.data(), r));
 }
+
+// ---- ko12.8.3: mapa de sectores (cadena FAT -> tramos) con un disco simulado ----
+namespace {
+struct SimDisk {
+  std::vector<uint8_t> d;  // sectores de 512
+  int reads = 0;
+  explicit SimDisk(uint32_t sectors) : d((size_t)sectors * 512, 0) {}
+  static bool rd(uint32_t s, uint32_t c, uint8_t *buf, void *ctx) {
+    SimDisk *k = (SimDisk *)ctx;
+    k->reads++;
+    if ((uint64_t)(s + c) * 512 > k->d.size()) return false;
+    memcpy(buf, k->d.data() + (size_t)s * 512, (size_t)c * 512);
+    return true;
+  }
+  void setFat(const PakFatGeo &g, uint32_t c, uint32_t v) {
+    uint8_t *p = d.data() + (size_t)g.fatbase * 512 + (size_t)c * (g.fat32 ? 4 : 2);
+    p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8);
+    if (g.fat32) { p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24); }
+  }
+};
+// escribe un fichero de 'size' bytes en los clusteres 'cl' (en ese orden) y devuelve su contenido
+std::vector<uint8_t> simFile(SimDisk &k, const PakFatGeo &g, const std::vector<uint32_t> &cl, uint32_t size, uint32_t seed) {
+  std::vector<uint8_t> v(size);
+  for (uint32_t i = 0; i < size; i++) { seed = seed * 1103515245u + 12345u; v[i] = (uint8_t)(seed >> 16); }
+  uint32_t cb = g.csize * 512;
+  for (size_t i = 0; i < cl.size(); i++) {
+    uint32_t sect = g.database + (cl[i] - 2) * g.csize;
+    uint32_t from = (uint32_t)i * cb, n = from < size ? (size - from < cb ? size - from : cb) : 0;
+    if (n) memcpy(k.d.data() + (size_t)sect * 512, v.data() + from, n);
+    k.setFat(g, cl[i], i + 1 < cl.size() ? cl[i + 1] : (g.fat32 ? 0x0FFFFFFFu : 0xFFFFu));
+  }
+  return v;
+}
+}  // namespace
+
+TEST(pak, mapa_fat32_fragmentado) {
+  PakFatGeo g{ true, 32, 32 + 64, 4, 3000 };  // FAT de 64 sectores, clusteres de 2 KB
+  SimDisk k(32 + 64 + 3000 * 4);
+  // 3 trozos seguidos, uno suelto hacia atras y otro largo: 23 clusteres
+  std::vector<uint32_t> cl;
+  for (uint32_t c = 10; c < 15; c++) cl.push_back(c);
+  for (uint32_t c = 200; c < 207; c++) cl.push_back(c);
+  cl.push_back(7);
+  for (uint32_t c = 2900; c < 2910; c++) cl.push_back(c);
+  uint32_t size = 22 * 2048 + 777;  // el ultimo cluster a medias
+  auto ref = simFile(k, g, cl, size, 99);
+  uint8_t win[4096], bounce[4096];
+  PakExt ex[16];
+  int n = pakChainExtents(g, cl[0], size, SimDisk::rd, &k, win, ex, 16);
+  CHECK(n == 4);
+  CHECK(ex[0].off == 0 && ex[0].nsect == 20 && ex[1].off == 5 * 2048 && ex[3].nsect == 40);
+  // lecturas por todas partes (cruzando tramos, a mitad de sector, hasta el final)
+  uint32_t seed = 7;
+  for (int t = 0; t < 400; t++) {
+    seed = seed * 1664525u + 1013904223u;
+    uint32_t off = seed % size;
+    uint32_t len = 1 + (seed >> 8) % 9000;
+    if (off + len > size) len = size - off;
+    std::vector<uint8_t> got(len);
+    uint32_t r = pakExtRead(ex, n, off, got.data(), len, SimDisk::rd, &k, bounce);
+    CHECK(r == len);
+    CHECK(memcmp(got.data(), ref.data() + off, len) == 0);
+  }
+  CHECK(pakExtFind(ex, n, 23 * 2048) == nullptr);  // fuera del ultimo cluster
+}
+
+TEST(pak, mapa_fat16_y_contiguo) {
+  PakFatGeo g{ false, 4, 4 + 16, 8, 2000 };
+  SimDisk k(4 + 16 + 2000 * 8);
+  std::vector<uint32_t> cl;
+  for (uint32_t c = 50; c < 150; c++) cl.push_back(c);  // todo seguido: un solo tramo
+  uint32_t size = 100 * 4096;
+  auto ref = simFile(k, g, cl, size, 3);
+  uint8_t win[4096], bounce[4096];
+  PakExt ex[4];
+  int n = pakChainExtents(g, 50, size, SimDisk::rd, &k, win, ex, 4);
+  CHECK(n == 1 && ex[0].nsect == 800);
+  std::vector<uint8_t> got(size);
+  CHECK(pakExtRead(ex, n, 0, got.data(), size, SimDisk::rd, &k, bounce) == size);
+  CHECK(got == ref);
+}
+
+TEST(pak, mapa_cadena_rota) {
+  PakFatGeo g{ true, 32, 32 + 64, 4, 3000 };
+  SimDisk k(32 + 64 + 3000 * 4);
+  std::vector<uint32_t> cl = { 10, 11, 12 };
+  simFile(k, g, cl, 3 * 2048, 1);
+  uint8_t win[4096];
+  PakExt ex[8];
+  CHECK(pakChainExtents(g, 10, 3 * 2048, SimDisk::rd, &k, win, ex, 8) == 1);
+  CHECK(pakChainExtents(g, 10, 4 * 2048, SimDisk::rd, &k, win, ex, 8) == -1);  // la cadena es mas corta
+  k.setFat(g, 11, 5000);  // apunta fuera del volumen
+  CHECK(pakChainExtents(g, 10, 3 * 2048, SimDisk::rd, &k, win, ex, 8) == -1);
+  k.setFat(g, 11, 0);     // cluster libre en medio
+  CHECK(pakChainExtents(g, 10, 3 * 2048, SimDisk::rd, &k, win, ex, 8) == -1);
+  CHECK(pakChainExtents(g, 1, 100, SimDisk::rd, &k, win, ex, 8) == -1);  // inicio invalido
+  CHECK(pakChainExtents(g, 10, 0, SimDisk::rd, &k, win, ex, 8) == 0);   // vacio
+  // mas trozos que sitio para tramos
+  std::vector<uint32_t> sp = { 100, 300, 500, 700 };
+  simFile(k, g, sp, 4 * 2048, 2);
+  CHECK(pakChainExtents(g, 100, 4 * 2048, SimDisk::rd, &k, win, ex, 3) == -1);
+  CHECK(pakChainExtents(g, 100, 4 * 2048, SimDisk::rd, &k, win, ex, 4) == 4);
+}
+
+TEST(pak, mapa_lee_poco_la_fat) {
+  // 270 MB con clusteres de 4 KB = 69k clusteres: la FAT se lee por ventanas de 8 sectores
+  PakFatGeo g{ true, 32, 32 + 600, 8, 70000 };
+  uint32_t nclu = 69000;
+  SimDisk k(32 + 600 + 8);  // solo la FAT (los datos no se tocan al hacer el mapa)
+  for (uint32_t c = 2; c < 2 + nclu; c++) k.setFat(g, c, c + 1 < 2 + nclu ? c + 1 : 0x0FFFFFFFu);
+  uint8_t win[4096];
+  PakExt ex[4];
+  int n = pakChainExtents(g, 2, nclu * 4096u, SimDisk::rd, &k, win, ex, 4);
+  CHECK(n == 1 && ex[0].nsect == nclu * 8);
+  CHECK(k.reads <= (int)((nclu * 4 / 512) / 8 + 2));  // ~68 lecturas de 4 KB, no una por cluster
+}
