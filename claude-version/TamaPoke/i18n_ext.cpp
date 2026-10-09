@@ -174,6 +174,7 @@ static const char *const XS[2][X_COUNT] = {
     "Pack SD files", "Pack SD files", "%u files / %u MB", "Makes one encrypted file: mons.pak", "Copy only mons.pak to the other SD", "Start", "In use: mons.pak (%u files)", "mons.pak: wrong passphrase", "mons.pak is damaged", "Packing... keep it on", "Done! mons.pak is ready", "Not enough free space on the SD", "Failed (SD error)", "No files in the mons folder", "%u / %u files", "No mons.pak yet (loose files)",
     "It guarded: damage halved!", "Super effective, but guarded: halved!", "Not very effective, and guarded...", "That move must rest next turn", "Resting",
     "Check SD files", "SD files", "Pokemon pictures", "Battle pictures", "Move effects", "Cries", "Small pictures", "Story people", "Music (optional)", "Everything is there!", "Missing: %s (+%u more)", "No SD card", "In mons.pak: %u files",
+    "%u candy",
   },
   // ---------------- KO ----------------
   {
@@ -342,6 +343,7 @@ static const char *const XS[2][X_COUNT] = {
     "SD 파일 하나로 묶기", "SD 파일 묶기", "파일 %u개 · %uMB", "암호화된 파일 하나(mons.pak)로 만들어요", "다른 SD에는 mons.pak 하나만 복사하면 돼요", "묶기 시작", "사용 중: mons.pak (파일 %u개)", "mons.pak 암호가 맞지 않아요", "mons.pak가 손상됐어요", "묶는 중... 전원을 끄지 마세요", "완료! mons.pak을 만들었어요", "SD 남은 공간이 부족해요", "SD 오류로 실패했어요", "mons 폴더에 파일이 없어요", "%u / %u개", "아직 mons.pak 없음 (낱개 파일 사용 중)",
     "막아서 피해가 절반이 됐다!", "효과가 굉장했지만 막아서 절반!", "효과가 별로인 데다 막혀 버렸다...", "다음 턴엔 이 기술을 쉬어야 해요", "쉬는 중",
     "SD 파일 점검", "SD 파일 점검", "포켓몬 그림", "배틀 그림", "기술 이펙트", "울음소리", "작은 그림", "스토리 인물", "음악 (없어도 됨)", "필요한 파일이 모두 있어요!", "없는 파일: %s 외 %u개", "SD카드가 없어요", "mons.pak 안에서 확인 (파일 %u개)",
+    "사탕 %u개",
   },
 };
 

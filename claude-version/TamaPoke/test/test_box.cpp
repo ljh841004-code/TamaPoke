@@ -472,6 +472,87 @@ TEST(sdupdate, fichero_de_0xe000) {
   CHECK_EQ(classifyFile(junk, &off), UPD_BAD);
 }
 
+// ko12.9.2: por WiFi el fichero llega a trozos (1436 bytes en el WebServer del core)
+struct FakeSink { std::vector<uint8_t> out; bool begun = false; int failAt = -1; };
+static UpdSink fakeSink(FakeSink &f) {
+  UpdSink s;
+  s.ctx = &f;
+  s.begin = [](void *c) { ((FakeSink *)c)->begun = true; return true; };
+  s.write = [](void *c, const uint8_t *d, size_t n) {
+    FakeSink *f = (FakeSink *)c;
+    if (f->failAt >= 0 && f->out.size() + n > (size_t)f->failAt) return false;
+    f->out.insert(f->out.end(), d, d + n);
+    return true;
+  };
+  return s;
+}
+static bool streamAll(const std::vector<uint8_t> &file, size_t chunk, FakeSink &fs, UpdStream &st) {
+  static uint8_t head[UPD_HEAD_LEN];
+  st.reset(head, fakeSink(fs));
+  for (size_t i = 0; i < file.size(); i += chunk) {
+    size_t n = file.size() - i < chunk ? file.size() - i : chunk;
+    if (!st.feed(file.data() + i, n)) return false;
+  }
+  return st.finish();
+}
+TEST(sdupdate, wifi_a_trozos) {
+  std::vector<uint8_t> app(0x30000);
+  for (size_t i = 0; i < app.size(); i++) app[i] = (uint8_t)(i * 7 + 3);
+  app[0] = 0xE9; app[12] = 9; app[13] = 0;
+  for (size_t chunk : { (size_t)1, (size_t)1436, (size_t)4096, (size_t)0x8002, (size_t)100000 }) {
+    FakeSink fs; UpdStream st;
+    CHECK(streamAll(app, chunk, fs, st));
+    CHECK(fs.begun && fs.out == app);
+    CHECK_EQ(st.skip, 0u);
+  }
+  // el fichero de 0xe000: se salta el boot_app0 (8 KB)
+  std::vector<uint8_t> e(UPD_E000_OFS, 0xFF);
+  e[0] = 0x01;
+  e.insert(e.end(), app.begin(), app.end());
+  { FakeSink fs; UpdStream st;
+    CHECK(streamAll(e, 1436, fs, st));
+    CHECK(fs.out == app);
+    CHECK_EQ(st.skip, (uint32_t)UPD_E000_OFS); }
+  // la imagen completa de 0x0 se rechaza sin escribir nada
+  std::vector<uint8_t> full(0x30000, 0);
+  full[0] = 0xE9; full[12] = 9; full[0x8000] = 0xAA; full[0x8001] = 0x50;
+  { FakeSink fs; UpdStream st;
+    CHECK(!streamAll(full, 1436, fs, st));
+    CHECK_EQ(st.err, UPD_FULLIMG);
+    CHECK(!fs.begun && fs.out.empty()); }
+  // otro fichero cualquiera
+  std::vector<uint8_t> junk(0x20000, 0x41);
+  { FakeSink fs; UpdStream st;
+    CHECK(!streamAll(junk, 1436, fs, st));
+    CHECK_EQ(st.err, UPD_BAD);
+    CHECK(!fs.begun); }
+  // vacio
+  { FakeSink fs; UpdStream st;
+    CHECK(!streamAll(std::vector<uint8_t>(), 1436, fs, st));
+    CHECK_EQ(st.err, UPD_NONE); }
+  // app pequena (menos que la cabecera): se decide al final
+  std::vector<uint8_t> small(app.begin(), app.begin() + 0x2000);
+  { FakeSink fs; UpdStream st;
+    CHECK(streamAll(small, 1436, fs, st));
+    CHECK(fs.out == small); }
+  // falla la escritura a medias: no sigue
+  { FakeSink fs; fs.failAt = 0x10000; UpdStream st;
+    CHECK(!streamAll(app, 1436, fs, st));
+    CHECK(st.failed); }
+}
+TEST(sdupdate, wifi_los_bin_publicados) {
+  std::vector<uint8_t> app = readFile("../../update.bin");
+  if (app.empty()) return;
+  { FakeSink fs; UpdStream st; CHECK(streamAll(app, 1436, fs, st)); CHECK(fs.out == app); }
+  for (const std::string &p : releaseBins()) {
+    std::vector<uint8_t> f = readFile(p.c_str());
+    FakeSink fs; UpdStream st;
+    bool ok = streamAll(f, 1436, fs, st);
+    if (p.find("-app-0xe000.bin") != std::string::npos) { CHECK(ok); CHECK(fs.out == app); }
+    else { CHECK(!ok); CHECK_EQ(st.err, UPD_FULLIMG); CHECK(fs.out.empty()); }
+  }
+}
+
 TEST(sdupdate, busca_la_marca_de_version) {
   const char blob[] = "xxTPVER:\0yyyyTPVER:1.17-ko6.2\0zz";
   const uint8_t *b = (const uint8_t *)blob;

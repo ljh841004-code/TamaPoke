@@ -4,6 +4,8 @@
 #include "net_pick.h"
 #include <WiFi.h>
 #include <WebServer.h>
+#include <Update.h>
+#include "sdupdate.h"  // ko12.9.2: UpdStream (misma clasificacion que la SD)
 #include <DNSServer.h>
 #include <Preferences.h>
 #include <esp_sntp.h>
@@ -312,7 +314,8 @@ static void pageRoot() {
   }
   h += F("<p><small>켤 때와 하루 한 번, 주변에서 신호가 가장 센 저장된 WiFi로 시간을 맞춰요."
          " 저장된 WiFi가 없으면 비밀번호 없는 WiFi를 써요.</small></p>"
-         "<p><small>2.4GHz WiFi만 됩니다. 5GHz는 안 돼요.</small></p></div>");
+         "<p><small>2.4GHz WiFi만 됩니다. 5GHz는 안 돼요.</small></p>"
+         "<h2>펌웨어 업데이트</h2><p><a href=/fw>update.bin 올리기 (192.168.4.1/fw)</a></p></div>");
   // la busqueda aun no acabo: recargar sola en 3 s para que aparezca la lista
   if (scanning) h += F("<script>setTimeout(function(){location.reload()},3000)</script>");
   h += F("</body></html>");
@@ -363,6 +366,139 @@ static void pageRedirect() {
   gWeb->send(302, "text/plain", "");
 }
 
+
+// ---------------------------------------------------------------- ko12.9.2: firmware por WiFi
+// GET /fw = pagina para elegir update.bin; POST /fw = el fichero (multipart), escrito a trozos en la
+// otra particion de app con Update. Igual que la SD: solo se cambia de firmware si llega entero y
+// verificado; la imagen de 0x0 (borraria la partida) se rechaza antes de escribir nada.
+static NetFwHooks gFwHooks = { nullptr, nullptr, nullptr, "" };
+static uint8_t *gFwHead = nullptr;
+static UpdStream gFw;
+static bool gFwActive = false, gFwBegun = false;
+// 0 nada, 1 bien, 2 fichero que no es, 3 imagen de 0x0, 4 bateria / no se puede, 5 fallo al escribir
+static uint8_t gFwRes = 0;
+static uint32_t gFwExpect = 0;
+
+void netSetFwHooks(const NetFwHooks &h) { gFwHooks = h; }
+
+static const char FW_CSS[] PROGMEM =
+    "<!doctype html><html><head><meta charset=utf-8>"
+    "<meta name=viewport content='width=device-width,initial-scale=1'><title>TamaPoke</title><style>"
+    "body{font-family:sans-serif;background:#fff6e0;margin:0;padding:20px;color:#222}"
+    ".c{max-width:420px;margin:auto;background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 8px #0002}"
+    "h1{color:#e7352c;font-size:22px;margin-top:0}small{color:#777}"
+    "input{width:100%;box-sizing:border-box;font-size:16px;padding:10px;border:2px solid #ccc;border-radius:10px}"
+    "button{margin-top:16px;width:100%;font-size:18px;padding:12px;border:0;border-radius:12px;"
+    "background:#e7352c;color:#fff}button:disabled{background:#bbb}"
+    ".bar{height:22px;background:#eee;border-radius:11px;margin-top:16px;overflow:hidden}"
+    ".bar div{height:100%;width:0;background:#3a9a4a}a{color:#e7352c}"
+    "</style></head><body><div class=c>";
+
+static void pageFw() {
+  gPortalT0 = millis();
+  String h = FPSTR(FW_CSS);
+  h += F("<h1>펌웨어 업데이트</h1>"
+         "<p>지금 버전: <b>");
+  h += gFwHooks.version ? gFwHooks.version : "";
+  h += F("</b></p><p><b>update.bin</b> 파일을 골라 [올리기]를 눌러 주세요.<br>"
+         "<small>포켓몬과 저장 데이터는 그대로예요. 다 받고 검사가 끝난 뒤에만 바뀌고, "
+         "도중에 끊기면 지금 펌웨어 그대로예요. 끝날 때까지(약 1분) 이 화면을 두세요.</small></p>"
+         "<input id=f type=file accept='.bin'>"
+         "<button id=b onclick='up()'>올리기 / Upload</button>"
+         "<div class=bar><div id=p></div></div><p id=m></p>"
+         "<p><small>파일 고르기가 안 열리면: 이 화면을 닫고 Chrome/Safari에서 "
+         "<b>192.168.4.1/fw</b> 를 열어 주세요.<br>0x0 통합 이미지(저장이 지워지는 파일)는 받지 않아요.</small></p>"
+         "<p><a href=/>WiFi 설정으로</a></p></div><script>"
+         "function up(){var f=document.getElementById('f').files[0];if(!f){alert('update.bin을 골라 주세요');return}"
+         "var b=document.getElementById('b'),p=document.getElementById('p'),m=document.getElementById('m');"
+         "b.disabled=true;m.textContent='보내는 중...';var d=new FormData();d.append('fw',f,f.name);"
+         "var x=new XMLHttpRequest();x.open('POST','/fw');"
+         "x.upload.onprogress=function(e){if(e.lengthComputable){var q=Math.floor(e.loaded*100/e.total);"
+         "p.style.width=q+'%';m.textContent=q+'%'+(q>=100?' - 검사 중...':'')}};"
+         "x.onload=function(){document.open();document.write(x.responseText);document.close()};"
+         "x.onerror=function(){m.textContent='연결이 끊겼어요. 다시 해 주세요.';b.disabled=false};"
+         "x.send(d)}</script></body></html>");
+  gWeb->send(200, "text/html; charset=utf-8", h);
+}
+
+static bool fwSinkBegin(void *) {
+  gFwBegun = Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH);
+  if (!gFwBegun) Serial.printf("FW begin: %s\n", Update.errorString());
+  return gFwBegun;
+}
+static bool fwSinkWrite(void *, const uint8_t *d, size_t n) { return Update.write((uint8_t *)d, n) == n; }
+
+static void fwFail(uint8_t res) {
+  if (gFwBegun) Update.abort();
+  gFwBegun = false;
+  gFwActive = false;
+  gFwRes = res;
+}
+
+static void pageFwUpload() {
+  HTTPUpload &u = gWeb->upload();
+  gPortalT0 = millis();
+  if (u.status == UPLOAD_FILE_START) {
+    gFwRes = 0;
+    gFwActive = false;
+    gFwBegun = false;
+    gFwExpect = (uint32_t)gWeb->clientContentLength();
+    if (!gFwHead) gFwHead = (uint8_t *)ps_malloc(UPD_HEAD_LEN);
+    if (!gFwHead || (gFwHooks.canStart && !gFwHooks.canStart())) { gFwRes = 4; return; }
+    UpdSink sink;
+    sink.begin = fwSinkBegin;
+    sink.write = fwSinkWrite;
+    sink.ctx = nullptr;
+    gFw.reset(gFwHead, sink);
+    gFwActive = true;
+    Serial.printf("FW: recibiendo %s (%u bytes)\n", u.filename.c_str(), (unsigned)gFwExpect);
+  } else if (u.status == UPLOAD_FILE_WRITE) {
+    if (!gFwActive) return;
+    if (!gFw.feed(u.buf, u.currentSize)) {
+      fwFail(gFw.err == UPD_FULLIMG ? 3 : gFw.err == UPD_OK ? 5 : 2);
+      return;
+    }
+    if (gFwHooks.progress) gFwHooks.progress(gFw.total, gFwExpect);
+  } else if (u.status == UPLOAD_FILE_END) {
+    if (!gFwActive) return;
+    if (!gFw.finish()) { fwFail(gFw.err == UPD_FULLIMG ? 3 : gFw.err == UPD_OK ? 5 : 2); return; }
+    if (!Update.end(true)) {  // verifica la imagen y la marca como la de arranque
+      Serial.printf("FW end: %s\n", Update.errorString());
+      gFwBegun = false;
+      fwFail(5);
+      return;
+    }
+    gFwBegun = false;
+    gFwActive = false;
+    gFwRes = 1;
+    Serial.printf("FW ok: %u bytes\n", (unsigned)gFw.written);
+  } else if (u.status == UPLOAD_FILE_ABORTED) {
+    fwFail(5);
+  }
+}
+
+static void pageFwDone() {
+  if (gFwActive) fwFail(5);  // sin UPLOAD_FILE_END (no venia ningun fichero)
+  if (!gFwRes) gFwRes = 2;
+  String h = FPSTR(FW_CSS);
+  if (gFwRes == 1) {
+    h += F("<h1>완료!</h1><p>새 펌웨어를 받았어요. TamaPoke가 곧 다시 켜져요.<br>"
+           "<small>이 WiFi 연결은 끊겨요. 설정 화면 아래쪽에서 새 버전을 확인해 주세요.</small></p>");
+  } else {
+    h += F("<h1>업데이트 못 했어요</h1><p>");
+    h += gFwRes == 3 ? F("이 파일은 0x0 통합 이미지예요 (저장이 지워지는 파일). <b>update.bin</b>을 골라 주세요.")
+         : gFwRes == 4 ? F("지금은 시작할 수 없어요. 배터리가 20% 미만이면 충전기를 꽂고 다시 해 주세요.")
+         : gFwRes == 5 ? F("쓰는 중에 문제가 생겼어요. 지금 펌웨어 그대로예요. 다시 해 주세요.")
+                       : F("TamaPoke 펌웨어 파일이 아니에요. <b>update.bin</b>을 골라 주세요.");
+    h += F("</p><p><a href=/fw>다시 하기</a></p>");
+  }
+  h += F("</div></body></html>");
+  gWeb->sendHeader("Connection", "close");
+  gWeb->send(200, "text/html; charset=utf-8", h);
+  bool ok = gFwRes == 1;
+  if (gFwHooks.done) gFwHooks.done(ok);
+}
+
 void netStartPortal() {
   if (gPortal || linkActive()) return;
   if (gState == NET_CONNECTING || gState == NET_NTP) radioOff();
@@ -381,6 +517,8 @@ void netStartPortal() {
   gWeb->on("/save", HTTP_POST, pageSave);
   gWeb->on("/rescan", HTTP_GET, pageRescan);
   gWeb->on("/del", HTTP_GET, pageDel);
+  gWeb->on("/fw", HTTP_GET, pageFw);                      // ko12.9.2
+  gWeb->on("/fw", HTTP_POST, pageFwDone, pageFwUpload);
   gWeb->onNotFound(pageRedirect);
   gWeb->begin();
   gPortal = true;

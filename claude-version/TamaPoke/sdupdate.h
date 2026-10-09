@@ -60,3 +60,65 @@ UpdCheck sdUpdateCheck(uint32_t *size);
 bool sdUpdateRun(void (*progress)(uint32_t done, uint32_t total));
 // version que trae el update.bin encontrado por sdUpdateCheck ("" si no se sabe)
 bool sdUpdateFileVersion(char *out, size_t n);
+
+// ko12.9.2: actualizar por WiFi (portal 192.168.4.1/fw). El fichero llega a trozos: se guardan los
+// primeros UPD_HEAD_LEN bytes para clasificarlo igual que en la SD (app normal, fichero de 0xe000 o
+// imagen completa de 0x0, que se rechaza) y solo entonces se empieza a escribir. Logica pura con
+// "sink" (Update en la placa, un buffer en test/test_box.cpp).
+struct UpdSink {
+  bool (*begin)(void *ctx);                                // empezar a escribir la app
+  bool (*write)(void *ctx, const uint8_t *d, size_t n);    // un trozo de la app
+  void *ctx;
+};
+struct UpdStream {
+  uint8_t *head = nullptr;  // UPD_HEAD_LEN bytes (lo pone quien llama)
+  size_t headN = 0;
+  bool decided = false;
+  UpdCheck err = UPD_OK;    // UPD_NONE = vacio; UPD_FULLIMG / UPD_BAD = rechazado; UPD_OK = bien
+  uint32_t skip = 0;        // bytes del principio que no son la app (0x2000 en el de 0xe000)
+  uint32_t total = 0;       // bytes recibidos
+  uint32_t written = 0;     // bytes de app escritos
+  bool failed = false;
+  UpdSink sink{};
+
+  void reset(uint8_t *buf, const UpdSink &s) { *this = UpdStream(); head = buf; sink = s; }
+  bool feed(const uint8_t *d, size_t n) {
+    if (failed) return false;
+    total += (uint32_t)n;
+    if (!decided) {
+      size_t k = UPD_HEAD_LEN - headN < n ? UPD_HEAD_LEN - headN : n;
+      memcpy(head + headN, d, k);
+      headN += k; d += k; n -= k;
+      if (headN < UPD_HEAD_LEN) return true;
+      if (!decide(false)) return false;
+    }
+    return put(d, n);
+  }
+  bool finish() {  // true = la app entera se escribio (falta Update.end)
+    if (failed) return false;
+    if (!decided && !decide(true)) return false;
+    if (written == 0) { err = UPD_NONE; failed = true; return false; }
+    if (written > UPD_MAX_SIZE) { err = UPD_BAD; failed = true; return false; }
+    return true;
+  }
+
+ private:
+  bool decide(bool final) {
+    decided = true;
+    if (headN == 0) { err = UPD_NONE; failed = true; return false; }
+    skip = updAppOffset(head, headN);
+    if (skip >= headN) skip = 0;
+    // el tamano de verdad aun no se sabe: 1 MB solo para pasar el limite; el final se mira en finish()
+    uint32_t sz = final ? (uint32_t)(headN - skip) : 0x100000u;
+    err = updClassify(head + skip, headN - skip, sz);
+    if (err != UPD_OK) { failed = true; return false; }
+    if (!sink.begin(sink.ctx)) { err = UPD_BAD; failed = true; return false; }
+    return put(head + skip, headN - skip);
+  }
+  bool put(const uint8_t *d, size_t n) {
+    if (!n) return true;
+    if (written + n > UPD_MAX_SIZE || !sink.write(sink.ctx, d, n)) { failed = true; return false; }
+    written += (uint32_t)n;
+    return true;
+  }
+};

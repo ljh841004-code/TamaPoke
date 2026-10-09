@@ -347,6 +347,20 @@ static void scenes(bool ko, const char *sfx) {
   cardPage = 2; render(); shot("03d_card_medals");
   pet.addCandy(pet.speciesId, 12); cardPage = 4; render(); shot("03f_card_candy");
   pet.careMistakes = 1; pet.addCandy(pet.speciesId, 10); render(); shot("03i_card_candy_mistake"); pet.careMistakes = 0;
+  {  // ko12.9.2: baldosas grandes en 2 columnas; el hueco va a la mas cercana
+    uint16_t c0 = pet.candyOf(pet.speciesId);
+    int x, y, w;
+    candyTileRect(1, x, y, w);
+    onTap(x + w / 2, y + CANDY_TILE_H / 2);
+    navCheck("caramelos: baldosa 2 (barras) = usar", cardOpen && pet.candyOf(pet.speciesId) == c0 - CANDY_COST[1]);
+    render(); shot("03p_card_candy_used");
+    navCheck("caramelos: hueco entre columnas", candyTileAt(CX - 2, y + 30) == 0 && candyTileAt(CX + 2, y + 30) == 1);
+    navCheck("caramelos: hueco entre filas", candyTileAt(120, y + CANDY_TILE_H + 2) == 0 && candyTileAt(120, y + CANDY_TILE_H + CANDY_TILE_GAP - 2) == 2);
+    navCheck("caramelos: la ancha de abajo", candyTileAt(100, CANDY_GRID_Y + 2 * (CANDY_TILE_H + CANDY_TILE_GAP) + 20) == 4 &&
+                                             candyTileAt(360, CANDY_GRID_Y + 2 * (CANDY_TILE_H + CANDY_TILE_GAP) + 20) == 4);
+    navCheck("caramelos: fuera = cerrar", candyTileAt(CX, 400) == -1 && candyTileAt(30, 200) == -1);
+    cardMsgUntil = 0;
+  }
   // ko10.11: bolsa de caramelos
   pet.addCandy(25, 7); pet.addCandy(133, 4); pet.addCandy(6, 2); pet.addCandy(92, 11); pet.rareCandy = 2;
   closeAll(); openCandyBag(); render(); shot("03j_candy_bag");

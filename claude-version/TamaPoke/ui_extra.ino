@@ -243,6 +243,7 @@ void portalRow(int y, const char *label, const char *value, uint16_t col) {
 void renderNet() {
   screenBase();
   gfx->setTextColor(UI_INK);
+  if (wifiFwRebooting()) { renderWifiFwDone(); return; }  // ko12.9.2: firmware por WiFi recibido
   if (netPortalOn()) {
     // ko8: QR grande (la camara del movil se une al WiFi sin teclear) y los
     // datos en letra grande por si el movil no lee QR

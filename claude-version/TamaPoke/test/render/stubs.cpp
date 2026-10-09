@@ -60,6 +60,7 @@ void netSyncNow() {}
 bool netBusy() { return false; }
 NetState netState() { return NET_IDLE; }
 void netStartPortal() {}
+void netSetFwHooks(const NetFwHooks &) {}  // ko12.9.2
 void netStopPortal() {}
 bool gMockPortal = false;
 bool netPortalOn() { return gMockPortal; }

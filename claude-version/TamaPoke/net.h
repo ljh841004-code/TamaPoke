@@ -45,4 +45,17 @@ const char *netApName();
 // termina una sincronizacion con exito; 0 el resto del tiempo.
 uint32_t netPoll(uint32_t nowMs);
 
-bool netSerialCommand(const String &line);  // WIFI / WIFIOFF / NTP / TZ / NET
+bool netSerialCommand(const String &line);
+
+// ko12.9.2: actualizar el firmware por WiFi (portal: 192.168.4.1/fw). Lo pone el .ino:
+//   canStart(): bateria suficiente y la musica parada (false = no empezar)
+//   progress(done, total): dibuja el avance en la pantalla (total = 0 si no se sabe)
+//   done(ok): ok = listo para reiniciar (el .ino guarda la partida y reinicia); !ok = seguir
+//   version: la que esta puesta (se ensena en la pagina)
+struct NetFwHooks {
+  bool (*canStart)();
+  void (*progress)(uint32_t done, uint32_t total);
+  void (*done)(bool ok);
+  const char *version;  // FW_VERSION (para la pagina)
+};
+void netSetFwHooks(const NetFwHooks &h);  // WIFI / WIFIOFF / NTP / TZ / NET

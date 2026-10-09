@@ -819,6 +819,7 @@ void setup() {
 
   bootStep(BS_NET);
   netBegin();    // WiFi/NTP: la primera sincronizacion va sola a los pocos segundos
+  wifiFwSetup();  // ko12.9.2: firmware por WiFi (portal /fw)
   if (safeMode) netSafeMode();  // ko11.5: sin sincronizar sola
   bootStep(BS_AUDIO);
   if (!safeMode) audioBegin();  // ES8311 + I2S + amplificador (suena un jingle de arranque)
@@ -959,6 +960,7 @@ void loop() {
   handleSerial();
   imuPoll(now);  // ko12.4: pasos (tambien con la pantalla apagada)
   tamaLoop();    // ko12.5: avisos de la rutina
+  wifiFwLoop();  // ko12.9.2: reiniciar tras recibir firmware por WiFi
   extraLoop(now);  // fork KO: red, tongsin, batallas (ui_extra.ino)
   bakAutoLoop(now);  // ko11.6: copia de la partida en la SD
   expLoop();         // ko11.7: aviso de vuelta de la expedicion
@@ -4205,11 +4207,32 @@ void renderFarewellTable() {
 }
 
 // ---- ko10.4: pagina de caramelos (de la familia del Pokemon que crias)
-#define CANDY_ROW_X 83
-#define CANDY_ROW_Y 112
-#define CANDY_ROW_W 300
-#define CANDY_ROW_H 40
-#define CANDY_ROW_GAP 6
+// ko12.9.2: antes 5 filas finas (40 px) y se pulsaba la de al lado. Ahora baldosas grandes en dos
+// columnas (usan los lados, que estaban vacios): 2 + 2 + 1 ancha, 74 px de alto. El toque en el hueco
+// va a la baldosa mas cercana
+#define CANDY_GRID_X 72
+#define CANDY_GRID_Y 104
+#define CANDY_GRID_W 322
+#define CANDY_TILE_H 74
+#define CANDY_TILE_GAP 10
+static void candyTileRect(int i, int &x, int &y, int &w) {
+  const int cw = (CANDY_GRID_W - CANDY_TILE_GAP) / 2;
+  y = CANDY_GRID_Y + (i / 2) * (CANDY_TILE_H + CANDY_TILE_GAP);
+  if (i == CU_COUNT - 1 && (CU_COUNT & 1)) { x = CANDY_GRID_X; w = CANDY_GRID_W; return; }  // la ultima, ancha
+  x = CANDY_GRID_X + (i & 1) * (cw + CANDY_TILE_GAP);
+  w = cw;
+}
+// baldosa bajo (x, y), o -1. El hueco entre dos se reparte por la mitad
+static int candyTileAt(int16_t x, int16_t y) {
+  const int pitch = CANDY_TILE_H + CANDY_TILE_GAP, rows = (CU_COUNT + 1) / 2;
+  int top = CANDY_GRID_Y - CANDY_TILE_GAP / 2;
+  if (x < CANDY_GRID_X - CANDY_TILE_GAP / 2 || x >= CANDY_GRID_X + CANDY_GRID_W + CANDY_TILE_GAP / 2) return -1;
+  if (y < top || y >= top + rows * pitch) return -1;
+  int r = (y - top) / pitch;
+  int i = r * 2 + (x >= CANDY_GRID_X + CANDY_GRID_W / 2 ? 1 : 0);
+  if (i >= CU_COUNT) i = CU_COUNT - 1;  // fila de la ancha
+  return i;
+}
 
 void renderCardCandy() {
   // ko10.11: el titulo es el boton de la bolsa de caramelos (todas las familias)
@@ -4217,26 +4240,30 @@ void renderCardCandy() {
   char have[48], nb[8];
   snprintf(nb, sizeof(nb), "%u", pet.candyOf(pet.speciesId));
   txFmt(have, sizeof(have), X_CANDY_HAVE, dexName(DEX_FAM[pet.speciesId]), nb);
-  drawFit(have, 78, 320, C565(0xc8, 0x3c, 0x78), 2);
+  // el aviso ("사용했어요!") sale en el sitio de la cuenta: abajo ya no hay hueco
+  bool msg = cardMsg && timeLeft(cardMsgUntil);
+  drawFit(msg ? cardMsg : have, 76, 320, msg ? UI_INK : C565(0xc8, 0x3c, 0x78), 2);
   static const XId LBL[CU_COUNT] = { X_CU_EXP, X_CU_GAUGE, X_CU_GENES, X_CU_SHINY, X_CU_EVO };
   for (int i = 0; i < CU_COUNT; i++) {
-    int y = CANDY_ROW_Y + i * (CANDY_ROW_H + CANDY_ROW_GAP);
+    int x, y, w;
+    candyTileRect(i, x, y, w);
     bool ok = pet.candyCanUse((uint8_t)i);
-    char b[48];
-    if (i == CU_SHINY && pet.shinyCharm) snprintf(b, sizeof(b), "%s", XT(X_CU_SHINY_ON));
-    else snprintf(b, sizeof(b), "%s  (%u)", XT(LBL[i]), CANDY_COST[i]);
-    drawBtn(CANDY_ROW_X, y, CANDY_ROW_W, CANDY_ROW_H, ok ? C565(0xf0, 0x7a, 0xa8) : UI_TRACK,
-            ok ? UI_WHITE : 0x8410, b);
+    uint16_t fg = ok ? UI_WHITE : 0x8410;
+    uiButton(x, y, w, CANDY_TILE_H, 14, ok ? C565(0xf0, 0x7a, 0xa8) : UI_TRACK, UI_INK);
+    bool charm = i == CU_SHINY && pet.shinyCharm;
+    drawFitIn(XT(charm ? X_CU_SHINY_ON : LBL[i]), x + 4, y + 14, w - 8, fg, 2);
+    if (!charm) {
+      char c[24];
+      snprintf(c, sizeof(c), XT(X_CANDY_COST_FMT), (unsigned)CANDY_COST[i]);
+      drawFitIn(c, x, y + 46, w, ok ? C565(0xff, 0xe8, 0xf0) : 0x8410, 1);
+    }
   }
-  if (cardMsg && timeLeft(cardMsgUntil)) drawFit(cardMsg, 346, 300, UI_INK, 1);
 }
 
 static void cardCandyTap(int16_t x, int16_t y) {
   if (y < 66 && x >= CX - 110 && x < CX + 110) { openCandyBag(); return; }  // ko10.11: bolsa
-  if (x < CANDY_ROW_X || x >= CANDY_ROW_X + CANDY_ROW_W || y < CANDY_ROW_Y) { cardOpen = false; return; }
-  int i = (y - CANDY_ROW_Y) / (CANDY_ROW_H + CANDY_ROW_GAP);
-  if (i >= CU_COUNT) { cardOpen = false; return; }
-  if ((y - CANDY_ROW_Y) % (CANDY_ROW_H + CANDY_ROW_GAP) >= CANDY_ROW_H) return;  // hueco
+  int i = candyTileAt(x, y);
+  if (i < 0) { cardOpen = false; return; }
   if (pet.candyUse((uint8_t)i)) { sfxPlay(SFX_HEART); cardMsg = XT(X_CANDY_USED); }  // subir de nivel ya suena en addExp
   else { sfxPlay(SFX_DENY); cardMsg = XT(X_CANDY_NO); }
   cardMsgUntil = millis() + 2000;

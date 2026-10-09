@@ -1412,6 +1412,46 @@ static void updProgress(uint32_t done, uint32_t total) {
   gfx->flush();  // ko11.13: sin fundido mientras escribe
 }
 
+// ---- ko12.9.2: firmware por WiFi (portal 192.168.4.1/fw, net.cpp) ----
+static bool wifiFwPaused = false;
+static uint32_t wifiFwRebootAt = 0;
+static bool wifiFwCanStart() {
+  int pc = batPercent();
+  if (pc >= 0 && pc < 20 && !usbPresent()) return false;  // que no se apague a medias
+  wifiFwPaused = audioPauseForUpload();                   // como la SD: la musica suelta la tarjeta
+  if (!wifiFwPaused) { audioResumeAfterUpload(); return false; }
+  pet.saveNow();
+  return true;
+}
+static void wifiFwProgress(uint32_t done, uint32_t total) { updProgress(done, total > done ? total : done + 1); }
+static void wifiFwDone(bool ok) {
+  if (ok) {
+    wifiFwRebootAt = millis() + 2500;  // que llegue la pagina "완료" al movil
+    if (!wifiFwRebootAt) wifiFwRebootAt = 1;
+    return;
+  }
+  if (wifiFwPaused) audioResumeAfterUpload();
+  wifiFwPaused = false;
+  showToast(XT(X_UPD_FAIL));
+  sfxPlay(SFX_DENY);
+}
+bool wifiFwRebooting() { return wifiFwRebootAt != 0; }
+void wifiFwSetup() {
+  NetFwHooks h = { wifiFwCanStart, wifiFwProgress, wifiFwDone, FW_VERSION };
+  netSetFwHooks(h);
+}
+void wifiFwLoop() {
+  if (!wifiFwRebootAt || (int32_t)(millis() - wifiFwRebootAt) < 0) return;
+  pet.saveNow();
+  netStopPortal();
+  ESP.restart();
+}
+void renderWifiFwDone() {  // la pantalla de la red mientras espera para reiniciar
+  updScreenBase();
+  drawFit(XT(X_UPD_DONE), 200, 360, UI_BAR_OK, 3);
+  uiFlush();
+}
+
 void renderUpdate() {
   updScreenBase();
   char ver[40];
