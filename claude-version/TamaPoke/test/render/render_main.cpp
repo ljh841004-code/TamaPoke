@@ -86,9 +86,9 @@ static void scenes(bool ko, const char *sfx) {
   {  // ko12.4: habitacion y objetos; menu de decorar; paseo (con y sin sensor)
     pet.roomOn = 1; pet.deco[0] = DECO_CUSHION + 1; pet.deco[1] = DECO_BALL + 1; pet.deco[2] = DECO_PLANT + 1;
     {  // ko12.5: barras, berrinche y pagina "생활"
-      uint8_t f0 = pet.fullness > 80 ? 80 : pet.fullness; pet.fullness = f0;
+      uint8_t f0 = pet.fullness > 70 ? 70 : pet.fullness; pet.fullness = f0;
       onTap(150, 318);  // barra de comida
-      navCheck("principal: tocar la barra sube 15", pet.fullness == f0 + 15);
+      navCheck("principal: tocar la barra sube 25", pet.fullness == f0 + GAUGE_TAP_GAIN_BIG);
       pet.tantrum = TANTRUM_MIN; render(); shot("01y_tantrum");
       onTap(CX, PET_CY);
       navCheck("berrinche: tocar al bicho abre el dialogo", tantrumDlg);
@@ -133,6 +133,24 @@ static void scenes(bool ko, const char *sfx) {
       render(); shot("01v_visit_play");
       tick(4100); tamaLoop();
       navCheck("visita: se va al rato", visitDex == 0);
+      {  // ko12.9.1: el amigo que llega mientras duerme espera a que se vea la pantalla principal
+        pet.sleeping = true; visitPending = true; tamaLoop();
+        navCheck("visita: durmiendo no entra", visitDex == 0 && visitPending);
+        pet.sleeping = false; screenOff = true; tamaLoop();
+        navCheck("visita: pantalla apagada no entra", visitDex == 0 && visitPending);
+        screenOff = false; tamaLoop();
+        navCheck("visita: al mirar, llega", visitDex != 0 && !visitPending);
+        pet.sleeping = true; tamaLoop();
+        navCheck("visita: se duerme sin jugar -> vuelve luego", visitDex == 0 && visitPending);
+        pet.sleeping = false; tamaLoop();
+        navCheck("visita: vuelve al despertar", visitDex != 0);
+        visitDex = 0; visitUntil = visitByeAt = 0; visitPending = false;
+      }
+      {  // ko12.9.1: placa de la comida favorita (izquierda de la flecha): "?" o el dibujo
+        bool k0 = pet.berryKnown;
+        pet.berryKnown = true; closeAll(); render(); shot("01w_fav_known");
+        pet.berryKnown = k0;
+      }
       box.release(box.count() - 1);
       navCheck("visita: la caja queda igual", box.count() == n0);
       uint8_t bm, bd;

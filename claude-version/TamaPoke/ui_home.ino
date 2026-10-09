@@ -646,7 +646,7 @@ bool sickTap(int16_t x, int16_t y) {
 
 // ---- visitas: de vez en cuando uno de la caja viene a jugar un rato ----
 #define VISIT_MS (15UL * 60 * 1000)  // se queda 15 min
-#define VISIT_ODDS 240               // 1 de cada 240 minutos despierto (~1 cada 4 h)
+#define VISIT_ODDS 240               // 1 de cada 240 minutos de dia (8-21 h: ~3 al dia como mucho)
 #define VISIT_MAX_DAY 3
 #define VISIT_X 344
 #define VISIT_Y 246
@@ -678,24 +678,37 @@ void visitStart(uint8_t boxIdx) {  // tambien la usa la consola serie / las prue
   showToast(b);
   sfxPlay(SFX_HEART);
 }
+// ko12.9.1: antes solo se tiraba el dado con el bicho despierto, y se duerme solo a los 3 min sin
+// tocarlo (ko12.2): casi nunca venia nadie. Ahora el dado corre de dia aunque duerma o la pantalla
+// este apagada; si sale, el amigo "espera" y llega en cuanto se vuelve a ver la pantalla principal
+static bool visitPending = false;
 static void visitPoll(uint32_t now) {
   if (visitDex) {
     if (visitByeAt && (int32_t)(now - visitByeAt) >= 0) visitEnd();
     else if (!visitByeAt && !timeLeft(visitUntil)) visitEnd();
-    else if (pet.sleeping || pet.isEgg() || pet.ceremony) { visitDex = 0; visitUntil = visitByeAt = 0; }
+    else if (pet.sleeping || pet.isEgg() || pet.ceremony) {  // se durmio: vuelve luego si no jugaron
+      if (!visitPlayed && !pet.isEgg() && !pet.ceremony) visitPending = true;
+      visitDex = 0; visitUntil = visitByeAt = 0;
+    }
+    return;
+  }
+  if (visitPending && !screenOff && !pet.sleeping && !pet.isEgg() && !pet.ceremony && petHoldAllowed() &&
+      mainNavAllowed() && box.count()) {
+    visitPending = false;
+    visitStart((uint8_t)random(box.count()));
     return;
   }
   if (now - visitCheckT < 60000UL) return;
   visitCheckT = now;
   uint32_t e = clockEpoch();
-  if (!e || pet.isEgg() || pet.sleeping || pet.ceremony || !box.count()) return;
+  if (!e || pet.isEgg() || pet.ceremony || !box.count()) return;
   uint32_t day = e / 86400UL;
-  if (day != visitDay) { visitDay = day; visitsToday = 0; }
+  if (day != visitDay) { visitDay = day; visitsToday = 0; visitPending = false; }
   uint8_t hr = (uint8_t)((e / 3600UL) % 24);
-  if (hr < 8 || hr >= 21 || visitsToday >= VISIT_MAX_DAY) return;
+  if (visitPending || hr < 8 || hr >= 21 || visitsToday >= VISIT_MAX_DAY) return;
   if (random(VISIT_ODDS)) return;
   visitsToday++;
-  visitStart((uint8_t)random(box.count()));
+  visitPending = true;
 }
 void drawVisitor(uint32_t now) {
   if (!visitDex || pet.sleeping || pet.isEgg()) return;

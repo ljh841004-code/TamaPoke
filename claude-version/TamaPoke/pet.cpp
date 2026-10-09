@@ -29,7 +29,7 @@ void Pet::gaugeTap(uint8_t which) {
   if (isEgg() || ceremony != CER_NONE) return;
   uint8_t *v = which == 0 ? &fullness : which == 1 ? &joy : which == 2 ? &energy : which == 3 ? &hygiene : nullptr;
   if (!v) return;
-  *v = clamp100(*v + GAUGE_TAP_GAIN);
+  *v = clamp100(*v + (which == 2 ? GAUGE_TAP_GAIN : GAUGE_TAP_GAIN_BIG));
   if (which == 3 && poops) poops--;  // limpiar de verdad: una caca menos
   pendingSave = true;
 }

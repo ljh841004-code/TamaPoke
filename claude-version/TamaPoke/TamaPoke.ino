@@ -1827,7 +1827,7 @@ void onTap(int16_t x, int16_t y) {
       return;
     }
   }
-  // ko12.5: tocar una barra la sube 15
+  // ko12.5: tocar una barra la sube (ko12.9.1: 25; la energia 15)
   if (y >= 306 && y < 362 && x >= 70 && x < 400) {
     uint8_t g = (uint8_t)((y >= 334 ? 2 : 0) + (x >= 236 ? 1 : 0));
     pet.gaugeTap(g);
@@ -3155,7 +3155,7 @@ void render() {
     snprintf(name, sizeof(name), T(S_NAME_FMT), pet.shiny ? "*" : "", base, pet.level());
     drawHeader(name, gNight ? UI_INK_NIGHT : d.accent, statusMsg());
     drawMasterCrown(centerX(name, 3) - 20, 60);  // ko12.7: tras el final del viaje
-    drawStreakBadge();
+    drawFavBadge();
     drawWalkPill();  // ko12.4: pasos de hoy (si la placa tiene sensor)
     drawVisitor(millis());  // ko12.6: amigo de visita (detras del bicho)
     drawPet();
@@ -3839,23 +3839,24 @@ void clockTap(int16_t x, int16_t y) {
   if (y >= CLK_OK_Y && y <= CLK_OK_Y + 48 && x >= 133 && x <= 333) { applyClock(); return; }
 }
 
-// llama + numero de racha. ko12.8: en una placa a la izquierda de la flecha de arriba (como la
-// bateria a la derecha); antes iba en la esquina (26,16), fuera de la pantalla redonda
-void drawStreakBadge() {
-  if (pet.streak < 1) return;
-  char s[6];
-  snprintf(s, sizeof(s), "%u", pet.streak);
-  int pw = 6 + 12 + 5 + textW(s, 1) + 6, y = 20;
+// ko12.9.1: placa a la izquierda de la flecha de arriba (como la bateria a la derecha): su comida
+// favorita (el mismo dibujo que el menu de comida) o "?" si aun no se ha descubierto. Antes: la racha
+// de dias (sigue en la ficha de progreso)
+void drawFavBadge() {
+  if (pet.isEgg()) return;
+  static const char *const *const ICON[4] = { SPR_ICON_FOOD, SPR_ICON_BERRY_B, SPR_ICON_BERRY_G, SPR_ICON_CANDY };
+  const int pw = 6 + 16 + 6, y = 20;
   int x = CX - 18 - pw;
   gfx->fillRoundRect(x, y, pw, 21, 8, gNight ? INK_K : UI_WHITE);
   gfx->drawRoundRect(x, y, pw, 21, 8, inkColor());
-  int fx = x + 6, fy = y + 3;
-  gfx->fillTriangle(fx + 6, fy, fx, fy + 15, fx + 12, fy + 15, UI_BAR_BAD);
-  gfx->fillTriangle(fx + 6, fy + 6, fx + 3, fy + 15, fx + 9, fy + 15, UI_BAR_WARN);
-  gfx->setTextColor(inkColor());
-  setSize(1);
-  setCur(fx + 17, y + 2);
-  printT(s);
+  if (pet.berryKnown) {
+    drawMap(ICON[pet.favFood() & 3], 16, x + 6, y + 3, 1, false);
+  } else {
+    gfx->setTextColor(inkColor());
+    setSize(1);
+    setCur(x + (pw - textW("?", 1)) / 2, y + 2);
+    printT("?");
+  }
 }
 
 // banner temporal: medalla nueva o hito de racha
@@ -4981,7 +4982,22 @@ void drawHeader(const char *name, uint16_t nameColor, const char *msg) {
     return lum > 140 ? C565(0x1c, 0x22, 0x30) : UI_WHITE;
   };
   printOutlined(centerX(name, 3), 44, name, 3, nameColor, edgeFor(nameColor), 2);  // ko11.10.1: 52 -> 44
-  printOutlined(centerX(msg, 2), 78, msg, 2, inkColor(), edgeFor(inkColor()), 1);  //            90 -> 78
+  // ko12.9.1: el estado ("행복해요"...) se leia mal: borde de 2 px y letra en negrita (dos pasadas)
+  int mx = centerX(msg, 2);
+  uint16_t mc = inkColor(), me = edgeFor(mc);
+  setSize(2);
+  gfx->setTextColor(me);
+  for (int dy = -2; dy <= 2; dy++)
+    for (int dx = -2; dx <= 3; dx++) {
+      if (!dy && (dx == 0 || dx == 1)) continue;
+      int ex = dx < 0 ? dx : dx > 1 ? dx - 1 : 0;  // distancia a la letra (que ocupa x y x+1)
+      if (ex * ex + dy * dy > 5) continue;           // redondeado, como printOutlined(..., 2)
+      setCur(mx + dx, 78 + dy);
+      printT(msg);
+    }
+  gfx->setTextColor(mc);
+  setCur(mx, 78); printT(msg);
+  setCur(mx + 1, 78); printT(msg);
 }
 
 // animacion de la ceremonia (10s): despedida = reverencia con corazones y se

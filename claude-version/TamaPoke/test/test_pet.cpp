@@ -1726,14 +1726,14 @@ TEST(room, objetos_y_condiciones) {
   CHECK_EQ((int)q.deco[2], DECO_CUSHION + 1);
 }
 
-// ko12.5: tocar una barra la sube 15
-TEST(tama, tocar_la_barra_sube_15) {
+// ko12.5: tocar una barra la sube. ko12.9.1: comida, animo y limpieza +25, energia +15
+TEST(tama, tocar_la_barra_sube_25_y_energia_15) {
   Pet p;
   makePet(p, 4);
   setStats(p, 50, 50, 50, 50);
   p.poops = 2;
   p.gaugeTap(0); p.gaugeTap(1); p.gaugeTap(2); p.gaugeTap(3);
-  CHECK_EQ((int)p.fullness, 65); CHECK_EQ((int)p.joy, 65); CHECK_EQ((int)p.energy, 65); CHECK_EQ((int)p.hygiene, 65);
+  CHECK_EQ((int)p.fullness, 75); CHECK_EQ((int)p.joy, 75); CHECK_EQ((int)p.energy, 65); CHECK_EQ((int)p.hygiene, 75);
   CHECK_EQ((int)p.poops, 1);
   p.fullness = 95; p.gaugeTap(0);
   CHECK_EQ((int)p.fullness, 100);

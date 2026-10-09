@@ -6,6 +6,7 @@
 #include "box.h"     // ko12.4: LifeLog / MemRec
 // ko12.5: tamagotchi: tocar una barra la sube, berrinches (educar), rutina del dia, caracter
 #define GAUGE_TAP_GAIN 15
+#define GAUGE_TAP_GAIN_BIG 25  // ko12.9.1: comida, animo y limpieza suben mas por toque (menos toques)
 #define TANTRUM_MIN 15          // minutos que dura un berrinche si nadie hace nada
 #define DISC_START 30
 enum : uint8_t { RT_MEAL = 0, RT_PLAY, RT_BED, RT_COUNT };  // rutina: desayuno 6-11, jugar 12-19, acostarlo 20-24
@@ -237,7 +238,7 @@ public:
   void setBirthday(uint8_t m, uint8_t d);
   bool isBirthday(uint8_t m, uint8_t d) const { return bdayM && bdayM == m && bdayD == d; }
   bool birthdayGift(uint16_t year); // una vez por ano: animo +30, 1 caramelo raro (false si ya)
-  void gaugeTap(uint8_t which);     // 0 comida, 1 animo, 2 energia, 3 limpieza: +GAUGE_TAP_GAIN
+  void gaugeTap(uint8_t which);     // 0 comida, 1 animo, 3 limpieza: +GAUGE_TAP_GAIN_BIG; 2 energia: +GAUGE_TAP_GAIN
   uint8_t roomOn = 0;
   uint8_t bgAsked = 0;  // ko12.4.1: ya eligio fondo (paisaje / habitacion) en el aviso de una vez
   uint8_t deco[DECO_SLOTS] = { 0, 0, 0 };
