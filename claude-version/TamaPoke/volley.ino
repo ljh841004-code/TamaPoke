@@ -18,6 +18,7 @@ bool vbFoeShiny = false;
 bool vbRewarded = false, vbRecord = false;
 uint8_t vbGain = 0;
 uint8_t vbLastScore[2] = {0, 0};
+#define VB_LVL_BASE 1  // ko12.9.12: nivel del rival sin racha (antes 0)
 
 static float vbClampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
 
@@ -36,7 +37,8 @@ void startVolley() {
   vbFoeDex = vbPickFoe();
   vbFoeShiny = random(64) == 0;
   loadFoe(vbFoeDex, vbFoeShiny);
-  uint8_t lvl = pet.vbStreak > 5 ? 5 : (uint8_t)pet.vbStreak;  // cada victoria seguida, rival mejor
+  // cada victoria seguida, rival mejor. ko12.9.12: empieza ya en el nivel 1 (antes 0) y llega al 5 antes
+  uint8_t lvl = pet.vbStreak + VB_LVL_BASE > 5 ? 5 : (uint8_t)(pet.vbStreak + VB_LVL_BASE);
   vb.begin((uint32_t)esp_random(), lvl);
   // nuestras estadisticas cuentan un poco (sin desequilibrar)
   vb.p[0].speed = 175 + vbClampf(pet.speStat(), 0, 200) * 0.35f;
@@ -45,10 +47,11 @@ void startVolley() {
   vb.p[0].dig = (uint8_t)(60 + vbClampf(pet.defStat(), 0, 200) / 10.0f);  // 60..80 %
   vb.autoMove0 = true;
   const DexEntry &e = DEX_TBL[vbFoeDex];
-  vb.p[1].speed = 170 + vbClampf(e.bSpe, 0, 150) * 0.3f + lvl * 10;  // ko11.9.3: +10
-  vb.p[1].spikePow = 460 + vbClampf(e.bAtk, 0, 150) * 0.5f + lvl * 15;
+  // ko12.9.12: rival algo mas rapido, remata mas fuerte y recibe mejor (+15 px/s, +25, +8 %)
+  vb.p[1].speed = 185 + vbClampf(e.bSpe, 0, 150) * 0.3f + lvl * 10;  // ko11.9.3: +10
+  vb.p[1].spikePow = 485 + vbClampf(e.bAtk, 0, 150) * 0.5f + lvl * 15;
   vb.p[1].hitR = 30 + vbClampf(e.bDef, 0, 150) / 50.0f;
-  vb.p[1].dig = (uint8_t)(30 + lvl * 8 + vbClampf(e.bDef, 0, 150) / 15.0f);  // 30..80 % (ko11.9.3: +10)
+  vb.p[1].dig = (uint8_t)(38 + lvl * 8 + vbClampf(e.bDef, 0, 150) / 15.0f);  // 38..88 % (ko11.9.3: +10)
   vbOpen = true;
   vbLast = millis();
   vbIntroUntil = vbLast + 1600;

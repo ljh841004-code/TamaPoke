@@ -27,7 +27,7 @@ static uint32_t shT0 = 0, shSwapMs = 400, shRtSum = 0, shOverUntil = 0;
 // un cambio de 170 ms se pintaba en 1-2 fotogramas (la pokeball "se teletransportaba"). Ahora cada cambio
 // se ve en al menos SH_MIN_FRAMES pasos, y entre cambio y cambio hay una pausa quieta
 #define SH_MIN_FRAMES 6
-#define SH_PAUSE_MS 90UL  // ko12.9.7: 110 -> 90
+#define SH_PAUSE_MS 70UL  // ko12.9.12: 90 -> 70 (ko12.9.7: 110 -> 90)
 static float shP = 0;          // avance del cambio en curso (0..1)
 static uint32_t shLastT = 0, shPauseUntil = 0;
 static bool shNewHi = false, shOk = false;
@@ -44,8 +44,8 @@ static void shNextSwap() {
   } else {
     do shB = (uint8_t)random(shN); while (shB == shA);
   }
-  shSwapMs = 520 - shRound * 30;  // ko12.9.7: 520 -> 280 ms (ko12.9.6: 560 -> 320); siempre >= 6 fotogramas
-  if (shSwapMs < 280) shSwapMs = 280;
+  shSwapMs = 460 - shRound * 28;  // ko12.9.12: 460 -> 240 ms (ko12.9.7: 520 -> 280); siempre >= 6 fotogramas
+  if (shSwapMs < 240) shSwapMs = 240;
   shP = 0;
 }
 
@@ -298,6 +298,9 @@ void renderShell() {
 enum : uint8_t { SM_READY = 0, SM_SHOW, SM_INPUT, SM_GOOD, SM_OOPS };
 static uint8_t smPhase = SM_READY, smSeq[SIM_MAX], smLen = 3, smIdx = 0, smLives = 2, smBest = 0, smTapPad = 255;
 static uint8_t smSfxIdx = 255;
+#define SM_PRESS_MS 380UL  // ko12.9.12: el boton tocado se ve hundido + onda (antes 220 ms, poco visible)
+static int16_t smTapX = 0, smTapY = 0;
+static bool smTapOk = true;
 static uint16_t smScore = 0;
 static uint32_t smT0 = 0, smTapT = 0, smOverUntil = 0;
 static bool smNewHi = false, smFirst = true;
@@ -399,6 +402,9 @@ void simonPress(int16_t x, int16_t y) {
   smTapPad = (uint8_t)p;
   smTapT = now;
   smT0 = now;
+  smTapX = x;
+  smTapY = y;
+  smTapOk = p == smSeq[smIdx];
   if (p == smSeq[smIdx]) {
     smScore++;
     sfxPlay(SFX_TAP);
@@ -439,19 +445,36 @@ static void smIcon(int i, int x, int y, uint16_t pad) {
   }
 }
 
-static void smPads(int lit) {
+// lit = el que enseña el bicho; press = el que toco yo (hundido: mas claro, mas estrecho, borde
+// grueso; verde si acerte, rojo con X si no)
+static void smPads(int lit, int press) {
   gfx->fillArc(CX, CX, SM_ROUT + 10, SM_RIN - 8, 0, 360, C565(0x38, 0x34, 0x48));  // fondo del anillo
   for (int i = 0; i < 4; i++) {
-    bool on = i == lit;
+    bool on = i == lit, pr = i == press;
     uint16_t c = on ? SM_COL[i] : lerp565(SM_COL[i], C565(0x38, 0x34, 0x48), 8, 16);
+    if (pr) c = smTapOk ? lerp565(SM_COL[i], UI_WHITE, 6, 16) : lerp565(SM_COL[i], C565(0x60, 0x10, 0x10), 7, 16);
     int a0 = SM_ANG[i] - 41, a1;
     if (a0 < 0) a0 += 360;
     a1 = a0 + 82;  // puede pasar de 360 (fillArc lo acepta, como el aro de tiempo)
     if (on) gfx->fillArc(CX, CX, SM_ROUT + 8, SM_RIN - 4, a0, a1, UI_WHITE);
-    gfx->fillArc(CX, CX, SM_ROUT, SM_RIN, a0, a1, c);
     float rad = SM_ANG[i] * 0.01745f;
     int mr = (SM_RIN + SM_ROUT) / 2;
-    smIcon(i, CX + (int)(mr * cosf(rad)), CX + (int)(mr * sinf(rad)), c);
+    int ix = CX + (int)(mr * cosf(rad)), iy = CX + (int)(mr * sinf(rad));
+    if (pr) {  // hundido: aro de color fuerte por fuera y el boton mas estrecho por dentro
+      uint16_t rim = smTapOk ? C565(0x2a, 0xd0, 0x5a) : C565(0xff, 0x30, 0x30);
+      gfx->fillArc(CX, CX, SM_ROUT + 10, SM_RIN - 8, a0, a1, rim);
+      gfx->fillArc(CX, CX, SM_ROUT - 6, SM_RIN + 6, a0 + 3, a1 - 3, c);
+      smIcon(i, ix, iy + 2, c);  // un poco hacia abajo: se ve "apretado"
+      if (!smTapOk) {            // equivocado: X encima
+        for (int k = -2; k <= 2; k++) {
+          gfx->drawLine(ix - 18 + k, iy - 18, ix + 18 + k, iy + 18, C565(0x50, 0x00, 0x00));
+          gfx->drawLine(ix + 18 + k, iy - 18, ix - 18 + k, iy + 18, C565(0x50, 0x00, 0x00));
+        }
+      }
+    } else {
+      gfx->fillArc(CX, CX, SM_ROUT, SM_RIN, a0, a1, c);
+      smIcon(i, ix, iy, c);
+    }
   }
 }
 
@@ -469,14 +492,22 @@ void renderSimon() {
   stepSimon(now);
   if (smOverUntil) return;
   uint32_t t = now - smT0;
-  int lit = -1;
+  int lit = -1, press = -1;
+  uint32_t pt = now - smTapT;
   if (smPhase == SM_SHOW && smIdx < smLen && t < smOnMs()) lit = smSeq[smIdx];
-  else if (smTapPad < 4 && now - smTapT < 220) lit = smTapPad;
+  else if (smTapPad < 4 && pt < SM_PRESS_MS) press = smTapPad;  // ko12.9.12: hundido (antes solo 220 ms de luz)
   else if (smPhase == SM_OOPS && smIdx < smLen && (t / 200) % 2 == 0) lit = smSeq[smIdx];  // el que tocaba
   drawGameScene();
   bool night = sceneHour() < 6 || sceneHour() >= 20;
   uint16_t ink = night ? UI_INK_NIGHT : UI_INK;
-  smPads(lit);
+  smPads(lit, press);
+  if (press >= 0) {  // onda que sale del dedo
+    int r = 12 + (int)(pt * 44 / SM_PRESS_MS);
+    uint16_t wc = smTapOk ? UI_WHITE : C565(0xff, 0x50, 0x50);
+    gfx->drawCircle(smTapX, smTapY, r, wc);
+    gfx->drawCircle(smTapX, smTapY, r + 1, wc);
+    gfx->drawCircle(smTapX, smTapY, r + 2, wc);
+  }
   // centro: puntos, vidas, avance de la secuencia
   char b[24];
   snprintf(b, sizeof(b), XT(X_SM_CNT_FMT), (unsigned)smScore);
