@@ -461,6 +461,13 @@ static void scenes(bool ko, const char *sfx) {
     tick(1850); render(); tick(250); render(); shot("29b_shell_hide");
     for (int k = 0; k < 400 && shellPhaseProbe() != 2; k++) { tick(20); render(); }
     tick(180); render(); shot("29c_shell_swap");
+    {  // ko12.9.6: placa lenta (200 ms por fotograma): el cambio avanza poco a poco, no salta
+      for (int k = 0; k < 200 && !(shellPhaseProbe() == 2 && shellSwapProbe() == 0); k++) { tick(20); render(); }
+      tick(200); render();
+      float p1 = shellSwapProbe();
+      tick(200); render();
+      navCheck("shell: con fotogramas lentos el cambio va a pasos (<=1/6)", p1 > 0 && p1 <= 0.17f && shellSwapProbe() <= 0.34f);
+    }
     for (int k = 0; k < 600 && shellPhaseProbe() != 3; k++) { tick(20); render(); }
     tick(400); render(); shot("29d_shell_pick");
     uint8_t pp = shellPetProbe();

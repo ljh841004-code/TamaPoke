@@ -23,6 +23,13 @@ static uint8_t shPick = 255, shHits = 0, shGain = 0;
 static uint8_t shRes[SH_ROUNDS];  // 0 pendiente, 1 bien, 2 fallo
 static uint16_t shScore = 0, shLastPts = 0;
 static uint32_t shT0 = 0, shSwapMs = 400, shRtSum = 0, shOverUntil = 0;
+// ko12.9.6: el cambio avanza por FOTOGRAMAS, no solo por tiempo: en la placa un fotograma tarda bastante y
+// un cambio de 170 ms se pintaba en 1-2 fotogramas (la pokeball "se teletransportaba"). Ahora cada cambio
+// se ve en al menos SH_MIN_FRAMES pasos, y entre cambio y cambio hay una pausa quieta
+#define SH_MIN_FRAMES 6
+#define SH_PAUSE_MS 110UL
+static float shP = 0;          // avance del cambio en curso (0..1)
+static uint32_t shLastT = 0, shPauseUntil = 0;
 static bool shNewHi = false, shOk = false;
 
 static uint8_t shCount(uint8_t r) { return r < 3 ? 3 : r < 7 ? 4 : 5; }
@@ -37,15 +44,16 @@ static void shNextSwap() {
   } else {
     do shB = (uint8_t)random(shN); while (shB == shA);
   }
-  shSwapMs = 430 - shRound * 28;
-  if (shSwapMs < 170) shSwapMs = 170;
+  shSwapMs = 560 - shRound * 30;  // ko12.9.6: 560 -> 320 ms (antes 430 -> 170)
+  if (shSwapMs < 320) shSwapMs = 320;
+  shP = 0;
 }
 
 static void shNewRound(uint32_t now) {
   shN = shCount(shRound);
   shPet = (uint8_t)random(shN);
   shSwapI = 0;
-  shSwapN = 3 + shRound;
+  shSwapN = 3 + (shRound + 1) / 2;  // ko12.9.6: 3 -> 8 cambios (antes 3 -> 12)
   shPick = 255;
   shPhase = SH_SHOW;
   shT0 = now;
@@ -88,13 +96,23 @@ static void stepShell(uint32_t now) {
   if (shPhase == SH_SHOW) {
     if (t >= (shRound == 0 ? 1800UL : 1000UL)) { shPhase = SH_HIDE; shT0 = now; sfxPlay(SFX_TAP); }
   } else if (shPhase == SH_HIDE) {
-    if (t >= 450) { shPhase = SH_SWAP; shT0 = now; shNextSwap(); }
+    if (t >= 450) { shPhase = SH_SWAP; shT0 = shLastT = now; shPauseUntil = 0; shNextSwap(); }
   } else if (shPhase == SH_SWAP) {
-    if (t >= shSwapMs) {
+    uint32_t dt = now - shLastT;
+    shLastT = now;
+    if (shPauseUntil) {  // quietas un momento entre dos cambios
+      if (!timeLeft(shPauseUntil)) { shPauseUntil = 0; shNextSwap(); }
+      return;
+    }
+    float inc = (float)dt / shSwapMs;
+    if (inc > 1.0f / SH_MIN_FRAMES) inc = 1.0f / SH_MIN_FRAMES;  // nunca de golpe
+    shP += inc;
+    if (shP >= 1) {
+      shP = 1;
       if (shPet == shA) shPet = shB;
       else if (shPet == shB) shPet = shA;
       if (++shSwapI >= shSwapN) { shPhase = SH_PICK; shT0 = now; }
-      else { shT0 = now; shNextSwap(); }
+      else shPauseUntil = now + SH_PAUSE_MS;
     }
   } else if (shPhase == SH_PICK) {
     if (t >= SH_PICK_MS) shResolve(false, 255, now);  // no eligio
@@ -210,14 +228,14 @@ void renderShell() {
   }
   // pokeballs (las dos que se cambian van por arcos: una por encima y otra por debajo)
   float p = 0;
-  if (shPhase == SH_SWAP) {
-    p = (float)t / shSwapMs;
-    if (p > 1) p = 1;
+  bool swapping = shPhase == SH_SWAP && !shPauseUntil;
+  if (swapping) {
+    p = shP > 1 ? 1 : shP;
     p = p * p * (3 - 2 * p);
   }
   for (int pass = 0; pass < 2; pass++) {  // 0: las quietas y la de abajo, 1: la de arriba
     for (int i = 0; i < shN; i++) {
-      bool moving = shPhase == SH_SWAP && (i == shA || i == shB);
+      bool moving = swapping && (i == shA || i == shB);
       if ((pass == 1) != (moving && i == shA)) continue;
       int x = shSlotX(i), y = SH_Y, lift = 0;
       if (moving) {
@@ -225,6 +243,11 @@ void renderShell() {
         float s = sinf(p * 3.14159f);
         if (i == shA) { x = xa + (int)((xb - xa) * p); y = SH_Y - (int)(s * 46); }
         else { x = xb + (int)((xa - xb) * p); y = SH_Y + (int)(s * 22); }
+        // ko12.9.6: estela (de donde viene), para seguirla con la vista
+        int sx = (i == shA ? xb - xa : xa - xb) > 0 ? -1 : 1;
+        for (int k = 2; k >= 1; k--)
+          gfx->fillCircle(x + sx * k * 14, y + (i == shA ? k * 4 : -k * 2), r - 6 - k * 4,
+                          lerp565(C565(0xff, 0xff, 0xff), C565(0xe8, 0x3a, 0x3a), 4 + k * 3, 16));
       }
       if (shPhase == SH_FEED && (i == shPick || i == shPet)) lift = i == shPet ? 96 : 40;
       if (shPhase == SH_HIDE && i == shPet && t > 160) y -= (int)(6 * sinf((t - 160) * 0.06f));  // tiembla
@@ -488,3 +511,4 @@ uint8_t simonLenProbe() { return smLen; }
 uint8_t simonLivesProbe() { return smLives; }
 uint16_t simonScoreProbe() { return smScore; }
 bool simonOverProbe() { return smOverUntil != 0; }
+float shellSwapProbe() { return shP; }
