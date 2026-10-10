@@ -187,7 +187,7 @@ def main():
             ("card", "SWIPE 233 400 233 120 300"),
             ("card_p2", "SWIPE 380 233 80 233 300"),
             ("card_p3", "SWIPE 380 233 80 233 300"),
-            ("card_close", "SWIPE 233 120 233 400 300"),
+            ("card_close", "SWIPE 233 400 233 120 300"),  # la ficha se cierra deslizando otra vez hacia arriba
             ("dex", "SWIPE 80 233 380 233 300"),
             ("dex_p2", "SWIPE 380 233 80 233 300"),
             ("dex_close", "TAP 233 440"),
