@@ -46,7 +46,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.9.8"
+#define FW_VERSION "1.17-ko12.9.9"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -1332,9 +1332,9 @@ void handleSerial() {
   } else if (line == "HW") {  // ko12.4: chips de la placa
     hwScan();
   } else if (line == "HEALTH") {
-    Serial.printf("up=%lus heap=%u min=%u sd=%d mon=%d\n",
+    Serial.printf("up=%lus heap=%u min=%u sd=%d mon=%d fw=%s\n",  // ko12.9.9: + version
                   (unsigned long)(millis() / 1000), (unsigned)ESP.getFreeHeap(),
-                  (unsigned)ESP.getMinFreeHeap(), sdReady, pmd.loaded || mon.loaded);
+                  (unsigned)ESP.getMinFreeHeap(), sdReady, pmd.loaded || mon.loaded, FW_VERSION);
 #ifdef ESP_PLATFORM
     // ko12.8: pila que nunca se ha usado (bytes) en cada tarea: si baja de ~500, subirla
     Serial.printf("stack libre: loop=%u", (unsigned)uxTaskGetStackHighWaterMark(nullptr));
