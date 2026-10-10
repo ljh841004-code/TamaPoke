@@ -65,6 +65,7 @@ static void tick(uint32_t ms) { gMockMillis += ms; }
 static void closeAll() {
   cardOpen = trainMenuOpen = galleryOpen = clockOpen = false;
   defOpen = spdOpen = sackOpen = gameOpen = vbOpen = false;
+  punchOpen = tiltOpen = false;  // ko12.9.3
   xScreen = XS_NONE;
   toastUntil = 0;
   while (pet.showMedal()) gMockMillis += 500;  // el cartel de medalla no tapa otras capturas
@@ -454,6 +455,62 @@ static void scenes(bool ko, const char *sfx) {
   shot("26b_ball_game_3balls");
   gameOpen = false;
   closeAll();
+  {  // ko12.9.3: ataque = timing punch
+    startPunch(); render(); shot("29_punch_start");
+    navCheck("punch: abre", punchOpen);
+    tick(1000); render();
+    // tocar cuando la luz esta en el centro de la zona: perfecto (+2)
+    for (int k = 0; k < 400 && fabsf(tpDiffProbe()) > 2; k++) { tick(10); render(); }
+    uint16_t r0 = tpRocksProbe();
+    punchPress(CX, CX); tick(120); render(); shot("29b_punch_perfect");
+    navCheck("punch: centro = completo (+2)", tpRocksProbe() == r0 + 2);
+    tick(800); render(); shot("29c_punch_play");
+    // tocar lejos de la zona: fallo
+    for (int k = 0; k < 400 && fabsf(tpDiffProbe()) < 100; k++) { tick(10); render(); }
+    uint8_t l0 = tpLivesProbe();
+    punchPress(CX, CX); tick(100); render(); shot("29d_punch_miss");
+    navCheck("punch: fuera de la zona = una vida menos", tpLivesProbe() == l0 - 1);
+    // dejarla pasar entera dos veces: se acaba
+    for (int k = 0; k < 2000 && tpLivesProbe() > 0; k++) { tick(20); render(); }
+    navCheck("punch: 3 fallos = fin", tpLivesProbe() == 0);
+    render(); tick(100); render(); shot("29e_punch_result");
+    for (int k = 0; k < 50; k++) { tick(100); render(); }
+    navCheck("punch: vuelve al menu", !punchOpen && trainMenuOpen);
+    closeAll();
+  }
+  {  // ko12.9.3: juego = inclinar y recoger bayas (sensor simulado)
+    extern bool gTiltSim; extern int32_t gTiltSimX, gTiltSimY;
+    gTiltSim = true; gTiltSimX = gTiltSimY = 0;
+    { Preferences tp; tp.begin("tptilt", false); tp.clear(); tp.end(); }
+    tiltResetMapProbe();
+    startTilt(); render(); shot("30_tilt_howto");
+    navCheck("tilt: abre la explicacion", tiltOpen && !gameOpen);
+    tiltPress(TL_START_X + 80, TL_START_Y + 20); render(); shot("30b_tilt_cal_right");
+    // sensor montado al reves en x (inclinar a la derecha baja el eje y del sensor)
+    gTiltSimY = -450; tick(100); render();
+    gTiltSimY = 0; tick(300); render(); shot("30c_tilt_cal_down");
+    gTiltSimX = 420; tick(100); render();
+    gTiltSimX = 0; tick(100); render();
+    navCheck("tilt: direccion aprendida y a jugar", tiltPhaseProbe() == 3);
+    // inclinar a la derecha: la bola va a la derecha
+    float x0 = tiltBallXProbe();
+    gTiltSimY = -400;
+    for (int k = 0; k < 10; k++) { tick(85); render(); }
+    navCheck("tilt: derecha = la bola va a la derecha", tiltBallXProbe() > x0 + 20);
+    gTiltSimY = 0; gTiltSimX = 300;
+    for (int k = 0; k < 6; k++) { tick(85); render(); }
+    shot("30d_tilt_play");
+    tiltForceScoreProbe(14);
+    for (int k = 0; k < 400 && tiltOpen && !tiltOverProbe(); k++) { tick(100); render(); }
+    render(); shot("30e_tilt_result");
+    navCheck("tilt: 30 s = fin con resultado", tiltOverProbe());
+    for (int k = 0; k < 50; k++) { tick(100); render(); }
+    navCheck("tilt: vuelve al menu", !tiltOpen && trainMenuOpen);
+    gTiltSim = false;
+    startTilt();
+    navCheck("tilt: sin sensor = el juego de toques", !tiltOpen && gameOpen);
+    closeAll();
+  }
   // entrenamiento
   closeAll(); openTrainMenu();
   pet.allStrHi = 12; pet.allDefHi = 31; pet.allSpeHi = 1180; pet.allGameHi = 22; pet.allVbBest = 14;  // ko11.9.2

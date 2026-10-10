@@ -67,7 +67,8 @@ uint8_t spdRes[SPD_ROUNDS];  // ko11.16: 0 pendiente, 1 bien, 2 fallo (puntos de
 bool spdGood = false, spdNewHi = false;
 
 extern bool vbOpen;  // ko11.9 (volley.ino)
-bool trainingFast() { return defOpen || spdOpen || vbOpen; }  // toques al apoyar el dedo
+extern bool punchOpen, tiltOpen;  // ko12.9.3 (train_more.ino)
+bool trainingFast() { return defOpen || spdOpen || vbOpen || punchOpen || tiltOpen; }  // toques al apoyar el dedo
 bool trainingOpen() { return trainMenuOpen || trainingFast(); }
 
 // ko11.17: el menu se abre desde la principal o desde la ficha: [<] vuelve ahi
@@ -243,11 +244,11 @@ void trainMenuTap(int16_t x, int16_t y) {
   }
   sfxPlay(SFX_TAP);
   trainMenuOpen = false;
-  if (i == 0) startSack();
+  if (i == 0) startPunch();  // ko12.9.3: timing punch (antes el saco)
   else if (i == 1) startDefense();
   else if (i == 2) startSpeed();
   else if (i == 4) startVolley();  // ko11.9
-  else startGame();
+  else startTilt();  // ko12.9.3: inclinar y recoger bayas (sin sensor: el juego de toques)
 }
 
 // ---------- pantalla de resultado comun ----------
@@ -672,6 +673,8 @@ bool trainingRender() {
   if (defOpen) { renderDefense(); return true; }
   if (spdOpen) { renderSpeed(); return true; }
   if (vbOpen) { renderVolley(); return true; }  // ko11.9
+  if (punchOpen) { renderPunch(); return true; }  // ko12.9.3
+  if (tiltOpen) { renderTilt(); return true; }
   return false;
 }
 
@@ -684,10 +687,12 @@ bool trainingTap(int16_t x, int16_t y) {
 void trainingPress(int16_t x, int16_t y) {  // al apoyar el dedo (juegos rapidos)
   if (defOpen) defensePress(x, y);
   else if (spdOpen) speedPress(x, y);
+  else if (punchOpen) punchPress(x, y);  // ko12.9.3
+  else if (tiltOpen) tiltPress(x, y);
 }
 
 // ko9.1: abandonar sin premio (mantener el dedo 2 s, ver handleTouch)
-void trainingQuit() { defOpen = spdOpen = vbOpen = false; }
+void trainingQuit() { defOpen = spdOpen = vbOpen = punchOpen = tiltOpen = false; }
 
 bool trainingSwipe() {
   if (trainMenuOpen) { trainMenuClose(); return true; }

@@ -279,6 +279,7 @@ static bool imuRead(int32_t &ax, int32_t &ay, int32_t &az) {
   ax = v[0] * 1000 / 8192; ay = v[1] * 1000 / 8192; az = v[2] * 1000 / 8192;  // 4 g -> 8192 LSB/g
   return true;
 }
+bool imuAccel(int32_t &ax, int32_t &ay, int32_t &az) { return imuAddr && imuRead(ax, ay, az); }  // ko12.9.3: juego de inclinar
 static uint32_t walkDay() {
   uint32_t e = clockEpoch();
   return e ? e / 86400UL : 0;
