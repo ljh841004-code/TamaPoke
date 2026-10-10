@@ -471,7 +471,7 @@ static void scenes(bool ko, const char *sfx) {
       tick(200); render();
       float p1 = shellSwapProbe();
       tick(200); render();
-      navCheck("shell: con fotogramas lentos el cambio va a pasos (<=1/6)", p1 > 0 && p1 <= 0.17f && shellSwapProbe() <= 0.34f);
+      navCheck("shell: con fotogramas lentos el cambio va a pasos (<=1/5)", p1 > 0 && p1 <= 0.21f && shellSwapProbe() <= 0.41f);
     }
     for (int k = 0; k < 600 && shellPhaseProbe() != 3; k++) { tick(20); render(); }
     tick(400); render(); shot("29d_shell_pick");

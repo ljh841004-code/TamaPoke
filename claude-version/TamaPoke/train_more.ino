@@ -26,8 +26,8 @@ static uint32_t shT0 = 0, shSwapMs = 400, shRtSum = 0, shOverUntil = 0;
 // ko12.9.6: el cambio avanza por FOTOGRAMAS, no solo por tiempo: en la placa un fotograma tarda bastante y
 // un cambio de 170 ms se pintaba en 1-2 fotogramas (la pokeball "se teletransportaba"). Ahora cada cambio
 // se ve en al menos SH_MIN_FRAMES pasos, y entre cambio y cambio hay una pausa quieta
-#define SH_MIN_FRAMES 6
-#define SH_PAUSE_MS 70UL  // ko12.9.12: 90 -> 70 (ko12.9.7: 110 -> 90)
+#define SH_MIN_FRAMES 5  // ko12.9.13: 6 -> 5 (mas rapido en la placa; sigue viendose el recorrido con estela)
+#define SH_PAUSE_MS 50UL  // ko12.9.13: 70 -> 50 (ko12.9.12: 90 -> 70)
 static float shP = 0;          // avance del cambio en curso (0..1)
 static uint32_t shLastT = 0, shPauseUntil = 0;
 static bool shNewHi = false, shOk = false;
@@ -37,15 +37,21 @@ static int shGap() { return shN >= 5 ? 82 : shN == 4 ? 96 : 112; }
 static int shR() { return shN >= 5 ? 30 : 34; }
 static int shSlotX(uint8_t i) { return CX + ((int)i * 2 - (shN - 1)) * shGap() / 2; }
 
+#define SH_PET_SWAP_PCT 65  // ko12.9.13: % de cambios en los que se mueve la pokeball con el bicho (antes al azar:
+                            // con 5 pokeballs solo 2 de cada 5 cambios la tocaban y "casi no se movia")
+
 static void shNextSwap() {
-  shA = (uint8_t)random(shN);
+  shA = (uint8_t)random(100) < SH_PET_SWAP_PCT ? shPet : (uint8_t)random(shN);
   if (shRound < 3) {  // al principio solo vecinas (se sigue mejor)
     shB = shA == 0 ? 1 : shA == shN - 1 ? shA - 1 : (random(2) ? shA + 1 : shA - 1);
   } else {
     do shB = (uint8_t)random(shN); while (shB == shA);
   }
-  shSwapMs = 460 - shRound * 28;  // ko12.9.12: 460 -> 240 ms (ko12.9.7: 520 -> 280); siempre >= 6 fotogramas
-  if (shSwapMs < 240) shSwapMs = 240;
+  // ko12.9.13: la que pasa por arriba (shA) es una de las dos al azar: si no, la del bicho iria
+  // siempre por arriba y bastaria con seguir "la de arriba"
+  if (random(2)) { uint8_t t = shA; shA = shB; shB = t; }
+  shSwapMs = 380 - shRound * 26;  // ko12.9.13: 380 -> 200 ms (ko12.9.12: 460 -> 240); siempre >= 5 fotogramas
+  if (shSwapMs < 200) shSwapMs = 200;
   shP = 0;
 }
 
@@ -53,7 +59,7 @@ static void shNewRound(uint32_t now) {
   shN = shCount(shRound);
   shPet = (uint8_t)random(shN);
   shSwapI = 0;
-  shSwapN = 4 + (shRound + 1) / 2;  // ko12.9.7: 4 -> 9 cambios (ko12.9.6: 3 -> 8)
+  shSwapN = 5 + (shRound + 1) / 2;  // ko12.9.13: 5 -> 10 cambios (ko12.9.7: 4 -> 9)
   shPick = 255;
   shPhase = SH_SHOW;
   shT0 = now;
