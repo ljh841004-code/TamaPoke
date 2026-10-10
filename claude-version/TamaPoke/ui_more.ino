@@ -1816,6 +1816,21 @@ void candyBagTap(int16_t x, int16_t y) {
 #define FM_Y 92
 static uint8_t famePage = 0;
 static int16_t fameSel = -1;  // indice en fame (0 = el mas antiguo), -1 = rejilla
+// ko12.9.2: juntar fichas partidas del mismo Pokemon. 0 nada, 1 elegir con cual, 2 confirmar
+int fameMergeCards(uint8_t a, uint8_t b);
+static uint8_t fmState = 0, fmN = 0, fmCand[6];
+static int16_t fmTarget = -1;
+#define FM_BTN_Y 386
+#define FM_PNL_Y 104
+#define FM_ROW_Y 168
+#define FM_ROW_H 46
+static void fmFind() {  // las otras fichas de su familia (las mas recientes primero)
+  fmN = 0;
+  if (fameSel < 0 || fameSel >= fame.count()) return;
+  int16_t fam = DEX_FAM[fame.at((uint8_t)fameSel).dex];
+  for (int i = fame.count() - 1; i >= 0 && fmN < sizeof(fmCand); i--)
+    if (i != fameSel && DEX_FAM[fame.at((uint8_t)i).dex] == fam) fmCand[fmN++] = (uint8_t)i;
+}
 
 static uint8_t famePages() {
   uint8_t n = fame.count();
@@ -1844,6 +1859,7 @@ void openFame() {
   xScreen = XS_FAME;
   famePage = 0;
   fameSel = -1;
+  fmState = 0;
   sfxPlay(SFX_TAP);
 }
 
@@ -1851,6 +1867,7 @@ PmdMon fameHelpPmd[PARTY_HELPERS];  // ko11.20: los ayudantes de una victoria en
 static void fameHelpUnload() { for (auto &h : fameHelpPmd) h.unload(); }
 void fameClose() {
   fameHelpUnload();
+  fmState = 0;
   if (fameSel >= 0) { fameSel = -1; galleryPmd.unload(); return; }
   galleryPmd.unload();
   xScreen = XS_GYM;  // vuelve a la pagina de la liga
@@ -1972,8 +1989,38 @@ static void fameDetail() {
     snprintf(b, sizeof(b), XT(X_FAME_GENES_FMT), m.geneAtk, m.geneDef, m.geneSpe);
     drawFit(b, 358, 320, 0x8410, 2);
   }
-  drawFit(XT(X_FAME_TAP), 392, 240, UI_INK, 1);
+  fmFind();
+  if (fmN) drawBtn(CX - 130, FM_BTN_Y, 260, 32, C565(0x7a, 0x4a, 0xa8), UI_WHITE, XT(X_FMERGE_BTN));  // ko12.9.2
+  else drawFit(XT(X_FAME_TAP), 392, 240, UI_INK, 1);
   drawNav(NAV_DOWN, UI_INK);
+  if (!fmState) return;
+  // ko12.9.2: elegir la otra ficha / confirmar
+  uiPanel(58, FM_PNL_Y, 350, 262, 18, UI_WHITE, C565(0x7a, 0x4a, 0xa8));
+  if (fmState == 1) {
+    drawFit(XT(X_FMERGE_PICK), FM_PNL_Y + 22, 320, UI_INK, 2);
+    for (uint8_t k = 0; k < fmN && k < 3; k++) {
+      const BoxMon &o = fame.at(fmCand[k]);
+      FameRec r = fameRecOf(o);
+      int y = FM_ROW_Y + k * (FM_ROW_H + 6);
+      uiButton(78, y, 310, FM_ROW_H, 12, C565(0xf4, 0xee, 0xff), C565(0x7a, 0x4a, 0xa8));
+      const uint8_t *th = thumbs.get(o.dex);
+      if (th) drawThumb(th, 84, y + 3, 1, false);
+      snprintf(b, sizeof(b), XT(X_FMERGE_ROW_FMT), dexName(o.dex), o.lvl, (unsigned)r.solo, (unsigned)r.team);
+      drawFitIn(b, 128, y + 15, 252, UI_INK, 1);
+    }
+    drawBtn(163, FM_PNL_Y + 214, 140, 38, UI_TRACK, UI_INK, XT(X_UPD_CANCEL));
+  } else {
+    const BoxMon &o = fame.at((uint8_t)fmTarget);
+    const uint8_t *th = thumbs.get(o.dex);
+    if (th) drawThumb(th, CX - 40, FM_PNL_Y + 18, 2, false);
+    char nm[48];
+    snprintf(nm, sizeof(nm), "%s Lv%u", dexName(o.dex), o.lvl);
+    txFmt(b, sizeof(b), X_FMERGE_Q, nm);
+    drawFit(b, FM_PNL_Y + 112, 330, UI_INK, 2);
+    drawFit(XT(X_FMERGE_NOTE), FM_PNL_Y + 150, 330, 0x8410, 1);
+    drawBtn(84, FM_PNL_Y + 196, 140, 48, C565(0x7a, 0x4a, 0xa8), UI_WHITE, XT(X_FMERGE_GO));
+    drawBtn(242, FM_PNL_Y + 196, 140, 48, UI_TRACK, UI_INK, XT(X_UPD_CANCEL));
+  }
 }
 
 void renderFame() {
@@ -2007,7 +2054,35 @@ void renderFame() {
   uiFlush();
 }
 
+static void fameOpenSel(int16_t sel);
 void fameTap(int16_t x, int16_t y) {
+  if (fameSel >= 0 && fmState == 1) {  // ko12.9.2: elegir con cual
+    for (uint8_t k = 0; k < fmN && k < 3; k++)
+      if (inRect(x, y, 78, FM_ROW_Y + k * (FM_ROW_H + 6), 310, FM_ROW_H)) {
+        fmTarget = fmCand[k]; fmState = 2; sfxPlay(SFX_TAP); return;
+      }
+    fmState = 0; sfxPlay(SFX_TAP);  // [취소] o fuera
+    return;
+  }
+  if (fameSel >= 0 && fmState == 2) {
+    if (inRect(x, y, 84, FM_PNL_Y + 196, 140, 48)) {
+      int keep = fameMergeCards((uint8_t)fameSel, (uint8_t)fmTarget);
+      fmState = 0;
+      if (keep >= 0) { fameOpenSel((int16_t)keep); sfxPlay(SFX_MEDAL); showToast(XT(X_FMERGE_DONE)); }
+      else sfxPlay(SFX_DENY);
+      return;
+    }
+    fmState = 0; sfxPlay(SFX_TAP);
+    return;
+  }
+  if (fameSel >= 0 && inRect(x, y, CX - 130, FM_BTN_Y, 260, 32)) {
+    fmFind();
+    if (fmN) {
+      if (fmN == 1) { fmTarget = fmCand[0]; fmState = 2; } else fmState = 1;
+      sfxPlay(SFX_TAP);
+      return;
+    }
+  }
   if (fameSel >= 0) { fameClose(); sfxPlay(SFX_TAP); return; }  // la ficha: cualquier toque vuelve
   if (navHit(NAV_DOWN, x, y)) { fameClose(); sfxPlay(SFX_TAP); return; }
   if (navHit(NAV_L, x, y)) { if (famePage > 0) fameSwipe(1); else { fameClose(); sfxPlay(SFX_TAP); } return; }
@@ -2018,7 +2093,13 @@ void fameTap(int16_t x, int16_t y) {
   int idx = famePage * FM_COLS * FM_ROWS + r * FM_COLS + c;
   uint8_t n = fame.count();
   if (idx >= n) return;
-  fameSel = (int16_t)(n - 1 - idx);
+  fameOpenSel((int16_t)(n - 1 - idx));
+  audioCry(fame.at((uint8_t)fameSel).dex);
+}
+// abre la ficha sel (carga su retrato y los ayudantes)
+static void fameOpenSel(int16_t sel) {
+  fameSel = sel;
+  fmState = 0;
   const BoxMon &m = fame.at((uint8_t)fameSel);
   galleryPmd.load((uint8_t)m.dex, m.flags & BOXF_SHINY);
   fameHelpUnload();
@@ -2028,7 +2109,6 @@ void fameTap(int16_t x, int16_t y) {
     for (uint8_t k = 0; t && k < PARTY_HELPERS; k++)
       if (t->help[k] >= 1) fameHelpPmd[k].load((uint8_t)t->help[k], (t->shiny >> k) & 1);
   }
-  audioCry(m.dex);
 }
 
 // ======================================================================

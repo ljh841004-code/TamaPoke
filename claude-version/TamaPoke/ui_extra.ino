@@ -706,6 +706,59 @@ void fameGenesChanged(uint8_t oldA, uint8_t oldD, uint8_t oldS) {
     return;
   }
 }
+// ko12.9.2: juntar a mano dos fichas del mismo Pokemon que quedaron partidas (el caramelo de genes o
+// la caja le cambiaban los genes y la siguiente victoria abria otra). Se queda el hueco mas antiguo
+// (su "N번째 챔피언"), con las victorias sumadas, la mejor racha, la primera fecha y la forma de la
+// ficha de mas nivel. Devuelve el indice que queda (-1 si no se pudo)
+int fameMergeCards(uint8_t a, uint8_t b) {
+  frLoad();
+  if (a == b || a >= fame.count() || b >= fame.count()) return -1;
+  uint8_t keep = a < b ? a : b, drop = a < b ? b : a;
+  BoxMon mk = fame.at(keep), md = fame.at(drop);
+  if (DEX_FAM[mk.dex] != DEX_FAM[md.dex]) return -1;
+  int kk = frFind(mk), kd = frFind(md);
+  FameRec rk = kk >= 0 ? gFR[kk] : frDefault(mk), rd = kd >= 0 ? gFR[kd] : frDefault(md);
+  // forma, nivel y genes: los de la ficha de mas nivel (la mas reciente del Pokemon); si una es la del
+  // que crias ahora, sus genes, para que la proxima victoria caiga aqui
+  BoxMon me = {};
+  me.dex = pet.speciesId; me.geneAtk = pet.geneAtk; me.geneDef = pet.geneDef; me.geneSpe = pet.geneSpe;
+  const BoxMon &top = md.lvl > mk.lvl ? md : mk;
+  const BoxMon &gsrc = sameIndividual(md, me) ? md : sameIndividual(mk, me) ? mk : top;
+  BoxMon m = mk;
+  m.dex = top.dex;
+  m.lvl = top.lvl;
+  memcpy(m.mv, top.mv, sizeof(m.mv));
+  m.geneAtk = gsrc.geneAtk; m.geneDef = gsrc.geneDef; m.geneSpe = gsrc.geneSpe;
+  m.epoch = (mk.epoch && md.epoch) ? (mk.epoch < md.epoch ? mk.epoch : md.epoch) : (mk.epoch ? mk.epoch : md.epoch);
+  m.flags = (uint8_t)(mk.flags | md.flags);
+  FameRec r = rk;
+  uint32_t solo = (uint32_t)rk.solo + rd.solo, team = (uint32_t)rk.team + rd.team;
+  r.solo = (uint16_t)(solo > 65535 ? 65535 : solo);
+  r.team = (uint16_t)(team > 65535 ? 65535 : team);
+  if (rd.team && rd.help[0] && (md.lvl > mk.lvl || !rk.help[0])) {  // ayudantes: los de la ficha mas reciente
+    r.help[0] = rd.help[0]; r.help[1] = rd.help[1]; r.shiny = rd.shiny;
+  }
+  m.flags = (uint8_t)(r.solo ? (m.flags & ~BOXF_TEAM) : (m.flags | BOXF_TEAM));
+  r.epoch = m.epoch; r.fam = DEX_FAM[m.dex]; r.gA = m.geneAtk; r.gD = m.geneDef; r.gS = m.geneSpe;
+  // fichas viejas fuera (la de indice mayor primero) y la nueva al final
+  int hi = kk > kd ? kk : kd, lo = kk > kd ? kd : kk;
+  if (hi >= 0) { memmove(gFR + hi, gFR + hi + 1, sizeof(FameRec) * (gFRN - hi - 1)); gFRN--; }
+  if (lo >= 0 && lo != hi) { memmove(gFR + lo, gFR + lo + 1, sizeof(FameRec) * (gFRN - lo - 1)); gFRN--; }
+  if (gFRN == FAME_REC_MAX) { memmove(gFR, gFR + 1, sizeof(FameRec) * (FAME_REC_MAX - 1)); gFRN--; }
+  gFR[gFRN++] = r;
+  fame.set(keep, m);
+  const uint8_t SN = (uint8_t)sizeof(pet.fameStreak);
+  if (drop < SN && keep < SN && pet.fameStreak[drop] > pet.fameStreak[keep]) pet.fameStreak[keep] = pet.fameStreak[drop];
+  fame.release(drop);
+  if (drop < SN) {
+    memmove(pet.fameStreak + drop, pet.fameStreak + drop + 1, SN - drop - 1);
+    pet.fameStreak[SN - 1] = 0;
+  }
+  frSave();
+  pet.saveNow();
+  bakRequest();
+  return keep;
+}
 int fameCardOfPet() {
   frLoad();
   BoxMon me = {};

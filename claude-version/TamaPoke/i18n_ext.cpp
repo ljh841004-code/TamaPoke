@@ -175,6 +175,7 @@ static const char *const XS[2][X_COUNT] = {
     "It guarded: damage halved!", "Super effective, but guarded: halved!", "Not very effective, and guarded...", "That move must rest next turn", "Resting",
     "Check SD files", "SD files", "Pokemon pictures", "Battle pictures", "Move effects", "Cries", "Small pictures", "Story people", "Music (optional)", "Everything is there!", "Missing: %s (+%u more)", "No SD card", "In mons.pak: %u files",
     "%u candy",
+    "Merge with the same Pokemon", "Pick the card to merge", "Merge with {1}?", "Wins are added up into one card", "Merge", "Cards merged!", "%s Lv%u  solo %u / team %u",
   },
   // ---------------- KO ----------------
   {
@@ -344,6 +345,7 @@ static const char *const XS[2][X_COUNT] = {
     "막아서 피해가 절반이 됐다!", "효과가 굉장했지만 막아서 절반!", "효과가 별로인 데다 막혀 버렸다...", "다음 턴엔 이 기술을 쉬어야 해요", "쉬는 중",
     "SD 파일 점검", "SD 파일 점검", "포켓몬 그림", "배틀 그림", "기술 이펙트", "울음소리", "작은 그림", "스토리 인물", "음악 (없어도 됨)", "필요한 파일이 모두 있어요!", "없는 파일: %s 외 %u개", "SD카드가 없어요", "mons.pak 안에서 확인 (파일 %u개)",
     "사탕 %u개",
+    "같은 포켓몬 카드 합치기", "합칠 카드를 고르세요", "{1} 카드와 합칠까요?", "우승 횟수를 더해서 카드 1장으로 만들어요", "합치기", "카드를 합쳤어요!", "%s Lv%u  단독 %u · 팀 %u",
   },
 };
 

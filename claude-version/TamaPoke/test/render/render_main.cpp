@@ -819,6 +819,33 @@ static void scenes(bool ko, const char *sfx) {
       navCheck("salon: una ficha por Pokemon", fame.count() == c0 && ci >= 0 &&
                fameRecOf(fame.at((uint8_t)ci)).solo == s0 + 1);
     }
+    {  // ko12.9.2: dos fichas partidas del mismo Pokemon (푸푸린 -> 푸크린) se juntan a mano
+      closeAll();
+      uint8_t c0 = fame.count();
+      fame.addRaised(39, 30, false, 101, 102, 103, gMockEpoch - 5 * 86400, nullptr);
+      { FameRec *r = frGetOrAdd(fame.at((uint8_t)(fame.count() - 1))); r->solo = 2; r->team = 1; }
+      fame.addRaised(40, 45, false, 103, 104, 105, gMockEpoch - 86400, nullptr);
+      { FameRec *r = frGetOrAdd(fame.at((uint8_t)(fame.count() - 1))); r->solo = 0; r->team = 3; r->help[0] = 25; r->help[1] = 0; }
+      frSave();
+      uint8_t a = (uint8_t)(fame.count() - 2);
+      pet.fameStreak[a] = 4; pet.fameStreak[a + 1] = 6;
+      openFame();
+      fameTap(FM_X + 10, FM_Y + 10);  // la mas reciente = 푸크린
+      render(); shot("59h_fame_merge_btn");
+      navCheck("salon: boton de juntar con otra de su familia", fameSel == a + 1 && fmN == 1);
+      fameTap(CX, FM_BTN_Y + 10);
+      render(); shot("59i_fame_merge_confirm");
+      navCheck("salon: una sola candidata -> confirmar", fmState == 2 && fmTarget == a);
+      fameTap(84 + 70, FM_PNL_Y + 196 + 20);
+      render(); shot("59j_fame_merged");
+      const BoxMon &m = fame.at(a);
+      FameRec r = fameRecOf(m);
+      navCheck("salon: juntadas en el hueco mas antiguo", fame.count() == c0 + 1 && fameSel == a && m.dex == 40 && m.lvl == 45 &&
+               r.solo == 2 && r.team == 4 && r.help[0] == 25 && m.epoch == gMockEpoch - 5 * 86400 && pet.fameStreak[a] == 6 &&
+               !(m.flags & BOXF_TEAM));
+      fameClose(); fameClose();
+      fame.release(a);
+    }
 
     closeAll();
     gymPage = 0; gymTap(GY_X + 10, GY_Y + 1 * (GY_H + GY_GAP) + 10);  // revancha de Misty

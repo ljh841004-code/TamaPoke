@@ -166,6 +166,7 @@ enum XId : uint16_t {  // ko10.6: pasaron de 255
   X_GUARD_HALF, X_SUPER_GUARD, X_NOTVERY_GUARD, X_REST_NOTE, X_MV_REST,  // ko12.8: por que pego flojo / descanso
   X_SDC_BTN, X_SDC_TITLE, X_SDC_SPR, X_SDC_BAT, X_SDC_FX, X_SDC_CRY, X_SDC_THUMB, X_SDC_STORY, X_SDC_MUSIC, X_SDC_OK, X_SDC_MISS_FMT, X_SDC_NOSD, X_SDC_PAK_FMT,  // ko12.8: SD 파일 점검
   X_CANDY_COST_FMT,  // ko12.9.2: baldosas de caramelos ("사탕 %u개")
+  X_FMERGE_BTN, X_FMERGE_PICK, X_FMERGE_Q, X_FMERGE_NOTE, X_FMERGE_GO, X_FMERGE_DONE, X_FMERGE_ROW_FMT,  // ko12.9.2: juntar fichas
   X_COUNT
 };
 
