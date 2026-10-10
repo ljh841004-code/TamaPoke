@@ -1159,7 +1159,16 @@ static bool testSerialCommand(const String &line) {
     uint32_t len = (uint32_t)LCD_WIDTH * LCD_HEIGHT * 2;
     if (!fb) { Serial.println("ERR"); return true; }
     Serial.printf("SHOT %d %d %lu\n", LCD_WIDTH, LCD_HEIGHT, (unsigned long)len);
-    for (uint32_t o = 0; o < len; o += 4096) Serial.write(fb + o, len - o < 4096 ? len - o : 4096);
+    // ko12.9.9: con el timeout global a 0 el USB tira lo que no cabe en el bufer (solo llegaban ~2 KB):
+    // aqui se espera a que el PC lea, con un limite total para no colgar el juego si deja de leer
+    Serial.setTxTimeoutMs(50);
+    uint32_t o = 0, t0 = millis();
+    while (o < len && millis() - t0 < 20000) {
+      size_t n = Serial.write(fb + o, len - o < 1024 ? len - o : 1024);
+      o += n;
+      if (!n) delay(2);
+    }
+    Serial.setTxTimeoutMs(0);
     Serial.println();
     Serial.println("DONE");
     return true;

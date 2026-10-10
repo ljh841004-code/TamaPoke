@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ko12.9.8: probar la placa de verdad desde el PC por USB (sin tocarla).
+"""ko12.9.8 (+ko12.9.9): probar la placa de verdad desde el PC por USB (sin tocarla).
 
 Necesita: pip install pyserial pillow   y la placa con ko12.9.8 o posterior conectada por USB.
 
@@ -142,8 +142,18 @@ class Board:
         return path
 
     def gesture(self, line, wait=0.9):
+        self.wake()
         self.cmd(line)
         time.sleep(wait)  # que la placa entregue el gesto y repinte
+
+    def wake(self):
+        # ko12.9.9: con la pantalla atenuada o apagada el primer toque solo la despierta (se traga el gesto)
+        out, _ = self.cmd("SCR")
+        st = dict(kv.split("=", 1) for kv in " ".join(out).split() if "=" in kv)
+        if st.get("dim", "0") != "0" or st.get("off", "0") != "0":
+            self.note("despertar pantalla")
+            self.cmd("TAP 233 233")
+            time.sleep(1.0)
 
 
 def main():
@@ -187,6 +197,8 @@ def main():
         for name, g in steps:
             if g:
                 b.gesture(g, 1.2)
+            else:
+                b.wake()
             b.shot(os.path.join(OUT, "tour_%s.png" % name))
             print("  ", name, "|", " ".join(b.cmd("SCR")[0]))
     elif w == "soak":
