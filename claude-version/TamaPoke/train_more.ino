@@ -27,25 +27,25 @@ static uint32_t shT0 = 0, shSwapMs = 400, shRtSum = 0, shOverUntil = 0;
 // un cambio de 170 ms se pintaba en 1-2 fotogramas (la pokeball "se teletransportaba"). Ahora cada cambio
 // se ve en al menos SH_MIN_FRAMES pasos, y entre cambio y cambio hay una pausa quieta
 #define SH_MIN_FRAMES 6
-#define SH_PAUSE_MS 110UL
+#define SH_PAUSE_MS 90UL  // ko12.9.7: 110 -> 90
 static float shP = 0;          // avance del cambio en curso (0..1)
 static uint32_t shLastT = 0, shPauseUntil = 0;
 static bool shNewHi = false, shOk = false;
 
-static uint8_t shCount(uint8_t r) { return r < 3 ? 3 : r < 7 ? 4 : 5; }
+static uint8_t shCount(uint8_t r) { return r < 2 ? 3 : r < 6 ? 4 : 5; }  // ko12.9.7: 4 y 5 una ronda antes
 static int shGap() { return shN >= 5 ? 82 : shN == 4 ? 96 : 112; }
 static int shR() { return shN >= 5 ? 30 : 34; }
 static int shSlotX(uint8_t i) { return CX + ((int)i * 2 - (shN - 1)) * shGap() / 2; }
 
 static void shNextSwap() {
   shA = (uint8_t)random(shN);
-  if (shRound < 4) {  // al principio solo vecinas (se sigue mejor)
+  if (shRound < 3) {  // al principio solo vecinas (se sigue mejor)
     shB = shA == 0 ? 1 : shA == shN - 1 ? shA - 1 : (random(2) ? shA + 1 : shA - 1);
   } else {
     do shB = (uint8_t)random(shN); while (shB == shA);
   }
-  shSwapMs = 560 - shRound * 30;  // ko12.9.6: 560 -> 320 ms (antes 430 -> 170)
-  if (shSwapMs < 320) shSwapMs = 320;
+  shSwapMs = 520 - shRound * 30;  // ko12.9.7: 520 -> 280 ms (ko12.9.6: 560 -> 320); siempre >= 6 fotogramas
+  if (shSwapMs < 280) shSwapMs = 280;
   shP = 0;
 }
 
@@ -53,7 +53,7 @@ static void shNewRound(uint32_t now) {
   shN = shCount(shRound);
   shPet = (uint8_t)random(shN);
   shSwapI = 0;
-  shSwapN = 3 + (shRound + 1) / 2;  // ko12.9.6: 3 -> 8 cambios (antes 3 -> 12)
+  shSwapN = 4 + (shRound + 1) / 2;  // ko12.9.7: 4 -> 9 cambios (ko12.9.6: 3 -> 8)
   shPick = 255;
   shPhase = SH_SHOW;
   shT0 = now;
@@ -305,6 +305,22 @@ static const uint16_t SM_COL[4] = { C565(0xe8, 0x48, 0x40), C565(0x40, 0x88, 0xe
                                     C565(0xf0, 0xc0, 0x30) };  // arriba fuego, derecha agua, abajo planta, izq. electrico
 static const int16_t SM_ANG[4] = { 270, 0, 90, 180 };
 
+// ko12.9.7: cada ronda una secuencia NUEVA (antes la misma alargada en uno: "siempre igual"), con su
+// propio generador sembrado al empezar (el momento exacto del toque cambia en cada partida); nunca el
+// mismo boton tres veces seguidas
+static uint32_t smRng = 1;
+static uint8_t smRand4() {
+  smRng ^= smRng << 13; smRng ^= smRng >> 17; smRng ^= smRng << 5;
+  return (uint8_t)((smRng >> 7) & 3);
+}
+static void smNewSeq(uint8_t len) {
+  for (uint8_t i = 0; i < len && i < SIM_MAX; i++) {
+    uint8_t v;
+    do v = smRand4(); while (i >= 2 && v == smSeq[i - 1] && v == smSeq[i - 2]);
+    smSeq[i] = v;
+  }
+}
+
 static uint32_t smOnMs() { int v = 560 - smLen * 24; return v < 260 ? 260 : (uint32_t)v; }
 #define SM_GAP_MS 170UL
 
@@ -313,7 +329,8 @@ void startSimon() {
   if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
   simonOpen = true;
   smLen = 3;
-  for (int i = 0; i < SIM_MAX; i++) smSeq[i] = (uint8_t)random(4);
+  smRng = ((uint32_t)random(0x7fffffff) ^ (micros() * 2654435761u) ^ (smRng * 69069u)) | 1;
+  smNewSeq(smLen);
   smIdx = 0;
   smLives = 2;
   smScore = 0;
@@ -353,6 +370,7 @@ static void stepSimon(uint32_t now) {
     if (t >= 800) {
       if (smLen >= SIM_MAX) { smEnd(now); return; }
       smLen++;
+      smNewSeq(smLen);  // ko12.9.7: otra secuencia (no la de antes + 1)
       smPhase = SM_READY; smT0 = now;
     }
   } else if (smPhase == SM_OOPS) {
@@ -512,3 +530,4 @@ uint8_t simonLivesProbe() { return smLives; }
 uint16_t simonScoreProbe() { return smScore; }
 bool simonOverProbe() { return smOverUntil != 0; }
 float shellSwapProbe() { return shP; }
+void simonSeqProbe(uint8_t *out, uint8_t n) { for (uint8_t i = 0; i < n && i < SIM_MAX; i++) out[i] = smSeq[i]; }

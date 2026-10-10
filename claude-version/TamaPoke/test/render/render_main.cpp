@@ -506,6 +506,18 @@ static void scenes(bool ko, const char *sfx) {
     while (simonPhaseProbe() == 2) { n = simonNextPadProbe(); simonPress(PX[n], PY[n]); tick(80); }
     render(); shot("30d_simon_good");
     navCheck("simon: secuencia completa", simonPhaseProbe() == 3);
+    { int same = 0;  // 20 partidas: el principio de cada una (y de cada ronda) no es siempre el mismo
+      uint8_t first[3], cur[3];
+      for (int g = 0; g < 20; g++) {
+        simonOpen = false; tick(37 + g * 13); startSimon(); simonSeqProbe(cur, 3);
+        if (g == 0) memcpy(first, cur, 3);
+        else if (!memcmp(first, cur, 3)) same++;
+      }
+      navCheck("simon: cada partida empieza distinto", same < 5);
+      simonOpen = false; startSimon(); tick(2250); render();
+      for (int k = 0; k < 400 && simonPhaseProbe() != 2; k++) { tick(20); render(); }
+      while (simonPhaseProbe() == 2) { n = simonNextPadProbe(); simonPress(PX[n], PY[n]); tick(80); }
+    }
     for (int k = 0; k < 400 && simonPhaseProbe() != 2; k++) { tick(20); render(); }
     navCheck("simon: crece en uno", simonLenProbe() == 4);
     n = simonNextPadProbe();
