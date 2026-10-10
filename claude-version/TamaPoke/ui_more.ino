@@ -1443,7 +1443,7 @@ void wifiFwSetup() {
 void wifiFwLoop() {
   if (!wifiFwRebootAt || (int32_t)(millis() - wifiFwRebootAt) < 0) return;
   pet.saveNow();
-  netStopPortal();
+  netStopPortal();  // tambien apaga /fw de la WiFi de casa (ko12.9.4)
   ESP.restart();
 }
 void renderWifiFwDone() {  // la pantalla de la red mientras espera para reiniciar

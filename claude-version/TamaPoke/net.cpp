@@ -48,6 +48,9 @@ static char gApName[24] = "TamaPoke";
 
 static WebServer *gWeb = nullptr;
 static DNSServer *gDns = nullptr;
+static NetLan gLan = LAN_OFF;  // ko12.9.4: /fw en la WiFi de casa (netStartLanFw)
+static char gLanIp[16] = "";
+static bool lanRadio() { return gLan == LAN_SCAN || gLan == LAN_CONNECTING || gLan == LAN_ON; }
 
 static void loadCfg() {
   Preferences p;
@@ -131,7 +134,7 @@ uint32_t netLastSync() { return gLastSync; }
 bool netPortalOn() { return gPortal; }
 const char *netApName() { return gApName; }
 NetState netState() { return gState; }
-bool netBusy() { return gPortal || gState == NET_SCAN || gState == NET_CONNECTING || gState == NET_NTP; }
+bool netBusy() { return gPortal || lanRadio() || gState == NET_SCAN || gState == NET_CONNECTING || gState == NET_NTP; }
 
 static void radioOff() {
   WiFi.disconnect(true, false);
@@ -142,7 +145,7 @@ static void onSntp(struct timeval *) { gSntpDone = true; }
 
 // ko8: primero se escanea y luego se prueban las candidatas en orden (net_pick.h)
 void netSyncNow() {
-  if (!netCanSync() || gPortal || linkActive()) return;
+  if (!netCanSync() || gPortal || lanRadio() || linkActive()) return;
   if (netBusy()) return;
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(true);
@@ -154,13 +157,18 @@ void netSyncNow() {
   Serial.println("NET buscando WiFi...");
 }
 
-static void tryCand(int i, uint32_t now) {
+static void beginCand(int i) {
   gCandI = i;
   const NetCand &c = gCand[i];
   strcpy(gSsid, gCandSsid[i]);
   WiFi.disconnect(false, false);
   if (c.saved >= 0 && gSavedPass[c.saved][0]) WiFi.begin(gSsid, gSavedPass[c.saved]);
   else WiFi.begin(gSsid);
+}
+
+static void tryCand(int i, uint32_t now) {
+  beginCand(i);
+  const NetCand &c = gCand[i];
   gState = NET_CONNECTING;
   gT0 = now;
   Serial.printf("NET conectando a '%s'%s\n", gSsid, c.saved < 0 ? " (abierta)" : "");
@@ -175,7 +183,8 @@ static void nextCand(uint32_t now) {
   Serial.println(gAnyConnected ? "NET fallo: NTP" : "NET fallo: WiFi");
 }
 
-static void scanDone(uint32_t now) {
+// el escaneo termino: candidatas en gCand / gCandSsid (allowOpen = probar tambien las abiertas)
+static int pickFromScan(bool allowOpen) {
   int n = WiFi.scanComplete();
   if (n < 0) n = 0;
   if (n > 40) n = 40;
@@ -187,7 +196,7 @@ static void scanDone(uint32_t now) {
     seen[i].rssi = (int16_t)WiFi.RSSI(i);
     seen[i].open = WiFi.encryptionType(i) == WIFI_AUTH_OPEN;
   }
-  gNCand = netPickCandidates(gSaved, gNSaved, seen, n, gOpenOk, gCand, NET_MAX_CAND);
+  gNCand = netPickCandidates(gSaved, gNSaved, seen, n, allowOpen, gCand, NET_MAX_CAND);
   for (int i = 0; i < gNCand; i++) {
     const char *src = gCand[i].seen >= 0 ? seen[gCand[i].seen].ssid : gSaved[gCand[i].saved];
     strncpy(gCandSsid[i], src, 32);
@@ -196,7 +205,11 @@ static void scanDone(uint32_t now) {
   for (int i = 0; i < n; i++) names[i] = String();
   WiFi.scanDelete();
   Serial.printf("NET %d redes vistas, %d candidatas\n", n, gNCand);
-  if (!gNCand) {
+  return gNCand;
+}
+
+static void scanDone(uint32_t now) {
+  if (!pickFromScan(gOpenOk)) {
     radioOff();
     gState = NET_FAIL_WIFI;
     return;
@@ -406,9 +419,12 @@ static void pageFw() {
          "<input id=f type=file accept='.bin'>"
          "<button id=b onclick='up()'>올리기 / Upload</button>"
          "<div class=bar><div id=p></div></div><p id=m></p>"
-         "<p><small>파일 고르기가 안 열리면: 이 화면을 닫고 Chrome/Safari에서 "
-         "<b>192.168.4.1/fw</b> 를 열어 주세요.<br>0x0 통합 이미지(저장이 지워지는 파일)는 받지 않아요.</small></p>"
-         "<p><a href=/>WiFi 설정으로</a></p></div><script>"
+         "<p><small>");
+  if (gPortal)
+    h += F("파일 고르기가 안 열리면: 이 화면을 닫고 Chrome/Safari에서 <b>192.168.4.1/fw</b> 를 열어 주세요.<br>");
+  h += F("0x0 통합 이미지(저장이 지워지는 파일)는 받지 않아요.</small></p>");
+  if (gPortal) h += F("<p><a href=/>WiFi 설정으로</a></p>");
+  h += F("</div><script>"
          "function up(){var f=document.getElementById('f').files[0];if(!f){alert('update.bin을 골라 주세요');return}"
          "var b=document.getElementById('b'),p=document.getElementById('p'),m=document.getElementById('m');"
          "b.disabled=true;m.textContent='보내는 중...';var d=new FormData();d.append('fw',f,f.name);"
@@ -501,6 +517,7 @@ static void pageFwDone() {
 
 void netStartPortal() {
   if (gPortal || linkActive()) return;
+  netStopLanFw();
   if (gState == NET_CONNECTING || gState == NET_NTP) radioOff();
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(gApName, NET_AP_PASS);
@@ -530,6 +547,7 @@ void netStartPortal() {
 }
 
 void netStopPortal() {
+  netStopLanFw();
   if (!gPortal) return;
   if (gWeb) { gWeb->stop(); delete gWeb; gWeb = nullptr; }
   if (gDns) { gDns->stop(); delete gDns; gDns = nullptr; }
@@ -544,14 +562,127 @@ void netStopPortal() {
   }
 }
 
-// ---------------------------------------------------------------- sondeo
+// ---------------------------------------------------------------- ko12.9.4: /fw en la WiFi de casa
 
 // ms transcurridos desde t, CON signo. ko6.1: el portal se abria y se cerraba en
 // el mismo loop: `now` se toma antes del toque que arranca el portal con
 // millis(), la resta sin signo daba ~49 dias y saltaba el tiempo maximo.
 static inline int32_t since(uint32_t now, uint32_t t) { return (int32_t)(now - t); }
 
+static void pageLanRoot() {
+  gWeb->sendHeader("Location", "/fw", true);
+  gWeb->send(302, "text/plain", "");
+}
+
+void netStartLanFw() {
+  if (lanRadio() || linkActive()) return;
+  if (gPortal) netStopPortal();
+  if (gState == NET_NTP) esp_sntp_stop();
+  if (gState == NET_SCAN || gState == NET_CONNECTING || gState == NET_NTP) {
+    WiFi.scanDelete();
+    radioOff();
+    gState = NET_IDLE;
+  }
+  gLanIp[0] = 0;
+  if (!gNSaved) { gLan = LAN_FAIL_NOSAVED; return; }
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);  // sin ahorro de energia: la subida de ~3 MB va mucho mas rapida
+  WiFi.scanDelete();
+  WiFi.scanNetworks(true);
+  gLan = LAN_SCAN;
+  gT0 = millis();
+  Serial.println("NET LAN: buscando la WiFi guardada");
+}
+
+void netStopLanFw() {
+  if (gLan == LAN_OFF) return;
+  bool radio = lanRadio();
+  if (gWeb && !gPortal) { gWeb->stop(); delete gWeb; gWeb = nullptr; }
+  if (radio) {
+    WiFi.scanDelete();
+    radioOff();
+  }
+  gLan = LAN_OFF;
+  gLanIp[0] = 0;
+  strcpy(gSsid, gSaved[0]);
+}
+
+NetLan netLanState() { return gLan; }
+const char *netLanIp() { return gLanIp; }
+
+static void lanFail() {
+  WiFi.scanDelete();
+  radioOff();
+  gLan = LAN_FAIL_WIFI;
+  strcpy(gSsid, gSaved[0]);
+  Serial.println("NET LAN: no conecta");
+}
+
+static void lanServe(uint32_t now) {
+  gWeb = new WebServer(80);
+  gWeb->on("/", HTTP_GET, pageLanRoot);
+  gWeb->on("/fw", HTTP_GET, pageFw);
+  gWeb->on("/fw", HTTP_POST, pageFwDone, pageFwUpload);
+  gWeb->onNotFound(pageLanRoot);
+  gWeb->begin();
+  strncpy(gLanIp, WiFi.localIP().toString().c_str(), sizeof(gLanIp) - 1);
+  gLanIp[sizeof(gLanIp) - 1] = 0;
+  gLan = LAN_ON;
+  gPortalT0 = now;
+  // la que funciono pasa a ser la mas reciente (como al poner la hora)
+  const NetCand &c = gCand[gCandI];
+  if (c.saved > 0) {
+    char ss[33], pp[65];
+    memcpy(ss, gSaved[c.saved], sizeof(ss));
+    memcpy(pp, gSavedPass[c.saved], sizeof(pp));
+    netRememberFront(gSaved, gSavedPass, gNSaved, ss, pp);
+    saveCfg();
+  }
+  Serial.printf("NET LAN: '%s' -> http://%s/fw\n", gSsid, gLanIp);
+}
+
+static void lanPoll(uint32_t now) {
+  if (gLan == LAN_SCAN) {
+    if (WiFi.scanComplete() >= 0 || since(now, gT0) > (int32_t)NET_SCAN_MS) {
+      if (!pickFromScan(false)) { lanFail(); return; }  // solo las guardadas: la de casa / la oficina
+      beginCand(0);
+      gLan = LAN_CONNECTING;
+      gT0 = now;
+    }
+  } else if (gLan == LAN_CONNECTING) {
+    if (WiFi.status() == WL_CONNECTED) lanServe(now);
+    else if (since(now, gT0) > (int32_t)NET_CONNECT_MS) {
+      Serial.printf("NET LAN: '%s' no conecta\n", gSsid);
+      if (gCandI + 1 < gNCand) { beginCand(gCandI + 1); gT0 = now; }
+      else lanFail();
+    }
+  } else if (gLan == LAN_ON) {
+    gWeb->handleClient();
+    // si el router la echa y vuelve (reconexion automatica) la IP puede cambiar
+    if (WiFi.status() == WL_CONNECTED) {
+      IPAddress ip = WiFi.localIP();
+      if (ip != IPAddress((uint32_t)0)) {
+        strncpy(gLanIp, ip.toString().c_str(), sizeof(gLanIp) - 1);
+        gLanIp[sizeof(gLanIp) - 1] = 0;
+      }
+    }
+    if (since(now, gPortalT0) > (int32_t)NET_PORTAL_MS) netStopLanFw();
+  }
+}
+
+// ---------------------------------------------------------------- sondeo
+
+uint32_t netLanLeftS(uint32_t now) {
+  if (gLan != LAN_ON) return 0;
+  int32_t left = (int32_t)NET_PORTAL_MS - since(now, gPortalT0);
+  return left > 0 ? (uint32_t)(left + 999) / 1000 : 0;
+}
+
 uint32_t netPoll(uint32_t now) {
+  if (lanRadio()) {
+    lanPoll(now);
+    return 0;
+  }
   if (gPortal) {
     gDns->processNextRequest();
     gWeb->handleClient();

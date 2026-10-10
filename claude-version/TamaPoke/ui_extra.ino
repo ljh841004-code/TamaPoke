@@ -159,10 +159,16 @@ void screenBase() {
 #define NET_SETUP_Y 266
 #define NET_AUTO_Y 318
 #define NET_TZ_Y 150
+#define NET_LAN_X 103  // ko12.9.4: [집 와이파이로 업데이트] (mas estrecho: abajo la pantalla redonda se cierra)
+#define NET_LAN_Y 372
+#define NET_LAN_W 260
+#define NET_LAN_H 40
+#define LAN_RETRY_Y 300
 
 void openNet() { retMark(); clockOpen = false; xScreen = XS_NET; }
 
 void closeNet() {
+  netStopLanFw();  // ko12.9.4
   if (netPortalOn()) netStopPortal();
   goBack();  // ko11.17: a la hora (desde donde se abre)
 }
@@ -240,10 +246,43 @@ void portalRow(int y, const char *label, const char *value, uint16_t col) {
   printT(value);
 }
 
+// ko12.9.4: firmware desde un PC del mismo router: la direccion en grande para teclearla
+static void renderLanFw() {
+  NetLan st = netLanState();
+  drawFit(XT(X_LAN_BTN), 40, 320, UI_INK, 3);
+  char b[64];
+  if (st == LAN_SCAN || st == LAN_CONNECTING) {
+    if (st == LAN_SCAN) snprintf(b, sizeof(b), "%s", XT(X_LAN_SCAN));
+    else snprintf(b, sizeof(b), XT(X_LAN_CONN_FMT), netSsid());
+    drawFit(b, 200, 360, UI_BAR_WARN, 2);
+  } else if (st == LAN_ON) {
+    drawFit(XT(X_LAN_HINT), 100, 340, UI_INK, 2);
+    char a[32];
+    snprintf(a, sizeof(a), "%s/fw", netLanIp());
+    uiButton(43, 136, 380, 76, 16, UI_WHITE, UI_BAR_OK);
+    uint8_t sz = textW(a, 4) <= 360 ? 4 : 3;
+    drawFit(a, 174 - textH(sz) / 2, 360, UI_BAR_BAD, sz);
+    snprintf(b, sizeof(b), XT(X_LAN_SAME_FMT), netSsid());
+    drawFit(b, 232, 360, UI_INK, 2);
+    uint32_t left = netLanLeftS(millis());
+    snprintf(b, sizeof(b), XT(X_LAN_LEFT_FMT), (unsigned)((left + 59) / 60));
+    drawFit(b, 268, 340, UI_INK, 2);
+    drawFit(XT(X_LAN_OFFICE), 306, 330, UI_INK, 1);
+  } else {
+    bool none = st == LAN_FAIL_NOSAVED;
+    drawFit(XT(none ? X_LAN_NOSAVED : X_LAN_FAIL), 176, 360, UI_BAR_BAD, 2);
+    drawFit(XT(none ? X_LAN_NOSAVED2 : X_LAN_FAIL2), 214, 360, UI_INK, 2);
+    if (!none) drawBtn(133, LAN_RETRY_Y, 200, 44, UI_BAR_OK, UI_WHITE, XT(X_LAN_RETRY));
+  }
+  drawBtn(158, 408, 150, 34, UI_TRACK, UI_INK, T(S_BACK));
+  uiFlush();
+}
+
 void renderNet() {
   screenBase();
   gfx->setTextColor(UI_INK);
   if (wifiFwRebooting()) { renderWifiFwDone(); return; }  // ko12.9.2: firmware por WiFi recibido
+  if (netLanState() != LAN_OFF) { renderLanFw(); return; }
   if (netPortalOn()) {
     // ko8: QR grande (la camara del movil se une al WiFi sin teclear) y los
     // datos en letra grande por si el movil no lee QR
@@ -321,12 +360,24 @@ void renderNet() {
           XT(netAuto() ? X_AUTO_S_ON : X_AUTO_S_OFF));
   drawBtn(NET_BTN_X + hw + 8, NET_AUTO_Y, hw, NET_BTN_H, netOpenAllowed() ? UI_WHITE : UI_TRACK, UI_INK,
           XT(netOpenAllowed() ? X_OPEN_ON : X_OPEN_OFF));
+  drawBtn(NET_LAN_X, NET_LAN_Y, NET_LAN_W, NET_LAN_H, (netConfigured() && !linkActive()) ? 0x8A5C : UI_TRACK,
+          UI_WHITE, XT(X_LAN_BTN));  // ko12.9.4
   // ko11.26: [SD update] y [copia] pasaron al menu de ajustes
   drawBackArrow();  // ko11.6.1: flecha izquierda = volver (antes "tocar arriba", con el aviso abajo junto a [SD])
   uiFlush();
 }
 
 void netTap(int16_t x, int16_t y) {
+  if (netLanState() != LAN_OFF) {  // ko12.9.4
+    NetLan st = netLanState();
+    if (y >= 400) { netStopLanFw(); sfxPlay(SFX_TAP); }
+    else if (st == LAN_FAIL_WIFI && inRect(x, y, 133, LAN_RETRY_Y, 200, 44)) {
+      netStopLanFw();
+      netStartLanFw();
+      sfxPlay(SFX_TAP);
+    }
+    return;
+  }
   if (netPortalOn()) {
     if (y >= 400) netStopPortal();  // ko8: [volver] bajo el QR
     return;
@@ -335,6 +386,12 @@ void netTap(int16_t x, int16_t y) {
   if (y >= NET_TZ_Y && y < NET_TZ_Y + 44) {
     if (x < 140) netSetTzMin(netTzMin() - 30);
     else if (x > 326) netSetTzMin(netTzMin() + 30);
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  if (inRect(x, y, NET_LAN_X, NET_LAN_Y, NET_LAN_W, NET_LAN_H + 8)) {  // ko12.9.4
+    if (linkActive()) { sfxPlay(SFX_DENY); return; }
+    netStartLanFw();  // sin WiFi guardada: la pantalla lo explica
     sfxPlay(SFX_TAP);
     return;
   }

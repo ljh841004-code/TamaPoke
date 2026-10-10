@@ -64,6 +64,13 @@ void netSetFwHooks(const NetFwHooks &) {}  // ko12.9.2
 void netStopPortal() {}
 bool gMockPortal = false;
 bool netPortalOn() { return gMockPortal; }
+// ko12.9.4: /fw en la WiFi de casa (las pruebas cambian el estado)
+NetLan gMockLan = LAN_OFF;
+void netStartLanFw() { gMockLan = LAN_SCAN; }
+void netStopLanFw() { gMockLan = LAN_OFF; }
+NetLan netLanState() { return gMockLan; }
+const char *netLanIp() { return gMockLan == LAN_ON ? "192.168.0.123" : ""; }
+uint32_t netLanLeftS(uint32_t) { return gMockLan == LAN_ON ? 540 : 0; }
 uint8_t netSavedCount() { return 3; }
 void netForgetSaved(uint8_t) {}
 bool netOpenAllowed() { return true; }

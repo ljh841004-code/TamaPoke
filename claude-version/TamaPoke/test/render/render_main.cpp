@@ -1272,6 +1272,22 @@ static void scenes(bool ko, const char *sfx) {
   audioSetBgmMask(0x02); render(); shot("16c_bgm_pick_one"); audioSetBgmMask(0xFF);
   closeAll(); openNet(); render(); shot("18_net");
   { gMockPortal = true; render(); shot("18b_portal_qr"); gMockPortal = false; }
+  // ko12.9.4: [집 와이파이로 업데이트]: buscar -> direccion grande -> fallo -> [다시 하기] -> [뒤로]
+  { extern NetLan gMockLan;
+    netTap(NET_LAN_X + NET_LAN_W / 2, NET_LAN_Y + 20);
+    navCheck("red: [집 와이파이로 업데이트] arranca", gMockLan == LAN_SCAN);
+    render(); shot("18e_lanfw_scan");
+    gMockLan = LAN_CONNECTING; render(); shot("18f_lanfw_conn");
+    gMockLan = LAN_ON; render(); shot("18g_lanfw_on");
+    gMockLan = LAN_FAIL_NOSAVED; render(); shot("18i_lanfw_nosaved");
+    gMockLan = LAN_FAIL_WIFI; render(); shot("18j_lanfw_fail");
+    netTap(233, LAN_RETRY_Y + 20);
+    navCheck("red: fallo -> [다시 하기] vuelve a buscar", gMockLan == LAN_SCAN);
+    gMockLan = LAN_ON; netTap(233, 420);
+    navCheck("red: [뒤로] apaga /fw de casa", gMockLan == LAN_OFF && xScreen == XS_NET);
+    gMockLan = LAN_ON; closeNet();
+    navCheck("red: salir de la red apaga /fw de casa", gMockLan == LAN_OFF);
+    openNet(); }
   // ko11.6: copia de la partida en la SD
   openBackup(); render(); shot("18c_backup");
   bakSel = 1; render(); shot("18d_backup_confirm"); bakSel = -1;

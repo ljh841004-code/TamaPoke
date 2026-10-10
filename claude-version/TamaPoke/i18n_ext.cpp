@@ -180,6 +180,10 @@ static const char *const XS[2][X_COUNT] = {
     "Tilt & collect berries", "Tilt the board to roll the ball", "Berry +1", "Gold +3", "Hole: -5 s", "As many as you can in 30 s!",
     "Start", "Set direction again", "Tilt the board to the RIGHT", "Now tilt it DOWN (toward you)", "Direction set!", "%u",
     "%u s", "%u berries", "The way you hold it now counts as level", "Hole! -5 s",
+    "Update from home WiFi", "Looking for saved WiFi...", "Connecting to %s...", "Type this in the PC browser",
+    "WiFi: %s (same router as the PC)", "Turns off by itself in %u min", "No saved WiFi",
+    "Add one first in [SET UP WIFI]", "Could not join the WiFi", "Move closer and retry (2.4 GHz only)", "Retry",
+    "Office WiFi may block PC-to-device access",
   },
   // ---------------- KO ----------------
   {
@@ -354,6 +358,10 @@ static const char *const XS[2][X_COUNT] = {
     "기울여 열매 모으기", "기기를 기울이면 몬스터볼이 굴러가요", "열매 +1", "금색 +3", "구멍: 시간 -5초", "30초 동안 최대한 많이!",
     "시작", "방향 다시 맞추기", "기기를 오른쪽으로 기울여 주세요", "이번엔 아래쪽(내 쪽)으로 기울여 주세요", "방향을 맞췄어요!", "%u개",
     "%u초", "열매 %u개", "편하게 든 지금 기울기가 기준이에요", "구멍! -5초",
+    "집 와이파이로 업데이트", "저장된 와이파이 찾는 중...", "%s에 연결하는 중...", "PC 브라우저 주소창에 입력하세요",
+    "와이파이: %s (PC와 같은 공유기)", "%u분 뒤 저절로 꺼져요", "저장된 와이파이가 없어요",
+    "[WiFi 설정하기]에서 먼저 등록해 주세요", "와이파이에 연결하지 못했어요", "공유기 가까이에서 다시 (2.4GHz만 돼요)", "다시 하기",
+    "회사 와이파이는 기기끼리 막혀 있을 수 있어요",
   },
 };
 

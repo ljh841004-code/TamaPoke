@@ -59,3 +59,14 @@ struct NetFwHooks {
   const char *version;  // FW_VERSION (para la pagina)
 };
 void netSetFwHooks(const NetFwHooks &h);  // WIFI / WIFIOFF / NTP / TZ / NET
+
+// ko12.9.4: firmware desde un PC con cable del mismo router ("집 와이파이로 업데이트").
+// El TamaPoke se une a la WiFi guardada mas fuerte que vea (solo guardadas, nunca abiertas) y
+// sirve la misma pagina /fw en su IP de esa red (p. ej. http://192.168.0.23/fw). Se apaga solo a
+// los 10 min sin usar la pagina (igual que el portal). Los fallos se quedan en pantalla hasta [뒤로].
+enum NetLan : uint8_t { LAN_OFF = 0, LAN_SCAN, LAN_CONNECTING, LAN_ON, LAN_FAIL_NOSAVED, LAN_FAIL_WIFI };
+void netStartLanFw();
+void netStopLanFw();
+NetLan netLanState();
+const char *netLanIp();               // "192.168.0.23" con LAN_ON ("" si no)
+uint32_t netLanLeftS(uint32_t nowMs);  // segundos hasta que se apague solo
