@@ -1684,7 +1684,7 @@ void renderCandyBag() {
     bool isMine = f == mine;
     uiButton(BAG_ROW_X, y, BAG_ROW_W, BAG_ROW_H, 12, isMine ? C565(0xf0, 0x7a, 0xa8) : UI_WHITE, UI_INK);
     const uint8_t *th = thumbs.get(f);
-    if (th) drawThumb(th, BAG_ROW_X + 8, y - 14, 1, false);
+    if (th) drawThumbC(th, BAG_ROW_X + 8 + GAL_CELL / 2, y - 14 + GAL_CELL / 2, 1, false);  // ko12.9.8: centrado
     snprintf(b, sizeof(b), XT(X_BAG_ROW_FMT), dexName(f), pet.candy[f]);
     gfx->setTextColor(isMine ? UI_WHITE : UI_INK);
     setSize(2);
@@ -2004,7 +2004,7 @@ static void fameDetail() {
       int y = FM_ROW_Y + k * (FM_ROW_H + 6);
       uiButton(78, y, 310, FM_ROW_H, 12, C565(0xf4, 0xee, 0xff), C565(0x7a, 0x4a, 0xa8));
       const uint8_t *th = thumbs.get(o.dex);
-      if (th) drawThumb(th, 84, y + 3, 1, false);
+      if (th) drawThumbC(th, 84 + GAL_CELL / 2, y + 3 + GAL_CELL / 2, 1, false);
       snprintf(b, sizeof(b), XT(X_FMERGE_ROW_FMT), dexName(o.dex), o.lvl, (unsigned)r.solo, (unsigned)r.team);
       drawFitIn(b, 128, y + 15, 252, UI_INK, 1);
     }
@@ -2012,7 +2012,7 @@ static void fameDetail() {
   } else {
     const BoxMon &o = fame.at((uint8_t)fmTarget);
     const uint8_t *th = thumbs.get(o.dex);
-    if (th) drawThumb(th, CX - 40, FM_PNL_Y + 18, 2, false);
+    if (th) drawThumbC(th, CX, FM_PNL_Y + 18 + GAL_CELL / 2, 2, false);
     char nm[48];
     snprintf(nm, sizeof(nm), "%s Lv%u", dexName(o.dex), o.lvl);
     txFmt(b, sizeof(b), X_FMERGE_Q, nm);
@@ -2037,7 +2037,7 @@ void renderFame() {
     int x = FM_X + (k % FM_COLS) * FM_CELL, y = FM_Y + (k / FM_COLS) * FM_CELL;
     uiButton(x + 4, y + 4, FM_CELL - 8, FM_CELL - 8, 14, (m.flags & BOXF_SHINY) ? C565(0xff, 0xf0, 0xc0) : UI_WHITE, C565(0xb0, 0x80, 0x10));
     const uint8_t *th = thumbs.get(m.dex);
-    if (th) drawThumb(th, x + 8, y + 14, 2, false);
+    if (th) drawThumbC(th, x + 8 + GAL_CELL / 2, y + 14 + GAL_CELL / 2, 2, false);  // ko12.9.8: centrado
     drawCrownBig(x + FM_CELL / 2, y + 22, 26, m.flags & BOXF_TEAM);
     FameRec fr = fameRecOf(m);  // ko11.20: solo / equipo / los dos
     const char *bt = XT(fr.solo && fr.team ? X_FAME_BOTH : fr.solo ? X_FAME_SOLO : X_FAME_TEAM);

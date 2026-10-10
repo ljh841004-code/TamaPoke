@@ -3450,7 +3450,7 @@ void renderDaily() {
     for (int i = 0; i < DAILY_TEAM; i++) {
       int cx = 126 + i * 107;
       const uint8_t *th = thumbs.get(team[i].dex);
-      if (th) drawThumb(th, cx - 40, 132, 2, false);  // 40 px x2
+      if (th) drawThumbC(th, cx, 132 + GAL_CELL / 2, 2, false);  // 40 px x2 (ko12.9.8: centrado)
       char lv[8];
       snprintf(lv, sizeof(lv), "Lv%u", team[i].lvl);
       gfx->setTextColor(UI_INK);

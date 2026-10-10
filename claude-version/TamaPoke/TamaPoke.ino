@@ -2819,7 +2819,7 @@ void renderStarterSelect() {
     int ry = STARTER_ROW_Y + i * (STARTER_ROW_H + STARTER_ROW_GAP);
     uiButton(70, ry, 326, STARTER_ROW_H, 14, lerp565(de.accent, UI_WHITE, 6, 8), de.accent);
     const uint8_t *th = thumbs.get(d);     // miniatura del inicial (si la SD esta lista)
-    if (th) drawThumb(th, 76, ry - 5, 3, false);
+    if (th) drawThumbC(th, 76 + 40, ry - 5 + 40, 3, false);  // ko12.9.8: centrado (40 = GAL_CELL / 2)
     gfx->setTextColor(UI_INK);
     setSize(3);
     setCur(178, ry + 24);
@@ -4576,7 +4576,27 @@ void drawThumb(const uint8_t *b, int x, int y, int s, bool sil) {
   smoothBlit(d, w, h, tp, ox, oy, s, sil);
 }
 
-// ko11.31: centro del dibujo (sin el fondo transparente 0xFF) de una miniatura dibujada en (x, y)
+// ko12.9.8: dibuja la miniatura con lo VISIBLE (sin el fondo 0xFF) centrado en (cx, cy). drawThumb centra el
+// marco de la imagen y cada miniatura tiene el bicho a una altura distinta dentro (hasta ~19 px a x2):
+// en la rejilla de la pokedex y en las listas las filas se veian torcidas
+void drawThumbC(const uint8_t *b, int cx, int cy, int s, bool sil) {
+  uint8_t w = b[0], h = b[1], n = b[2];
+  const uint8_t *d = b + 3 + n * 2;
+  int x0 = w, x1 = -1, y0 = h, y1 = -1;
+  for (int yy = 0; yy < h; yy++)
+    for (int xx = 0; xx < w; xx++)
+      if (d[yy * w + xx] != 0xFF) {
+        if (xx < x0) x0 = xx;
+        if (xx > x1) x1 = xx;
+        if (yy < y0) y0 = yy;
+        if (yy > y1) y1 = yy;
+      }
+  if (x1 < 0) { x0 = y0 = 0; x1 = w - 1; y1 = h - 1; }
+  int ox = cx - (x0 + x1 + 1) * s / 2, oy = cy - (y0 + y1 + 1) * s / 2;
+  // drawThumb pone el marco en x + (GAL_CELL - w*s)/2: se le pasa la esquina que deja el origen en (ox, oy)
+  drawThumb(b, ox - (GAL_CELL - w * s) / 2, oy - (GAL_CELL - h * s) / 2, s, sil);
+}
+
 // ko12.1.1: caja de lo visible (sin el fondo 0xFF) de una miniatura dibujada en (x, y): [bx0,bx1) x [by0,by1)
 void thumbBox(const uint8_t *b, int x, int y, int s, int *bx0, int *by0, int *bx1, int *by1) {
   uint8_t w = b[0], h = b[1], n = b[2];
@@ -4594,24 +4614,6 @@ void thumbBox(const uint8_t *b, int x, int y, int s, int *bx0, int *by0, int *bx
   if (x1 < 0) { x0 = y0 = 0; x1 = w - 1; y1 = h - 1; }
   *bx0 = ox + x0 * s; *bx1 = ox + (x1 + 1) * s;
   *by0 = oy + y0 * s; *by1 = oy + (y1 + 1) * s;
-}
-
-void thumbCenter(const uint8_t *b, int x, int y, int s, int *cx, int *cy) {
-  uint8_t w = b[0], h = b[1], n = b[2];
-  const uint8_t *d = b + 3 + n * 2;
-  int x0 = w, x1 = -1, y0 = h, y1 = -1;
-  for (int yy = 0; yy < h; yy++)
-    for (int xx = 0; xx < w; xx++)
-      if (d[yy * w + xx] != 0xFF) {
-        if (xx < x0) x0 = xx;
-        if (xx > x1) x1 = xx;
-        if (yy < y0) y0 = yy;
-        if (yy > y1) y1 = yy;
-      }
-  int ox = x + (GAL_CELL - w * s) / 2, oy = y + (GAL_CELL - h * s) / 2;
-  if (x1 < 0) { *cx = x + GAL_CELL / 2; *cy = y + GAL_CELL / 2; return; }
-  *cx = ox + (x0 + x1 + 1) * s / 2;
-  *cy = oy + (y0 + y1 + 1) * s / 2;
 }
 
 // fork KO (ko4): descubierto = criado, visto en batalla o capturado
@@ -4926,15 +4928,10 @@ void renderGallery() {
       const uint8_t *t = thumbs.get(dex);
       if (t) {
         uint8_t rar = DEX_TBL[dex].rarity;
-        if ((rar == R_RARO || rar == R_LEGENDARIO) && dexDiscovered(dex)) {  // ko12.9.6: brilla al verlo
-          int ccx, ccy;
-          thumbCenter(t, x, y, 2, &ccx, &ccy);
-          dexRareGlow(ccx, ccy, rar == R_LEGENDARIO);
-        }
-        drawThumb(t, x, y, 2, !dexDiscovered(dex));
+        int ccx = x + GAL_CELL / 2, ccy = y + GAL_CELL / 2;  // ko12.9.8: todos centrados en su casilla
+        if ((rar == R_RARO || rar == R_LEGENDARIO) && dexDiscovered(dex)) dexRareGlow(ccx, ccy, rar == R_LEGENDARIO);  // ko12.9.6
+        drawThumbC(t, ccx, ccy, 2, !dexDiscovered(dex));
         if (dexLog.caughtCount(dex)) {  // ko11.31: capturado alguna vez: circulo
-          int ccx, ccy;
-          thumbCenter(t, x, y, 2, &ccx, &ccy);
           gfx->drawCircle(ccx, ccy, 28, C565(0xe0, 0x40, 0x38));
           gfx->drawCircle(ccx, ccy, 27, C565(0xe0, 0x40, 0x38));
         }
