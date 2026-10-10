@@ -268,6 +268,7 @@ static void scenes(bool ko, const char *sfx) {
         drawOrb(cx - 0, cy + 10, 18, orbMake(t, (row + col) & 1, 20), gMockMillis + t * 137);
         setSize(1); gfx->setTextColor(UI_INK); setCur(cx - textW(typeName(t), 1) / 2, cy + 42); printT(typeName(t));
       }
+      gGeomPending.clear();  // escaparate de prueba (no es una pantalla del aparato): sin control de bordes
       char fn[32]; snprintf(fn, sizeof(fn), "90_orbs_%02d", f); shot(fn);
       tick(60);
     }
@@ -1748,7 +1749,6 @@ static void storyShots() {
   closeAll(); trainMenuOpen = true; trainMenuPage = 1; render(); shot("52_battle_page"); trainMenuOpen = false;
 }
 
-#include "preview_ideas.inc"  // ko12.4: maquetas de ideas
 
 int main(int argc, char **argv) {
   gSdRoot = argc > 1 ? argv[1] : "sd";
@@ -1770,7 +1770,6 @@ int main(int argc, char **argv) {
   pet.bgAsked = 1;  // ko12.4.1: el aviso de elegir fondo tiene su propia captura
   ensureMon();
   navChecks();
-  previewShots();
   storyShots();
   scenes(true, "");
   scenes(false, "_en");

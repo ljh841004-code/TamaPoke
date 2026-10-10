@@ -687,8 +687,10 @@ TEST(wild, salvaje_de_tu_talla) {
     int16_t d = (int16_t)(1 + r.below(DEX_COUNT));
     Battler f = makeBattler(d, (uint16_t)(5 + r.below(80)), 50, 50, 50);
     Battler m = makeBattler(9, (uint16_t)(5 + r.below(90)), (uint16_t)(20 + r.below(200)), 100, 100);
+    // ko12.9.8: si ya llegaba sin evolucionar con nivel de sobra (WILD_STAY_PCT) se queda asi
+    bool keptLow = DEX_TBL[d].evolvesTo && evoLevel(d) && f.lvl >= evoLevel(d);
     wildMatchPower(f, m, r);
-    if (DEX_TBL[f.dex].evolvesTo && evoLevel(f.dex)) CHECK(f.lvl < evoLevel(f.dex));
+    if (!keptLow && DEX_TBL[f.dex].evolvesTo && evoLevel(f.dex)) CHECK(f.lvl < evoLevel(f.dex));
     int16_t pre = dexPrevo(f.dex);
     if (pre > 0 && evoLevel(pre)) CHECK(f.lvl >= evoLevel(pre));
   }
@@ -1038,4 +1040,20 @@ TEST(battle, pp_doble_ko126) {
   CHECK_EQ(movePP(7), (uint8_t)10);   // hyper-beam: 5 -> 10
   CHECK_EQ(movePP(MOVE_STRUGGLE), (uint8_t)1);
   for (uint8_t id = 1; id < MOVE_N; id++) CHECK(movePP(id) <= 80);
+}
+
+// ko12.9.8: un salvaje que se quedo sin evolucionar sigue asi al ajustarlo a tu fuerza
+TEST(wild, sin_evolucionar_sigue_asi_tras_ajustar) {
+  BRng rng(11);
+  int kept = 0;
+  for (int i = 0; i < 200; i++) {
+    Battler foe = makeWildIn(13, 60, 7, WX_RAIN, SEASON_AUTUMN, rng, nullptr);
+    if (foe.dex != 147 && foe.dex != 148) continue;  // Dratini / Dragonair a nivel 60 = se quedo abajo
+    int16_t before = foe.dex;
+    Battler me = makeBoxBattler(149, 60, 60, 100, 100, 100);
+    wildMatchPower(foe, me, rng);
+    CHECK(foe.dex == before || foe.dex == dexPrevo(before));  // nunca sube a Dragonite
+    kept++;
+  }
+  CHECK(kept > 10);
 }

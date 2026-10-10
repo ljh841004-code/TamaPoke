@@ -282,7 +282,7 @@ void renderShell() {
   drawFit(msg, 344, 340, mc, 2);
   if (shPhase == SH_FEED && shOk) {
     snprintf(b, sizeof(b), "+%u", (unsigned)shLastPts);
-    drawFit(b, 136 - (int)(t / 40), 120, C565(0x1a, 0x86, 0x34), 3);
+    drawFit(b, 104 - (int)(t / 90), 120, C565(0x1a, 0x86, 0x34), 3);  // encima de la tapa abierta
   }
   uiFlush();
 }

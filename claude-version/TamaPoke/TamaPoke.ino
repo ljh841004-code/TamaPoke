@@ -136,6 +136,7 @@ void bakAutoLoop(uint32_t now);
 bool inBattleScreen();    // ko11.8 (ui_extra.ino)
 extern bool vbOpen;       // ko11.9 (volley.ino): voleibol
 extern bool defOpen, spdOpen;  // train.ino (ko11.9.2: miga de pan)
+extern bool shellOpen, simonOpen;  // train_more.ino (ko12.9.8)
 extern uint8_t xScreen;       // ui_extra.ino
 extern bool trainMenuOpen;     // train.ino
 extern uint8_t trainMenuPage;
@@ -382,8 +383,9 @@ const char *crashWhereName() { return crumbName((uint8_t)(crashWhere >> 8)); }
 const char *crashReasonName() { return resetName(crashReason); }
 static const char *crumbName(uint8_t scr) {
   switch (scr) {
-    case 1: return "volley"; case 2: return "defense"; case 3: return "speed"; case 4: return "ball game";
+    case 1: return "volley"; case 2: return "defense"; case 3: return "targets"; case 4: return "ball game";
     case 5: return "sack"; case 6: return "train menu"; case 7: return "card"; case 0: return "main";
+    case 8: return "find ball"; case 9: return "copy me";  // ko12.9.8
     default: return "screen";
   }
 }
@@ -924,7 +926,7 @@ void loop() {
   if (!pet.sleeping && petHoldAllowed() && mainNavAllowed() && (int32_t)(now - lastInteract) >= (int32_t)AUTO_SLEEP_MS) pet.autoSleepNow();
   uint32_t loopT0 = now, renderMs = 0;
   {  // ko11.9.2: en que pantalla estamos (si se reinicia, se ve al arrancar)
-    uint8_t scr = vbOpen ? 1 : defOpen ? 2 : spdOpen ? 3 : gameOpen ? 4 : sackOpen ? 5 : trainMenuOpen ? 6
+    uint8_t scr = vbOpen ? 1 : defOpen ? 2 : spdOpen ? 3 : gameOpen ? 4 : sackOpen ? 5 : shellOpen ? 8 : simonOpen ? 9 : trainMenuOpen ? 6
                 : cardOpen ? 7 : xScreen ? (uint8_t)(20 + xScreen) : 0;
     crumb((uint16_t)(scr << 8));
   }

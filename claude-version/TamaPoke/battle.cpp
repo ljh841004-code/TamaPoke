@@ -1295,7 +1295,7 @@ int8_t typeMatch(uint8_t mine, uint8_t foe) {
 uint32_t battlerPower(const Battler &b) { return (uint32_t)b.maxHp + b.atk + b.def + b.spe; }
 
 // ko11: la forma que toca a ese nivel (Caterpie Lv57 -> Butterfree, Dragonite Lv25 -> Dratini)
-static int16_t formForLevel(int16_t dex, uint16_t lv, BRng &rng) {
+static int16_t formForLevel(int16_t dex, uint16_t lv, BRng &rng, bool allowUp = true) {
   for (int g = 0; g < 3; g++) {  // bajar mientras no llegue al nivel de su evolucion
     int16_t pre = dexPrevo(dex);
     if (pre <= 0) break;
@@ -1303,7 +1303,7 @@ static int16_t formForLevel(int16_t dex, uint16_t lv, BRng &rng) {
     if (need && lv < need) dex = pre;
     else break;
   }
-  for (int g = 0; g < 3 && DEX_TBL[dex].evolvesTo; g++) {  // subir si ya le toca
+  for (int g = 0; g < 3 && allowUp && DEX_TBL[dex].evolvesTo; g++) {  // subir si ya le toca
     uint8_t need = evoLevel(dex);
     if (!need || lv < need) break;
     int16_t opts[8];
@@ -1332,6 +1332,10 @@ void wildMatchPower(Battler &foe, const Battler &me, BRng &rng) {
   int anchor = foe.lvl;
   int16_t dex = foe.dex;
   int best = anchor;
+  // ko12.9.8: si makeWildIn lo dejo sin evolucionar a proposito (WILD_STAY_PCT: ya tenia nivel para
+  // evolucionar), aqui no se vuelve a evolucionar (antes formForLevel lo subia y casi nunca se veian)
+  uint8_t el = evoLevel(dex);
+  bool keepLow = DEX_TBL[dex].evolvesTo && el && foe.lvl >= el;
   // ko11: nivel de tu talla y luego la forma de ese nivel; si la forma cambia,
   // se vuelve a ajustar el nivel (siempre dentro de -6..+10 del original).
   // ko11.12: y nunca mas de 3 niveles por encima del tuyo (un Pichu Lv9 muy
@@ -1342,7 +1346,7 @@ void wildMatchPower(Battler &foe, const Battler &me, BRng &rng) {
   if (lo > hi) lo = hi;
   for (int pass = 0; pass < 3; pass++) {
     best = bestLevelFor(dex, target, lo, hi);
-    int16_t nd = formForLevel(dex, (uint16_t)best, rng);
+    int16_t nd = formForLevel(dex, (uint16_t)best, rng, !keepLow);
     if (nd == dex) break;
     dex = nd;
   }
