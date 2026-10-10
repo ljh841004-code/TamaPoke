@@ -899,7 +899,11 @@ void evMessages(const BEvent &e) {
       else if (e.eff == 1) strncpy(bvL2, XT(X_NOTVERY), sizeof(bvL2) - 1);
       break;
     case EV_RUN_OK: strncpy(bvL1, XT(X_FLED), sizeof(bvL1) - 1); break;
-    case EV_RUN_FAIL: strncpy(bvL1, XT(X_CANT_RUN), sizeof(bvL1) - 1); break;
+    case EV_RUN_FAIL:
+      strncpy(bvL1, XT(X_CANT_RUN), sizeof(bvL1) - 1);
+      if (e.val == RUN_FAIL_HIT) strncpy(bvL2, XT(X_RUN_HIT), sizeof(bvL2) - 1);  // ko12.9.13
+      else if (e.val == RUN_FAIL_DODGE) strncpy(bvL2, XT(X_RUN_DODGE), sizeof(bvL2) - 1);
+      break;
     case EV_FAINT: txFmt(bvL1, sizeof(bvL1), X_FAINTED, who); break;
     case EV_HEAL: txFmt(bvL1, sizeof(bvL1), X_HEALED, who); break;
     case EV_CATCH:
@@ -915,7 +919,10 @@ void evMessages(const BEvent &e) {
   bvL1[sizeof(bvL1) - 1] = 0;
   bvL2[sizeof(bvL2) - 1] = 0;
   if (e.kind == EV_STATUS || e.kind == EV_STDMG || e.kind == EV_CONFHIT) sfxPlay(SFX_DENY);
-  if ((e.kind == EV_HIT || e.kind == EV_COUNTER) && e.dmg) {
+  if (e.kind == EV_RUN_FAIL && e.dmg) {  // ko12.9.13: golpe flojo al huir
+    sfxPlay(SFX_PLAY);
+    vibBattle(EV_HIT, 2, false, !evIsMe(e.side));
+  } else if ((e.kind == EV_HIT || e.kind == EV_COUNTER) && e.dmg) {
     sfxPlay(SFX_PLAY);
     vibBattle(e.kind, e.eff, e.crit, evIsMe(e.side));  // ko11.28: patron segun el golpe (antes un solo pulso)
   }
@@ -2016,6 +2023,10 @@ void drawBattlers() {
     } else if (e.kind == EV_FAINT) {
       if (me) { meSil = true; meG += (int)(t / 8); }
       else    { foeSil = true; foeG += (int)(t / 8); }
+    } else if (e.kind == EV_RUN_FAIL && e.dmg && t > 250 && t < 900) {  // ko12.9.13: le pegan al huir
+      bool blink = ((t / 80) % 2) == 0;
+      if (me) { meAct = PMD_HURT; meHide = blink; }
+      else    { foeAct = PMD_HURT; foeHide = blink; }
     } else if (e.kind == EV_RUN_OK && me) {
       meAct = PMD_WALKL;
       meX -= (int)(t / 4);

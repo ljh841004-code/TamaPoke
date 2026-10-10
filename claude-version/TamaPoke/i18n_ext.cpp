@@ -187,6 +187,7 @@ static const char *const XS[2][X_COUNT] = {
     "Office WiFi may block PC-to-device access",
     "Lure Orb! (%u)", "Brought back a Lure Orb!", "Lure Orb x%u - tap to use", "Tap again to use (%u left)",
     "Lure Orb on: %u wild battles left", "Lure Orb used! Rare x2, legends x3", "A Lure Orb is already working",
+    "Got hit from behind!", "Dodged the attack!",
   },
   // ---------------- KO ----------------
   {
@@ -368,6 +369,7 @@ static const char *const XS[2][X_COUNT] = {
     "회사 와이파이는 기기끼리 막혀 있을 수 있어요",
     "부르는 구슬 획득! (%u개)", "부르는 구슬을 주워 왔어요!", "부르는 구슬 %u개: 눌러서 사용", "한 번 더 누르면 사용 (%u개)",
     "부르는 구슬 효과: 야생 %u번 남음", "부르는 구슬 사용! 희귀 x2, 전설 x3", "부르는 구슬 효과가 이미 있어요",
+    "등 뒤를 공격당했다!", "공격을 아슬아슬 피했다!",
   },
 };
 

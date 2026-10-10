@@ -176,6 +176,7 @@ enum XId : uint16_t {  // ko10.6: pasaron de 255
   X_LAN_NOSAVED2, X_LAN_FAIL, X_LAN_FAIL2, X_LAN_RETRY, X_LAN_OFFICE,  // ko12.9.4: firmware desde el PC de casa
   X_LURE_GOT_FMT, X_EXP_LURE, X_LURE_PILL_FMT, X_LURE_ARM_FMT, X_LURE_ON_FMT, X_LURE_USED,
   X_LURE_BUSY,  // ko12.9.11: 부르는 구슬
+  X_RUN_HIT, X_RUN_DODGE,  // ko12.9.13: 도망 실패 때 등 뒤 타격
   X_COUNT
 };
 

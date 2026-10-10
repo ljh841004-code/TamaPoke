@@ -43,6 +43,8 @@ enum BEvKind : uint8_t {
 // ko11.31: estados alterados (val de los eventos). Los de batalla se quitan al terminar
 // ko12.8: val de EV_HIT (bits): el otro se protegia (dano a la mitad) / ese movimiento descansa
 enum : uint8_t { HIT_GUARDED = 1, HIT_REST = 2 };
+// ko12.9.13: val de EV_RUN_FAIL: el rival le pego al huir (dmg) o lo esquivo
+enum : uint8_t { RUN_FAIL_HIT = 1, RUN_FAIL_DODGE = 2 };
 enum : uint8_t { ST_NONE = 0, ST_PSN, ST_BRN, ST_PAR, ST_SLP, ST_FRZ, ST_CNF, ST_FLINCH, ST_RECHARGE };
 
 struct Battler {
@@ -238,6 +240,14 @@ uint8_t weatherMul(uint8_t wx, uint8_t moveType);  // en medios (3 = x1,5)
 
 // resuelve un turno: a hace actA, b hace actB. Rellena ev[] y devuelve cuantos.
 // canRun: solo en batallas salvajes (en tongsin BA_RUN se trata como placaje)
+// ko12.9.13: huir cuesta mas (35% + media diferencia de velocidad, 15..75; antes 50, 25..95)
+// y al fallar el rival pega flojo a suertes (50%: 1/16..1/8 de la vida, nunca debilita)
+#define RUN_BASE 35
+#define RUN_MIN 15
+#define RUN_MAX 75
+#define RUN_HIT_PCT 50
+#define RUN_HIT_DIV 16
+int runChance(uint32_t speMe, uint32_t speFoe);
 int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
                BEvent *ev, int maxEv, bool canRun);
 

@@ -1080,6 +1080,13 @@ static void restTick(Battler &b) {
   if (b.restT && !--b.restT) b.restMv = 0;
 }
 
+int runChance(uint32_t speMe, uint32_t speFoe) {
+  int ch = RUN_BASE + ((int)speMe - (int)speFoe) / 2;
+  if (ch < RUN_MIN) ch = RUN_MIN;
+  if (ch > RUN_MAX) ch = RUN_MAX;
+  return ch;
+}
+
 int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
                BEvent *ev, int maxEv, bool canRun) {
   int n = 0;
@@ -1097,14 +1104,21 @@ int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
   for (uint8_t s = 0; s < 2; s++) {
     Battler &me = *side[s], &op = *side[s ^ 1];
     if (act[s] == BA_RUN) {
-      int ch = 50 + ((int)effSpe(me) - (int)effSpe(op)) / 2;
-      if (ch < 25) ch = 25;
-      if (ch > 95) ch = 95;
+      int ch = runChance(effSpe(me), effSpe(op));
       if ((int)rng.below(100) < ch) {
         push(ev, maxEv, n, s, EV_RUN_OK, BA_RUN, 2, false, 0, a, b);
         return n < maxEv ? n : maxEv;
       }
-      push(ev, maxEv, n, s, EV_RUN_FAIL, BA_RUN, 2, false, 0, a, b);
+      // ko12.9.13: al fallar, el rival le da un golpe flojo por la espalda (a suertes; nunca lo debilita)
+      uint16_t d = 0;
+      if (rng.below(100) < RUN_HIT_PCT && me.hp > 1) {
+        uint16_t q = me.maxHp / RUN_HIT_DIV;
+        d = (uint16_t)(q + rng.below((uint32_t)q + 1));
+        if (d < 1) d = 1;
+        if (d >= me.hp) d = me.hp - 1;
+        me.hp -= d;
+      }
+      push(ev, maxEv, n, s, EV_RUN_FAIL, BA_RUN, 2, false, d, a, b, 0, (int8_t)(d ? RUN_FAIL_HIT : RUN_FAIL_DODGE));
     } else if (act[s] == BA_POTION) {  // fork KO: cura la mitad de la vida
       uint16_t heal = me.maxHp / 2;
       if (heal < 1) heal = 1;

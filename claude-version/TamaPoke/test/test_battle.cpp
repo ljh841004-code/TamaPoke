@@ -215,6 +215,39 @@ TEST(battle, huir_termina_el_turno_sin_ataques) {
   for (int i = 0; i < n; i++) CHECK(ev[i].kind != EV_RUN_OK && ev[i].kind != EV_RUN_FAIL);
 }
 
+// ko12.9.13: huir cuesta mas y al fallar el rival pega flojo a suertes (nunca debilita)
+TEST(battle, huir_falla_mas_y_pega_flojo) {
+  CHECK_EQ(runChance(100, 100), RUN_BASE);
+  CHECK_EQ(runChance(10, 300), RUN_MIN);
+  CHECK_EQ(runChance(300, 10), RUN_MAX);
+  BRng rng(5);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  int ok = 0, hit = 0, dodge = 0;
+  for (int i = 0; i < 400; i++) {
+    Battler a = makeBattler(25, 30, 80, 60, 60), b = makeBattler(74, 30, 80, 60, 60);
+    if (i % 4 == 0) a.hp = 1;
+    uint16_t hp0 = a.hp;
+    int n = battleTurn(a, b, BA_RUN, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, true);
+    CHECK(n > 0);
+    if (ev[0].kind == EV_RUN_OK) { ok++; CHECK_EQ(a.hp, hp0); continue; }
+    CHECK_EQ(ev[0].kind, (uint8_t)EV_RUN_FAIL);
+    CHECK(a.hp >= 1);
+    CHECK_EQ(ev[0].hpA, (uint16_t)(hp0 - ev[0].dmg));
+    if (ev[0].val == RUN_FAIL_HIT) {
+      hit++;
+      CHECK(ev[0].dmg >= 1);
+      CHECK(ev[0].dmg <= a.maxHp / RUN_HIT_DIV * 2);
+    } else {
+      dodge++;
+      CHECK_EQ(ev[0].val, (int8_t)RUN_FAIL_DODGE);
+      CHECK_EQ(ev[0].dmg, (uint16_t)0);
+    }
+  }
+  CHECK(ok > 60 && ok < 240);  // ~35%
+  CHECK(hit > 40);
+  CHECK(dodge > 40);
+}
+
 TEST(battle, el_hp_de_los_eventos_cuadra) {
   BRng rng(99);
   Battler a = makeBattler(1, 25, 70, 70, 60), b = makeBattler(4, 25, 75, 60, 70);
