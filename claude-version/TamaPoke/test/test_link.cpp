@@ -19,10 +19,11 @@ struct Air {
   uint32_t now = 1000;
   bool chance() { rng = rng * 1664525u + 1013904223u; return (rng >> 8) % 100 >= lossPct; }
 };
+static bool (*airFilter)(const Node *from, const Node *to) = nullptr;  // ko12.9.12: quien oye a quien
 static void airSend(void *ctx, const LinkMsg &m) {
   Node *from = (Node *)ctx;
   for (Node *n : from->air->nodes)
-    if (n != from && from->air->chance()) n->core.receive(from->mac, m, from->air->now);
+    if (n != from && (!airFilter || airFilter(from, n)) && from->air->chance()) n->core.receive(from->mac, m, from->air->now);
 }
 static LinkPet petOf(int16_t dex, uint16_t lvl) {
   LinkPet p;
@@ -205,4 +206,59 @@ TEST(link, la_hora_de_fiar_pasa_al_que_la_perdio) {
   CHECK_RANGE((int)(e - 1790343900u), 4, 6);   // la de A, avanzada ~5 s
   CHECK(!a.partnerClock(tNow, &e));             // la de B no es de fiar: A no la toma
   a.stop(); b.stop();
+}
+
+// ko12.9.12: 3 placas en circulo (cada una elige a otra distinta: A->B, B->C, C->A).
+// Antes las tres se quedaban esperando y caian a los 8 s; ahora sueltan y se emparejan dos
+static Node *gCyc[3];
+static bool cycleOnly(const Node *from, const Node *to) {
+  for (int i = 0; i < 3; i++)
+    if (to == gCyc[i]) return from == gCyc[(i + 1) % 3];  // cada uno solo oye al siguiente
+  return true;
+}
+TEST(link, tres_en_circulo_se_deshace) {
+  Air a;
+  Node x, y, z;
+  a.nodes = { &x, &y, &z };
+  gCyc[0] = &x; gCyc[1] = &y; gCyc[2] = &z;
+  startNode(x, a, 1, LINK_BATTLE, petOf(7, 20), 1);
+  startNode(y, a, 2, LINK_BATTLE, petOf(4, 20), 2);
+  startNode(z, a, 3, LINK_BATTLE, petOf(1, 20), 3);
+  airFilter = cycleOnly;
+  run(a, 400);          // primer HELLO: x elige a y, y a z, z a x
+  airFilter = nullptr;  // ya se oyen todos
+  run(a, 6000);
+  int ready = 0, lost = 0;
+  for (Node *n : a.nodes) {
+    if (n->core.state() == LS_READY) ready++;
+    if (n->core.state() == LS_LOST) lost++;
+  }
+  CHECK_EQ(ready, 2);
+  CHECK_EQ(lost, 0);    // el tercero sigue buscando (no "conexion perdida")
+  run(a, 10000);
+  ready = 0; lost = 0;
+  for (Node *n : a.nodes) {
+    if (n->core.state() == LS_READY) ready++;
+    if (n->core.state() == LS_LOST) lost++;
+  }
+  CHECK_EQ(ready, 2);   // la pareja sigue bien
+  CHECK_EQ(lost, 0);    // antes: el que eligio al que ya tenia pareja caia a los 8 s
+}
+
+// el que sobra (eligio a uno que ya esta con otro) no cae a los 8 s: sigue buscando
+TEST(link, el_que_sobra_sigue_buscando) {
+  Air a;
+  Node x, y, z;
+  a.nodes = { &x, &y, &z };
+  startNode(x, a, 1, LINK_TRADE, petOf(7, 20), 1);
+  startNode(y, a, 2, LINK_TRADE, petOf(4, 20), 2);
+  startNode(z, a, 3, LINK_TRADE, petOf(1, 20), 3);
+  run(a, 12000);
+  int ready = 0, search = 0;
+  for (Node *n : a.nodes) {
+    if (n->core.state() == LS_READY) ready++;
+    if (n->core.state() == LS_SEARCH) search++;
+  }
+  CHECK_EQ(ready, 2);
+  CHECK_EQ(search, 1);
 }

@@ -96,7 +96,20 @@ void LinkCore::receive(const uint8_t src[6], const LinkMsg &m, uint32_t now) {
   if (m.magic != LINK_MAGIC || m.ver != LINK_PROTO_VER) return;
   if (m.mode != md || sameMac(src, myMac)) return;
   // si el otro ya tiene pareja y no soy yo, no es para mi
-  if (!zeroMac(m.peerMac) && !sameMac(m.peerMac, myMac)) return;
+  if (!zeroMac(m.peerMac) && !sameMac(m.peerMac, myMac)) {
+    // ko12.9.12: y si era al que yo habia elegido, lo suelto y sigo buscando. Con 3 placas
+    // cerca podia quedar un circulo (A->B, B->C, C->A) y las tres caian a los 8 s; o el que
+    // sobraba esperaba a uno que ya estaba con otro
+    if (havePeer && st == LS_SEARCH && sameMac(src, peer)) {
+      havePeer = false;
+      memset(peer, 0, 6);
+      memset(&theirs, 0, sizeof(theirs));
+      theirNonce = 0;
+      theirClockOk = false;
+      lastRx = now;
+    }
+    return;
+  }
   if (!havePeer) {
     if (st != LS_SEARCH || m.type != MSG_HELLO) return;
     memcpy(peer, src, 6);
