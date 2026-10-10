@@ -95,7 +95,11 @@ static void scenes(bool ko, const char *sfx) {
         onTap(300, 300);
         navCheck("principal: justo encima de la barra = barra (+25)", pet.joy == j0 + GAUGE_TAP_GAIN_BIG);
         pet.joy = j0;
-        onTap(CX, 280);
+        pet.joy = j0;
+        onTap(300, 268);  // ko12.9.10: el dedo en "기분" se lee hasta ~45 px mas alto en la placa
+        navCheck("principal: 44 px encima de la barra = barra (+25)", pet.joy == j0 + GAUGE_TAP_GAIN_BIG);
+        pet.joy = j0;
+        onTap(CX, 240);
         navCheck("principal: el cuerpo sigue siendo caricia", pet.joy > j0 && pet.joy < j0 + GAUGE_TAP_GAIN_BIG);
       }
       {  // ko12.9.3: una lectura rota del RTC (2 h en el futuro) no adelanta el reloj

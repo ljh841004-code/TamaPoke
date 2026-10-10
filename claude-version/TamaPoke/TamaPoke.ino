@@ -1364,7 +1364,10 @@ void handleSerial() {
 // ko12.9.3: termina donde empieza la zona de las barras (GAUGE_HIT_Y). Antes llegaba a 310 y las
 // barras empezaban a tocar en 306: un toque en "기분" que el tactil leia unos px mas arriba caia
 // en la caricia (+5, +8 si es mimoso) en vez de +25
-#define GAUGE_HIT_Y 294
+// ko12.9.10: en la placa real seguia pasando (corazon + grito al tocar "기분"): el dedo se lee
+// bastante mas alto. 50 px de margen sobre las barras (312); la caricia queda en el cuerpo
+// (el sprite va de 122 a 282: solo se pierden los pies)
+#define GAUGE_HIT_Y 262
 bool inPetZone(int16_t x, int16_t y) {
   return x > 110 && x < 356 && y > 95 && y < GAUGE_HIT_Y;
 }
@@ -1934,7 +1937,7 @@ void onTap(int16_t x, int16_t y) {
     }
   }
   // ko12.5: tocar una barra la sube (ko12.9.1: 25; la energia 15)
-  if (y >= GAUGE_HIT_Y && y < 366 && x >= 70 && x < 400) {  // ko12.9.3: 18 px de margen sobre las barras (312)
+  if (y >= GAUGE_HIT_Y && y < 366 && x >= 70 && x < 400) {  // ko12.9.10: 50 px de margen sobre las barras (312)
     uint8_t g = (uint8_t)((y >= 334 ? 2 : 0) + (x >= 236 ? 1 : 0));
     pet.gaugeTap(g);
     sfxPlay(SFX_TAP);
