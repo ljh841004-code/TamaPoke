@@ -54,6 +54,8 @@ class Board:
         self.s = serial.Serial(self.port, 115200, timeout=0.5)
         time.sleep(0.3)
         self.s.reset_input_buffer()
+        time.sleep(0.3)  # mensajes viejos (p. ej. del arranque) que la placa guardaba hasta que el PC abriera el puerto
+        self.s.reset_input_buffer()
         self.note("== conectado a %s ==" % self.port)
 
     def note(self, line):
@@ -94,7 +96,19 @@ class Board:
             out.append(l)
         return out, False
 
-    def shot(self, path=None):
+    def shot(self, path=None, tries=3):
+        # ko12.9.9: a veces el USB pierde un trozo (~1 de cada 10): se repite la foto entera
+        for t in range(tries):
+            got = self.shot_once(path)
+            if got:
+                return got
+            time.sleep(0.5)
+            self.s.reset_input_buffer()  # tirar lo que quede de la foto rota
+            if t + 1 < tries:
+                print("repitiendo la foto (%d/%d)" % (t + 2, tries))
+        return None
+
+    def shot_once(self, path=None):
         self.note("> SHOT")
         self.s.write(b"SHOT\n")
         end = time.time() + 10
