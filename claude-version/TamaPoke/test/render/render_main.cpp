@@ -1426,6 +1426,10 @@ static void navChecks() {
   navCheck("ajustes -> SD update -> [<]", up && xScreen == XS_SET);
   closeAll(); openSettings(); setBtn(5); bool bk = xScreen == XS_BAK; backupTap(LX, LY);
   navCheck("ajustes -> copias -> [<]", bk && xScreen == XS_SET);
+  closeAll(); openSettings(); setBtn(5); extraSwipe();
+  navCheck("ajustes -> copias -> deslizar = ajustes", xScreen == XS_SET);
+  closeAll(); openSettings(); setBtn(5); bakSel = 0; backupTap(LX, LY);
+  navCheck("copias: <- cierra la ventana de restaurar", bakSel < 0 && xScreen == XS_BAK);
   { Lang l0 = gLang; closeAll(); openSettings(); setBtn(6);
     navCheck("ajustes -> [언어] cambia el idioma", gLang != l0 && xScreen == XS_SET);
     while (gLang != l0) setBtn(6); }
@@ -1750,6 +1754,8 @@ static void storyShots() {
 }
 
 
+#include "monkey.inc"  // ko12.9.8
+
 int main(int argc, char **argv) {
   gSdRoot = argc > 1 ? argv[1] : "sd";
   mkdir("build/shots", 0755);
@@ -1769,6 +1775,12 @@ int main(int argc, char **argv) {
   pet.balls = 5; pet.potions = 2;
   pet.bgAsked = 1;  // ko12.4.1: el aviso de elegir fondo tiene su propia captura
   ensureMon();
+  if (const char *mk = getenv("MONKEY")) {  // ko12.9.8: solo la prueba del mono
+    long n = atol(mk);
+    for (uint32_t seed = getenv("MONKEY_SEED0") ? atoi(getenv("MONKEY_SEED0")) : 1; seed <= (uint32_t)(getenv("MONKEY_SEEDS") ? atoi(getenv("MONKEY_SEEDS")) : 1); seed++)
+      monkey(n, seed * 7919u);
+    return mkFails ? 1 : 0;
+  }
   navChecks();
   storyShots();
   scenes(true, "");

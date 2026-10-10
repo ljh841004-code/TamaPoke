@@ -4351,6 +4351,7 @@ bool extraSwipe() {
   if (xScreen == XS_BRIGHT || xScreen == XS_UPD) { xScreen = XS_SET; return true; }
   if (xScreen == XS_PAK) { if (!pakBusy) xScreen = XS_UPD; return true; }
   if (xScreen == XS_SDCHK) { xScreen = XS_UPD; return true; }  // ko12.8  // ko11.26
+  if (xScreen == XS_BAK) { backupSwipeBack(); return true; }  // ko12.9.8: como los demas ajustes
   if (xScreen == XS_SET) { goBack(); return true; }
   if (xScreen == XS_ROOM || xScreen == XS_WALK || xScreen == XS_BDAY || xScreen == XS_EGGPICK) { goBack(); return true; }
   if (xScreen == XS_ENDING) return true;  // ko12.7: el final no se cierra deslizando  // ko12.4

@@ -2328,7 +2328,16 @@ static void bakRestoreAndRestart(int8_t slot) {
   bakSetMsg(X_BAK_FAIL);
 }
 
+// ko12.9.8: deslizar = volver a ajustes (como brillo / SD), salvo con una ventana abierta
+void backupSwipeBack() {
+  if (bakSel >= 0 || bakCrashView) { bakSel = -1; bakCrashView = false; return; }  // primero cierra la ventana
+  xScreen = XS_SET;
+}
+
 void backupTap(int16_t x, int16_t y) {
+  if ((bakCrashView || bakSel >= 0) && navHit(NAV_L, x, y)) {  // ko12.9.8: <- cierra la ventana
+    bakCrashView = false; bakSel = -1; sfxPlay(SFX_TAP); return;
+  }
   if (bakCrashView) {  // ko11.9.2
     if (inRect(x, y, 78, 328, 150, 44)) { crashClear(); bakCrashView = false; sfxPlay(SFX_TAP); }
     else if (inRect(x, y, 238, 328, 150, 44)) { bakCrashView = false; sfxPlay(SFX_TAP); }
