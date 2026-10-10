@@ -22,3 +22,6 @@ case/
 # Personal SD audio is distributed separately, never committed.
 *.wav
 *.mp3
+
+# ko12.9.9: fotos de la placa (devtest.py) - tienen sprites, nunca subirlas
+devtest_out/
