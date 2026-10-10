@@ -5,6 +5,7 @@
 bool rtcBegin();
 uint32_t rtcEpoch();             // segundos unix; 0 si el RTC no es valido
 void rtcSetEpoch(uint32_t e);
+extern volatile bool rtcJustSet;  // ko12.9.3: lo pone rtcSetEpoch (clockEpoch acepta el salto)
 
 // PMU AXP2101: estado de la bateria
 bool batBegin();

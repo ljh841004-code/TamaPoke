@@ -1303,8 +1303,12 @@ void handleSerial() {
 
 // ---------- entrada tactil ----------
 
+// ko12.9.3: termina donde empieza la zona de las barras (GAUGE_HIT_Y). Antes llegaba a 310 y las
+// barras empezaban a tocar en 306: un toque en "기분" que el tactil leia unos px mas arriba caia
+// en la caricia (+5, +8 si es mimoso) en vez de +25
+#define GAUGE_HIT_Y 294
 bool inPetZone(int16_t x, int16_t y) {
-  return x > 110 && x < 356 && y > 95 && y < 310;
+  return x > 110 && x < 356 && y > 95 && y < GAUGE_HIT_Y;
 }
 // ko11.9.2: mantener el dedo sobre el bicho 3 s = soltarlo. El tactil a veces
 // "suelta" un instante con el dedo quieto y el gesto se partia en toques cortos
@@ -1830,7 +1834,7 @@ void onTap(int16_t x, int16_t y) {
     }
   }
   // ko12.5: tocar una barra la sube (ko12.9.1: 25; la energia 15)
-  if (y >= 306 && y < 362 && x >= 70 && x < 400) {
+  if (y >= GAUGE_HIT_Y && y < 366 && x >= 70 && x < 400) {  // ko12.9.3: 18 px de margen sobre las barras (312)
     uint8_t g = (uint8_t)((y >= 334 ? 2 : 0) + (x >= 236 ? 1 : 0));
     pet.gaugeTap(g);
     sfxPlay(SFX_TAP);
@@ -2735,7 +2739,23 @@ uint32_t clockEpoch() {  // hora del RTC, leida como mucho una vez por segundo
   // avanza con millis() y el RTC se vuelve a leer al salir
   static uint32_t base = 0;
   if (fastGameNow() && e) return e + (now - base) / 1000;
-  if (!at || now - at >= 1000) { at = now ? now : 1; uint32_t r = rtcEpoch(); if (r) e = r; base = now; }
+  // ko12.9.3: una lectura que no cuadra con la anterior + lo que ha pasado (mas de 5 s de diferencia)
+  // solo se cree si la siguiente lectura la confirma (o si la hora se acaba de poner). Antes un dato
+  // roto adelantaba el reloj un segundo: "la expedicion ha vuelto" y en la caja seguia fuera
+  static uint32_t cand = 0, candAt = 0;
+  if (!at || now - at >= 1000) {
+    at = now ? now : 1;
+    uint32_t r = rtcEpoch();
+    uint32_t expect = e ? e + (now - base) / 1000 : 0;
+    int32_t d = (int32_t)(r - expect);
+    bool sane = r && (!e || rtcJustSet || (d >= -5 && d <= 5));
+    if (r && !sane && cand) {  // la anterior rara y esta cuentan lo mismo: era un salto de verdad
+      int32_t dc = (int32_t)(r - (cand + (now - candAt) / 1000));
+      sane = dc >= -3 && dc <= 3;
+    }
+    if (sane) { e = r; base = now; cand = 0; rtcJustSet = false; }
+    else if (r) { cand = r; candAt = now; if (e) { e = expect; base = now; } }
+  }
   return e ? e : pet.lastSeenEpoch;
 }
 

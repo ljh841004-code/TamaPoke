@@ -157,8 +157,16 @@ bool sdUpdateFileVersion(char *out, size_t n) { snprintf(out, n, "1.17-ko6.3"); 
 
 // ---- reloj / PMU ----
 bool rtcBegin() { return true; }
-uint32_t rtcEpoch() { return gMockEpoch; }
-void rtcSetEpoch(uint32_t e) { gMockEpoch = e; }
+// ko12.9.3: en las capturas la hora se cambia a mano (gMockEpoch): cuenta como hora puesta
+volatile bool rtcJustSet = false;
+uint32_t gMockGlitch = 0;  // ko12.9.3: una lectura rota (una vez), sin ser hora puesta
+uint32_t rtcEpoch() {
+  static uint32_t last = 0;
+  if (gMockGlitch) { uint32_t g = gMockGlitch; gMockGlitch = 0; return g; }
+  if (gMockEpoch != last) { rtcJustSet = true; last = gMockEpoch; }
+  return gMockEpoch;
+}
+void rtcSetEpoch(uint32_t e) { gMockEpoch = e; rtcJustSet = true; }
 bool batBegin() { return true; }
 void batSetChargeLimit(bool) {}
 void pmuEnablePanel() {}

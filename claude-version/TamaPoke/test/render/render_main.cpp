@@ -89,6 +89,24 @@ static void scenes(bool ko, const char *sfx) {
       uint8_t f0 = pet.fullness > 70 ? 70 : pet.fullness; pet.fullness = f0;
       onTap(150, 318);  // barra de comida
       navCheck("principal: tocar la barra sube 25", pet.fullness == f0 + GAUGE_TAP_GAIN_BIG);
+      {  // ko12.9.3: un toque unos px por encima de "기분" (el tactil lee algo alto) es la barra, no una caricia
+        uint8_t j0 = pet.joy > 70 ? 70 : pet.joy; pet.joy = j0;
+        onTap(300, 300);
+        navCheck("principal: justo encima de la barra = barra (+25)", pet.joy == j0 + GAUGE_TAP_GAIN_BIG);
+        pet.joy = j0;
+        onTap(CX, 280);
+        navCheck("principal: el cuerpo sigue siendo caricia", pet.joy > j0 && pet.joy < j0 + GAUGE_TAP_GAIN_BIG);
+      }
+      {  // ko12.9.3: una lectura rota del RTC (2 h en el futuro) no adelanta el reloj
+        extern uint32_t gMockGlitch;
+        tick(1100); uint32_t c0 = clockEpoch();
+        gMockGlitch = gMockEpoch + 7200;
+        tick(1100); uint32_t c1 = clockEpoch();
+        tick(1100); uint32_t c2 = clockEpoch();
+        navCheck("reloj: una lectura rota no salta 2 h", c1 >= c0 && c1 < c0 + 10 && c2 < c0 + 10);
+        gMockEpoch += 600; tick(1100); uint32_t c3 = clockEpoch();
+        navCheck("reloj: la hora puesta a mano si se acepta", c3 >= c0 + 600);
+      }
       pet.tantrum = TANTRUM_MIN; render(); shot("01y_tantrum");
       onTap(CX, PET_CY);
       navCheck("berrinche: tocar al bicho abre el dialogo", tantrumDlg);

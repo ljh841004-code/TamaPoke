@@ -20,6 +20,11 @@ uint32_t rtcEpoch() {
   if (!rtcOk) return 0;
   RTC_DateTime t = rtc.getDateTime();
   if (t.getYear() < 2025 || t.getYear() > 2120) return 0;  // sin hora valida
+  // ko12.9.3: una lectura rota del bus (lo comparte el tactil) traia campos imposibles que mktime
+  // "normalizaba" a otra fecha valida: el reloj saltaba un momento al futuro
+  if (t.getMonth() < 1 || t.getMonth() > 12 || t.getDay() < 1 || t.getDay() > 31 || t.getHour() > 23 ||
+      t.getMinute() > 59 || t.getSecond() > 59)
+    return 0;
   struct tm tmv = {};
   tmv.tm_year = t.getYear() - 1900;
   tmv.tm_mon = t.getMonth() - 1;
@@ -31,8 +36,10 @@ uint32_t rtcEpoch() {
   return e > 0 ? (uint32_t)e : 0;
 }
 
+volatile bool rtcJustSet = false;  // ko12.9.3: clockEpoch acepta el salto en seguida (hora puesta a proposito)
 void rtcSetEpoch(uint32_t e) {
   if (!rtcOk) return;
+  rtcJustSet = true;
   time_t tt = e;
   struct tm tmv;
   gmtime_r(&tt, &tmv);
