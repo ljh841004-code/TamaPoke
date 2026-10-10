@@ -4794,6 +4794,24 @@ void renderDexDetail() {
   uiFlush();
 }
 
+// ko12.9.6: aura detras de los raros (violeta) y legendarios (dorado) de la pokedex, en cuanto se han
+// visto o capturado. La rejilla es estatica: aura en anillos + destellos (sin animacion)
+static void dexSparkle(int x, int y, int s, uint16_t c) {
+  gfx->fillTriangle(x - s, y, x + s, y, x, y - s * 2, c);
+  gfx->fillTriangle(x - s, y, x + s, y, x, y + s * 2, c);
+  gfx->fillTriangle(x, y - s, x, y + s, x - s * 2, y, c);
+  gfx->fillTriangle(x, y - s, x, y + s, x + s * 2, y, c);
+}
+void dexRareGlow(int cx, int cy, bool legend) {
+  const uint16_t bg = C565(0xf0, 0xec, 0xdc);
+  uint16_t col = legend ? C565(0xff, 0xc0, 0x20) : C565(0xa0, 0x70, 0xff);
+  for (int k = 0; k < 6; k++) gfx->fillCircle(cx, cy, 37 - k * 3, lerp565(bg, col, 3 + k * 2, 16));
+  uint16_t sp = legend ? C565(0xe0, 0x90, 0x00) : C565(0x80, 0x48, 0xe8);
+  dexSparkle(cx + 27, cy - 25, 3, sp);
+  dexSparkle(cx - 29, cy + 21, 2, sp);
+  if (legend) dexSparkle(cx - 25, cy - 27, 2, sp);
+}
+
 int16_t galleryLoadWant = 0;
 void galleryLoadPending();
 void renderGallery() {
@@ -4829,7 +4847,6 @@ void renderGallery() {
   int k = snprintf(gl, sizeof(gl), "%s   ", XT(g2 ? X_GEN2 : X_GEN1));
   if (nx) snprintf(gl + k, sizeof(gl) - k, XT(X_DEXRW_NEXT_FMT), dexCaughtCount(), nx);
   else snprintf(gl + k, sizeof(gl) - k, XT(X_DEXRW_DONE_FMT), dexCaughtCount());
-  drawFit(gl, 70, 300, g2 ? UI_BAR_WARN : 0x8410, 1);
 
   for (int r = 0; r < 4; r++) {
     for (int c = 0; c < 4; c++) {
@@ -4838,6 +4855,12 @@ void renderGallery() {
       int x = GAL_X + c * GAL_CELL, y = GAL_Y + r * GAL_CELL;
       const uint8_t *t = thumbs.get(dex);
       if (t) {
+        uint8_t rar = DEX_TBL[dex].rarity;
+        if ((rar == R_RARO || rar == R_LEGENDARIO) && dexDiscovered(dex)) {  // ko12.9.6: brilla al verlo
+          int ccx, ccy;
+          thumbCenter(t, x, y, 2, &ccx, &ccy);
+          dexRareGlow(ccx, ccy, rar == R_LEGENDARIO);
+        }
         drawThumb(t, x, y, 2, !dexDiscovered(dex));
         if (dexLog.caughtCount(dex)) {  // ko11.31: capturado alguna vez: circulo
           int ccx, ccy;
@@ -4861,6 +4884,7 @@ void renderGallery() {
       }
     }
   }
+  drawFit(gl, 70, 300, g2 ? UI_BAR_WARN : 0x8410, 1);  // ko12.9.6: despues de la rejilla (el aura no lo tapa)
   // ko10.8: sin el aviso "doble toque: salir" (la flecha de abajo sale; el doble toque sigue)
   // puntos de pagina (ko10: 16 paginas; mas juntos para caber abajo del circulo;
   // los de gen 2 en color de acento)

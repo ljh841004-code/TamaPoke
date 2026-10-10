@@ -1260,6 +1260,10 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); galleryOpen = true; galleryDetail = 0; galleryPage = 10; galleryDirty = true;
   for (int16_t d : { 172, 175, 176, 179, 181, 196, 197, 208, 212 }) dexLog.seen(d, gMockEpoch);
   render(); shot("30_dex_gen2_grid");
+  // ko12.9.6: raros (violeta) y legendarios (dorado) brillan en cuanto se han visto
+  for (int16_t d : { 131, 137, 144, 145, 150 }) dexLog.seen(d, gMockEpoch);
+  for (int16_t d : { 147, 151 }) { dexLog.seen(d, gMockEpoch); dexLog.caught(d, gMockEpoch); }
+  galleryPage = 8; galleryDirty = true; render(); shot("31c_dex_rare_glow");
   galleryPage = 9; galleryDirty = true; render(); shot("31b_dex_gen1_last");
   galleryPage = GAL_PAGES - 1; galleryDirty = true; render(); shot("31_dex_gen2_last");
   galleryDetail = 197; galleryPmd.load(197, false); render(); shot("32_dex_umbreon");
