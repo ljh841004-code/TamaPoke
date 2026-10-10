@@ -63,6 +63,11 @@ uint32_t spdRtSum = 0;     // suma de reflejos (ms) de los aciertos (ko11.14: po
 #define SPD_MAXN 5      // ko11.14: balones por ronda (3 -> 5)
 int16_t spdBx[SPD_MAXN], spdBy[SPD_MAXN];
 uint8_t spdN = 3, spdNext = 0, spdFail = 0;  // spdFail: 1 orden equivocado, 2 tiempo
+// ko12.9.5: en el ataque se perdonan 2 toques equivocados por ronda (el dedo da a la de al lado);
+// el tercero falla la ronda. El tiempo sigue corriendo
+#define SPD_FORGIVE 2
+uint8_t spdWrong = 0, spdWrongI = 0;
+uint32_t spdWrongT = 0;
 uint16_t spdBase = 0;  // ko11.17: los numeros siguen de ronda en ronda (1-3, 4-7, 8-12...)
 #define SPD_RANDOM_FROM 7   // desde esta ronda (0 = la 1a) el primer numero es al azar
 #define SPD_RANDOM_MAX 60   // ... entre 1 y 60
@@ -490,6 +495,8 @@ static void spdNextRound() {
   spdUntil = millis() + 600 + random(500);
   spdNext = 0;
   spdFail = 0;
+  spdWrong = 0;
+  spdWrongT = 0;
   spdPlace();
 }
 
@@ -537,7 +544,17 @@ void speedPress(int16_t x, int16_t y) {
     if (d < bd) { bd = d; best = i; }
   }
   if (best < 0) return;  // toque en vacio: no cuenta
-  if (best != spdNext) { spdFail = 1; spdResolve(false); return; }
+  if (best != spdNext) {
+    if (++spdWrong <= SPD_FORGIVE) {  // ko12.9.5: perdonado: tiembla esa diana y sigue la ronda
+      spdWrongI = (uint8_t)best;
+      spdWrongT = millis();
+      sfxPlay(SFX_DENY);
+      return;
+    }
+    spdFail = 1;
+    spdResolve(false);
+    return;
+  }
   spdTapT[spdNext] = millis();
   spdNext++;
   spdTargets++;
@@ -633,6 +650,8 @@ void renderSpeed() {
     uint32_t age = now - spdShowAt;
     for (int i = spdN - 1; i >= 0; i--) {
       int x = spdBx[i], y = spdBy[i];
+      bool shake = spdWrong && i == spdWrongI && now - spdWrongT < 350;  // ko12.9.5: toque perdonado
+      if (shake) x += (int)(7 * sinf((now - spdWrongT) * 0.09f));
       if (i < spdNext) {  // tocado: estallido (aro que crece y se apaga)
         uint32_t t = now - spdTapT[i];
         if (t < 260) {
@@ -682,6 +701,11 @@ void renderSpeed() {
     int i = spdNext - 1;
     drawMoveFx(DEX_TBL[pet.speciesId].ptype, CX, 360, spdBx[i], spdBy[i], 120 + lastTap * 2, true, 2,
                moveTier(pet.speciesId), pet.moveVar());
+  }
+  if (spdPhase == SP_SHOW && spdWrong && now - spdWrongT < 700) {  // ko12.9.5: "앗! 다시 (실수 1/2)"
+    char ob[40];
+    snprintf(ob, sizeof(ob), XT(X_TGT_OOPS_FMT), (unsigned)spdWrong);
+    drawFit(ob, 330, 320, UI_BAR_BAD, 2);
   }
   if (spdPhase == SP_FEED) {
     const char *fb = XT(spdGood ? X_NICE : spdFail == 1 ? X_SPD_WRONG : X_MISS);

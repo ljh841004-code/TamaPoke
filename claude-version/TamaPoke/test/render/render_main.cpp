@@ -585,6 +585,12 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); startSpeed();
   for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
   tick(300); render(); shot("07e_train_speed_hint");  // ko11.17: solo el 1o parpadea
+  {  // ko12.9.5: 2 toques equivocados se perdonan; el 3o falla la ronda
+    speedPress(spdBx[1], spdBy[1]); tick(150); render(); shot("07g_attack_oops");
+    navCheck("ataque: 1er toque equivocado perdonado", spdPhase == SP_SHOW && spdWrong == 1 && spdNext == 0);
+    speedPress(spdBx[1], spdBy[1]);
+    navCheck("ataque: 2o perdonado", spdPhase == SP_SHOW && spdWrong == 2);
+  }
   speedPress(spdBx[0], spdBy[0]);
   tick(120); render(); shot("07_train_speed");
   // ko10.6: resultado con puntos por reflejos y la media
@@ -598,6 +604,10 @@ static void scenes(bool ko, const char *sfx) {
       tick(700); render(); shot("07d_train_speed_mid");
     }
     for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
+    if (r == 5) {  // ko12.9.5: el 3er toque equivocado de la ronda si la falla
+      for (int k = 0; k < 3; k++) speedPress(spdBx[1], spdBy[1]);
+      navCheck("ataque: 3er toque equivocado = ronda fallada", spdPhase == SP_FEED && spdFail == 1);
+    }
     for (int k = 0; k < spdN; k++) { tick(300 + r * 5); speedPress(spdBx[k], spdBy[k]); }
     for (int i = 0; i < 60 && spdPhase == SP_FEED && !spdOverUntil; i++) { tick(20); render(); }
   }

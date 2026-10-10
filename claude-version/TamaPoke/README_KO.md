@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko12.9.4)
+# TamaPoke KO (v1.17-ko12.9.5)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko12.9.5: 훈련 메뉴 = 공격 startSpeed(번호 과녁: drawTarget, drawMoveFx, trainStrength(spdTargets), 라운드당 SPD_FORGIVE 2 오터치 허용) / 속도 startShell(몬스터볼 찾기, 10라운드, trainSpeed(hits*1.5, 점수)) / 놀이 startSimon(따라 해 봐!, 4패드 fillArc, 하트 2, playResult(맞힌 수)); punch·tilt 코드 삭제
 - ✅ ko12.9.4: netStartLanFw (저장된 와이파이만 스캔·연결 → 같은 WebServer /fw 핸들러를 그 IP에서, setSleep(false), 10분 타임아웃, LAN_FAIL_NOSAVED/WIFI 화면), 네트워크 화면 [집 와이파이로 업데이트], netStopPortal/closeNet이 같이 끔
 - ✅ ko12.9.3: train_more.ino (타이밍 펀치: 링 각도·노란/주황 판정, 바위→trainStrength(rocks*4, rocks); 기울여 열매: QMI8658 축 학습 tptilt mx/my, 30초, playResult), GAUGE_HIT_Y 294, rtcEpoch 필드 검사 + clockEpoch 튀는 값 확인(rtcJustSet)
 - ✅ ko12.9.2: 포털 /fw (UpdStream: SD와 같은 분류, 0x0 거절, 0xe000 받음, 배터리 20%, 음악 멈춤, 저장 후 재시작), 사탕 카드 2열 타일(candyTileAt), fameGenesChanged(사탕으로 유전자 바뀌면 명예의 전당 카드도), clampGene 상한 115, fameMergeCards(같은 계열 카드 합치기: 오래된 자리, 우승 합산, 최고 연승, 첫 날짜, 레벨 높은 모습)
