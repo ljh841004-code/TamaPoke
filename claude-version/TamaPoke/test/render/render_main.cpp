@@ -1373,6 +1373,20 @@ static void scenes(bool ko, const char *sfx) {
 
 // ko11.17: [<] vuelve a la pantalla desde la que se abrio cada menu
 static void navChecks() {
+  {  // ko12.9.8: prueba por USB: SWIPE / TAP / HOLD llegan por loop() como un dedo; SCR y SHOT no rompen nada
+    closeAll();
+    auto run = [](uint32_t ms) { for (uint32_t t = 0; t < ms; t += 20) { gMockMillis += 20; loop(); } };
+    run(300);
+    navCheck("usb: SWIPE abajo = ajustes", testSerialCommand(String("SWIPE 233 120 233 360 300")));
+    run(800);
+    navCheck("usb: ... llego como deslizar", xScreen == XS_SET);
+    testSerialCommand(String("TAP 20 200"));
+    run(600);
+    navCheck("usb: TAP en la flecha = vuelve", xScreen == XS_NONE);
+    navCheck("usb: SCR y SHOT responden", testSerialCommand(String("SCR")) && testSerialCommand(String("SHOT")));
+    navCheck("usb: comando desconocido no se traga", !testSerialCommand(String("WIPEX")));
+    closeAll();
+  }
   const int LX = 20, LY = 200;  // flecha izquierda
   closeAll(); cardOpen = true; cardPage = 3; openBox(); boxTap(LX, LY);
   navCheck("ficha -> caja -> [<]", xScreen == XS_NONE && cardOpen && cardPage == 3);

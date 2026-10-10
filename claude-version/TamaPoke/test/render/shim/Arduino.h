@@ -56,6 +56,7 @@ extern uint32_t gMockMillis;
 
 
 struct MockSerial : public Print {
+  using Print::write;  // ko12.9.8: write(buf, n) para SHOT
   size_t write(uint8_t) override { return 1; }
   void begin(unsigned long) {}
   int available() { return 0; }

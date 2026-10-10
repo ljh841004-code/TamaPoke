@@ -46,7 +46,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.9.7"
+#define FW_VERSION "1.17-ko12.9.8"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -385,9 +385,14 @@ static const char *crumbName(uint8_t scr) {
   switch (scr) {
     case 1: return "volley"; case 2: return "defense"; case 3: return "targets"; case 4: return "ball game";
     case 5: return "sack"; case 6: return "train menu"; case 7: return "card"; case 0: return "main";
-    case 8: return "find ball"; case 9: return "copy me";  // ko12.9.8
+    case 8: return "find ball"; case 9: return "copy me"; case 10: return "pokedex";  // ko12.9.8
     default: return "screen";
   }
+}
+// ko11.9.2: en que pantalla estamos (miga de pan; ko12.9.8: tambien para SCR)
+static uint8_t screenCode() {
+  return vbOpen ? 1 : defOpen ? 2 : spdOpen ? 3 : gameOpen ? 4 : sackOpen ? 5 : shellOpen ? 8 : simonOpen ? 9 : trainMenuOpen ? 6
+       : cardOpen ? 7 : galleryOpen ? 10 : xScreen ? (uint8_t)(20 + xScreen) : 0;
 }
 bool safeMode = false;
 static bool bootGfxUp = false;
@@ -926,9 +931,7 @@ void loop() {
   if (!pet.sleeping && petHoldAllowed() && mainNavAllowed() && (int32_t)(now - lastInteract) >= (int32_t)AUTO_SLEEP_MS) pet.autoSleepNow();
   uint32_t loopT0 = now, renderMs = 0;
   {  // ko11.9.2: en que pantalla estamos (si se reinicia, se ve al arrancar)
-    uint8_t scr = vbOpen ? 1 : defOpen ? 2 : spdOpen ? 3 : gameOpen ? 4 : sackOpen ? 5 : shellOpen ? 8 : simonOpen ? 9 : trainMenuOpen ? 6
-                : cardOpen ? 7 : xScreen ? (uint8_t)(20 + xScreen) : 0;
-    crumb((uint16_t)(scr << 8));
+    crumb((uint16_t)(screenCode() << 8));
   }
   // ko11.8: en combate no hace caca. ko11.8.1: se decide ANTES del tick (antes iba
   // despues y el primer minuto aun podia caer) y dura 2 min tras salir del combate
@@ -1121,6 +1124,49 @@ void updateBrightness(uint32_t now) {
 
 // ---------- consola serie (provision de SD + depuracion) ----------
 
+// ko12.9.8: prueba desde el PC por USB (tools/devtest.py). No cambian la partida por si solos: solo
+// tocan la pantalla como un dedo (TAP/SWIPE/HOLD), la copian (SHOT) o dicen donde estamos (SCR)
+static const char *crumbName(uint8_t scr);
+static uint8_t screenCode();
+static bool testSerialCommand(const String &line) {
+  int a, b, c, d, e;
+  if (line.startsWith("TAP ") && sscanf(line.c_str() + 4, "%d %d", &a, &b) == 2) {
+    injTap(a, b);
+    Serial.println("DONE");
+    return true;
+  }
+  if (line.startsWith("SWIPE ")) {
+    int n = sscanf(line.c_str() + 6, "%d %d %d %d %d", &a, &b, &c, &d, &e);
+    if (n >= 4) { injSwipe(a, b, c, d, n == 5 ? (uint32_t)e : 300); Serial.println("DONE"); }
+    else Serial.println("ERR");
+    return true;
+  }
+  if (line.startsWith("HOLD ")) {
+    int n = sscanf(line.c_str() + 5, "%d %d %d", &a, &b, &c);
+    if (n >= 2) { injHold(a, b, n == 3 ? (uint32_t)c : 1500); Serial.println("DONE"); }
+    else Serial.println("ERR");
+    return true;
+  }
+  if (line == "SCR") {  // pantalla actual (codigo de la miga de pan) y si quedan toques por entregar
+    uint8_t sc = screenCode();
+    Serial.printf("scr=%u %s x=%u busy=%d off=%d dim=%u\n", sc, crumbName(sc), (unsigned)xScreen, injBusy() ? 1 : 0,
+                  screenOff ? 1 : 0, (unsigned)dimStage);
+    Serial.println("DONE");
+    return true;
+  }
+  if (line == "SHOT") {  // copia de la pantalla: cabecera + 466x466 RGB565 (little endian) en binario
+    const uint8_t *fb = (const uint8_t *)gfx->getFramebuffer();
+    uint32_t len = (uint32_t)LCD_WIDTH * LCD_HEIGHT * 2;
+    if (!fb) { Serial.println("ERR"); return true; }
+    Serial.printf("SHOT %d %d %lu\n", LCD_WIDTH, LCD_HEIGHT, (unsigned long)len);
+    for (uint32_t o = 0; o < len; o += 4096) Serial.write(fb + o, len - o < 4096 ? len - o : 4096);
+    Serial.println();
+    Serial.println("DONE");
+    return true;
+  }
+  return false;
+}
+
 void handleSerial() {
   if (!Serial.available()) return;
   String line = Serial.readStringUntil('\n');
@@ -1128,6 +1174,7 @@ void handleSerial() {
   if (line.length() == 0) return;
   if (sdSerialCommand(line)) return;
   if (netSerialCommand(line)) return;
+  if (testSerialCommand(line)) return;  // ko12.9.8: TAP / SWIPE / HOLD / SHOT / SCR
 
   if (line.startsWith("VOL")) {  // fork KO: VOL [bgm cry sfx] en 0..100
     int v[3], n = sscanf(line.c_str() + 3, "%d %d %d", &v[0], &v[1], &v[2]);
@@ -1463,7 +1510,49 @@ void i2cFastMode() {
 }
 
 // el toque se resuelve al LEVANTAR el dedo para distinguir tap de deslizar
+// ko12.9.8: toques de prueba por USB (TAP / SWIPE / HOLD): una lista de eventos con su hora que se
+// entregan a touchSample() como si vinieran del tactil. Para probar la placa desde el PC (tools/devtest.py)
+struct InjEv { uint32_t at; int16_t x, y; bool p; };
+#define INJ_MAX 64
+static InjEv injQ[INJ_MAX];
+static uint8_t injN = 0;
+static void injAdd(uint32_t at, bool p, int x, int y) {
+  if (injN >= INJ_MAX) return;
+  injQ[injN++] = { at ? at : 1, (int16_t)constrain(x, 0, LCD_WIDTH - 1), (int16_t)constrain(y, 0, LCD_HEIGHT - 1), p };
+}
+static bool injBusy() { return injN > 0; }
+static void injPoll() {
+  uint32_t now = millis();
+  while (injN && (int32_t)(now - injQ[0].at) >= 0) {
+    InjEv e = injQ[0];
+    memmove(injQ, injQ + 1, (injN - 1) * sizeof(InjEv));
+    injN--;
+    gTouchEvT = e.at;
+    touchSample(e.p, e.x, e.y);
+    gTouchEvT = 0;
+  }
+}
+static void injTap(int x, int y) {
+  uint32_t t = millis() + 10;
+  injAdd(t, true, x, y);
+  injAdd(t + 120, false, x, y);
+}
+static void injSwipe(int x0, int y0, int x1, int y1, uint32_t ms) {
+  uint32_t t = millis() + 10;
+  if (ms < 120) ms = 120;
+  for (int k = 0; k <= 8; k++) injAdd(t + ms * k / 8, true, x0 + (x1 - x0) * k / 8, y0 + (y1 - y0) * k / 8);
+  injAdd(t + ms + 20, false, x1, y1);
+}
+static void injHold(int x, int y, uint32_t ms) {
+  uint32_t t = millis() + 10;
+  uint32_t step = ms / 40 + 1;  // como mucho ~40 eventos
+  if (step < 40) step = 40;
+  for (uint32_t d = 0; d <= ms && injN < INJ_MAX - 1; d += step) injAdd(t + d, true, x, y);
+  injAdd(t + ms + 10, false, x, y);
+}
+
 void handleTouch() {
+  injPoll();  // ko12.9.8
   if (petTapPendT && !wasPressed && touchNow() - petTapPendT >= PET_HOLD_GAP_MS) {  // ko11.9.2
     petTapPendT = 0;
     petHoldT0 = 0;
