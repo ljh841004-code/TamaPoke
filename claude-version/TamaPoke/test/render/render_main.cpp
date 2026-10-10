@@ -65,7 +65,7 @@ static void tick(uint32_t ms) { gMockMillis += ms; }
 static void closeAll() {
   cardOpen = trainMenuOpen = galleryOpen = clockOpen = false;
   defOpen = spdOpen = sackOpen = gameOpen = vbOpen = false;
-  punchOpen = tiltOpen = false;  // ko12.9.3
+  shellOpen = simonOpen = false;  // ko12.9.5
   xScreen = XS_NONE;
   toastUntil = 0;
   while (pet.showMedal()) gMockMillis += 500;  // el cartel de medalla no tapa otras capturas
@@ -455,60 +455,63 @@ static void scenes(bool ko, const char *sfx) {
   shot("26b_ball_game_3balls");
   gameOpen = false;
   closeAll();
-  {  // ko12.9.3: ataque = timing punch
-    startPunch(); render(); shot("29_punch_start");
-    navCheck("punch: abre", punchOpen);
-    tick(1000); render();
-    // tocar cuando la luz esta en el centro de la zona: perfecto (+2)
-    for (int k = 0; k < 400 && fabsf(tpDiffProbe()) > 2; k++) { tick(10); render(); }
-    uint16_t r0 = tpRocksProbe();
-    punchPress(CX, CX); tick(120); render(); shot("29b_punch_perfect");
-    navCheck("punch: centro = completo (+2)", tpRocksProbe() == r0 + 2);
-    tick(800); render(); shot("29c_punch_play");
-    // tocar lejos de la zona: fallo
-    for (int k = 0; k < 400 && fabsf(tpDiffProbe()) < 100; k++) { tick(10); render(); }
-    uint8_t l0 = tpLivesProbe();
-    punchPress(CX, CX); tick(100); render(); shot("29d_punch_miss");
-    navCheck("punch: fuera de la zona = una vida menos", tpLivesProbe() == l0 - 1);
-    // dejarla pasar entera dos veces: se acaba
-    for (int k = 0; k < 2000 && tpLivesProbe() > 0; k++) { tick(20); render(); }
-    navCheck("punch: 3 fallos = fin", tpLivesProbe() == 0);
-    render(); tick(100); render(); shot("29e_punch_result");
+  {  // ko12.9.5: velocidad = buscar la pokeball
+    startShell(); render(); shot("29_shell_show");
+    navCheck("shell: abre", shellOpen);
+    tick(1850); render(); tick(250); render(); shot("29b_shell_hide");
+    for (int k = 0; k < 400 && shellPhaseProbe() != 2; k++) { tick(20); render(); }
+    tick(180); render(); shot("29c_shell_swap");
+    for (int k = 0; k < 600 && shellPhaseProbe() != 3; k++) { tick(20); render(); }
+    tick(400); render(); shot("29d_shell_pick");
+    uint8_t pp = shellPetProbe();
+    shellPress(shellSlotXProbe(pp), SH_Y); tick(200); render(); shot("29e_shell_found");
+    navCheck("shell: la buena = puntos", shellScoreProbe() >= 50 && shellPhaseProbe() == 4);
+    // ronda 2: la equivocada
+    for (int k = 0; k < 800 && shellPhaseProbe() != 3; k++) { tick(20); render(); }
+    uint16_t sc = shellScoreProbe();
+    uint8_t wrong = (uint8_t)((shellPetProbe() + 1) % shellCountProbe());
+    shellPress(shellSlotXProbe(wrong), SH_Y); tick(200); render(); shot("29f_shell_wrong");
+    navCheck("shell: la otra = sin puntos", shellScoreProbe() == sc);
+    // a media partida (4-5 pokeballs) y hasta el final
+    for (int r = 2; r < SH_ROUNDS; r++) {
+      for (int k = 0; k < 1500 && shellPhaseProbe() != 3; k++) { tick(20); render(); }
+      if (r == 8) { tick(30); render(); shot("29g_shell_five"); }
+      shellPress(shellSlotXProbe(shellPetProbe()), SH_Y);
+      for (int k = 0; k < 100 && shellPhaseProbe() == 4 && !shellOverProbe(); k++) { tick(20); render(); }
+    }
+    navCheck("shell: 5 pokeballs al final", shellCountProbe() == 5);
+    render(); tick(100); render(); shot("29h_shell_result");
+    navCheck("shell: 10 rondas = fin", shellOverProbe());
     for (int k = 0; k < 50; k++) { tick(100); render(); }
-    navCheck("punch: vuelve al menu", !punchOpen && trainMenuOpen);
+    navCheck("shell: vuelve al menu", !shellOpen && trainMenuOpen);
     closeAll();
   }
-  {  // ko12.9.3: juego = inclinar y recoger bayas (sensor simulado)
-    extern bool gTiltSim; extern int32_t gTiltSimX, gTiltSimY;
-    gTiltSim = true; gTiltSimX = gTiltSimY = 0;
-    { Preferences tp; tp.begin("tptilt", false); tp.clear(); tp.end(); }
-    tiltResetMapProbe();
-    startTilt(); render(); shot("30_tilt_howto");
-    navCheck("tilt: abre la explicacion", tiltOpen && !gameOpen);
-    tiltPress(TL_START_X + 80, TL_START_Y + 20); render(); shot("30b_tilt_cal_right");
-    // sensor montado al reves en x (inclinar a la derecha baja el eje y del sensor)
-    gTiltSimY = -450; tick(100); render();
-    gTiltSimY = 0; tick(300); render(); shot("30c_tilt_cal_down");
-    gTiltSimX = 420; tick(100); render();
-    gTiltSimX = 0; tick(100); render();
-    navCheck("tilt: direccion aprendida y a jugar", tiltPhaseProbe() == 3);
-    // inclinar a la derecha: la bola va a la derecha
-    float x0 = tiltBallXProbe();
-    gTiltSimY = -400;
-    for (int k = 0; k < 10; k++) { tick(85); render(); }
-    navCheck("tilt: derecha = la bola va a la derecha", tiltBallXProbe() > x0 + 20);
-    gTiltSimY = 0; gTiltSimX = 300;
-    for (int k = 0; k < 6; k++) { tick(85); render(); }
-    shot("30d_tilt_play");
-    tiltForceScoreProbe(14);
-    for (int k = 0; k < 400 && tiltOpen && !tiltOverProbe(); k++) { tick(100); render(); }
-    render(); shot("30e_tilt_result");
-    navCheck("tilt: 30 s = fin con resultado", tiltOverProbe());
-    for (int k = 0; k < 50; k++) { tick(100); render(); }
-    navCheck("tilt: vuelve al menu", !tiltOpen && trainMenuOpen);
-    gTiltSim = false;
-    startTilt();
-    navCheck("tilt: sin sensor = el juego de toques", !tiltOpen && gameOpen);
+  {  // ko12.9.5: juego = "따라 해 봐!"
+    startSimon(); render(); shot("30_simon_howto");
+    navCheck("simon: abre", simonOpen);
+    tick(2250); render(); tick(200); render(); shot("30b_simon_show");
+    for (int k = 0; k < 400 && simonPhaseProbe() != 2; k++) { tick(20); render(); }
+    uint16_t s0 = simonScoreProbe();
+    static const int16_t PX[4] = { CX, CX + 170, CX, CX - 170 }, PY[4] = { CX - 170, CX, CX + 170, CX };
+    uint8_t n = simonNextPadProbe();
+    simonPress(PX[n], PY[n]); tick(60); render(); shot("30c_simon_input");
+    navCheck("simon: el bueno = +1", simonScoreProbe() == s0 + 1);
+    while (simonPhaseProbe() == 2) { n = simonNextPadProbe(); simonPress(PX[n], PY[n]); tick(80); }
+    render(); shot("30d_simon_good");
+    navCheck("simon: secuencia completa", simonPhaseProbe() == 3);
+    for (int k = 0; k < 400 && simonPhaseProbe() != 2; k++) { tick(20); render(); }
+    navCheck("simon: crece en uno", simonLenProbe() == 4);
+    n = simonNextPadProbe();
+    simonPress(PX[(n + 1) % 4], PY[(n + 1) % 4]); tick(300); render(); shot("30e_simon_oops");
+    navCheck("simon: el malo = una vida menos", simonLivesProbe() == 1);
+    for (int k = 0; k < 400 && simonPhaseProbe() != 2; k++) { tick(20); render(); }
+    n = simonNextPadProbe();
+    simonPress(PX[(n + 1) % 4], PY[(n + 1) % 4]);
+    for (int k = 0; k < 100 && !simonOverProbe(); k++) { tick(20); render(); }
+    render(); shot("30f_simon_result");
+    navCheck("simon: 2 fallos = fin", simonOverProbe());
+    for (int k = 0; k < 60; k++) { tick(100); render(); }
+    navCheck("simon: vuelve al menu", !simonOpen && trainMenuOpen);
     closeAll();
   }
   // entrenamiento

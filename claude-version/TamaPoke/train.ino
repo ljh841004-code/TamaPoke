@@ -9,6 +9,9 @@
 //                cada vez mas rapido. ko10.6: puntos por reflejos (hasta 100 por
 //                ronda segun lo rapido que toques): antes el tope era 15/15
 //   - Pelota: el juego de siempre (ahora solo sube el animo)
+// ko12.9.5: el menu queda asi: ataque = dianas numeradas (el juego "en orden" de velocidad: tocar
+// 1, 2, 3... y el bicho dispara a cada una), velocidad = buscar la pokeball (train_more.ino),
+// juego = imitar ("따라 해 봐!", train_more.ino). El saco y la timing punch ya no salen.
 //
 // Se engancha a TamaPoke.ino por funciones: trainingRender / trainingTap /
 // trainingFast / trainingPress / trainingSwipe (como ui_extra.ino).
@@ -55,6 +58,7 @@ uint8_t spdRound = 0, spdPhase = SP_WAIT, spdSide = 0, spdGain = 0;
 uint16_t spdScore = 0;
 uint32_t spdUntil = 0, spdOverUntil = 0, spdShowAt = 0;
 uint8_t spdHits = 0;       // ko10.6: aciertos (entrenan la VEL); spdScore = puntos
+uint16_t spdTargets = 0;   // ko12.9.5: dianas tocadas en orden (ataque: el record y lo que entrena)
 uint32_t spdRtSum = 0;     // suma de reflejos (ms) de los aciertos (ko11.14: por balon)
 #define SPD_MAXN 5      // ko11.14: balones por ronda (3 -> 5)
 int16_t spdBx[SPD_MAXN], spdBy[SPD_MAXN];
@@ -67,8 +71,8 @@ uint8_t spdRes[SPD_ROUNDS];  // ko11.16: 0 pendiente, 1 bien, 2 fallo (puntos de
 bool spdGood = false, spdNewHi = false;
 
 extern bool vbOpen;  // ko11.9 (volley.ino)
-extern bool punchOpen, tiltOpen;  // ko12.9.3 (train_more.ino)
-bool trainingFast() { return defOpen || spdOpen || vbOpen || punchOpen || tiltOpen; }  // toques al apoyar el dedo
+extern bool shellOpen, simonOpen;  // ko12.9.5 (train_more.ino)
+bool trainingFast() { return defOpen || spdOpen || vbOpen || shellOpen || simonOpen; }  // toques al apoyar el dedo
 bool trainingOpen() { return trainMenuOpen || trainingFast(); }
 
 // ko11.17: el menu se abre desde la principal o desde la ficha: [<] vuelve ahi
@@ -244,11 +248,11 @@ void trainMenuTap(int16_t x, int16_t y) {
   }
   sfxPlay(SFX_TAP);
   trainMenuOpen = false;
-  if (i == 0) startPunch();  // ko12.9.3: timing punch (antes el saco)
+  if (i == 0) startSpeed();  // ko12.9.5: dianas numeradas (antes timing punch / saco)
   else if (i == 1) startDefense();
-  else if (i == 2) startSpeed();
+  else if (i == 2) startShell();  // ko12.9.5: buscar la pokeball
   else if (i == 4) startVolley();  // ko11.9
-  else startTilt();  // ko12.9.3: inclinar y recoger bayas (sin sensor: el juego de toques)
+  else startSimon();  // ko12.9.5: imitar (antes inclinar / pelota)
 }
 
 // ---------- pantalla de resultado comun ----------
@@ -448,7 +452,7 @@ void renderDefense() {
   uiFlush();
 }
 
-// ---------- velocidad ----------
+// ---------- ataque (ko12.9.5; antes velocidad): dianas numeradas ----------
 // ko11.14: EN ORDEN. Salen 3-5 pokeballs numeradas a la vez; hay que tocarlas
 // 1, 2, 3... lo antes posible. Orden equivocado o sin tiempo = ronda fallada.
 // Puntos por la media de cada balon (100 - ms/10, minimo 10)
@@ -496,6 +500,7 @@ void startSpeed() {
   spdBase = 0;
   spdScore = 0;
   spdHits = 0;
+  spdTargets = 0;
   spdRtSum = 0;
   spdOverUntil = 0;
   spdNewHi = false;
@@ -535,6 +540,7 @@ void speedPress(int16_t x, int16_t y) {
   if (best != spdNext) { spdFail = 1; spdResolve(false); return; }
   spdTapT[spdNext] = millis();
   spdNext++;
+  spdTargets++;
   if (spdNext >= spdN) spdResolve(true);
   else sfxPlay(SFX_TAP);
 }
@@ -549,8 +555,9 @@ void stepSpeed() {
     spdFail = 2;
     spdResolve(false);  // no llego a tiempo
   } else if (++spdRound >= SPD_ROUNDS) {
-    spdNewHi = spdScore > pet.speHi;
-    spdGain = pet.trainSpeed(spdHits, spdScore);
+    // ko12.9.5: ahora entrena el ATAQUE: record = dianas (como las rocas / sacos de antes)
+    spdNewHi = spdTargets > pet.strHi;
+    spdGain = pet.trainStrength(spdTargets, spdTargets);
     sfxPlay(spdNewHi ? SFX_MEDAL : SFX_PLAY);
     spdOverUntil = millis() + 3500;
   } else {
@@ -565,17 +572,27 @@ void stepSpeed() {
   }
 }
 
+// ko12.9.5: diana roja y blanca (el numero va encima, en el circulo blanco del centro)
+static void drawTarget(int x, int y, int r) {
+  const uint16_t RED = C565(0xe0, 0x40, 0x30);
+  gfx->fillCircle(x, y, r, RED);
+  gfx->fillCircle(x, y, r * 3 / 4, UI_WHITE);
+  gfx->fillCircle(x, y, r / 2 + 2, RED);
+  gfx->drawCircle(x, y, r, UI_INK);
+  gfx->drawCircle(x, y, r - 1, UI_INK);
+}
+
 void renderSpeed() {
   if (spdOverUntil) {
     if (!timeLeft(spdOverUntil)) { spdOpen = false; backToTrainMenu(); return; }
     char s[24], g[20];
-    snprintf(s, sizeof(s), XT(X_SPE_PTS_FMT), spdScore);
-    snprintf(g, sizeof(g), XT(X_SPE_GAIN_FMT), spdGain);
+    snprintf(s, sizeof(s), XT(X_TGT_FMT), (unsigned)spdTargets);
+    snprintf(g, sizeof(g), T(S_STR_GAIN_FMT), spdGain);
     char sub[48];
     uint32_t avg = spdHits ? spdRtSum / spdHits : 0;
     snprintf(sub, sizeof(sub), XT(X_SPE_AVG_FMT), (unsigned)spdHits, (unsigned)SPD_ROUNDS,
              (unsigned)(avg / 1000), (unsigned)(avg % 1000 / 10));
-    drawTrainResult(s, g, UI_BAR_WARN, spdNewHi && spdScore > 0, pet.speHi, sub);
+    drawTrainResult(s, g, UI_BAR_BAD, spdNewHi && spdTargets > 0, pet.strHi, sub);
     return;
   }
   stepSpeed();
@@ -594,9 +611,9 @@ void renderSpeed() {
     if (f > 0.01f) gfx->fillArc(CX, CX, 232, 222, 270, 270 + f * 360.0f, rc);
   }
   // puntos arriba y 15 puntitos de progreso (verde bien, rojo fallo, aro = ahora)
-  char b[16];
-  snprintf(b, sizeof(b), "%u", spdScore);
-  drawFit(b, 34, 200, ink, 3);
+  char b[24];
+  snprintf(b, sizeof(b), XT(X_TGT_FMT), (unsigned)spdTargets);
+  drawFit(b, 34, 220, ink, 3);
   for (int i = 0; i < SPD_ROUNDS; i++) {
     int dx = CX - (SPD_ROUNDS - 1) * 7 + i * 14, dy = 84;
     if (spdRes[i] == 1) gfx->fillCircle(dx, dy, 5, okC);
@@ -604,9 +621,12 @@ void renderSpeed() {
     else gfx->fillCircle(dx, dy, 4, lerp565(UI_TRACK, UI_INK, 3, 16));
     if (i == spdRound && !spdOverUntil) gfx->drawCircle(dx, dy, 7, ink);
   }
-  // el bicho abajo, mirando
+  // el bicho abajo: dispara a cada diana que se toca (ko12.9.5)
+  uint32_t lastTap = spdNext ? now - spdTapT[spdNext - 1] : 9999;
   if (pmd.loaded) {
-    uint8_t act = spdPhase == SP_FEED && !spdGood && pmd.has(PMD_HURT) ? PMD_HURT : PMD_IDLE;
+    uint8_t act = spdPhase == SP_FEED && !spdGood ? PMD_HURT
+                : lastTap < 260 ? (pmd.has(PMD_SHOOT) ? PMD_SHOOT : PMD_ATTACK) : PMD_IDLE;
+    if (!pmd.has(act)) act = PMD_IDLE;
     drawPmdActM(pmd, act, CX, 420, now, true, false, 3, 96);
   }
   if (spdPhase == SP_SHOW || spdPhase == SP_FEED) {
@@ -632,8 +652,8 @@ void renderSpeed() {
       if (ta < 0) continue;
       int s4 = ta >= 150 ? 16 : ta < 100 ? 8 + (int)(ta * 9 / 100) : 17 - (int)((ta - 100) / 50);
       int half = s4 * 2;
-      uiShade(x - half * 3 / 5, y + half - 7, half * 6 / 5, 8, 4, 4);  // sombra pegada al balon
-      drawMapQ(SPR_ICON_PLAY, 16, x - half, y - half, s4, false);
+      uiShade(x - half * 3 / 5, y + half - 7, half * 6 / 5, 8, 4, 4);  // sombra pegada a la diana
+      drawTarget(x, y, half);  // ko12.9.5: diana (antes pokeball)
       if (s4 >= 14) {
         // ko11.17: numeros que siguen subiendo; solo el PRIMERO de la ronda parpadea
         // (pista de por donde empezar), el resto hay que seguirlo de cabeza
@@ -657,6 +677,12 @@ void renderSpeed() {
       }
     }
   }
+  // ko12.9.5: el ataque del bicho vuela hasta la ultima diana tocada
+  if (spdNext && lastTap < 420) {
+    int i = spdNext - 1;
+    drawMoveFx(DEX_TBL[pet.speciesId].ptype, CX, 360, spdBx[i], spdBy[i], 120 + lastTap * 2, true, 2,
+               moveTier(pet.speciesId), pet.moveVar());
+  }
   if (spdPhase == SP_FEED) {
     const char *fb = XT(spdGood ? X_NICE : spdFail == 1 ? X_SPD_WRONG : X_MISS);
     drawFit(fb, 330, 320, spdGood ? C565(0x1a, 0x86, 0x34) : UI_BAR_BAD, 3);
@@ -673,8 +699,8 @@ bool trainingRender() {
   if (defOpen) { renderDefense(); return true; }
   if (spdOpen) { renderSpeed(); return true; }
   if (vbOpen) { renderVolley(); return true; }  // ko11.9
-  if (punchOpen) { renderPunch(); return true; }  // ko12.9.3
-  if (tiltOpen) { renderTilt(); return true; }
+  if (shellOpen) { renderShell(); return true; }  // ko12.9.5
+  if (simonOpen) { renderSimon(); return true; }
   return false;
 }
 
@@ -687,12 +713,12 @@ bool trainingTap(int16_t x, int16_t y) {
 void trainingPress(int16_t x, int16_t y) {  // al apoyar el dedo (juegos rapidos)
   if (defOpen) defensePress(x, y);
   else if (spdOpen) speedPress(x, y);
-  else if (punchOpen) punchPress(x, y);  // ko12.9.3
-  else if (tiltOpen) tiltPress(x, y);
+  else if (shellOpen) shellPress(x, y);  // ko12.9.5
+  else if (simonOpen) simonPress(x, y);
 }
 
 // ko9.1: abandonar sin premio (mantener el dedo 2 s, ver handleTouch)
-void trainingQuit() { defOpen = spdOpen = vbOpen = punchOpen = tiltOpen = false; }
+void trainingQuit() { defOpen = spdOpen = vbOpen = shellOpen = simonOpen = false; }
 
 bool trainingSwipe() {
   if (trainMenuOpen) { trainMenuClose(); return true; }

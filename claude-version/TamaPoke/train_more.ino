@@ -1,573 +1,490 @@
-// ko12.9.3: dos entrenamientos nuevos
-//   - Ataque: "타이밍 펀치". Una luz da vueltas por el borde redondo; tocar cuando pasa por la zona
-//     amarilla = el bicho carga y dispara y rompe una roca (el centro naranja = "완벽!", dos rocas).
-//     Cada acierto estrecha la zona y acelera la luz; 3 fallos (tocar fuera o dejarla pasar) = fin.
-//     Sustituye al saco (el codigo del saco sigue en TamaPoke.ino, ya no sale en el menu).
-//   - Juego: "기울여 열매 모으기". Se inclina la placa (QMI8658) y una pokeball rueda por el campo
-//     recogiendo bayas (+1, doradas +3); los agujeros quitan 5 s. 30 s. La primera vez se aprende
-//     la direccion: "inclina a la derecha" y "inclina hacia abajo" (el eje y el signo del sensor
-//     cambian con como esta montado). Sin sensor: el juego de toques de siempre.
+// ko12.9.5: dos entrenamientos nuevos (sustituyen a la timing punch y al juego de inclinar de ko12.9.3)
+//   - Velocidad: "몬스터볼 찾기". El bicho se mete en una pokeball (rayo rojo, como al guardarlo), las
+//     pokeballs se cambian de sitio cada vez mas rapido y hay que tocar la suya. 10 rondas; 3, 4 y luego
+//     5 pokeballs. Puntos por lo rapido que se elige (hasta 150 por ronda, 1500 en total: la misma
+//     escala que el juego de velocidad de antes, asi el record sigue valiendo).
+//   - Juego (animo): "따라 해 봐!". Cuatro botones alrededor del bicho (fuego, agua, planta, electrico);
+//     el bicho enseña una secuencia y hay que repetirla. Cada acierto la alarga en uno. 2 vidas: al fallar
+//     se repite la misma. Puntos = toques acertados (3 + 4 + 5 ... : la escala del juego de antes).
+// El ataque ("번호 과녁") es el juego de dianas numeradas de train.ino.
 
-bool punchOpen = false, tiltOpen = false;
+bool shellOpen = false, simonOpen = false;
 
 // ======================================================================
-// ataque: timing punch
+// velocidad: buscar la pokeball
 // ======================================================================
-#define TP_R 212         // radio del anillo
-#define TP_ROCK_Y 200
-#define TP_PET_Y 404
-#define TP_FX_MS 450
-static uint32_t tpStart = 0, tpOverUntil = 0, tpFxT = 0, tpLastT = 0, tpJudgeT = 0;
-static float tpAng = 0, tpSpeed = 150, tpTgt = 90, tpW = 70;
-static uint8_t tpLives = 3, tpCombo = 0, tpBestCombo = 0, tpJudge = 0, tpGain = 0;
-static uint16_t tpRocks = 0, tpPerfect = 0;
-static bool tpNewHi = false;
+#define SH_ROUNDS 10
+#define SH_Y 276          // fila de pokeballs
+#define SH_PICK_MS 4000UL // tiempo para elegir
+#define SH_FEED_MS 1200UL
+enum : uint8_t { SH_SHOW = 0, SH_HIDE, SH_SWAP, SH_PICK, SH_FEED };
+static uint8_t shPhase = SH_SHOW, shRound = 0, shN = 3, shPet = 0, shSwapI = 0, shSwapN = 0, shA = 0, shB = 1;
+static uint8_t shPick = 255, shHits = 0, shGain = 0;
+static uint8_t shRes[SH_ROUNDS];  // 0 pendiente, 1 bien, 2 fallo
+static uint16_t shScore = 0, shLastPts = 0;
+static uint32_t shT0 = 0, shSwapMs = 400, shRtSum = 0, shOverUntil = 0;
+static bool shNewHi = false, shOk = false;
 
-static float tpDiff(float a, float b) {  // a - b en (-180, 180]
-  float d = fmodf(a - b + 540.0f, 360.0f) - 180.0f;
-  return d;
+static uint8_t shCount(uint8_t r) { return r < 3 ? 3 : r < 7 ? 4 : 5; }
+static int shGap() { return shN >= 5 ? 82 : shN == 4 ? 96 : 112; }
+static int shR() { return shN >= 5 ? 30 : 34; }
+static int shSlotX(uint8_t i) { return CX + ((int)i * 2 - (shN - 1)) * shGap() / 2; }
+
+static void shNextSwap() {
+  shA = (uint8_t)random(shN);
+  if (shRound < 4) {  // al principio solo vecinas (se sigue mejor)
+    shB = shA == 0 ? 1 : shA == shN - 1 ? shA - 1 : (random(2) ? shA + 1 : shA - 1);
+  } else {
+    do shB = (uint8_t)random(shN); while (shB == shA);
+  }
+  shSwapMs = 430 - shRound * 28;
+  if (shSwapMs < 170) shSwapMs = 170;
 }
-static float tpPerfW() { float p = tpW * 0.28f; return p < 8 ? 8 : p; }
-static void tpNewTarget() { tpTgt = fmodf(tpAng + 130 + random(140), 360.0f); }
 
-void startPunch() {
+static void shNewRound(uint32_t now) {
+  shN = shCount(shRound);
+  shPet = (uint8_t)random(shN);
+  shSwapI = 0;
+  shSwapN = 3 + shRound;
+  shPick = 255;
+  shPhase = SH_SHOW;
+  shT0 = now;
+}
+
+void startShell() {
   perfReset();
   if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
-  punchOpen = true;
-  tpStart = tpLastT = millis();
-  tpOverUntil = tpFxT = tpJudgeT = 0;
-  tpAng = 0; tpSpeed = 150; tpW = 70;
-  tpLives = 3; tpCombo = tpBestCombo = tpJudge = 0;
-  tpRocks = tpPerfect = 0;
-  tpNewHi = false;
-  tpNewTarget();
+  shellOpen = true;
+  shRound = 0;
+  shScore = shHits = 0;
+  shRtSum = 0;
+  shOverUntil = 0;
+  shNewHi = false;
+  for (auto &v : shRes) v = 0;
+  shNewRound(millis());
 }
 
-static void tpMiss(uint32_t now) {
-  if (tpLives) tpLives--;
-  tpCombo = 0;
-  tpJudge = 3; tpJudgeT = now;
-  sfxPlay(SFX_DENY);
-  tpNewTarget();
-}
-
-static void stepPunch(uint32_t now) {
-  float dt = (now - tpLastT) / 1000.0f;
-  if (dt > 0.25f) dt = 0.25f;
-  tpLastT = now;
-  if (now - tpStart < 900) return;  // un respiro para leer
-  tpAng = fmodf(tpAng + tpSpeed * dt, 360.0f);
-  float d = tpDiff(tpAng, tpTgt);
-  if (d > tpW / 2 + 4 && d < 90) tpMiss(now);  // la dejo pasar entera
-}
-
-void punchPress(int16_t x, int16_t y) {
-  (void)x; (void)y;  // vale tocar en cualquier sitio
-  uint32_t now = millis();
-  if (tpOverUntil || !tpLives || now - tpStart < 900) return;
-  float d = fabsf(tpDiff(tpAng, tpTgt));
-  if (d <= tpPerfW() / 2) {
-    tpRocks += 2; tpPerfect++; tpCombo++;
-    tpJudge = 1;
+static void shResolve(bool ok, uint8_t pick, uint32_t now) {
+  shOk = ok;
+  shPick = pick;
+  shRes[shRound] = ok ? 1 : 2;
+  shLastPts = 0;
+  if (ok) {
+    uint32_t rt = now - shT0;
+    shLastPts = rt >= 1000 ? 50 : (uint16_t)(150 - rt / 10);
+    shScore += shLastPts;
+    shHits++;
+    shRtSum += rt;
     sfxPlay(SFX_MEDAL);
-  } else if (d <= tpW / 2) {
-    tpRocks += 1; tpCombo++;
-    tpJudge = 2;
-    sfxPlay(SFX_PLAY);
   } else {
-    tpMiss(now);
-    return;
+    sfxPlay(SFX_DENY);
   }
-  if (tpCombo > tpBestCombo) tpBestCombo = tpCombo;
-  tpJudgeT = tpFxT = now;
-  tpSpeed = tpSpeed + 12 > 430 ? 430 : tpSpeed + 12;
-  tpW = tpW - 3 < 26 ? 26 : tpW - 3;
-  tpNewTarget();
+  shPhase = SH_FEED;
+  shT0 = now;
 }
 
-static void tpDojo() {
-  gfx->fillScreen(C565(0x2c, 0x26, 0x38));
-  gfx->fillCircle(CX, CX, 196, C565(0xe8, 0xd8, 0xb8));
-  for (int y = 70; y < 430; y += 36) {
-    int w = (int)sqrtf((float)(196 * 196 - (y - CX) * (y - CX)));
-    gfx->drawFastHLine(CX - w, y, 2 * w, C565(0xd4, 0xc0, 0x9c));
-  }
-}
-static void tpRing(uint32_t now) {
-  for (int a = 0; a < 360; a += 3) {  // pista
-    float r = (a - 90) * 0.01745f;
-    gfx->fillCircle(CX + (int)(TP_R * cosf(r)), CX + (int)(TP_R * sinf(r)), 4, C565(0x4a, 0x42, 0x5a));
-  }
-  float pw = tpPerfW();
-  for (float a = tpTgt - tpW / 2; a <= tpTgt + tpW / 2; a += 1.5f) {  // zona buena / perfecta
-    float r = (a - 90) * 0.01745f;
-    bool perf = fabsf(tpDiff(a, tpTgt)) <= pw / 2;
-    gfx->fillCircle(CX + (int)(TP_R * cosf(r)), CX + (int)(TP_R * sinf(r)), perf ? 9 : 7,
-                    perf ? C565(0xff, 0x8a, 0x20) : C565(0xff, 0xd8, 0x40));
-  }
-  for (int k = 6; k >= 1; k--) {  // estela de la luz
-    float r = (tpAng - k * 4 - 90) * 0.01745f;
-    gfx->fillCircle(CX + (int)(TP_R * cosf(r)), CX + (int)(TP_R * sinf(r)), 9 - k,
-                    lerp565(C565(0x4a, 0x42, 0x5a), UI_WHITE, 16 - k * 2, 16));
-  }
-  float r = (tpAng - 90) * 0.01745f;
-  int dx = CX + (int)(TP_R * cosf(r)), dy = CX + (int)(TP_R * sinf(r));
-  bool flash = tpFxT && now - tpFxT < 150;
-  gfx->fillCircle(dx, dy, flash ? 16 : 12, flash ? C565(0xff, 0xf0, 0xa0) : UI_WHITE);
-  gfx->drawCircle(dx, dy, flash ? 16 : 12, UI_INK);
-}
-static void tpRock(int cx, int cy, int r, int cracks) {
-  gfx->fillCircle(cx, cy + 4, r, C565(0x5a, 0x52, 0x4a));
-  gfx->fillCircle(cx, cy, r, C565(0x9a, 0x92, 0x88));
-  gfx->fillCircle(cx - r / 3, cy - r / 3, r / 3, C565(0xb8, 0xb0, 0xa6));
-  gfx->drawCircle(cx, cy, r, UI_INK);
-  for (int i = 0; i < cracks; i++) {
-    float a = i * 2.4f;
-    int x0 = cx + (int)(r * 0.15f * cosf(a)), y0 = cy + (int)(r * 0.15f * sinf(a));
-    int x1 = cx + (int)(r * 0.8f * cosf(a + 0.3f)), y1 = cy + (int)(r * 0.8f * sinf(a + 0.3f));
-    gfx->drawLine(x0, y0, x1, y1, UI_INK);
-    gfx->drawLine(x0 + 1, y0, x1 + 1, y1, UI_INK);
+static void stepShell(uint32_t now) {
+  uint32_t t = now - shT0;
+  if (shPhase == SH_SHOW) {
+    if (t >= (shRound == 0 ? 1800UL : 1000UL)) { shPhase = SH_HIDE; shT0 = now; sfxPlay(SFX_TAP); }
+  } else if (shPhase == SH_HIDE) {
+    if (t >= 450) { shPhase = SH_SWAP; shT0 = now; shNextSwap(); }
+  } else if (shPhase == SH_SWAP) {
+    if (t >= shSwapMs) {
+      if (shPet == shA) shPet = shB;
+      else if (shPet == shB) shPet = shA;
+      if (++shSwapI >= shSwapN) { shPhase = SH_PICK; shT0 = now; }
+      else { shT0 = now; shNextSwap(); }
+    }
+  } else if (shPhase == SH_PICK) {
+    if (t >= SH_PICK_MS) shResolve(false, 255, now);  // no eligio
+  } else if (shPhase == SH_FEED) {
+    if (t >= SH_FEED_MS) {
+      if (++shRound >= SH_ROUNDS) {
+        shNewHi = shScore > pet.speHi;
+        shGain = pet.trainSpeed(shHits + shHits / 2, shScore);  // 10 rondas -> hasta 15 (como las 15 de antes)
+        sfxPlay(shNewHi ? SFX_MEDAL : SFX_PLAY);
+        shOverUntil = now + 3500;
+      } else {
+        shNewRound(now);
+      }
+    }
   }
 }
 
-void renderPunch() {
+void shellPress(int16_t x, int16_t y) {
+  if (shOverUntil || shPhase != SH_PICK) return;
+  int best = -1, bd = 52 * 52;
+  for (int i = 0; i < shN; i++) {
+    int dx = x - shSlotX(i), dy = y - SH_Y, d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = i; }
+  }
+  if (best < 0) return;  // toque en vacio: no cuenta
+  shResolve(best == shPet, (uint8_t)best, millis());
+}
+
+// media pokeball (arriba roja / abajo blanca) con su borde
+static void halfDisc(int cx, int cy, int r, bool top, uint16_t c) {
+  for (int y = 0; y <= r; y++) {
+    int w = (int)sqrtf((float)(r * r - y * y));
+    gfx->drawFastHLine(cx - w, top ? cy - y : cy + y, 2 * w + 1, c);
+  }
+}
+static void halfRim(int cx, int cy, int r, bool top) {
+  for (int a = 0; a <= 180; a += 4) {
+    float rad = a * 0.01745f;
+    int x = cx + (int)(r * cosf(rad)), y = cy + (int)(r * sinf(rad)) * (top ? -1 : 1);
+    gfx->fillCircle(x, y, 1, UI_INK);
+  }
+}
+// abajo (blanca) y tapa (roja); lift = cuanto sube la tapa (0 = cerrada)
+static void pokeBallBase(int cx, int cy, int r, bool open) {
+  uiShade(cx - r, cy + r - 6, 2 * r, 10, 5, 4);
+  if (open) gfx->fillEllipse(cx, cy, r - 2, r / 4 + 1, C565(0x3a, 0x34, 0x40));  // por dentro
+  halfDisc(cx, cy, r, false, UI_WHITE);
+  halfRim(cx, cy, r, false);
+  gfx->fillRect(cx - r, cy - 2, 2 * r + 1, 4, UI_INK);
+}
+static void pokeBallCap(int cx, int cy, int r, int lift) {
+  const uint16_t RED = C565(0xe8, 0x3a, 0x3a);
+  int ty = cy - lift;
+  halfDisc(cx, ty, r, true, RED);
+  halfRim(cx, ty, r, true);
+  gfx->fillRect(cx - r, ty - 2, 2 * r + 1, 4, UI_INK);
+  gfx->fillCircle(cx - r / 2, ty - r / 2, r / 7 + 1, C565(0xff, 0xa8, 0xa0));  // brillo
+  int br = r / 3;
+  gfx->fillCircle(cx, ty, br, UI_WHITE);
+  gfx->drawCircle(cx, ty, br, UI_INK);
+  gfx->drawCircle(cx, ty, br - 1, UI_INK);
+}
+static void pokeBallV(int cx, int cy, int r, int lift) {
+  pokeBallBase(cx, cy, r, lift > 0);
+  pokeBallCap(cx, cy, r, lift);
+}
+
+static uint8_t petActOr(uint8_t want) { return pmd.has(want) ? want : (uint8_t)PMD_IDLE; }
+
+void renderShell() {
   uint32_t now = millis();
-  if (tpOverUntil) {
-    if (!timeLeft(tpOverUntil)) { punchOpen = false; backToTrainMenu(); return; }
-    char s[32], g[20], sub[48];
-    snprintf(s, sizeof(s), XT(X_TP_ROCKS_FMT), (unsigned)tpRocks);
-    snprintf(g, sizeof(g), T(S_STR_GAIN_FMT), tpGain);
-    snprintf(sub, sizeof(sub), XT(X_TP_SUB_FMT), (unsigned)tpPerfect, (unsigned)tpBestCombo);
-    drawTrainResult(s, g, UI_BAR_BAD, tpNewHi && tpRocks > 0, pet.strHi, sub);
+  if (shOverUntil) {
+    if (!timeLeft(shOverUntil)) { shellOpen = false; backToTrainMenu(); return; }
+    char s[24], g[20], sub[48];
+    snprintf(s, sizeof(s), XT(X_SPE_PTS_FMT), shScore);
+    snprintf(g, sizeof(g), XT(X_SPE_GAIN_FMT), shGain);
+    uint32_t avg = shHits ? shRtSum / shHits : 0;
+    snprintf(sub, sizeof(sub), XT(X_SH_SUB_FMT), (unsigned)shHits, (unsigned)SH_ROUNDS, (unsigned)(avg / 1000),
+             (unsigned)(avg % 1000 / 10));
+    drawTrainResult(s, g, UI_BAR_WARN, shNewHi && shScore > 0, pet.speHi, sub);
     return;
   }
-  if (!tpLives) {  // fin: el entrenamiento cuenta las rocas (como los sacos: rocas = record, 1 roca = 1 punto)
-    tpNewHi = tpRocks > pet.strHi;
-    tpGain = pet.trainStrength((uint16_t)(tpRocks * 4), tpRocks);
-    sfxPlay(tpNewHi ? SFX_MEDAL : SFX_PLAY);
-    tpOverUntil = now + 3500;
-    return;
+  stepShell(now);
+  if (shOverUntil) return;
+  uint32_t t = now - shT0;
+  drawGameScene();
+  bool night = sceneHour() < 6 || sceneHour() >= 20;
+  uint16_t ink = night ? UI_INK_NIGHT : UI_INK;
+  const uint16_t okC = C565(0x4c, 0xc8, 0x5c);
+  // tiempo para elegir: aro por el borde (como el ataque)
+  if (shPhase == SH_PICK) {
+    float f = 1.0f - (float)t / SH_PICK_MS;
+    if (f < 0) f = 0;
+    uint16_t rc = f > 0.5f ? okC : f > 0.25f ? UI_BAR_WARN : UI_BAR_BAD;
+    gfx->fillArc(CX, CX, 232, 222, 0, 360, lerp565(UI_TRACK, UI_INK, 2, 16));
+    if (f > 0.01f) gfx->fillArc(CX, CX, 232, 222, 270, 270 + f * 360.0f, rc);
   }
-  stepPunch(now);
-  tpDojo();
-  tpRing(now);
-  // marcador: rocas, vidas, combo
-  uiPanel(168, 46, 130, 38, 14, UI_WHITE, UI_INK);
-  char b[32];
-  snprintf(b, sizeof(b), XT(X_TP_ROCKS_FMT), (unsigned)tpRocks);
-  drawFit(b, 54, 120, UI_INK, 2);
-  for (int i = 0; i < 3; i++) {
-    int x = 186 + i * 34;
-    if (i < tpLives) drawMap(SPR_HEART, 32, x - 4, 92, 1, false);
-    else gfx->drawCircle(x + 12, 106, 9, C565(0x9a, 0x92, 0x88));
+  // puntos y 10 puntitos de progreso
+  char b[24];
+  snprintf(b, sizeof(b), XT(X_SPE_PTS_FMT), shScore);
+  drawFit(b, 34, 220, ink, 3);
+  for (int i = 0; i < SH_ROUNDS; i++) {
+    int dx = CX - (SH_ROUNDS - 1) * 8 + i * 16, dy = 84;
+    if (shRes[i] == 1) gfx->fillCircle(dx, dy, 5, okC);
+    else if (shRes[i] == 2) gfx->fillCircle(dx, dy, 5, UI_BAR_BAD);
+    else gfx->fillCircle(dx, dy, 4, lerp565(UI_TRACK, UI_INK, 3, 16));
+    if (i == shRound) gfx->drawCircle(dx, dy, 7, ink);
   }
-  if (tpCombo > 1) { snprintf(b, sizeof(b), XT(X_TP_COMBO_FMT), (unsigned)tpCombo); drawFit(b, 132, 160, C565(0xd0, 0x50, 0x20), 1); }
-  // la roca: se rompe al acertar y sale otra
-  uint32_t ft = tpFxT ? now - tpFxT : 9999;
-  if (ft < TP_FX_MS) {
-    for (int i = 0; i < 9; i++) {  // trozos
-      float a = i * 0.7f;
-      int dist = 30 + (int)(ft / 5);
-      int x = CX + (int)(dist * cosf(a)), y = TP_ROCK_Y + (int)(dist * 0.85f * sinf(a)) + (int)(ft * ft / 9000);
-      gfx->fillTriangle(x, y, x + 12, y + 4, x + 4, y + 14, C565(0x9a, 0x92, 0x88));
-      gfx->drawTriangle(x, y, x + 12, y + 4, x + 4, y + 14, UI_INK);
+  int r = shR();
+  // el bicho encima de su pokeball (antes de esconderse)
+  if (shPhase == SH_SHOW || (shPhase == SH_HIDE && t < 160)) {
+    if (pmd.loaded) drawPmdActM(pmd, petActOr(PMD_HOP), shSlotX(shPet), SH_Y - r + 8, now, true, false, 3, 100);
+  }
+  // pokeballs (las dos que se cambian van por arcos: una por encima y otra por debajo)
+  float p = 0;
+  if (shPhase == SH_SWAP) {
+    p = (float)t / shSwapMs;
+    if (p > 1) p = 1;
+    p = p * p * (3 - 2 * p);
+  }
+  for (int pass = 0; pass < 2; pass++) {  // 0: las quietas y la de abajo, 1: la de arriba
+    for (int i = 0; i < shN; i++) {
+      bool moving = shPhase == SH_SWAP && (i == shA || i == shB);
+      if ((pass == 1) != (moving && i == shA)) continue;
+      int x = shSlotX(i), y = SH_Y, lift = 0;
+      if (moving) {
+        int xa = shSlotX(shA), xb = shSlotX(shB);
+        float s = sinf(p * 3.14159f);
+        if (i == shA) { x = xa + (int)((xb - xa) * p); y = SH_Y - (int)(s * 46); }
+        else { x = xb + (int)((xa - xb) * p); y = SH_Y + (int)(s * 22); }
+      }
+      if (shPhase == SH_FEED && (i == shPick || i == shPet)) lift = i == shPet ? 96 : 40;
+      if (shPhase == SH_HIDE && i == shPet && t > 160) y -= (int)(6 * sinf((t - 160) * 0.06f));  // tiembla
+      if (lift && i == shPet) {  // sale de dentro: abajo, el bicho y la tapa por encima de la cabeza
+        pokeBallBase(x, y, r, true);
+        if (pmd.loaded)
+          drawPmdActM(pmd, shOk ? petActOr(PMD_HOP) : petActOr(PMD_HURT), x, y + 6, now, true, false, 3, 80);
+        pokeBallCap(x, y, r, lift);
+      } else {
+        pokeBallV(x, y, r, lift);
+      }
     }
-    for (int a = 0; a < 8; a++) {
-      float r = a * 0.785f;
-      gfx->drawLine(CX + (int)(20 * cosf(r)), TP_ROCK_Y + (int)(20 * sinf(r)), CX + (int)(52 * cosf(r)),
-                    TP_ROCK_Y + (int)(52 * sinf(r)), C565(0xff, 0xb0, 0x30));
+  }
+  // rayo rojo: el bicho entra en su pokeball
+  if (shPhase == SH_HIDE && t >= 120 && t < 420) {
+    int x = shSlotX(shPet);
+    float q = (t - 120) / 300.0f;
+    for (int k = -2; k <= 2; k++) {
+      int x0 = x + k * 18, y0 = SH_Y - r - 70 + (int)(q * 60);
+      gfx->drawLine(x0, y0, x, SH_Y - 4, C565(0xff, 0x50, 0x50));
+      gfx->drawLine(x0 + 1, y0, x + 1, SH_Y - 4, C565(0xff, 0x50, 0x50));
     }
-    drawMoveFx(DEX_TBL[pet.speciesId].ptype, CX, 330, CX, TP_ROCK_Y, 120 + ft * 560 / TP_FX_MS, true, 2,
-               moveTier(pet.speciesId), pet.moveVar());
-  } else {
-    int grow = ft < TP_FX_MS + 200 ? (int)(ft - TP_FX_MS) / 5 : 40;  // la nueva aparece creciendo
-    tpRock(CX, TP_ROCK_Y, 6 + grow, tpCombo > 3 ? 3 : tpCombo);
+    gfx->fillCircle(x, SH_Y - 4, 8 + (int)(q * 10), C565(0xff, 0xc0, 0xc0));
   }
-  // el bicho: carga esperando, dispara al acertar, se duele al fallar
-  if (pmd.loaded) {
-    uint8_t act = ft < TP_FX_MS ? (pmd.has(PMD_SHOOT) ? PMD_SHOOT : PMD_ATTACK)
-                : (tpJudge == 3 && now - tpJudgeT < 500) ? PMD_HURT
-                : pmd.has(PMD_CHARGE) ? PMD_CHARGE : PMD_IDLE;
-    if (!pmd.has(act)) act = PMD_IDLE;
-    drawPmdActM(pmd, act, CX, TP_PET_Y, now, true, false, 4, 140);
+  const char *msg = nullptr;
+  uint16_t mc = ink;
+  if (shPhase == SH_SHOW || shPhase == SH_HIDE) msg = XT(shRound == 0 ? X_SH_WATCH : X_SH_FOLLOW);
+  else if (shPhase == SH_SWAP) msg = XT(X_SH_FOLLOW);
+  else if (shPhase == SH_PICK) msg = XT(X_SH_PICK);
+  else if (shOk) { msg = XT(X_SH_FOUND); mc = C565(0x1a, 0x86, 0x34); }
+  else { msg = XT(X_SH_WRONG); mc = UI_BAR_BAD; }
+  drawFit(msg, 344, 340, mc, 2);
+  if (shPhase == SH_FEED && shOk) {
+    snprintf(b, sizeof(b), "+%u", (unsigned)shLastPts);
+    drawFit(b, 136 - (int)(t / 40), 120, C565(0x1a, 0x86, 0x34), 3);
   }
-  // juicio
-  if (tpJudge && now - tpJudgeT < 600) {
-    uint32_t t = now - tpJudgeT;
-    XId id = tpJudge == 1 ? X_TP_PERFECT : tpJudge == 2 ? X_TP_GOOD : X_TP_MISS;
-    uint16_t c = tpJudge == 1 ? C565(0xe0, 0x50, 0x10) : tpJudge == 2 ? C565(0x1a, 0x86, 0x34) : UI_BAR_BAD;
-    if (tpJudge == 3) drawFit(XT(id), 256, 220, c, 2);  // fallo: debajo de la roca (sigue entera)
-    else {  // acierto: sobre los trozos de la roca
-      drawFit(XT(id), 150 - (int)(t / 30), 220, c, 3);
-      drawFit(tpJudge == 1 ? "+2" : "+1", 196 - (int)(t / 30), 80, c, 2);
-    }
-  }
-  if (now - tpStart < 2500) drawFit(XT(X_TP_HINT), 280, 330, UI_INK, 2);
   uiFlush();
 }
 
 // ======================================================================
-// juego: inclinar y recoger bayas
+// juego (animo): "따라 해 봐!" - repetir la secuencia del bicho
 // ======================================================================
-bool imuOk();
-bool imuAccel(int32_t &ax, int32_t &ay, int32_t &az);
-// pruebas (capturas): sin sensor de verdad, una inclinacion simulada
-bool gTiltSim = false;
-int32_t gTiltSimX = 0, gTiltSimY = 0;
-static bool tiltRead(int32_t &x, int32_t &y) {
-  if (gTiltSim) { x = gTiltSimX; y = gTiltSimY; return true; }
-  int32_t z;
-  return imuAccel(x, y, z);
-}
-bool tiltAvailable() { return gTiltSim || imuOk(); }
+#define SIM_MAX 32
+#define SM_RIN 128        // anillo de botones
+#define SM_ROUT 214
+#define SM_PET_Y 290      // suelo del bicho (en el centro)
+#define SM_IDLE_MS 6000UL // sin tocar = fallo
+enum : uint8_t { SM_READY = 0, SM_SHOW, SM_INPUT, SM_GOOD, SM_OOPS };
+static uint8_t smPhase = SM_READY, smSeq[SIM_MAX], smLen = 3, smIdx = 0, smLives = 2, smBest = 0, smTapPad = 255;
+static uint8_t smSfxIdx = 255;
+static uint16_t smScore = 0;
+static uint32_t smT0 = 0, smTapT = 0, smOverUntil = 0;
+static bool smNewHi = false, smFirst = true;
+static const uint16_t SM_COL[4] = { C565(0xe8, 0x48, 0x40), C565(0x40, 0x88, 0xe8), C565(0x48, 0xb8, 0x58),
+                                    C565(0xf0, 0xc0, 0x30) };  // arriba fuego, derecha agua, abajo planta, izq. electrico
+static const int16_t SM_ANG[4] = { 270, 0, 90, 180 };
 
-#define TL_MS 30000UL
-#define TL_ARENA 200
-#define TL_BALL 18
-#define TL_ITEMS 5
-#define TL_HOLES 3
-#define TL_FALL_MS 700
-enum : uint8_t { TL_HOW = 0, TL_CAL_R, TL_CAL_D, TL_PLAY };
-static uint8_t tlPhase = TL_HOW;
-static int8_t tlMap[2] = { -1, -1 };     // eje del sensor para x / y de la pantalla: 0 = x, 1 = y (+2 = signo -)
-static bool tlMapLoaded = false;
-static int32_t tlBase[2] = { 0, 0 };
-static bool tlBaseOk = false;
-static float tlBX, tlBY, tlVX, tlVY;
-static struct { int16_t x, y; uint8_t k; } tlItem[TL_ITEMS];
-static struct { int16_t x, y; } tlHole[TL_HOLES];
-static uint16_t tlScore = 0;
-static uint32_t tlEnd = 0, tlLastT = 0, tlFallT = 0, tlOverUntil = 0, tlCalT = 0, tlPopT = 0;
-static int16_t tlPopX = 0, tlPopY = 0;
-static uint8_t tlPopV = 0;
-static bool tlNewHi = false;
+static uint32_t smOnMs() { int v = 560 - smLen * 24; return v < 260 ? 260 : (uint32_t)v; }
+#define SM_GAP_MS 170UL
 
-static void tlLoadMap() {
-  if (tlMapLoaded) return;
-  tlMapLoaded = true;
-  Preferences p;
-  p.begin("tptilt", true);
-  tlMap[0] = (int8_t)p.getChar("mx", -1);
-  tlMap[1] = (int8_t)p.getChar("my", -1);
-  p.end();
-}
-static void tlSaveMap() {
-  Preferences p;
-  p.begin("tptilt", false);
-  p.putChar("mx", tlMap[0]);
-  p.putChar("my", tlMap[1]);
-  p.end();
-}
-static bool tlMapped() { return tlMap[0] >= 0 && tlMap[1] >= 0 && (tlMap[0] & 1) != (tlMap[1] & 1); }
-// inclinacion de la pantalla (milesimas de g) segun lo aprendido
-static float tlAxis(const int32_t *raw, int8_t m) {
-  float v = (float)(raw[m & 1] - tlBase[m & 1]);
-  return (m & 2) ? -v : v;
-}
-
-static bool tlFree(int x, int y, int skipItem) {
-  float bx = tlBX - x, by = tlBY - y;
-  if (bx * bx + by * by < 70 * 70) return false;
-  for (auto &h : tlHole) { int dx = h.x - x, dy = h.y - y; if (dx * dx + dy * dy < 50 * 50) return false; }
-  for (int i = 0; i < TL_ITEMS; i++) {
-    if (i == skipItem) continue;
-    int dx = tlItem[i].x - x, dy = tlItem[i].y - y;
-    if (dx * dx + dy * dy < 44 * 44) return false;
-  }
-  return true;
-}
-static void tlRandPos(int16_t &x, int16_t &y, int skipItem) {
-  for (int t = 0; t < 40; t++) {
-    float a = random(628) / 100.0f, r = 30 + random(TL_ARENA - 50);
-    int px = CX + (int)(r * cosf(a)), py = CX + (int)(r * sinf(a));
-    if (tlFree(px, py, skipItem) || t == 39) { x = (int16_t)px; y = (int16_t)py; return; }
-  }
-}
-static void tlSpawnItem(int i) {
-  tlItem[i].x = tlItem[i].y = -999;
-  tlRandPos(tlItem[i].x, tlItem[i].y, i);
-  tlItem[i].k = random(100) < 12 ? 3 : (uint8_t)random(3);
-}
-
-static void tlStartPlay() {
-  int32_t x, y;
-  tlBaseOk = tiltRead(x, y);
-  tlBase[0] = tlBaseOk ? x : 0;
-  tlBase[1] = tlBaseOk ? y : 0;
-  tlBX = tlBY = CX; tlVX = tlVY = 0;
-  for (auto &h : tlHole) h.x = h.y = -999;
-  for (auto &it : tlItem) it.x = it.y = -999;
-  for (auto &h : tlHole) tlRandPos(h.x, h.y, -1);
-  for (int i = 0; i < TL_ITEMS; i++) tlSpawnItem(i);
-  tlScore = 0;
-  tlLastT = millis();
-  tlEnd = tlLastT + TL_MS;
-  tlFallT = tlPopT = 0;
-  tlPhase = TL_PLAY;
-  sfxPlay(SFX_TAP);
-}
-
-void startTilt() {
+void startSimon() {
   perfReset();
   if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
-  if (!tiltAvailable()) { startGame(); return; }  // sin sensor: el de toques
-  tlLoadMap();
-  tiltOpen = true;
-  tlPhase = TL_HOW;
-  tlOverUntil = 0;
-  tlNewHi = false;
+  simonOpen = true;
+  smLen = 3;
+  for (int i = 0; i < SIM_MAX; i++) smSeq[i] = (uint8_t)random(4);
+  smIdx = 0;
+  smLives = 2;
+  smScore = 0;
+  smBest = 0;
+  smTapPad = 255;
+  smOverUntil = 0;
+  smNewHi = false;
+  smFirst = true;
+  smPhase = SM_READY;
+  smT0 = millis();
 }
 
-static void tlStartCal() {
-  int32_t x, y;
-  tlBaseOk = tiltRead(x, y);
-  tlBase[0] = x; tlBase[1] = y;
-  tlMap[0] = tlMap[1] = -1;
-  tlCalT = millis();
-  tlPhase = TL_CAL_R;
-  sfxPlay(SFX_TAP);
+static void smEnd(uint32_t now) {
+  pet.lastTrainExp = 0;
+  pet.lastTrainCandy = 0;
+  smNewHi = pet.playResult((uint8_t)(smScore > 255 ? 255 : smScore));
+  sfxPlay(smNewHi ? SFX_MEDAL : SFX_LEVEL);
+  smOverUntil = now + 4000;
 }
 
-// aprender un eje: el que mas cambio (mas de 0,3 g) respecto al de partida
-static void tlCalStep(uint32_t now) {
-  int32_t r[2];
-  if (!tiltRead(r[0], r[1])) {
-    if (now - tlCalT > 6000) { tiltOpen = false; startGame(); }  // el sensor no contesta
-    return;
-  }
-  int32_t d0 = r[0] - tlBase[0], d1 = r[1] - tlBase[1];
-  int ax = abs(d0) > abs(d1) ? 0 : 1;
-  int32_t d = ax ? d1 : d0;
-  if (abs(d) < 300) return;
-  if (tlPhase == TL_CAL_R) {
-    tlMap[0] = (int8_t)(ax | (d < 0 ? 2 : 0));
-    tlPhase = TL_CAL_D;
-    tlCalT = now;
-    sfxPlay(SFX_PLAY);
-  } else if (tlPhase == TL_CAL_D && ax != (tlMap[0] & 1)) {
-    tlMap[1] = (int8_t)(ax | (d < 0 ? 2 : 0));
-    tlSaveMap();
-    showToast(XT(X_TL_CAL_OK));
-    sfxPlay(SFX_MEDAL);
-    tlStartPlay();
-  }
-}
-
-static void tlStep(uint32_t now) {
-  float dt = (now - tlLastT) / 1000.0f;
-  if (dt > 0.2f) dt = 0.2f;
-  tlLastT = now;
-  if (tlFallT) {  // cayendo en un agujero
-    if (now - tlFallT >= TL_FALL_MS) { tlFallT = 0; tlBX = tlBY = CX; tlVX = tlVY = 0; }
-    return;
-  }
-  int32_t raw[2];
-  if (tiltRead(raw[0], raw[1])) {
-    float gx = tlAxis(raw, tlMap[0]) / 1000.0f, gy = tlAxis(raw, tlMap[1]) / 1000.0f;
-    if (gx > 0.6f) gx = 0.6f;
-    if (gx < -0.6f) gx = -0.6f;
-    if (gy > 0.6f) gy = 0.6f;
-    if (gy < -0.6f) gy = -0.6f;
-    tlVX += gx * 900.0f * dt;
-    tlVY += gy * 900.0f * dt;
-  }
-  float fr = powf(0.35f, dt);  // rozamiento
-  tlVX *= fr; tlVY *= fr;
-  tlBX += tlVX * dt; tlBY += tlVY * dt;
-  float dx = tlBX - CX, dy = tlBY - CX, d = sqrtf(dx * dx + dy * dy), lim = TL_ARENA - TL_BALL;
-  if (d > lim) {  // borde: rebota
-    float nx = dx / d, ny = dy / d, dot = tlVX * nx + tlVY * ny;
-    if (dot > 0) { tlVX -= 1.5f * dot * nx; tlVY -= 1.5f * dot * ny; }
-    tlBX = CX + nx * lim; tlBY = CX + ny * lim;
-  }
-  for (auto &h : tlHole) {  // agujeros: -5 s y vuelve al centro
-    float hx = tlBX - h.x, hy = tlBY - h.y;
-    if (hx * hx + hy * hy < 13 * 13) {
-      tlFallT = now;
-      tlEnd -= 5000;
-      tlBX = h.x; tlBY = h.y;
-      tlPopX = h.x; tlPopY = h.y; tlPopV = 0; tlPopT = now;
-      sfxPlay(SFX_DENY);
-      tlRandPos(h.x, h.y, -1);
-      return;
+static void stepSimon(uint32_t now) {
+  uint32_t t = now - smT0;
+  if (smPhase == SM_READY) {
+    if (t >= (smFirst ? 2200UL : 700UL)) { smFirst = false; smPhase = SM_SHOW; smIdx = 0; smSfxIdx = 255; smT0 = now; }
+  } else if (smPhase == SM_SHOW) {
+    if (smSfxIdx != smIdx) { smSfxIdx = smIdx; sfxPlay(SFX_PLAY); }
+    if (t >= smOnMs() + SM_GAP_MS) {
+      smT0 = now;
+      if (++smIdx >= smLen) { smPhase = SM_INPUT; smIdx = 0; }
     }
-  }
-  for (int i = 0; i < TL_ITEMS; i++) {  // bayas
-    float ix = tlBX - tlItem[i].x, iy = tlBY - tlItem[i].y;
-    if (ix * ix + iy * iy < 30 * 30) {
-      uint8_t v = tlItem[i].k == 3 ? 3 : 1;
-      tlScore += v;
-      tlPopX = tlItem[i].x; tlPopY = tlItem[i].y; tlPopV = v; tlPopT = now;
-      sfxPlay(v == 3 ? SFX_MEDAL : SFX_PLAY);
-      tlSpawnItem(i);
+  } else if (smPhase == SM_INPUT) {
+    if (t >= SM_IDLE_MS) {  // se quedo quieto
+      if (smLives) smLives--;
+      smPhase = SM_OOPS; smT0 = now; sfxPlay(SFX_DENY);
+    }
+  } else if (smPhase == SM_GOOD) {
+    if (t >= 800) {
+      if (smLen >= SIM_MAX) { smEnd(now); return; }
+      smLen++;
+      smPhase = SM_READY; smT0 = now;
+    }
+  } else if (smPhase == SM_OOPS) {
+    if (t >= 1200) {
+      if (!smLives) { smEnd(now); return; }
+      smPhase = SM_READY; smT0 = now;  // la misma secuencia otra vez
     }
   }
 }
 
-static void tlPokeball(int cx, int cy, int r) {
-  gfx->fillCircle(cx, cy, r, UI_WHITE);
-  for (int y = -r; y <= 0; y++) {
-    int w = (int)sqrtf((float)(r * r - y * y));
-    gfx->drawFastHLine(cx - w, cy + y, 2 * w + 1, C565(0xe8, 0x3a, 0x3a));
-  }
-  gfx->fillRect(cx - r, cy - 2, 2 * r + 1, 4, UI_INK);
-  gfx->drawCircle(cx, cy, r, UI_INK);
-  gfx->fillCircle(cx, cy, r / 3, UI_WHITE);
-  gfx->drawCircle(cx, cy, r / 3, UI_INK);
-  gfx->fillCircle(cx - r / 2, cy - r / 2, r / 6 + 1, UI_WHITE);
-}
-static void tlBerry(int cx, int cy, uint8_t k) {
-  if (k == 3) {  // dorada
-    gfx->fillCircle(cx, cy + 2, 12, C565(0xff, 0xc8, 0x30));
-    gfx->drawCircle(cx, cy + 2, 12, C565(0xa0, 0x70, 0x10));
-    gfx->fillCircle(cx - 4, cy - 2, 3, UI_WHITE);
-    gfx->fillRect(cx - 1, cy - 14, 3, 6, C565(0x4c, 0x8a, 0x3a));
-    return;
-  }
-  static const char *const *const B[3] = { SPR_ICON_FOOD, SPR_ICON_BERRY_B, SPR_ICON_BERRY_G };
-  drawMap(B[k % 3], 16, cx - 16, cy - 16, 2, false);
-}
-static void tlHoleDraw(int cx, int cy) {
-  gfx->fillCircle(cx, cy, 17, C565(0x8a, 0x6a, 0x48));
-  gfx->fillCircle(cx, cy, 14, C565(0x2a, 0x22, 0x1c));
-}
-static void tlArena() {
-  uint16_t grass = C565(0x8c, 0xc8, 0x6a);
-  gfx->fillScreen(C565(0x5a, 0x9a, 0x4a));
-  gfx->fillCircle(CX, CX, TL_ARENA, grass);
-  for (int i = 0; i < 40; i++) {
-    int a = (i * 97) % 360, d = 30 + (i * 53) % 160;
-    int x = CX + (int)(d * cosf(a * 0.01745f)), y = CX + (int)(d * sinf(a * 0.01745f));
-    gfx->drawLine(x, y, x - 3, y - 6, lerp565(grass, UI_INK, 4, 16));
-    gfx->drawLine(x, y, x + 3, y - 6, lerp565(grass, UI_INK, 4, 16));
-  }
-  gfx->drawCircle(CX, CX, TL_ARENA, C565(0x6a, 0x4a, 0x2a));
-  gfx->drawCircle(CX, CX, TL_ARENA + 1, C565(0x6a, 0x4a, 0x2a));
-}
-static void tlTimerRing(float frac) {
-  for (int a = 0; a < 360; a += 3) {
-    float rad = (a - 90) * 0.01745f;
-    bool on = a < frac * 360;
-    uint16_t c = on ? (frac < 0.25f ? UI_BAR_BAD : UI_BAR_OK) : C565(0x40, 0x60, 0x38);
-    gfx->fillCircle(CX + (int)(218 * cosf(rad)), CX + (int)(218 * sinf(rad)), 4, c);
-  }
+static int smPadAt(int16_t x, int16_t y) {
+  int dx = x - CX, dy = y - CX, d2 = dx * dx + dy * dy;
+  if (d2 < (SM_RIN - 16) * (SM_RIN - 16) || d2 > 240 * 240) return -1;
+  float a = atan2f((float)dy, (float)dx) * 57.2958f;  // -180..180, 0 = derecha, 90 = abajo
+  if (a >= -135 && a < -45) return 0;
+  if (a >= -45 && a < 45) return 1;
+  if (a >= 45 && a < 135) return 2;
+  return 3;
 }
 
-#define TL_START_X 153
-#define TL_START_Y 342
-#define TL_CAL_Y 404
-static void tlHowTo() {
-  uiScreenBg();
-  drawFit(XT(X_TL_TITLE), 40, 320, UI_INK, 3);
-  tlPokeball(CX, 132, 18);
-  gfx->fillTriangle(CX - 40, 132, CX - 26, 122, CX - 26, 142, UI_INK);
-  gfx->fillTriangle(CX + 40, 132, CX + 26, 122, CX + 26, 142, UI_INK);
-  drawFit(XT(X_TL_HOW1), 172, 340, UI_INK, 1);
-  tlBerry(126, 226, 0); drawFitIn(XT(X_TL_BERRY), 146, 216, 110, UI_INK, 1);
-  tlBerry(262, 226, 3); drawFitIn(XT(X_TL_GOLD), 282, 216, 110, C565(0xd0, 0x90, 0x10), 1);
-  tlHoleDraw(136, 272); drawFitIn(XT(X_TL_HOLE), 160, 262, 200, UI_BAR_BAD, 1);
-  drawFit(XT(X_TL_HOW2), 306, 340, 0x8410, 1);
-  drawBtn(TL_START_X, TL_START_Y, 160, 50, UI_BAR_OK, UI_WHITE, XT(X_TL_START));
-  if (tlMapped()) drawFit(XT(X_TL_CAL_BTN), TL_CAL_Y, 200, C565(0x4c, 0x6a, 0xa0), 1);
-}
-static void tlCalScreen(uint32_t now) {
-  uiScreenBg();
-  drawFit(XT(X_TL_TITLE), 40, 320, UI_INK, 3);
-  bool right = tlPhase == TL_CAL_R;
-  drawFit(XT(right ? X_TL_CAL_R : X_TL_CAL_D), 120, 340, UI_INK, 2);
-  // una placa que se inclina hacia donde toca
-  float a = 0.35f * sinf(now * 0.006f);
-  int cx = CX, cy = 250;
-  if (right) {
-    int dy = (int)(60 * a);
-    gfx->fillTriangle(cx - 70, cy - dy, cx + 70, cy + dy, cx + 70, cy + dy + 10, C565(0xb8, 0xd8, 0xf0));
-    gfx->fillTriangle(cx - 70, cy - dy, cx - 70, cy - dy + 10, cx + 70, cy + dy + 10, C565(0xb8, 0xd8, 0xf0));
-    gfx->fillTriangle(cx + 92, cy + 20, cx + 78, cy + 10, cx + 78, cy + 30, UI_INK);
-  } else {  // la parte de arriba se aleja (trapecio) y la de abajo baja hacia ti
-    int k = (int)(26 * fabsf(a));
-    uint16_t bc = C565(0xb8, 0xd8, 0xf0);
-    gfx->fillTriangle(cx - 70 + k, cy - 34 + k / 2, cx + 70 - k, cy - 34 + k / 2, cx + 70, cy + 34, bc);
-    gfx->fillTriangle(cx - 70 + k, cy - 34 + k / 2, cx - 70, cy + 34, cx + 70, cy + 34, bc);
-    gfx->fillTriangle(cx, cy + 72, cx - 12, cy + 52, cx + 12, cy + 52, UI_INK);
-  }
-  tlPokeball(cx + (right ? (int)(40 * a) : 0), cy + (right ? 0 : (int)(20 * fabsf(a))) - 4, 12);
-  drawFit(XT(X_TL_HOLD), 340, 340, 0x8410, 1);
-}
-
-void tiltPress(int16_t x, int16_t y) {
-  if (tlOverUntil) return;
-  if (tlPhase == TL_HOW) {
-    if (inRect(x, y, TL_START_X - 10, TL_START_Y - 8, 180, 66)) {
-      if (tlMapped()) tlStartPlay(); else tlStartCal();
-    } else if (tlMapped() && y >= TL_CAL_Y - 14 && y < TL_CAL_Y + 30 && x > 120 && x < 346) {
-      tlStartCal();
-    }
-  }
-}
-
-void renderTilt() {
+void simonPress(int16_t x, int16_t y) {
+  if (smOverUntil || smPhase != SM_INPUT) return;
+  int p = smPadAt(x, y);
+  if (p < 0) return;
   uint32_t now = millis();
-  if (tlOverUntil) {
-    if (!timeLeft(tlOverUntil)) { tiltOpen = false; backToTrainMenu(); return; }
-    char s[32];
-    snprintf(s, sizeof(s), XT(X_TL_RES_FMT), (unsigned)tlScore);
-    const char *msg = tlNewHi ? XT(X_GAME_REWARD) : tlScore ? XT(X_GAME_SMALL) : XT(X_GAME_NO_REWARD);
-    drawTrainResult(s, msg, tlNewHi ? UI_BAR_OK : UI_INK, tlNewHi, pet.gameHi, nullptr);
-    return;
-  }
-  if (tlPhase == TL_HOW) { tlHowTo(); uiFlush(); return; }
-  if (tlPhase == TL_CAL_R || tlPhase == TL_CAL_D) { tlCalStep(now); if (tiltOpen && tlPhase != TL_PLAY) tlCalScreen(now); uiFlush(); return; }
-  if ((int32_t)(now - tlEnd) >= 0) {  // fin: como el juego de toques (record = animo + energia)
-    pet.lastTrainExp = 0;
-    pet.lastTrainCandy = 0;
-    tlNewHi = pet.playResult((uint8_t)(tlScore > 255 ? 255 : tlScore));
-    sfxPlay(tlNewHi ? SFX_MEDAL : SFX_LEVEL);
-    tlOverUntil = now + 4000;
-    return;
-  }
-  tlStep(now);
-  tlArena();
-  uint32_t left = (int32_t)(tlEnd - now) > 0 ? tlEnd - now : 0;
-  tlTimerRing((float)left / TL_MS);
-  for (auto &h : tlHole) tlHoleDraw(h.x, h.y);
-  for (auto &it : tlItem) tlBerry(it.x, it.y, it.k);
-  if (tlFallT) {  // se hunde
-    int r = TL_BALL - (int)((now - tlFallT) * TL_BALL / TL_FALL_MS);
-    if (r > 2) tlPokeball((int)tlBX, (int)tlBY, r);
-  } else {
-    float sp = sqrtf(tlVX * tlVX + tlVY * tlVY);
-    if (sp > 60) {  // estela
-      for (int k = 3; k >= 1; k--)
-        gfx->fillCircle((int)(tlBX - tlVX * 0.03f * k), (int)(tlBY - tlVY * 0.03f * k), TL_BALL - 3 * k,
-                        lerp565(C565(0x8c, 0xc8, 0x6a), UI_WHITE, 6 - k, 16));
+  smTapPad = (uint8_t)p;
+  smTapT = now;
+  smT0 = now;
+  if (p == smSeq[smIdx]) {
+    smScore++;
+    sfxPlay(SFX_TAP);
+    if (++smIdx >= smLen) {
+      smBest = smLen;
+      smPhase = SM_GOOD;
+      sfxPlay(SFX_MEDAL);
     }
-    tlPokeball((int)tlBX, (int)tlBY, TL_BALL);
+  } else {
+    if (smLives) smLives--;
+    smPhase = SM_OOPS;
+    sfxPlay(SFX_DENY);
   }
-  if (tlPopT && now - tlPopT < 600) {  // +1 / +3 / -5초
-    uint32_t t = now - tlPopT;
-    char p[16];
-    if (tlPopV) snprintf(p, sizeof(p), "+%u", tlPopV);
-    else snprintf(p, sizeof(p), "%s", XT(X_TL_FALL));
-    setSize(2);
-    gfx->setTextColor(tlPopV == 3 ? C565(0xd0, 0x90, 0x10) : tlPopV ? UI_INK : UI_BAR_BAD);
-    setCur(tlPopX - textW(p, 2) / 2, tlPopY - 30 - (int)(t / 25));
-    printT(p);
+}
+
+// dibujitos de los botones (blancos): llama, gota, hoja, rayo
+static void smIcon(int i, int x, int y, uint16_t pad) {
+  const uint16_t W = UI_WHITE;
+  if (i == 0) {  // llama de tres puntas
+    gfx->fillCircle(x, y + 9, 12, W);
+    gfx->fillTriangle(x - 12, y + 7, x + 2, y + 7, x - 9, y - 10, W);
+    gfx->fillTriangle(x - 7, y + 7, x + 8, y + 7, x + 2, y - 22, W);
+    gfx->fillTriangle(x + 1, y + 7, x + 12, y + 7, x + 10, y - 6, W);
+    gfx->fillCircle(x, y + 11, 5, pad);
+    gfx->fillTriangle(x - 5, y + 10, x + 5, y + 10, x + 1, y - 3, pad);
+  } else if (i == 1) {
+    gfx->fillCircle(x, y + 6, 12, W);
+    gfx->fillTriangle(x - 11, y + 1, x + 11, y + 1, x, y - 20, W);
+    gfx->fillCircle(x - 4, y + 6, 3, pad);
+  } else if (i == 2) {
+    gfx->fillEllipse(x, y, 10, 19, W);
+    gfx->drawLine(x, y - 15, x, y + 17, pad);
+    gfx->drawLine(x, y - 2, x - 6, y - 9, pad);
+    gfx->drawLine(x, y + 6, x + 6, y - 1, pad);
+  } else {
+    gfx->fillTriangle(x + 5, y - 21, x - 11, y + 4, x + 3, y + 4, W);
+    gfx->fillTriangle(x - 3, y - 4, x + 11, y - 4, x - 5, y + 21, W);
   }
-  uiPanel(173, 44, 120, 40, 16, UI_WHITE, UI_INK);
-  char b[16];
-  snprintf(b, sizeof(b), XT(X_TL_CNT_FMT), (unsigned)tlScore);
-  drawFit(b, 52, 110, UI_INK, 2);
-  snprintf(b, sizeof(b), XT(X_TL_SEC_FMT), (unsigned)((left + 999) / 1000));
-  drawFit(b, 396, 100, UI_WHITE, 2);
+}
+
+static void smPads(int lit) {
+  gfx->fillArc(CX, CX, SM_ROUT + 10, SM_RIN - 8, 0, 360, C565(0x38, 0x34, 0x48));  // fondo del anillo
+  for (int i = 0; i < 4; i++) {
+    bool on = i == lit;
+    uint16_t c = on ? SM_COL[i] : lerp565(SM_COL[i], C565(0x38, 0x34, 0x48), 8, 16);
+    int a0 = SM_ANG[i] - 41, a1;
+    if (a0 < 0) a0 += 360;
+    a1 = a0 + 82;  // puede pasar de 360 (fillArc lo acepta, como el aro de tiempo)
+    if (on) gfx->fillArc(CX, CX, SM_ROUT + 8, SM_RIN - 4, a0, a1, UI_WHITE);
+    gfx->fillArc(CX, CX, SM_ROUT, SM_RIN, a0, a1, c);
+    float rad = SM_ANG[i] * 0.01745f;
+    int mr = (SM_RIN + SM_ROUT) / 2;
+    smIcon(i, CX + (int)(mr * cosf(rad)), CX + (int)(mr * sinf(rad)), c);
+  }
+}
+
+void renderSimon() {
+  uint32_t now = millis();
+  if (smOverUntil) {
+    if (!timeLeft(smOverUntil)) { simonOpen = false; backToTrainMenu(); return; }
+    char s[32], sub[40];
+    snprintf(s, sizeof(s), XT(X_SM_RES_FMT), (unsigned)smScore);
+    snprintf(sub, sizeof(sub), XT(X_SM_SUB_FMT), (unsigned)smBest);
+    const char *msg = smNewHi ? XT(X_GAME_REWARD) : smScore ? XT(X_GAME_SMALL) : XT(X_GAME_NO_REWARD);
+    drawTrainResult(s, msg, smNewHi ? UI_BAR_OK : UI_INK, smNewHi, pet.gameHi, sub);
+    return;
+  }
+  stepSimon(now);
+  if (smOverUntil) return;
+  uint32_t t = now - smT0;
+  int lit = -1;
+  if (smPhase == SM_SHOW && smIdx < smLen && t < smOnMs()) lit = smSeq[smIdx];
+  else if (smTapPad < 4 && now - smTapT < 220) lit = smTapPad;
+  else if (smPhase == SM_OOPS && smIdx < smLen && (t / 200) % 2 == 0) lit = smSeq[smIdx];  // el que tocaba
+  drawGameScene();
+  bool night = sceneHour() < 6 || sceneHour() >= 20;
+  uint16_t ink = night ? UI_INK_NIGHT : UI_INK;
+  smPads(lit);
+  // centro: puntos, vidas, avance de la secuencia
+  char b[24];
+  snprintf(b, sizeof(b), XT(X_SM_CNT_FMT), (unsigned)smScore);
+  drawFit(b, 136, 160, ink, 2);
+  for (int i = 0; i < 2; i++) {
+    int x = CX - 34 + i * 36;
+    if (i < smLives) drawMap(SPR_HEART, 32, x - 4, 160, 1, false);
+    else gfx->drawCircle(x + 12, 174, 9, C565(0x9a, 0x92, 0x88));
+  }
+  int nd = smLen > 12 ? 12 : smLen;
+  for (int i = 0; i < nd; i++) {
+    int dx = CX - (nd - 1) * 7 + i * 14, dy = 306;
+    bool done = smPhase == SM_INPUT ? i < smIdx : smPhase == SM_SHOW ? i < smIdx : smPhase == SM_GOOD;
+    gfx->fillCircle(dx, dy, done ? 5 : 4, done ? C565(0x1a, 0x86, 0x34) : lerp565(UI_TRACK, UI_INK, 3, 16));
+  }
+  // el bicho mira hacia el boton que enseña
+  if (pmd.loaded) {
+    int ox = 0, oy = 0;
+    uint8_t act = PMD_IDLE;
+    if (lit >= 0 && smPhase == SM_SHOW) {
+      float rad = SM_ANG[lit] * 0.01745f;
+      ox = (int)(12 * cosf(rad));
+      oy = (int)(8 * sinf(rad));
+      act = petActOr(PMD_ATTACK);
+    } else if (smPhase == SM_GOOD) act = petActOr(PMD_HOP);
+    else if (smPhase == SM_OOPS) act = petActOr(PMD_HURT);
+    drawPmdActM(pmd, act, CX + ox, SM_PET_Y - 8 + oy, now, true, false, 3, 82);
+  }
+  const char *msg = smPhase == SM_INPUT ? XT(X_SM_YOUR) : smPhase == SM_GOOD ? XT(X_SM_GOOD)
+                  : smPhase == SM_OOPS ? XT(X_SM_OOPS) : XT(X_SM_WATCH);
+  uint16_t mc = smPhase == SM_GOOD ? C565(0x1a, 0x86, 0x34) : smPhase == SM_OOPS ? UI_BAR_BAD : ink;
+  drawFit(msg, 318, 170, mc, 2);
+  if (smPhase == SM_READY && smFirst) {  // como se juega (la primera vez)
+    uiPanel(43, 206, 380, 56, 16, UI_WHITE, UI_INK);
+    drawFit(XT(X_SM_HOW), 222, 360, UI_INK, 2);
+  }
   uiFlush();
 }
 
 // ---- para las pruebas (test/render) ----
-float tpDiffProbe() { return tpDiff(tpAng, tpTgt); }
-uint16_t tpRocksProbe() { return tpRocks; }
-uint8_t tpLivesProbe() { return tpLives; }
-uint8_t tiltPhaseProbe() { return tlPhase; }
-float tiltBallXProbe() { return tlBX; }
-bool tiltOverProbe() { return tlOverUntil != 0; }
-void tiltForceScoreProbe(uint16_t s) { tlScore = s; }
-void tiltResetMapProbe() { tlMapLoaded = false; tlMap[0] = tlMap[1] = -1; }
+uint8_t shellPetProbe() { return shPet; }
+uint8_t shellPhaseProbe() { return shPhase; }
+uint8_t shellCountProbe() { return shN; }
+int shellSlotXProbe(uint8_t i) { return shSlotX(i); }
+uint16_t shellScoreProbe() { return shScore; }
+bool shellOverProbe() { return shOverUntil != 0; }
+uint8_t simonPhaseProbe() { return smPhase; }
+uint8_t simonNextPadProbe() { return smIdx < smLen ? smSeq[smIdx] : 255; }
+uint8_t simonLenProbe() { return smLen; }
+uint8_t simonLivesProbe() { return smLives; }
+uint16_t simonScoreProbe() { return smScore; }
+bool simonOverProbe() { return smOverUntil != 0; }
