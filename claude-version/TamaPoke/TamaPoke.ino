@@ -4683,6 +4683,73 @@ uint8_t dexTopMoves(int16_t dex, uint8_t out[4]) {
 #define DEXFX_AX (CX - 60)  // ko11.31: el efecto sale del Pokemon y va hacia arriba a la derecha (dentro)
 #define DEXFX_AY 190
 #define DEX_FEET_Y 172  // ko12.1.1: donde quedan los pies del sprite grande de la ficha (drawPmdActM en suelo 196)
+// ko12.9.6: pista de la pokedex para los que aun no se han visto (lugar, hora, tiempo, nivel)
+bool regionOpen(uint8_t r);
+static void hintRegion(char *o, size_t n, uint8_t r) {
+  if (r == 0xFF) { snprintf(o, n, "%s", XT(X_HINT_ANYWHERE)); return; }
+  int k = snprintf(o, n, "%s", XT((XId)(X_REG_0 + r)));
+  if (!regionOpen(r) && k > 0 && k < (int)n) snprintf(o + k, n - k, XT(X_HINT_LOCK_FMT), regionBadgesNeeded(r));
+}
+static void drawDexHint(int16_t dx) {
+  WildHint h[6];
+  int16_t via = 0;
+  uint8_t lv = 0;
+  int n = wildHints(dx, h, 6, &via, &lv);
+  if (n <= 0) return;
+  char lines[4][72];
+  int nl = 0;
+  if (via || lv) {
+    char a[40] = "", b[32] = "";
+    if (via) snprintf(a, sizeof(a), XT(X_HINT_EVO_FMT), dexDiscovered(via) ? dexName(via) : "???");
+    if (lv) snprintf(b, sizeof(b), XT(X_HINT_LV_FMT), (unsigned)lv);
+    snprintf(lines[nl++], sizeof(lines[0]), "%s%s%s", a, a[0] && b[0] ?  " / " : "", b);
+  }
+  // con condicion (hora / tiempo / cualquier sitio): una linea cada uno
+  int plain = 0;
+  for (int i = 0; i < n && nl < 3; i++) {
+    const WildHint &w = h[i];
+    if (w.region != 0xFF && w.slots == WS_ANY && w.wx == 0xFF && !w.rare) { plain++; continue; }
+    char reg[40], tm[32] = "", wx[24] = "";
+    hintRegion(reg, sizeof(reg), w.region);
+    if (w.slots != WS_ANY) {
+      int k = 0;
+      static const uint8_t S[3] = { WS_MORNING, WS_DAY, WS_NIGHT };
+      for (int j = 0; j < 3; j++)
+        if (w.slots & S[j]) k += snprintf(tm + k, sizeof(tm) - k, "%s%s", k ? "/" : "", XT((XId)(X_HINT_MORNING + j)));
+    }
+    if (w.wx == 0xFE) snprintf(wx, sizeof(wx), "%s", XT(X_HINT_WET));
+    else if (w.wx == 0xFD) snprintf(wx, sizeof(wx), "%s", XT(X_HINT_DRY));
+    char *o = lines[nl++];
+    int k = snprintf(o, sizeof(lines[0]), "%s", reg);
+    if (tm[0]) k += snprintf(o + k, sizeof(lines[0]) - k, " / %s", tm);
+    if (wx[0]) k += snprintf(o + k, sizeof(lines[0]) - k, " / %s", wx);
+    if (w.rare && k < (int)sizeof(lines[0])) snprintf(o + k, sizeof(lines[0]) - k, " / %s", XT(X_HINT_RARE));
+  }
+  // los de "siempre en ese sitio": en una linea (hasta 3 nombres)
+  if (plain && nl < 4) {
+    char *o = lines[nl++];
+    int k = 0, shown = 0;
+    o[0] = 0;
+    for (int i = 0; i < n; i++) {
+      const WildHint &w = h[i];
+      if (!(w.region != 0xFF && w.slots == WS_ANY && w.wx == 0xFF && !w.rare)) continue;
+      if (shown == 3) break;
+      char reg[40];
+      hintRegion(reg, sizeof(reg), w.region);
+      k += snprintf(o + k, sizeof(lines[0]) - k, "%s%s", shown ? ", " : "", reg);
+      shown++;
+    }
+    if (plain > shown) {
+      char tmp[72];
+      snprintf(tmp, sizeof(tmp), XT(X_HINT_MORE_FMT), o, (unsigned)(plain - shown));
+      strncpy(o, tmp, sizeof(lines[0]) - 1);
+      o[sizeof(lines[0]) - 1] = 0;
+    }
+  }
+  drawFit(XT(X_HINT_TITLE), 280, 300, C565(0x80, 0x48, 0xe8), 1);
+  for (int i = 0; i < nl; i++) drawFit(lines[i], 302 + i * 26, 330, UI_INK, 2);
+}
+
 void renderDexDetail() {
   dexMvPoll();  // ko12.2.1
   uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
@@ -4717,6 +4784,7 @@ void renderDexDetail() {
   }
   if (!disc) {
     drawFit(XT(X_UNKNOWN), 250, 340, UI_INK, 2);
+    drawDexHint(dx);  // ko12.9.6: donde y cuando sale
   } else {
     char l[64];
     static const XId RAR[4] = { X_RARITY_EVO, X_RARITY_COMMON, X_RARITY_RARE, X_RARITY_LEGEND };

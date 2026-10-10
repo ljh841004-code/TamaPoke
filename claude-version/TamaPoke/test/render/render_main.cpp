@@ -1267,6 +1267,18 @@ static void scenes(bool ko, const char *sfx) {
   galleryPage = 9; galleryDirty = true; render(); shot("31b_dex_gen1_last");
   galleryPage = GAL_PAGES - 1; galleryDirty = true; render(); shot("31_dex_gen2_last");
   galleryDetail = 197; galleryPmd.load(197, false); render(); shot("32_dex_umbreon");
+  {  // ko12.9.6: pistas en la ficha de los que aun no se han visto (el primero sin ver de cada grupo)
+    static const int16_t G[4][4] = { { 243, 244, 245, 146 }, { 250, 251, 249, 150 }, { 149, 248, 242, 230 },
+                                     { 42, 17, 64, 93 } };
+    const char *N[4] = { "32b_hint_legend", "32c_hint_hooh", "32d_hint_evolved", "32e_hint_common_evo" };
+    for (int i = 0; i < 4; i++) {
+      int16_t d = 0;
+      for (int16_t c : G[i]) if (!dexDiscovered(c)) { d = c; break; }
+      navCheck("pista: hay uno sin ver", d != 0);
+      if (!d) continue;
+      galleryDetail = d; galleryPmd.unload(); render(); shot(N[i]);
+    }
+  }
   galleryDetail = 0; galleryPage = 0;
   // sonido y hora
   closeAll(); openClock(); setBigPart("nvs2"); render(); shot("15z_clock_nvs2"); setBigPart(nullptr); render(); shot("15_clock_settings");

@@ -188,6 +188,13 @@ uint8_t pickNextFoe(const Battler *team, uint8_t from, uint8_t n, uint8_t myType
 
 // probabilidad (por mil) de la especie "dex" en ese momento, antes de evolucionar
 // por nivel (para tests y para el comando serie WILD)
+// ko12.9.6: % de salvajes que se quedan en una fase anterior (formas intermedias a cualquier nivel)
+#define WILD_STAY_PCT 30
+// ko12.9.6: pista de la pokedex: donde y cuando sale (o su forma base). region 0xFF = cualquiera;
+// wx: 0xFF cualquiera, 0xFE lluvia/nieve, 0xFD sin lluvia, si no WX_*. viaBase = la forma base de la que
+// sale evolucionado (0 = sale tal cual); minLvl = nivel de tu bicho necesario (0 = cualquiera)
+struct WildHint { uint8_t region, slots, wx; bool rare; };
+int wildHints(int16_t dex, WildHint *out, int max, int16_t *viaBase, uint8_t *minLvl);
 uint16_t wildPermil(int16_t dex, uint8_t region, uint16_t petLvl, uint8_t hour, uint8_t wx,
                     uint8_t season);
 

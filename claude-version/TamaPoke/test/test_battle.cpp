@@ -428,23 +428,86 @@ TEST(region, legendarios_solo_con_su_condicion_y_nivel) {
   CHECK_EQ((int)wildPermil(243, 6, 45, 13, WX_CLEAR, SEASON_SPRING), 0);
   CHECK_EQ((int)wildPermil(243, 6, 30, 13, WX_RAIN, SEASON_SPRING), 0);   // nivel bajo
   CHECK_EQ((int)wildPermil(243, 1, 45, 13, WX_RAIN, SEASON_SPRING), 0);   // otra region
-  // Articuno solo nevando, Celebi con cerezos, Ho-Oh mananas de sol
+  // ko12.9.6: sin estaciones. Articuno con lluvia o nieve, Celebi sin lluvia, Ho-Oh mananas sin lluvia
   CHECK_EQ((int)wildPermil(144, 5, 45, 13, WX_SNOW, SEASON_WINTER), 5);
+  CHECK_EQ((int)wildPermil(144, 5, 45, 13, WX_RAIN, SEASON_AUTUMN), 5);   // antes solo en invierno
   CHECK_EQ((int)wildPermil(144, 5, 45, 13, WX_CLEAR, SEASON_WINTER), 0);
   CHECK_EQ((int)wildPermil(251, 2, 45, 13, WX_BLOSSOM, SEASON_SPRING), 5);
+  CHECK_EQ((int)wildPermil(251, 2, 45, 13, WX_LEAVES, SEASON_AUTUMN), 5);  // antes solo con cerezos
+  CHECK_EQ((int)wildPermil(251, 2, 45, 13, WX_RAIN, SEASON_AUTUMN), 0);
   CHECK_EQ((int)wildPermil(250, 9, 45, 8, WX_SUNNY, SEASON_SUMMER), 5);
+  CHECK_EQ((int)wildPermil(250, 9, 45, 8, WX_CLEAR, SEASON_WINTER), 5);   // antes solo en verano
   CHECK_EQ((int)wildPermil(250, 9, 45, 13, WX_SUNNY, SEASON_SUMMER), 0);
-  // en ningun caso sale un legendario sin su condicion
+  CHECK_EQ((int)wildPermil(146, 3, 45, 13, WX_CLEAR, SEASON_WINTER), 5);  // Moltres: volcan de dia
+  CHECK_EQ((int)wildPermil(244, 3, 45, 23, WX_LEAVES, SEASON_AUTUMN), 5); // Entei: volcan sin lluvia
+  CHECK_EQ((int)wildPermil(243, 6, 45, 13, WX_SNOW, SEASON_WINTER), 5);   // Raikou tambien con nieve
+  // en ningun caso sale un legendario sin su condicion (de dia, despejado: Zapdos en la central;
+  // Moltres y Entei en el volcan; Celebi en el bosque)
   BRng rng(99);
   for (int i = 0; i < 20000; i++) {
     uint8_t reg = (uint8_t)(i % REGION_COUNT), g = 0;
     Battler b = makeWildIn(reg, 60, 13, WX_CLEAR, SEASON_AUTUMN, rng, &g);
     if (DEX_TBL[b.dex].rarity == R_LEGENDARIO) {
       CHECK_EQ((int)g, (int)WG_RARE);
-      CHECK(b.dex == 145);  // de dia, despejado, otono: solo Zapdos en la central
-      CHECK_EQ((int)reg, 6);
+      bool ok = (b.dex == 145 && reg == 6) || ((b.dex == 146 || b.dex == 244) && reg == 3) || (b.dex == 251 && reg == 2);
+      CHECK(ok);
     }
   }
+}
+
+// ko12.9.6: ningun salvaje depende de la estacion (mismo resultado en las 4 con el mismo tiempo)
+TEST(region, sin_estaciones) {
+  static const uint8_t WXS[] = { WX_CLEAR, WX_RAIN, WX_SNOW, WX_SUNNY, WX_BLOSSOM, WX_LEAVES };
+  for (int16_t d = 1; d <= DEX_COUNT; d++)
+    for (uint8_t reg = 0; reg < REGION_COUNT; reg++)
+      for (uint8_t h : { 7, 13, 23 })
+        for (uint8_t wx : WXS) {
+          uint16_t p0 = wildPermil(d, reg, 50, h, wx, SEASON_SPRING);
+          for (uint8_t se = 1; se < 4; se++) CHECK_EQ((int)wildPermil(d, reg, 50, h, wx, se), (int)p0);
+        }
+}
+
+// ko12.9.6: a veces se queda sin evolucionar: con nivel alto tambien salen Metapod / Dragonair
+TEST(region, formas_intermedias_con_nivel_alto) {
+  BRng rng(5);
+  int base = 0, mid = 0, fin = 0;
+  for (int i = 0; i < 6000; i++) {
+    Battler b = makeWildIn(13, 70, 7, WX_RAIN, SEASON_AUTUMN, rng, nullptr);  // valle: Dratini
+    if (b.dex == 147) base++;
+    if (b.dex == 148) mid++;
+    if (b.dex == 149) fin++;
+  }
+  CHECK(fin > 0);
+  CHECK(mid > 0);
+  CHECK(base > 0);
+  CHECK(fin > mid);  // la mayoria sigue evolucionada (70 %)
+}
+
+// ko12.9.6: pistas de la pokedex
+TEST(region, pistas_de_la_pokedex) {
+  WildHint h[6];
+  int16_t via = 0;
+  uint8_t lv = 0;
+  // Raikou: central + lluvia/nieve, nivel 40
+  int n = wildHints(243, h, 6, &via, &lv);
+  CHECK_EQ(n, 1);
+  CHECK_EQ((int)h[0].region, 6);
+  CHECK_EQ((int)h[0].wx, 0xFE);
+  CHECK_EQ((int)via, 0);
+  CHECK_EQ((int)lv, (int)WILD_LEGEND_MIN_LVL);
+  // Ho-Oh: en cualquier sitio por la manana
+  n = wildHints(250, h, 6, &via, &lv);
+  CHECK_EQ(n, 1);
+  CHECK_EQ((int)h[0].region, 0xFF);
+  CHECK_EQ((int)h[0].slots, (int)WS_MORNING);
+  // Dragonair: sale de Dratini (valle) con tu bicho a cierto nivel
+  n = wildHints(148, h, 6, &via, &lv);
+  CHECK(n >= 1);
+  CHECK_EQ((int)via, 147);
+  CHECK(lv >= 10 && lv <= 40);
+  for (int i = 0; i < n; i++) CHECK_EQ((int)h[i].region, 13);
+  // todos los 251 tienen alguna pista
+  for (int16_t d = 1; d <= DEX_COUNT; d++) CHECK(wildHints(d, h, 6, &via, &lv) > 0);
 }
 
 TEST(region, todas_las_regiones_dan_especies_validas_y_suman_mil) {

@@ -129,13 +129,20 @@ static uint16_t wildStat(uint8_t base, uint8_t gene, uint16_t lvl) {
 }
 
 // sube por su linea evolutiva segun el nivel y monta el combatiente
+// ko12.9.6: a veces (WILD_STAY_PCT) se queda en una fase anterior aunque el nivel ya diera para
+// evolucionar: asi las formas intermedias (Metapod, Dragonair...) salen tambien con el bicho alto
 static Battler wildBattler(int16_t dex, int lv, BRng &rng) {
+  int16_t chain[4];
+  int nc = 0;
+  chain[nc++] = dex;
   for (int guard = 0; guard < 3 && DEX_TBL[dex].evolvesTo; guard++) {
     if (lv < evoLevel(dex)) break;
     int16_t opts[8];
     int k = dexEvoOptions(dex, opts);
     dex = opts[k > 1 ? rng.below(k) : 0];  // ramas: una al azar
+    chain[nc++] = dex;
   }
+  if (nc > 1 && rng.below(100) < WILD_STAY_PCT) dex = chain[rng.below(nc - 1)];
   const DexEntry &e = DEX_TBL[dex];
   uint8_t gA = 90 + rng.below(21), gD = 90 + rng.below(21), gS = 90 + rng.below(21);
   return makeBattler(dex, (uint16_t)lv, wildStat(e.bAtk, gA, lv), wildStat(e.bDef, gD, lv),
@@ -223,18 +230,22 @@ static const WildTime WILD_TIME[] = {
 
 // 4. raros con condicion. region/wx/season 0xFF = cualquiera. permil = por mil
 #define W_ANY 0xFF
+#define W_WET 0xFE  // ko12.9.6: lluvia o nieve (cualquier estacion; en invierno la lluvia es nieve)
+#define W_DRY 0xFD  // ko12.9.6: sin lluvia ni nieve (despejado, sol, petalos, hojas)
 struct WildRare { uint8_t region, slots, wx, season; int16_t dex; uint8_t permil; };
 static const WildRare WILD_RARE[] = {
   // legendarios (0,5 %; y solo con tu Pokemon a nivel 40 o mas)
-  { 6, WS_ANY, WX_RAIN, W_ANY, 243, 5 },            // Raikou: central + lluvia
+  // ko12.9.6: ninguno depende de la estacion (antes Moltres/Entei/Ho-Oh solo en verano, Articuno en
+  // invierno y Celebi en primavera): W_WET = lluvia o nieve, W_DRY = sin lluvia ni nieve
+  { 6, WS_ANY, W_WET, W_ANY, 243, 5 },              // Raikou: central + lluvia/nieve
   { 6, WS_DAY, W_ANY, W_ANY, 145, 5 },              // Zapdos: central de dia
-  { 3, WS_ANY, WX_SUNNY, W_ANY, 244, 5 },           // Entei: volcan + sol de verano
-  { 3, WS_ANY, W_ANY, SEASON_SUMMER, 146, 5 },      // Moltres: volcan en verano
-  { 1, WS_ANY, WX_RAIN, W_ANY, 245, 5 },            // Suicune: playa + lluvia
+  { 3, WS_ANY, W_DRY, W_ANY, 244, 5 },              // Entei: volcan sin lluvia
+  { 3, WS_DAY, W_ANY, W_ANY, 146, 5 },              // Moltres: volcan de dia
+  { 1, WS_ANY, W_WET, W_ANY, 245, 5 },              // Suicune: playa + lluvia/nieve
   { 1, WS_NIGHT, W_ANY, W_ANY, 249, 5 },            // Lugia: playa de noche
-  { 5, WS_ANY, WX_SNOW, W_ANY, 144, 5 },            // Articuno: nieve + nevando
-  { W_ANY, WS_MORNING, WX_SUNNY, W_ANY, 250, 5 },   // Ho-Oh: mananas de sol de verano
-  { 2, WS_ANY, WX_BLOSSOM, W_ANY, 251, 5 },         // Celebi: bosque + cerezos
+  { 5, WS_ANY, W_WET, W_ANY, 144, 5 },              // Articuno: nieve + lluvia/nieve
+  { W_ANY, WS_MORNING, W_DRY, W_ANY, 250, 5 },      // Ho-Oh: mananas sin lluvia
+  { 2, WS_ANY, W_DRY, W_ANY, 251, 5 },              // Celebi: bosque sin lluvia
   { 10, WS_NIGHT, W_ANY, W_ANY, 151, 5 },           // Mew: ruinas de noche
   { 15, WS_NIGHT, W_ANY, W_ANY, 150, 5 },           // Mewtwo: mina de noche
   // raros (1 %)
@@ -251,7 +262,7 @@ static const WildRare WILD_RARE[] = {
   { 14, WS_NIGHT, W_ANY, W_ANY, 137, 10 },          // Porygon: ciudad de noche
   { 14, WS_ANY, W_ANY, W_ANY, 132, 10 },            // Ditto: ciudad
   { 14, WS_DAY, W_ANY, W_ANY, 133, 10 },            // Eevee: ciudad de dia
-  { 13, WS_ANY, WX_RAIN, W_ANY, 147, 10 },          // Dratini: valle + lluvia (ademas de al alba)
+  { 13, WS_ANY, W_WET, W_ANY, 147, 10 },            // Dratini: valle + lluvia/nieve (ademas de al alba)
   { 7, WS_ANY, W_ANY, W_ANY, 106, 10 },             // Hitmonlee: dojo
   { 7, WS_ANY, W_ANY, W_ANY, 107, 10 },             // Hitmonchan: dojo
 };
@@ -266,7 +277,9 @@ static bool rareOk(const WildRare &r, uint8_t region, uint16_t petLvl, uint8_t s
                    uint8_t season) {
   if (r.region != W_ANY && r.region != region) return false;
   if (!(r.slots & slot)) return false;
-  if (r.wx != W_ANY && r.wx != wx) return false;
+  if (r.wx == W_WET) { if (wx != WX_RAIN && wx != WX_SNOW) return false; }
+  else if (r.wx == W_DRY) { if (wx == WX_RAIN || wx == WX_SNOW) return false; }
+  else if (r.wx != W_ANY && r.wx != wx) return false;
   if (r.season != W_ANY && r.season != season) return false;
   if (DEX_TBL[r.dex].rarity == R_LEGENDARIO && petLvl < WILD_LEGEND_MIN_LVL) return false;
   return true;
@@ -387,6 +400,64 @@ uint16_t wildPermil(int16_t dex, uint8_t region, uint16_t petLvl, uint8_t hour, 
   for (int i = 0; i < WILD_COMMON_N; i++)
     if (WILD_COMMON[region][i] == dex) num += (uint64_t)rest * comPct * 1000 / WILD_COMMON_N;
   return (uint16_t)(num / (100 * 1000));
+}
+
+// ---------------------------------------------------------------- ko12.9.6: pistas de la pokedex
+static int hintAdd(WildHint *out, int n, int max, uint8_t region, uint8_t slots, uint8_t wx, bool rare) {
+  if (slots == WS_ANY && wx == W_ANY) {  // siempre en ese sitio: sobran las otras pistas de ese sitio
+    int m = 0;
+    for (int i = 0; i < n; i++) if (out[i].region != region) out[m++] = out[i];
+    n = m;
+    if (n < max) out[n++] = { region, WS_ANY, W_ANY, rare };
+    return n;
+  }
+  for (int i = 0; i < n; i++) {
+    WildHint &h = out[i];
+    if (h.region != region) continue;
+    if (h.slots == WS_ANY && h.wx == W_ANY) return n;  // ya sale ahi siempre
+    if (slots == WS_ANY && wx == W_ANY) { h.slots = WS_ANY; h.wx = W_ANY; h.rare = rare && h.rare; return n; }
+    if (h.wx == wx) { h.slots |= slots; h.rare = rare && h.rare; return n; }
+  }
+  if (n < max) out[n++] = { region, slots, wx, rare };
+  return n;
+}
+
+static int hintsDirect(int16_t d, WildHint *out, int max) {
+  int n = 0;
+  for (const WildRare &r : WILD_RARE)
+    if (r.dex == d) n = hintAdd(out, n, max, r.region, r.slots, r.wx, true);
+  for (const WildTime &t : WILD_TIME)
+    if (t.dex == d) n = hintAdd(out, n, max, t.region, t.slots, W_ANY, false);
+  for (uint8_t reg = 0; reg < REGION_COUNT; reg++) {
+    bool any = regionWeight(d, reg) > 0;
+    for (int i = 0; i < WILD_COMMON_N && !any; i++) any = WILD_COMMON[reg][i] == d;
+    if (any) n = hintAdd(out, n, max, reg, WS_ANY, W_ANY, false);
+  }
+  return n;
+}
+
+int wildHints(int16_t dex, WildHint *out, int max, int16_t *viaBase, uint8_t *minLvl) {
+  if (viaBase) *viaBase = 0;
+  if (minLvl) *minLvl = 0;
+  if (dex < 1 || dex > DEX_COUNT || max <= 0) return 0;
+  uint8_t need = DEX_TBL[dex].rarity == R_LEGENDARIO ? WILD_LEGEND_MIN_LVL : 0;
+  int16_t d = dex;
+  for (int guard = 0; guard < 4; guard++) {
+    int n = hintsDirect(d, out, max);
+    if (n) {
+      if (viaBase && d != dex) *viaBase = d;
+      if (minLvl) *minLvl = need;
+      return n;
+    }
+    int16_t p = dexPrevo(d);
+    if (!p) break;
+    // el salvaje sale con el nivel de tu bicho -4..+1: para verlo ya evolucionado hace falta
+    // que tu bicho tenga (nivel de evolucion - 1) o mas
+    uint8_t el = evoLevel(p);
+    if (d == dex && el > 1) need = (uint8_t)(el - 1);
+    d = p;
+  }
+  return 0;
 }
 
 // ---------------------------------------------------------------- ko10.4: gimnasios
