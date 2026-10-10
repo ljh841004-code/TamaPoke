@@ -117,7 +117,24 @@ uint8_t wildSlot(uint8_t hour);
 // planta, jueves electrico, viernes psiquico; sabado y domingo shiny x2. Y las
 // noches de luna llena, los legendarios salen el triple
 enum : uint8_t { DEV_NONE = 0, DEV_TYPE, DEV_SHINY };
-struct DayEvent { uint8_t kind; uint8_t ptype; bool moonNight; };
+struct DayEvent { uint8_t kind; uint8_t ptype; bool moonNight;
+                  bool lure = false;                    // ko12.9.11: "부르는 구슬" en uso
+                  bool (*isNew)(int16_t dex) = nullptr; // especie aun no vista: x2 mas
+};
+// ko12.9.11: "부르는 구슬" (lure): N combates salvajes con raros x2 y legendarios x3; los que aun no
+// has visto, x2 mas. Con la luna llena el legendario no pasa de x6 (las condiciones de lugar/hora/
+// tiempo/Lv40 siguen igual: solo sube la probabilidad)
+#define LURE_BATTLES 10
+#define LURE_RARE_MULT 2
+#define LURE_LEGEND_MULT 3
+#define LURE_NEW_MULT 2
+#define LURE_LEGEND_CAP 6
+#define LURE_RARE_CAP 4
+#define LURE_MAX 99
+#define LURE_CHAMP_PCT 25   // ganar la liga
+#define LURE_DAILY_PCT 20   // premio del reto del dia
+#define LURE_EXPED8_PCT 30  // expedicion de 8 h
+uint32_t wildRareMult(int16_t dex, const DayEvent *ev);  // multiplicador de un raro de WILD_RARE
 bool fullMoon(uint32_t epoch);            // luna llena ese dia (±1 dia)
 DayEvent dayEvent(uint32_t localEpoch);   // 0 = sin reloj: sin evento
 // ko11.19: combate automatico (entrenadores): medicina segun lo dificil que sea

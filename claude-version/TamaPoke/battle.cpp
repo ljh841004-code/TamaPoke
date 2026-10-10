@@ -321,6 +321,20 @@ DayEvent dayEvent(uint32_t e) {
   return ev;
 }
 
+uint32_t wildRareMult(int16_t dex, const DayEvent *ev) {
+  if (!ev) return 1;
+  bool legend = DEX_TBL[dex].rarity == R_LEGENDARIO;
+  uint32_t m = 1;
+  if (ev->moonNight && legend) m *= EVENT_MOON_MULT;   // ko11.7: luna llena de noche = legendarios x3
+  if (ev->lure) {                                      // ko12.9.11
+    m *= legend ? LURE_LEGEND_MULT : LURE_RARE_MULT;
+    if (ev->isNew && ev->isNew(dex)) m *= LURE_NEW_MULT;
+    uint32_t cap = legend ? LURE_LEGEND_CAP : LURE_RARE_CAP;
+    if (m > cap) m = cap;
+  }
+  return m;
+}
+
 Battler makeWildIn(uint8_t region, uint16_t petLvl, uint8_t hour, uint8_t wx, uint8_t season,
                    BRng &rng, uint8_t *group, const DayEvent *ev) {
   if (region >= REGION_COUNT) region = 0;
@@ -330,8 +344,7 @@ Battler makeWildIn(uint8_t region, uint16_t petLvl, uint8_t hour, uint8_t wx, ui
   uint32_t roll = rng.below(1000), acc = 0;
   for (const WildRare &r : WILD_RARE) {
     if (!rareOk(r, region, petLvl, slot, wx, season)) continue;
-    uint32_t pm = r.permil;
-    if (ev && ev->moonNight && DEX_TBL[r.dex].rarity == R_LEGENDARIO) pm *= EVENT_MOON_MULT;
+    uint32_t pm = r.permil * wildRareMult(r.dex, ev);
     acc += pm;
     if (roll < acc) { if (group) *group = WG_RARE; return wildBattler(r.dex, lv, rng); }
   }

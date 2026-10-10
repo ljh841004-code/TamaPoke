@@ -742,6 +742,44 @@ TEST(event, dia_de_tipo_sube_ese_tipo) {
   CHECK(withEv > without + 300);
 }
 
+// ko12.9.11: 부르는 구슬: raros x2, legendarios x3, no vistos x2 mas; con luna llena el legendario no pasa de x6
+static bool lureNewAll(int16_t) { return true; }
+TEST(lure, multiplicadores_y_tope) {
+  DayEvent none = { DEV_NONE, 0, false };
+  CHECK_EQ(wildRareMult(150, &none), 1u);           // Mewtwo sin nada
+  CHECK_EQ(wildRareMult(150, nullptr), 1u);
+  DayEvent moon = { DEV_NONE, 0, true };
+  CHECK_EQ(wildRareMult(150, &moon), (uint32_t)EVENT_MOON_MULT);
+  CHECK_EQ(wildRareMult(131, &moon), 1u);           // Lapras: la luna solo afecta a los legendarios
+  DayEvent lure = { DEV_NONE, 0, false };
+  lure.lure = true;
+  CHECK_EQ(wildRareMult(131, &lure), (uint32_t)LURE_RARE_MULT);
+  CHECK_EQ(wildRareMult(150, &lure), (uint32_t)LURE_LEGEND_MULT);
+  lure.isNew = lureNewAll;
+  CHECK_EQ(wildRareMult(131, &lure), (uint32_t)LURE_RARE_CAP);       // 2 x 2
+  CHECK_EQ(wildRareMult(150, &lure), (uint32_t)LURE_LEGEND_CAP);     // 3 x 2
+  lure.moonNight = true;
+  CHECK_EQ(wildRareMult(150, &lure), (uint32_t)LURE_LEGEND_CAP);     // 3 x 3 x 2 -> tope 6
+}
+
+TEST(lure, mas_raros_en_la_misma_region) {
+  // playa (1) de dia: Lapras 1 %. Con el orbe deberia salir el doble
+  DayEvent lure = { DEV_NONE, 0, false };
+  lure.lure = true;
+  int withL = 0, without = 0, legW = 0, legN = 0;
+  for (int i = 0; i < 20000; i++) {
+    BRng a(5000 + i), b(5000 + i);
+    uint8_t ga = 0, gb = 0;
+    Battler x = makeWildIn(1, 50, 23, 0, 0, a, &ga, &lure);   // noche: Lugia (legendario) + Lapras
+    Battler y = makeWildIn(1, 50, 23, 0, 0, b, &gb, nullptr);
+    if (ga == WG_RARE) { withL++; if (DEX_TBL[x.dex].rarity == R_LEGENDARIO) legW++; }
+    if (gb == WG_RARE) { without++; if (DEX_TBL[y.dex].rarity == R_LEGENDARIO) legN++; }
+  }
+  CHECK(withL > without * 2 - without / 3);   // ~2,3x en total (Lapras x2, Lugia x3)
+  CHECK(legW > legN * 2);                    // ~3x
+  CHECK(without > 150 && without < 450);      // sin orbe: 1,5 % (sigue siendo raro)
+}
+
 // ko11.7: expediciones: mas horas, mas premio
 TEST(expedition, premio_crece_con_las_horas) {
   int newMon[3] = {0, 0, 0}, rare[3] = {0, 0, 0};

@@ -1484,6 +1484,8 @@ void Pet::save() {
   prefs.putUChar("dxrw", dexRewards);
   prefs.putUShort("rcandy", rareCandy);
   prefs.putUShort("rshd", rareShards);  // ko11.15.1
+  prefs.putUChar("lurn", lureN);         // ko12.9.11
+  prefs.putUChar("lurl", lureLeft);
   prefs.putUShort("orb", orb);           // ko11.16
   {  // ko11.31: los 4 movimientos y sus PP
     uint8_t b[8];
@@ -1612,6 +1614,10 @@ void Pet::load(bool *migrated) {
   dexRewards = prefs.getUChar("dxrw", 0);
   rareCandy = prefs.getUShort("rcandy", 0);
   rareShards = prefs.getUShort("rshd", 0);
+  lureN = prefs.getUChar("lurn", 0);  // ko12.9.11
+  lureLeft = prefs.getUChar("lurl", 0);
+  if (lureN > LURE_MAX) lureN = LURE_MAX;
+  if (lureLeft > LURE_BATTLES) lureLeft = LURE_BATTLES;
   orb = prefs.getUShort("orb", 0);  // ko11.16
   orbN = prefs.getUChar("orbn", 0);
   if (orbN > ORB_BAG_MAX) orbN = 0;

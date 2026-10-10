@@ -2893,6 +2893,17 @@ static bool nextTrainerMon() {
   return true;
 }
 
+// ko12.9.11: 부르는 구슬
+static bool lureIsNew(int16_t d) { return !dexDiscovered(d); }
+
+void lureDrop() {
+  if (pet.lureN >= LURE_MAX) return;
+  pet.lureN++;
+  char t[64];
+  snprintf(t, sizeof(t), XT(X_LURE_GOT_FMT), (unsigned)pet.lureN);
+  showToast(t);
+}
+
 void startWildIn(uint8_t region) {
   if (!battleAllowed(true)) return;
   autoLeft = 0;  // ko11.19
@@ -2907,6 +2918,10 @@ void startWildIn(uint8_t region) {
   // ko10.11: hasta 3 tiradas; una especie ya vista/capturada se queda solo al 45 %
   // (asi salen mas nuevas). Los raros se quedan siempre
   DayEvent ev = dayEvent(gClockTrusted ? clockEpoch() : 0);  // ko11.7: evento del dia
+  if (pet.lureTick()) {  // ko12.9.11: 부르는 구슬: este combate cuenta
+    ev.lure = true;
+    ev.isNew = lureIsNew;
+  }
   for (int t = 0; t < 3; t++) {
     bFoe = makeWildIn(bRegion, pet.level(), (uint8_t)sceneHour(), sceneWeather(), wxSeason(wxMonth(ep)),
                       bRng, &bGroup, &ev);
@@ -2959,6 +2974,13 @@ void startWild() { startWildIn(petRegion()); }
 #define RG_ART_W 92
 uint8_t regionPage = 0;
 uint32_t regionMsgUntil = 0;
+// ko12.9.11: 부르는 구슬 (donde estaban los puntos de pagina; 2 toques para gastarlo)
+#define LURE_W 300
+#define LURE_H 26
+#define LURE_X (CX - LURE_W / 2)
+#define LURE_Y (RG_DOTS_Y - 11)
+uint32_t lureArmUntil = 0;
+static bool lureShown() { return pet.lureN || pet.lureLeft; }
 // ko10.4: abierta si hay medallas suficientes; la region de mi Pokemon, siempre
 bool regionOpen(uint8_t r) { return r == petRegion() || regionUnlocked(r, pet.badges); }
 
@@ -3016,6 +3038,17 @@ void renderRegionPick() {
   if (regionPage < 1) drawRegionArrow(426, false);
   if (timeLeft(regionMsgUntil)) {  // ko10.4: "faltan medallas"
     drawFit(XT(X_REGION_LOCKED), RG_DOTS_Y - 8, 300, UI_BAR_BAD, 1);
+  } else if (lureShown()) {  // ko12.9.11: 부르는 구슬 (en lugar de los puntos de pagina)
+    char l[64];
+    bool on = pet.lureLeft > 0, armed = !on && timeLeft(lureArmUntil);
+    if (on) snprintf(l, sizeof(l), XT(X_LURE_ON_FMT), (unsigned)pet.lureLeft);
+    else snprintf(l, sizeof(l), XT(armed ? X_LURE_ARM_FMT : X_LURE_PILL_FMT), (unsigned)pet.lureN);
+    uint16_t bg = on ? C565(0x5a, 0x2a, 0x9a) : armed ? C565(0xff, 0x8a, 0x1a) : C565(0x8a, 0x3c, 0xd8);
+    gfx->fillRoundRect(LURE_X, LURE_Y, LURE_W, LURE_H, LURE_H / 2, bg);
+    if (on) {  // brillo: puntitos alrededor
+      for (int k = 0; k < 4; k++) gfx->fillCircle(LURE_X + 14 + k * ((LURE_W - 28) / 3), LURE_Y - 3, 2, C565(0xd8, 0xb0, 0xff));
+    }
+    drawFit(l, LURE_Y + (LURE_H - 16) / 2, LURE_W - 16, UI_WHITE, 1);
   } else {
     for (int p = 0; p < 2; p++) {
       int x = CX - 13 + p * 26;
@@ -3053,6 +3086,17 @@ void regionTap(int16_t x, int16_t y) {
   }
   if (inRect(x, y, RG_ART_X, RG_BACK_Y, RG_ART_W, 44)) { battleArtToggle(); return; }  // ko11.16.1
   if (inRect(x, y, RG_CTR_X, RG_BACK_Y, RG_ART_W, 44)) { sfxPlay(SFX_TAP); xScreen = XS_CENTER; return; }  // ko11.31
+  if (lureShown() && !timeLeft(regionMsgUntil) && inRect(x, y, LURE_X, LURE_Y - 2, LURE_W, LURE_H + 4)) {  // ko12.9.11
+    if (pet.lureLeft) { sfxPlay(SFX_DENY); showToast(XT(X_LURE_BUSY)); return; }
+    if (!timeLeft(lureArmUntil)) { sfxPlay(SFX_TAP); lureArmUntil = millis() + 3000; return; }
+    lureArmUntil = 0;
+    pet.lureN--;
+    pet.lureLeft = LURE_BATTLES;
+    pet.saveNow();
+    sfxPlay(SFX_EVOLVE);
+    showToast(XT(X_LURE_USED));
+    return;
+  }
   if (y >= RG_ARROW_Y - 40 && y < RG_ARROW_Y + 40) {  // flechas (zona amplia)
     if (x < RG_X - 4) { regionTurn(regionPage - 1); return; }
     if (x >= RG_X + 2 * RG_W + RG_GAPX + 4) { regionTurn(regionPage + 1); return; }
@@ -3781,6 +3825,7 @@ void finishBattle(bool won, bool fled, bool caught) {
       if (pet.champStreak > pet.champBest) pet.champBest = pet.champStreak;
       pet.giveItems(3, 3);  // ko11.1: antes +5/+5
       pet.addCandy(pet.speciesId, 10);
+      if ((uint32_t)random(100) < LURE_CHAMP_PCT) lureDrop();  // ko12.9.11
       // ko11.20: una ficha por Pokemon; con ayudantes que llegaron a luchar = en equipo
       bool teamWin = pUsed & (uint8_t)~1u;
       int ci = fameCardOfPet();
@@ -3838,6 +3883,7 @@ void finishBattle(bool won, bool fled, bool caught) {
         pet.dailyClears++;
         pet.giveItems(2, 2);  // ko11.1: antes +3/+3
         pet.addCandy(pet.speciesId, 3);
+        if ((uint32_t)random(100) < LURE_DAILY_PCT) lureDrop();  // ko12.9.11
         strncpy(bNote, XT(X_DAILY_WIN), sizeof(bNote) - 1);
         bNote[sizeof(bNote) - 1] = 0;
         pet.saveNow();

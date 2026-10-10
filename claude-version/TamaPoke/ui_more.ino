@@ -73,6 +73,7 @@ bool expResOpen = false;       // ventana con lo que trajo
 static ExpReward expRes;
 static int16_t expResDex = 0, expNewDex = 0;
 static uint8_t expGotBalls = 0, expGotPotions = 0;
+static bool expGotLure = false;  // ko12.9.11
 
 static void expSend(uint8_t idx, uint8_t hours) {
   BoxMon m;
@@ -125,6 +126,8 @@ static void expCollect() {
     uint8_t h = pet.exped.hours, pc = h >= 8 ? 35 : h >= 4 ? 20 : 10;
     if ((uint32_t)random(100) < pc) orbDrop(DEX_TBL[m.dex].ptype);
   }
+  expGotLure = pet.exped.hours >= 8 && (uint32_t)random(100) < LURE_EXPED8_PCT && pet.lureN < LURE_MAX;  // ko12.9.11
+  if (expGotLure) pet.lureN++;
   expNewDex = 0;
   if (expRes.newMon && !box.full()) {  // un Pokemon de su region se viene con el
     Battler w = makeWildIn(DEX_TBL[m.dex].biome, m.lvl, (uint8_t)sceneHour(), 0, 0, rng, nullptr);
@@ -153,6 +156,7 @@ static void drawExpResult() {
     drawFit(l, y, 330, UI_INK, 2); y += 32;
   }
   if (expRes.rare) { drawFit(XT(X_EXP_RARE), y, 330, UI_BAR_OK, 2); y += 32; }
+  if (expGotLure) { drawFit(XT(X_EXP_LURE), y, 330, C565(0x8a, 0x3c, 0xd8), 2); y += 32; }
   if (expNewDex) {
     snprintf(l, sizeof(l), XT(X_EXP_NEW_FMT), dexName(expNewDex));
     drawFit(l, y, 330, C565(0xc0, 0x40, 0x90), 2); y += 32;

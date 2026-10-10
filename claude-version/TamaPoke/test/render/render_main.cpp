@@ -1058,6 +1058,24 @@ static void scenes(bool ko, const char *sfx) {
   {
     closeAll(); pet.energy = 80;
     openRegionPick(); regionPage = 0; render(); shot("44_region_pick"); regionPage = 1; render(); shot("44b_region_pick2");
+    {  // ko12.9.11: 부르는 구슬 en la pantalla de regiones (2 toques), cuenta los combates salvajes
+      regionPage = 0; pet.lureN = 3; pet.lureLeft = 0; lureArmUntil = 0;
+      render(); shot("44e_lure_pill");
+      regionTap(CX, LURE_Y + LURE_H / 2);
+      navCheck("구슬: 1번째 탭은 확인만", pet.lureN == 3 && pet.lureLeft == 0);
+      render(); shot("44f_lure_armed");
+      regionTap(CX, LURE_Y + LURE_H / 2);
+      navCheck("구슬: 2번째 탭 = 사용 (10번)", pet.lureN == 2 && pet.lureLeft == LURE_BATTLES);
+      openRegionPick(); regionPage = 0; render(); shot("44g_lure_on");
+      regionTap(CX, LURE_Y + LURE_H / 2);
+      navCheck("구슬: 효과 중엔 또 못 씀", pet.lureN == 2 && pet.lureLeft == LURE_BATTLES);
+      regionTap(RG_X + 10, RG_Y + 10);  // 1a region -> combate
+      navCheck("구슬: 야생 1번 = 1 줄어듦", xScreen == XS_WILD && pet.lureLeft == LURE_BATTLES - 1);
+      xScreen = XS_NONE; bPhase = BP_INTRO;
+      pet.lureN = 0; pet.lureLeft = 0;
+      openRegionPick(); regionPage = 0; render();
+      navCheck("구슬: 없으면 점 표시 (탭해도 그대로)", (regionTap(CX, LURE_Y + LURE_H / 2), pet.lureLeft == 0 && pet.lureN == 0));
+    }
     {  // ko11.7: evento del dia bajo el titulo
       uint32_t keep = gMockEpoch; bool kt = gClockTrusted;
       gClockTrusted = true; regionPage = 0;

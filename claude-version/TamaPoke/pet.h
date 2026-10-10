@@ -199,7 +199,9 @@ public:
   uint8_t dexRewards = 0;  // ko11.7: premios de la pokedex ya dados (bit i = DEXRW_AT[i])
   // ko10.11: caramelo universal (sale a veces en los salvajes) y cambios
   uint16_t rareCandy = 0;
-  uint16_t rareShards = 0;  // ko11.15.1: trozos de caramelo raro (SHARDS_PER_RARE = 1 raro)
+  uint16_t rareShards = 0;
+  uint8_t lureN = 0;     // ko12.9.11: "부르는 구슬" en la bolsa
+  uint8_t lureLeft = 0;  // ...y combates salvajes que le quedan al que esta en uso  // ko11.15.1: trozos de caramelo raro (SHARDS_PER_RARE = 1 raro)
   // ko11.16: orbe equipado (solo el de su tipo) y bolsa de orbes
   uint16_t orb = 0;
   uint16_t orbBag[ORB_BAG_MAX] = { 0 };
@@ -258,6 +260,8 @@ public:
   void moveOfferNew(uint8_t id);   // con hueco lo aprende ya (moveLearned); si no, queda ofrecido
   void moveAccept(uint8_t slot);   // el ofrecido sustituye a esa casilla (0..3)
   void moveDecline() { moveOffer = 0; pendingSave = true; }
+  // ko12.9.11: un combate salvaje con el 부르는 구슬 en uso (false = no hay ninguno)
+  bool lureTick() { if (!lureLeft) return false; lureLeft--; pendingSave = true; return true; }
   void ppRefill();
   bool ppFull() const;
   uint8_t moveRandomNew() const;   // uno que puede aprender y aun no sabe (0 = ninguno)
