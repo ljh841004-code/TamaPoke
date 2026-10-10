@@ -359,6 +359,18 @@ static void scenes(bool ko, const char *sfx) {
     navCheck("caramelos: la ancha de abajo", candyTileAt(100, CANDY_GRID_Y + 2 * (CANDY_TILE_H + CANDY_TILE_GAP) + 20) == 4 &&
                                              candyTileAt(360, CANDY_GRID_Y + 2 * (CANDY_TILE_H + CANDY_TILE_GAP) + 20) == 4);
     navCheck("caramelos: fuera = cerrar", candyTileAt(CX, 400) == -1 && candyTileAt(30, 200) == -1);
+    {  // ko12.9.2: el caramelo de genes no le abre otra ficha en el salon de la liga
+      uint8_t f0 = fame.count();
+      pet.geneAtk = pet.geneDef = pet.geneSpe = 95;
+      fame.addRaised(pet.speciesId, pet.level(), pet.shiny, pet.geneAtk, pet.geneDef, pet.geneSpe, gMockEpoch, pet.mv);
+      int ci = fameCardOfPet();
+      pet.addCandy(pet.speciesId, 10);
+      candyTileRect(CU_GENES, x, y, w);
+      onTap(x + w / 2, y + CANDY_TILE_H / 2);
+      navCheck("caramelos: genes suben y la ficha del salon le sigue",
+               pet.geneAtk == 97 && ci >= 0 && fameCardOfPet() == ci && fame.at((uint8_t)ci).geneAtk == 97 && fame.count() == f0 + 1);
+      fame.release((uint8_t)ci);
+    }
     cardMsgUntil = 0;
   }
   // ko10.11: bolsa de caramelos

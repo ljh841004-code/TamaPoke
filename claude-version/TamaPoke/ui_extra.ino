@@ -688,6 +688,24 @@ FameRec fameRecOf(const BoxMon &m) {
   int i = frFind(m);
   return i >= 0 ? gFR[i] : frDefault(m);
 }
+// ko12.9.2: la ficha se reconoce por familia + genes, y el caramelo de genes los sube: sin esto,
+// la siguiente victoria abria una ficha NUEVA para el mismo Pokemon (gastaba huecos y partia sus
+// victorias). Se llama justo despues de subir los genes, con los de antes
+void fameGenesChanged(uint8_t oldA, uint8_t oldD, uint8_t oldS) {
+  frLoad();
+  BoxMon before = {};
+  before.dex = pet.speciesId; before.geneAtk = oldA; before.geneDef = oldD; before.geneSpe = oldS;
+  for (int i = fame.count() - 1; i >= 0; i--) {
+    BoxMon c = fame.at((uint8_t)i);
+    if (!sameIndividual(c, before)) continue;
+    int k = frFind(c);
+    c.geneAtk = pet.geneAtk; c.geneDef = pet.geneDef; c.geneSpe = pet.geneSpe;
+    fame.set((uint8_t)i, c);
+    if (k >= 0) { gFR[k].gA = pet.geneAtk; gFR[k].gD = pet.geneDef; gFR[k].gS = pet.geneSpe; }
+    frSave();
+    return;
+  }
+}
 int fameCardOfPet() {
   frLoad();
   BoxMon me = {};

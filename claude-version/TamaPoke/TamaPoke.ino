@@ -4264,7 +4264,11 @@ static void cardCandyTap(int16_t x, int16_t y) {
   if (y < 66 && x >= CX - 110 && x < CX + 110) { openCandyBag(); return; }  // ko10.11: bolsa
   int i = candyTileAt(x, y);
   if (i < 0) { cardOpen = false; return; }
-  if (pet.candyUse((uint8_t)i)) { sfxPlay(SFX_HEART); cardMsg = XT(X_CANDY_USED); }  // subir de nivel ya suena en addExp
+  uint8_t gA = pet.geneAtk, gD = pet.geneDef, gS = pet.geneSpe;
+  if (pet.candyUse((uint8_t)i)) {
+    sfxPlay(SFX_HEART); cardMsg = XT(X_CANDY_USED);  // subir de nivel ya suena en addExp
+    if (i == CU_GENES) fameGenesChanged(gA, gD, gS);  // ko12.9.2: su ficha del salon le sigue
+  }
   else { sfxPlay(SFX_DENY); cardMsg = XT(X_CANDY_NO); }
   cardMsgUntil = millis() + 2000;
 }
