@@ -357,7 +357,7 @@ TEST(trade, rechaza_datos_basura) {
   t.ageMinutes = 0xFFFFFFFF;
   memset(t.nick, 0xFF, sizeof(t.nick));  // sin terminador
   CHECK(a.importTrade(t));
-  CHECK_EQ(a.geneAtk, (uint8_t)110);
+  CHECK_EQ(a.geneAtk, (uint8_t)CANDY_GENE_MAX);  // ko12.9.2: tope 115 (genes del caramelo)
   CHECK_EQ(a.geneDef, (uint8_t)90);
   CHECK_EQ(a.trAtk, (uint8_t)100);
   CHECK_EQ(a.weight, (uint8_t)100);

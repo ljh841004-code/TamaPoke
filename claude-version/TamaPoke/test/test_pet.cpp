@@ -2054,3 +2054,13 @@ TEST(save, cabe_en_la_nvs_pequena) {
   printf("    nvs: %zu entradas (claves tamapoke %zu)\n", used, mockNvsKeyCount("tamapoke"));
   CHECK(used < 330);  // 4 x 126 = 504: deja sitio a las versiones viejas antes de limpiar
 }
+
+// ko12.9.2: los genes subidos con caramelo (hasta 115) sobreviven a la caja
+TEST(tama, genes_del_caramelo_sobreviven_a_la_caja) {
+  Pet p;
+  makePet(p, 4);
+  p.adoptMon(100, 20, false, 114, 115, 91);
+  CHECK_EQ((int)p.geneAtk, 114); CHECK_EQ((int)p.geneDef, 115); CHECK_EQ((int)p.geneSpe, 91);
+  p.adoptMon(100, 20, false, 130, 80, 100);  // fuera de rango: se recorta a 90..115
+  CHECK_EQ((int)p.geneAtk, 115); CHECK_EQ((int)p.geneDef, 90); CHECK_EQ((int)p.geneSpe, 100);
+}

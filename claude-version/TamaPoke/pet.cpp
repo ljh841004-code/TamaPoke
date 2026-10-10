@@ -6,7 +6,9 @@
 
 static_assert(PET_DEX_MAX == DEX_COUNT, "pet.h y dex.h no cuadran");
 
-static uint8_t clampGene(uint8_t g) { return g < 90 ? 90 : (g > 110 ? 110 : g); }
+// ko12.9.2: arriba hasta CANDY_GENE_MAX (115): con 110 la caja y el intercambio quitaban lo que dio el
+// caramelo de genes (y la ficha del salon de la liga ya no lo reconocia: salia otra)
+static uint8_t clampGene(uint8_t g) { return g < 90 ? 90 : (g > CANDY_GENE_MAX ? CANDY_GENE_MAX : g); }
 
 void Pet::begin() {
   prefs.begin("tamapoke", false);
