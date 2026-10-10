@@ -4696,7 +4696,7 @@ static void drawDexHint(int16_t dx) {
   uint8_t lv = 0;
   int n = wildHints(dx, h, 6, &via, &lv);
   if (n <= 0) return;
-  char lines[4][72];
+  char lines[4][80];
   int nl = 0;
   if (via || lv) {
     char a[40] = "", b[32] = "";
@@ -4740,7 +4740,7 @@ static void drawDexHint(int16_t dx) {
       shown++;
     }
     if (plain > shown) {
-      char tmp[72];
+      char tmp[80];
       snprintf(tmp, sizeof(tmp), XT(X_HINT_MORE_FMT), o, (unsigned)(plain - shown));
       strncpy(o, tmp, sizeof(lines[0]) - 1);
       o[sizeof(lines[0]) - 1] = 0;
