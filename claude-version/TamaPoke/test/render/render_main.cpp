@@ -618,59 +618,73 @@ static void scenes(bool ko, const char *sfx) {
     pet.speciesId = keepSp;
     pmd.load((uint8_t)keepSp, pet.shiny);
   }
-  // ko12.9.17: "반사 방패": justo = devolver, casi = parar, pronto = escudo gastado, tarde = me da
-  closeAll(); startDefense();
-  tick(400); render(); shot("05_train_defense_hint");
+  // ko12.9.18: "상성 방패": cada pareja nueva se ensena primero; luego se elige el escudo que aguanta
+  closeAll(); randomSeed(5); startDefense();
+  navCheck("상성: 처음 보는 상성은 먼저 알려줌", defState == DQ_LEARN && typeEff(defAtk, defOpt[defAns]) <= 1);
+  navCheck("상성: 처음엔 쉬운 4타입만", defStage == 0);
   {
-    auto shootAt = [](float y) {  // una tecnica en vuelo a esa altura
-      defWindT = 0; defShot = { true, false, y, 300, (uint8_t)DEX_TBL[defFoeDex].ptype };
-    };
-    defHits = 6; defScore = 11; defCombo = 3; defPerfectN = 4; defGoodN = 2; defMissN = 1;
-    defNextSpawn = gMockMillis + 99999;
-    shootAt(DEF_SHIELD_Y - 70); render(); shot("05_train_defense");
-    uint8_t hp0 = defFoeHp;
-    shootAt(DEF_SHIELD_Y - 3); defensePress(CX, 200);
-    navCheck("반사: 딱 맞으면 되받아침 (+2)", defShot.back && defJudge == 1 && defScore == 13);
-    tick(120); render(); shot("05b_train_defense_perfect");
-    for (int i = 0; i < 30 && defShot.on; i++) { tick(30); render(); }
-    navCheck("반사: 되받아친 기술이 상대 체력을 깎음", defFoeHp == hp0 - 1);
-    tick(400); defShieldCD = 0;
-    shootAt(DEF_SHIELD_Y - 20); defensePress(CX, 200);
-    navCheck("반사: 조금 어긋나면 막기만 (+1)", !defShot.on && defJudge == 2 && defScore == 14);
-    tick(500); defShieldCD = 0;
-    shootAt(DEF_SHIELD_Y - 120); defensePress(CX, 200);
-    navCheck("반사: 너무 일찍 = 방패가 잠깐 회색", defJudge == 3 && defShieldCD > gMockMillis);
-    render(); shot("05c_train_defense_early");
-    uint16_t m0 = defMissN;
-    for (int i = 0; i < 30 && defShot.on; i++) { tick(30); render(); }
-    navCheck("반사: 못 막으면 맞음", defMissN == m0 + 1 && defJudge == 4);
-    tick(30); render(); shot("05e_train_defense_hit");
-    // amago: cargar sin disparar; tocar ahi = "속았다!"
-    tick(600); defShieldCD = 0; defShot.on = false;
-    defWindT = gMockMillis; defFeint = true; render(); shot("05f_train_defense_wind");
-    defensePress(CX, 200);
-    navCheck("반사: 쏘는 척(속임)에 누르면 속았다", defJudge == 5);
-    // vencer al rival: sale otro
-    defShieldCD = 0; defFoeHp = 1; shootAt(DEF_SHIELD_Y); defensePress(CX, 200);
-    for (int i = 0; i < 30 && defShot.on; i++) { tick(30); render(); }
-    navCheck("반사: 상대를 쓰러뜨리면 +3, 다음 상대", defFoeSwapT && defFoeHp == 0);
-    render(); shot("05g_train_defense_ko");
-    for (int i = 0; i < 50 && defFoeSwapT; i++) { tick(30); render(); }
-    navCheck("반사: 다음 상대 등장", defFoeN == 1 && defFoeHp == defFoeMax);
-    defShot.on = false; defMissN = 0;
+    bool okOpts = true;
+    for (int i = 0; i < 3; i++) okOpts &= (i == defAns) == (typeEff(defAtk, defOpt[i]) <= 1);
+    navCheck("상성: 방패 3개 중 버티는 건 딱 1개", okOpts);
+  }
+  tick(300); render(); shot("05_train_defense_learn");
+  tick(300); defensePress(CX, 200);
+  navCheck("상성: 탭하면 공격 시작", defState == DQ_FLY);
+  tick(500); render(); shot("05_train_defense");
+  auto btnX = [](int i) { return CX + (i - 1) * DEF_BTN_DX; };
+  defensePress(btnX(defAns), DEF_BTN_Y + 30);
+  navCheck("상성: 빨리 맞히면 +2", defState == DQ_BLOCK && defJudge == 1 && defScore == 2);
+  tick(150); render(); shot("05b_train_defense_block");
+  for (int i = 0; i < 40 && defState != DQ_FLY && defState != DQ_LEARN; i++) { tick(30); render(); }
+  if (defState == DQ_LEARN) { tick(600); defensePress(CX, 200); }
+  tick(defFlyMs * 6 / 10);
+  defensePress(btnX(defAns), DEF_BTN_Y + 30);
+  navCheck("상성: 늦게 맞히면 +1", defJudge == 2 && defScore == 3);
+  for (int i = 0; i < 40 && defState != DQ_FLY && defState != DQ_LEARN; i++) { tick(30); render(); }
+  if (defState == DQ_LEARN) { tick(600); defensePress(CX, 200); }
+  {
+    uint8_t wrong = (uint8_t)((defAns + 1) % 3), atk = defAtk;
+    defensePress(btnX(wrong), DEF_BTN_Y + 30);
+    navCheck("상성: 틀리면 목숨 -1 + 알려주는 카드", defMissN == 1 && defState == DQ_TEACH && defReviewN == 1 && defReview[0] == atk);
+    tick(100); render(); shot("05c_train_defense_wrong");
+    tick(500); render(); shot("05e_train_defense_teach");
+    tick(300); defensePress(CX, 200);
+    navCheck("상성: 카드는 탭하면 넘어감", defState == DQ_WAIT);
+  }
+  for (int i = 0; i < 40 && defState != DQ_FLY && defState != DQ_LEARN; i++) { tick(30); render(); }
+  if (defState == DQ_LEARN) { tick(600); defensePress(CX, 200); }
+  tick(defFlyMs + 40); render();
+  navCheck("상성: 시간 안에 못 고르면 맞음", defMissN == 2 && defState == DQ_TEACH && defJudge == 4);
+  tick(500); render(); shot("05f_train_defense_late");
+  {  // etapas: con aciertos salen tipos nuevos
+    defHits = 12; defMissN = 0; tick(400); defensePress(CX, 200);
+    for (int i = 0; i < 40 && defState == DQ_WAIT; i++) { tick(30); render(); }
+    navCheck("상성: 12번 맞히면 3단계 (타입 12개)", defStage == 2);
+    if (defState == DQ_LEARN) { tick(600); defensePress(CX, 200); }
+    tick(400); render(); shot("05g_train_defense_stage");
+    bool ok = true;
+    for (int k = 0; k < 300; k++) {  // muchas preguntas al azar: siempre 1 bueno y 2 malos, todos distintos
+      defNewQuestion(gMockMillis);
+      for (int i = 0; i < 3; i++) ok &= (i == defAns) == (typeEff(defAtk, defOpt[i]) <= 1);
+      ok &= defOpt[0] != defOpt[1] && defOpt[1] != defOpt[2] && defOpt[0] != defOpt[2];
+      ok &= DEX_TBL[defFoeDex].ptype == defAtk;
+    }
+    navCheck("상성: 문제 300개 모두 정답 1개 + 상대 타입 일치", ok);
+    defMissN = 0;
   }
   defScore = 34; defPerfectN = 14; defGoodN = 6; defMissN = DEF_LIVES; render(); tick(85); render(); shot("06_train_defense_result");
   {  // ko12.9.15: [X] arriba a la izquierda: para el juego y pregunta; [계속하기] sigue sin perder nada
     closeAll(); startDefense(); tick(1200); render();
     navCheck("훈련 X: 다른 곳 탭은 X가 아님", !trainQuitPress(CX, 300));
-    uint32_t sp0 = defNextSpawn; uint16_t miss0 = defMissN;
+    if (defState == DQ_LEARN) { tick(600); defensePress(CX, 200); }
+    uint32_t sp0 = defStateT; uint16_t miss0 = defMissN;
     navCheck("훈련 X: 누르면 멈추고 물어봄", trainQuitPress(TQ_X, TQ_Y0) && trainPaused() && defOpen);
     render(); shot("05d_train_quit_ask");
     tick(5000); render(); render();
     navCheck("훈련 X: 멈춘 동안 시간이 안 감", defMissN == miss0 && trainPaused());
     navCheck("훈련 X: 빈 곳 탭은 아무 일 없음", trainQuitPress(CX, 180) && trainPaused());
     trainQuitPress(TP_RX + 20, TP_BY + 20);
-    navCheck("훈련 X: 계속하기 = 이어서", !trainPaused() && defOpen && defNextSpawn >= sp0 + 5000);
+    navCheck("훈련 X: 계속하기 = 이어서", !trainPaused() && defOpen && defStateT >= sp0 + 5000);
     render();
     trainQuitPress(TQ_X, TQ_Y0);
     trainQuitPress(TP_QX + 20, TP_BY + 20);

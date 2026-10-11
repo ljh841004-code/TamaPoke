@@ -29,8 +29,8 @@ static const char *const XS[2][X_COUNT] = {
     "BOX %u/%u", "Empty", "Win or catch in battle", "Next partner comes from here",
     "RELEASE", "CLOSE", "CAUGHT", "WON", "{1} came out of the box!", "BALLS %u  POTIONS %u",
     "Release it?",
-    "TRAINING", "ATTACK: NUMBER TARGETS", "DEFENSE: REFLECT SHIELD", "SPEED: FIND THE BALL",
-    "COPY ME! (JOY)", "Tap as it hits the shield!", "Hit 1, 2, 3... in order!",
+    "TRAINING", "ATTACK: NUMBER TARGETS", "DEFENSE: TYPE SHIELD", "SPEED: FIND THE BALL",
+    "COPY ME! (JOY)", "Pick the shield that resists!", "Hit 1, 2, 3... in order!",
     "SCORE %u", "DEF +%u", "SPD +%u", "NICE!", "MISSED",
     "SOUND", "MUSIC", "CRIES", "SYSTEM", "SOUND ON", "SOUND OFF", "DONE",
     "EVOLVED", "COMMON", "RARE", "LEGEND", "HP %u  AT %u  DF %u  SP %u", "EVOLVES: %s Lv%u",
@@ -194,6 +194,8 @@ static const char *const XS[2][X_COUNT] = {
     "Quit training?", "No reward if you quit", "QUIT", "KEEP GOING",
     "Rare bonus! Candy +%u", "Special bonus! Candy +%u, orb", "%u wins in a row!", "%u-win streak",
     "Ball+Potion", "My candy +2", "Lure Orb",
+    "Which shield resists it?", "NEW MATCHUP!", "Block it like this!", "{1} attack: use {2}!", "Not very effective (half)",
+    "No effect at all!", "{1} shield is weak to {2}!", "{1} shield takes normal damage", "Tap to go on", "New types join!", "FAST!", "Too slow!",
   },
   // ---------------- KO ----------------
   {
@@ -218,8 +220,8 @@ static const char *const XS[2][X_COUNT] = {
     "보관함 %u/%u", "비어 있어요", "배틀에서 이기거나 잡으면 들어와요", "다음 육성 포켓몬은 여기서 나와요",
     "놓아주기", "닫기", "포획", "승리", "보관함에서 {1}{이} 나왔다!", "포켓볼 %u   물약 %u",
     "놓아줄까요?",
-    "훈련 선택", "공격: 번호 과녁", "방어: 반사 방패", "속도: 몬스터볼 찾기",
-    "놀이: 따라 해 봐! (기분)", "방패에 닿는 순간 톡!", "1부터 순서대로 맞혀요!",
+    "훈련 선택", "공격: 번호 과녁", "방어: 상성 방패", "속도: 몬스터볼 찾기",
+    "놀이: 따라 해 봐! (기분)", "공격을 버티는 방패를 골라요!", "1부터 순서대로 맞혀요!",
     "방어 %u점", "방어 +%u", "속도 +%u", "좋아!", "놓쳤다",
     "소리/진동 설정", "배경음", "포켓몬 목소리", "시스템음", "소리 켜짐", "소리 꺼짐", "완료",
     "진화형", "흔함", "희귀", "전설", "HP %u  공 %u  방 %u  속 %u", "진화: %s (Lv.%u)",
@@ -382,6 +384,8 @@ static const char *const XS[2][X_COUNT] = {
     "훈련을 그만할까요?", "그만하면 보상이 없어요", "그만하기", "계속하기",
     "희귀 보너스! 사탕 +%u", "특별 보너스! 사탕 +%u, 구슬", "%u연승!", "%u연승 중",
     "볼+상처약", "내 사탕 +2", "부르는 구슬",
+    "어떤 방패가 버틸까?", "새 상성!", "이렇게 막아요!", "{1} 공격엔 {2} 방패!", "효과가 별로예요 (절반)",
+    "아무 효과가 없어요!", "{1} 방패는 {2}에 약해요!", "{1} 방패는 그냥 맞아요", "탭해서 계속", "새 타입 등장!", "빠르다!", "늦었다!",
   },
 };
 

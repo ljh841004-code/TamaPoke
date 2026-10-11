@@ -28,36 +28,37 @@ const char *trainMsg = nullptr;
 #define TRM_GAP 6
 #define TRM_N 5
 
-// ---------- defensa (ko12.9.17): "반사 방패" ----------
-// Un rival arriba carga y dispara su tecnica hacia mi escudo (encima de mi bicho). Se toca en
-// cualquier sitio cuando llega al escudo: justo = la devuelve (le quita vida al rival, 2 puntos),
-// casi = la para (1 punto). Antes de tiempo el escudo se gasta un momento; tarde, me da. A veces
-// el rival solo hace como que dispara (amago). Vencido el rival (+3), sale otro mas rapido. 3 vidas
+// ---------- defensa (ko12.9.18): "상성 방패" ----------
+// Sale un rival de un tipo y lanza su tecnica hacia mi bicho. Abajo hay 3 escudos de tipos: hay que
+// tocar el que AGUANTA ese tipo (poco eficaz o inmune) antes de que llegue: pronto = +2, a tiempo = +1.
+// Escudo malo o tarde = una vida menos y la tarjeta "X 공격엔 Y 방패!"; ese ataque vuelve pronto (repaso).
+// Para quien no sabe de tipos: empieza solo con fuego/agua/planta/electrico, cada pareja nueva se
+// ensena antes con una tarjeta ("새 상성!") y luego se van sumando tipos. 3 vidas
 #define DEF_LIVES 3
-#define DEF_Y0 168        // de donde sale (la boca del rival)
-#define DEF_SHIELD_Y 300  // el escudo
-#define DEF_PERF 11       // +-px: la devuelve
-#define DEF_GOOD 28       // +-px: la para
-#define DEF_FOE_G 160     // suelo del rival
-#define DEF_WIND_MS 380   // carga antes de cada disparo (o amago)
-#define DEF_CD_MS 450     // escudo gastado (toque a destiempo)
+#define DEF_FOE_X 318
+#define DEF_FOE_G 196
+#define DEF_PET_X 142
+#define DEF_PET_G 306
+#define DEF_BTN_Y 322
+#define DEF_BTN_W 94
+#define DEF_BTN_H 72
+#define DEF_BTN_DX 102
+#define DEF_FLY_MAX 3600  // tiempo para elegir (ms), baja con los aciertos
+#define DEF_FLY_MIN 1500
+enum : uint8_t { DQ_WAIT = 0, DQ_LEARN, DQ_FLY, DQ_BLOCK, DQ_TEACH };
 bool defOpen = false;
-uint32_t defStart = 0, defOverUntil = 0, defLastStep = 0, defNextSpawn = 0;
+uint32_t defStart = 0, defOverUntil = 0, defStateT = 0, defFlyMs = DEF_FLY_MAX;
 uint16_t defScore = 0, defMissN = 0;
 uint8_t defGain = 0;
 bool defNewHi = false;
 uint16_t defHits = 0, defPerfectN = 0, defGoodN = 0, defCombo = 0;
-uint8_t defJudge = 0;         // 1 devuelta, 2 parada, 3 pronto, 4 le dio, 5 amago (cayo)
-uint32_t defJudgeT = 0;
-uint32_t defShieldT = 0, defShieldCD = 0;   // ultimo toque / escudo gastado hasta
-uint32_t defWindT = 0;        // empezo a cargar (0 = no)
-bool defFeint = false;        // esta carga es un amago
-uint32_t defFoeHitT = 0, defFoeSwapT = 0;   // el rival recibio / cambio de rival
+uint8_t defState = DQ_WAIT, defStage = 0;
+uint8_t defAtk = PT_FIRE, defOpt[3] = { PT_WATER, PT_GRASS, PT_ELECTRIC }, defAns = 0, defPick = 0xFF;
+uint8_t defJudge = 0;   // 1 pronto, 2 a tiempo, 3 escudo malo, 4 tarde
+uint32_t defJudgeT = 0, defStageT = 0;
 int16_t defFoeDex = 4;
-uint8_t defFoeHp = 3, defFoeMax = 3, defFoeN = 0;
-struct DefShot { bool on, back; float y, v; uint8_t type; };
-DefShot defShot;
-uint32_t defPoisonHintUntil = 0;  // (sin uso; la pausa lo corre)
+uint16_t defLearned[PT_COUNT];        // bit d de [a]: ya se enseno "a contra d" (esta partida)
+uint8_t defReview[4], defReviewN = 0;  // ataques fallados: vuelven pronto
 
 // ---------- velocidad: reflejos izquierda/derecha ----------
 #define SPD_ROUNDS 15
@@ -360,13 +361,9 @@ void renderTrainPause() {
 }
 static void trainShiftTime(uint32_t d) {
   if (defOpen) {
-    defStart += d; defLastStep += d; defNextSpawn += d;
+    defStart += d; defStateT += d;
     if (defJudgeT) defJudgeT += d;
-    if (defShieldT) defShieldT += d;
-    if (defShieldCD) defShieldCD += d;
-    if (defWindT) defWindT += d;
-    if (defFoeHitT) defFoeHitT += d;
-    if (defFoeSwapT) defFoeSwapT += d;
+    if (defStageT) defStageT += d;
   }
   if (spdOpen) {
     spdUntil += d; spdShowAt += d;
@@ -408,126 +405,172 @@ void drawTimeBar(uint32_t left, uint32_t total, int y) {
 }
 
 // ---------- defensa ----------
-static int16_t defPickFoe() {
-  for (int tries = 0; tries < 40; tries++) {
+// tipos que van saliendo: 4 faciles, luego tierra/roca/hielo, luego 5 mas, luego todos
+static const uint8_t DEF_POOL[PT_COUNT] = { PT_FIRE, PT_WATER, PT_GRASS, PT_ELECTRIC, PT_GROUND, PT_ROCK, PT_ICE,
+                                            PT_FIGHT, PT_PSYCHIC, PT_BUG, PT_POISON, PT_GHOST,
+                                            PT_NORMAL, PT_DRAGON, PT_DARK, PT_STEEL };
+static const uint8_t DEF_POOL_N[4] = { 4, 7, 12, PT_COUNT };
+static const uint8_t DEF_STAGE_AT[4] = { 0, 5, 12, 20 };  // aciertos para pasar de etapa
+
+static bool defResists(uint8_t atk, uint8_t d) { return typeEff(atk, d) <= 1; }
+static int16_t defFoeOfType(uint8_t t) {
+  for (int tries = 0; tries < 300; tries++) {
     int16_t d = (int16_t)(1 + random(DEX_COUNT));
-    if (d == pet.speciesId || DEX_TBL[d].rarity == R_LEGENDARIO) continue;
-    return d;
+    if (DEX_TBL[d].ptype == t && DEX_TBL[d].rarity != R_LEGENDARIO && d != pet.speciesId) return d;
   }
+  for (int16_t d = 1; d <= DEX_COUNT; d++)
+    if (DEX_TBL[d].ptype == t) return d;
   return 4;
 }
-static void defNewFoe() {
-  defFoeDex = defPickFoe();
+// elige ataque y 3 escudos: uno que aguanta y dos que no
+static bool defBuild(uint8_t a, uint8_t n, bool commit) {
+  uint8_t good[PT_COUNT], bad[PT_COUNT], ng = 0, nb = 0;
+  for (int i = 0; i < n; i++) {
+    uint8_t d = DEF_POOL[i];
+    if (defResists(a, d)) good[ng++] = d; else bad[nb++] = d;
+  }
+  if (!ng || nb < 2) return false;
+  if (!commit) return true;
+  uint8_t ans = good[random(ng)];
+  int b1 = random(nb), b2 = random(nb - 1);
+  if (b2 >= b1) b2++;
+  defAns = (uint8_t)random(3);
+  uint8_t k = 0;
+  for (int i = 0; i < 3; i++) defOpt[i] = i == defAns ? ans : (k++ ? bad[b2] : bad[b1]);
+  defAtk = a;
+  return true;
+}
+static void defNewQuestion(uint32_t now) {
+  while (defStage < 3 && defHits >= DEF_STAGE_AT[defStage + 1]) { defStage++; defStageT = now; }
+  uint8_t n = DEF_POOL_N[defStage];
+  bool ok = false;
+  if (defReviewN && random(100) < 60) {  // repaso de un fallo
+    uint8_t a = defReview[0];
+    for (int i = 1; i < defReviewN; i++) defReview[i - 1] = defReview[i];
+    defReviewN--;
+    ok = defBuild(a, n, true);
+  }
+  for (int tries = 0; !ok && tries < 40; tries++) {
+    uint8_t a = DEF_POOL[random(n)];
+    if (a == defAtk && tries < 20) continue;  // no el mismo ataque dos veces seguidas
+    ok = defBuild(a, n, true);
+  }
+  if (!ok) defBuild(PT_FIRE, DEF_POOL_N[0], true);
+  defFoeDex = defFoeOfType(defAtk);
   loadFoe(defFoeDex, false);
-  defFoeMax = defFoeHp = (uint8_t)(3 + (defFoeN < 5 ? defFoeN : 5));
+  int fly = DEF_FLY_MAX - defHits * 70;
+  defFlyMs = (uint32_t)(fly < DEF_FLY_MIN ? DEF_FLY_MIN : fly);
+  defPick = 0xFF;
+  uint8_t ans = defOpt[defAns];
+  if (!(defLearned[defAtk] & (1u << ans))) {  // pareja nueva: primero se ensena
+    defLearned[defAtk] |= (uint16_t)(1u << ans);
+    defState = DQ_LEARN;
+  } else defState = DQ_FLY;
+  defStateT = now;
 }
-static void defPlanNext(uint32_t now, uint32_t wait) {
-  defWindT = 0;
-  defNextSpawn = now + wait;
-}
+static void defWait(uint32_t now, uint32_t ms) { defState = DQ_WAIT; defStateT = now + ms; }
 
 void startDefense() {
   perfReset();  // ko11.3
   defOpen = true;
-  defStart = defLastStep = millis();
+  defStart = millis();
   defOverUntil = 0;
   defScore = defMissN = 0;
   defHits = defPerfectN = defGoodN = defCombo = 0;
   defNewHi = false;
-  defJudge = 0; defJudgeT = 0;
-  defShieldT = defShieldCD = 0;
-  defFoeN = 0; defFoeHitT = defFoeSwapT = 0;
-  defShot.on = false;
-  defNewFoe();
-  defPlanNext(defStart, 1200);  // un respiro para leer la ayuda
+  defJudge = 0; defJudgeT = 0; defStageT = 0;
+  defStage = 0; defReviewN = 0; defAtk = 0xFF;
+  memset(defLearned, 0, sizeof(defLearned));
+  defNewQuestion(defStart);
 }
 
 static void defSetJudge(uint8_t j) { defJudge = j; defJudgeT = millis(); }
-static float defSpeed() {
-  float v = 210.0f + defFoeN * 30.0f + defHits * 3.0f;
-  return v > 560 ? 560 : v;
+static int defBtnX(int i) { return CX + (i - 1) * DEF_BTN_DX - DEF_BTN_W / 2; }
+static void defMiss(uint32_t now, uint8_t j) {
+  defMissN++; defCombo = 0;
+  defSetJudge(j);
+  if (defReviewN < 4) defReview[defReviewN++] = defAtk;
+  sfxPlay(SFX_DENY);
+  defState = DQ_TEACH; defStateT = now;
 }
 
 void defensePress(int16_t x, int16_t y) {
-  (void)x; (void)y;  // en cualquier sitio
   uint32_t now = millis();
-  if (defOverUntil || (int32_t)(defShieldCD - now) > 0 || defFoeSwapT) return;
-  defShieldT = now;
-  if (defShot.on && !defShot.back) {
-    float d = fabsf(defShot.y - DEF_SHIELD_Y);
-    if (d <= DEF_PERF) {  // devuelta
-      defShot.back = true;
-      defScore += 2; defPerfectN++; defHits++; defCombo++;
-      defSetJudge(1);
-      sfxPlay(SFX_MEDAL);
-      return;
-    }
-    if (d <= DEF_GOOD) {  // parada
-      defShot.on = false;
-      defScore += 1; defGoodN++; defHits++; defCombo++;
-      defSetJudge(2);
-      sfxPlay(SFX_PLAY);
-      defPlanNext(now, 500 + random(500));
-      return;
-    }
+  if (defOverUntil) return;
+  if (defState == DQ_LEARN) {  // "새 상성!": tocar = empezar
+    if (now - defStateT >= 500) { defState = DQ_FLY; defStateT = now; sfxPlay(SFX_TAP); }
+    return;
   }
-  // a destiempo (o en un amago): el escudo se gasta un momento
-  defShieldCD = now + DEF_CD_MS;
-  defCombo = 0;
-  defSetJudge(defWindT && defFeint ? 5 : 3);
-  sfxPlay(SFX_DENY);
+  if (defState == DQ_TEACH) {
+    if (now - defStateT >= 800) defWait(now, 250);
+    return;
+  }
+  if (defState != DQ_FLY) return;
+  if (y < DEF_BTN_Y - 8 || y > DEF_BTN_Y + DEF_BTN_H + 8) return;
+  int i = -1;
+  for (int k = 0; k < 3; k++)
+    if (x >= defBtnX(k) - 4 && x < defBtnX(k) + DEF_BTN_W + 4) i = k;
+  if (i < 0) return;
+  defPick = (uint8_t)i;
+  if (i != defAns) { defMiss(now, 3); return; }
+  bool fast = (now - defStateT) * 100 < defFlyMs * 45;
+  defScore += fast ? 2 : 1;
+  if (fast) defPerfectN++; else defGoodN++;
+  defHits++; defCombo++;
+  defSetJudge(fast ? 1 : 2);
+  sfxPlay(fast ? SFX_MEDAL : SFX_PLAY);
+  defState = DQ_BLOCK; defStateT = now;
 }
 
 void stepDefense() {
   uint32_t now = millis();
-  uint32_t dt = now - defLastStep;
-  if (dt > 100) dt = 100;
-  defLastStep = now;
   if (defOverUntil) return;
-  if (defFoeSwapT) {  // sale otro rival
-    if ((int32_t)(now - defFoeSwapT) >= 0) { defFoeSwapT = 0; defFoeN++; defNewFoe(); defPlanNext(now, 900); }
-    return;
+  switch (defState) {
+    case DQ_WAIT: if ((int32_t)(now - defStateT) >= 0) defNewQuestion(now); break;
+    case DQ_LEARN: break;  // espera el toque
+    case DQ_FLY: if (now - defStateT >= defFlyMs) defMiss(now, 4); break;
+    case DQ_BLOCK: if (now - defStateT >= 700) defWait(now, 250); break;
+    case DQ_TEACH: if (now - defStateT >= 6000) defWait(now, 250); break;  // si no toca, sigue solo
   }
-  if (!defShot.on) {
-    if (!defWindT && (int32_t)(now - defNextSpawn) >= 0) {  // empieza a cargar
-      defWindT = now;
-      defFeint = defFoeN + defHits >= 3 && random(100) < 25;
-    } else if (defWindT && now - defWindT >= DEF_WIND_MS) {
-      if (defFeint) defPlanNext(now, 250 + random(350));  // solo amago: enseguida otra
-      else {
-        defShot.on = true; defShot.back = false; defShot.y = DEF_Y0;
-        defShot.v = defSpeed() * (0.9f + random(21) / 100.0f);
-        defShot.type = DEX_TBL[defFoeDex].ptype;
-        defWindT = 0;
-      }
-    }
-    return;
+}
+
+// circulo de color con el dibujo del tipo
+static void defTypeDot(int x, int y, int r, uint8_t t) {
+  gfx->fillCircle(x, y, r + 2, UI_INK);
+  gfx->fillCircle(x, y, r, typeColor(t));
+  drawTypeGlyph(x, y, t, false, typeColor(t));
+}
+static void defTextAt(const char *s, int cx, int y, uint16_t c, uint8_t sz) {
+  setSize(sz);
+  gfx->setTextColor(c);
+  setCur(cx - textW(s, sz) / 2, y);
+  printT(s);
+}
+// tarjeta: ataque -> escudo que aguanta (y si fallo, por que no valia el mio)
+static void defCard(bool learn) {
+  const uint16_t GREEN = C565(0x1a, 0x86, 0x34);
+  uiPanel(58, 98, 350, 290, 28, UI_WHITE, UI_INK);
+  uint8_t ans = defOpt[defAns];
+  drawFit(XT(learn ? X_DEF_NEW : X_DEF_OOPS), 116, 300, learn ? GREEN : UI_BAR_BAD, 3);
+  defTypeDot(150, 196, 26, defAtk);
+  defTextAt(typeName(defAtk), 150, 232, UI_INK, 1);
+  gfx->fillTriangle(214, 184, 214, 208, 236, 196, UI_INK);
+  gfx->fillRect(196, 192, 20, 8, UI_INK);
+  defTypeDot(316, 196, 26, ans);
+  defTextAt(typeName(ans), 316, 232, UI_INK, 1);
+  // escudo alrededor del bueno
+  for (int k = 0; k < 3; k++) gfx->drawCircle(316, 196, 32 + k, GREEN);
+  char l[64];
+  txFmt(l, sizeof(l), X_DEF_RULE_FMT, typeName(defAtk), typeName(ans));
+  drawFit(l, 262, 320, UI_INK, 2);
+  drawFit(XT(typeEff(defAtk, ans) == 0 ? X_DEF_ZERO : X_DEF_HALF), 296, 300, C565(0x60, 0x68, 0x70), 1);
+  if (!learn && defPick < 3) {  // por que el mio no
+    uint8_t w = defOpt[defPick];
+    if (typeEff(defAtk, w) >= 4) txFmt(l, sizeof(l), X_DEF_WEAK_FMT, typeName(w), typeName(defAtk));
+    else txFmt(l, sizeof(l), X_DEF_NORM_FMT, typeName(w), nullptr);
+    drawFit(l, 322, 300, UI_BAR_BAD, 1);
   }
-  if (defShot.back) {  // vuelve al rival
-    defShot.y -= 620.0f * dt / 1000.0f;
-    if (defShot.y <= DEF_Y0 - 20) {
-      defShot.on = false;
-      defFoeHitT = now;
-      if (defFoeHp) defFoeHp--;
-      if (!defFoeHp) {  // vencido
-        defScore += 3;
-        defFoeSwapT = now + 1100;
-        sfxPlay(SFX_EVOLVE);
-      } else {
-        sfxPlay(SFX_PLAY);
-        defPlanNext(now, 600 + random(500));
-      }
-    }
-    return;
-  }
-  defShot.y += defShot.v * dt / 1000.0f;
-  if (defShot.y > DEF_SHIELD_Y + DEF_GOOD) {  // me dio
-    defShot.on = false;
-    defMissN++; defCombo = 0;
-    defSetJudge(4);
-    sfxPlay(SFX_DENY);
-    defPlanNext(now, 700 + random(400));
-  }
+  drawFit(XT(X_DEF_TAP), 352, 280, C565(0x60, 0x68, 0x70), 1);
 }
 
 void renderDefense() {
@@ -541,7 +584,7 @@ void renderDefense() {
     drawTrainResult(s, g, 0x4C98, defNewHi && defScore > 0, pet.defHi, sub);
     return;
   }
-  if (defMissN >= DEF_LIVES) {
+  if (defMissN >= DEF_LIVES && defState != DQ_TEACH) {
     defNewHi = defScore > pet.defHi;
     defGain = pet.trainDefense(defScore);
     sfxPlay(defNewHi ? SFX_MEDAL : SFX_PLAY);
@@ -552,115 +595,84 @@ void renderDefense() {
   drawGameScene();
   bool night = sceneHour() < 6 || sceneHour() >= 20;
   uint16_t ink = night ? UI_INK_NIGHT : UI_INK;
-  const uint16_t perfC = C565(0x4c, 0xc8, 0x5c), goodC = C565(0xf4, 0xc4, 0x3c);
-  const uint16_t SH = C565(0x3a, 0x8c, 0xe8), SHL = C565(0xb8, 0xe0, 0xff);
-  uint8_t ft = DEX_TBL[defFoeDex].ptype;
+  const uint16_t GREEN = C565(0x1a, 0x86, 0x34);
+  uint32_t st = (int32_t)(now - defStateT) > 0 ? now - defStateT : 0;
   uint32_t jt = defJudge ? now - defJudgeT : 9999;
-  // el rival: nombre y vida arriba
-  {
-    char nm[40];
-    snprintf(nm, sizeof(nm), "%s", dexName(defFoeDex));
-    drawFit(nm, 22, 200, ink, 1);
-    int bw = 150, bx = CX - bw / 2;
-    gfx->fillRoundRect(bx, 44, bw, 10, 5, UI_TRACK);
-    int fw = defFoeMax ? bw * defFoeHp / defFoeMax : 0;
-    if (fw > 0) gfx->fillRoundRect(bx, 44, fw, 10, 5, defFoeHp * 3 <= defFoeMax ? UI_BAR_BAD : UI_BAR_OK);
-    gfx->drawRoundRect(bx, 44, bw, 10, 5, ink);
-  }
-  if (foePmd.loaded && !(defFoeSwapT && (now / 90) % 2)) {
-    bool hit = defFoeHitT && now - defFoeHitT < 450;
-    uint8_t act = hit ? PMD_HURT : defWindT ? PMD_CHARGE : (defShot.on && !defShot.back && defShot.y < DEF_Y0 + 60) ? PMD_SHOOT : PMD_IDLE;
-    if (act == PMD_SHOOT && !foePmd.has(act)) act = PMD_ATTACK;
-    if (!foePmd.has(act)) act = PMD_IDLE;
-    int sh = hit ? (int)(6 * sinf((now - defFoeHitT) * 0.09f)) : defWindT ? (int)(2 * sinf(now * 0.08f)) : 0;
-    drawPmdActM(foePmd, act, CX + sh, DEF_FOE_G, now, true, defFoeSwapT != 0, 3, 100);
-  }
-  if (defWindT && !defShot.on) {  // carga: una bola que crece en la boca (igual si es amago)
-    int r = 4 + (int)((now - defWindT) * 10 / DEF_WIND_MS);
-    gfx->fillCircle(CX, DEF_Y0, r + 3, lerp565(typeColor(ft), UI_WHITE, 8, 16));
-    gfx->fillCircle(CX, DEF_Y0, r, typeColor(ft));
-  }
-  // mi bicho y el escudo
-  bool hurt = defJudge == 4 && jt < 450;
-  if (pmd.loaded) {
-    uint8_t act = hurt ? PMD_HURT : PMD_IDLE;
-    if (!pmd.has(act)) act = PMD_IDLE;
-    drawPmdActM(pmd, act, CX + (hurt ? (int)(7 * sinf(jt * 0.09f)) : 0), 378, now, true, false, 3, 90);
-  }
-  bool spent = (int32_t)(defShieldCD - now) > 0;
-  bool flash = now - defShieldT < 160 && !spent;
-  int sw = flash ? 76 : 62;
-  uint16_t sc = spent ? UI_TRACK : flash ? SHL : SH;
-  gfx->fillRoundRect(CX - sw, DEF_SHIELD_Y - 7, 2 * sw, 14, 7, sc);
-  gfx->fillRoundRect(CX - 14, DEF_SHIELD_Y - 7, 28, 14, 7, spent ? UI_TRACK : perfC);  // el centro: devolver
-  gfx->drawRoundRect(CX - sw, DEF_SHIELD_Y - 7, 2 * sw, 14, 7, ink);
-  // la tecnica
-  if (defShot.on) {
-    if (!defShot.back) {
-      float p = (defShot.y - DEF_Y0) / (float)(DEF_SHIELD_Y + 40 - DEF_Y0);
-      if (p > 1) p = 1;
-      drawMoveFx(ft, CX, DEF_Y0, CX, DEF_SHIELD_Y + 40, 120 + (uint32_t)(p * 260), false, 2, moveTier(defFoeDex), 0);
-    } else {  // devuelta: sube brillando
-      int y = (int)defShot.y;
-      for (int k = 3; k >= 1; k--) gfx->fillCircle(CX, y + k * 14, 10 - k * 2, lerp565(SHL, UI_WHITE, 6 + k * 3, 16));
-      gfx->fillCircle(CX, y, 12, typeColor(ft));
-      gfx->drawCircle(CX, y, 14, UI_WHITE);
-      gfx->drawCircle(CX, y, 15, SH);
-    }
-  }
-  // juicio
-  if (defJudge && jt < 650) {
-    if (defJudge <= 2 && jt < 300) {
-      int r = 30 + (int)(jt / 8);
-      for (int k = 0; k < 8; k++) {
-        float q = k * 0.785f + 0.39f;
-        gfx->drawLine(CX + (int)(cosf(q) * r), DEF_SHIELD_Y + (int)(sinf(q) * r / 2), CX + (int)(cosf(q) * (r + 14)),
-                      DEF_SHIELD_Y + (int)(sinf(q) * (r + 14) / 2), defJudge == 1 ? perfC : goodC);
-      }
-    } else if (defJudge == 4 && jt < 300) {
-      for (int k = 0; k < 4; k++) gfx->drawCircle(CX, CX, 232 - k, UI_BAR_BAD);
-    }
-    XId id = defJudge == 1 ? X_DEF_REFLECT : defJudge == 2 ? X_DEF_GOOD : defJudge == 3 ? X_DEF_EARLY
-           : defJudge == 5 ? X_DEF_FEINT : X_DEF_LATE;
-    uint16_t c = defJudge == 1 ? C565(0x1a, 0x86, 0x34) : defJudge == 2 ? C565(0xb8, 0x7a, 0x00) : UI_BAR_BAD;
-    setSize(defJudge == 1 ? 3 : 2);
-    const char *jx = XT(id);
-    gfx->setTextColor(c);
-    setCur(CX + 84, DEF_SHIELD_Y - 30 - (int)(jt / 30));
-    if (CX + 84 + textW(jx, defJudge == 1 ? 3 : 2) > 440) setCur(440 - textW(jx, defJudge == 1 ? 3 : 2), DEF_SHIELD_Y - 30 - (int)(jt / 30));
-    printT(jx);
-  }
-  if (defFoeSwapT) drawFit(XT(X_DEF_FOE_DOWN), 230, 300, C565(0x1a, 0x86, 0x34), 2);
-  // puntos y vidas (a la izquierda del camino)
+  bool fly = defState == DQ_FLY, blk = defState == DQ_BLOCK, teach = defState == DQ_TEACH;
+  // puntos y vidas arriba
   {
     char b[12];
     snprintf(b, sizeof(b), "%u", defScore);
-    setSize(3);
-    gfx->setTextColor(ink);
-    setCur(96 - textW(b, 3) / 2, 214);
-    printT(b);
+    defTextAt(b, CX, 30, ink, 3);
     for (int i = 0; i < DEF_LIVES; i++) {
-      int hx = 74 + i * 22, hy = 262;
+      int hx = CX - 22 + i * 22, hy = 84;
       if (i < DEF_LIVES - (int)defMissN) gfx->fillCircle(hx, hy, 6, UI_BAR_BAD);
       else gfx->drawCircle(hx, hy, 6, UI_TRACK);
     }
     if (defCombo >= 2) {
       char cb[20];
       snprintf(cb, sizeof(cb), XT(X_DEF_COMBO_FMT), defCombo);
-      setSize(2);
-      gfx->setTextColor(C565(0x1a, 0x86, 0x34));
-      setCur(370 - textW(cb, 2) / 2, 220);
-      printT(cb);
+      defTextAt(cb, 112, 120, GREEN, 1);
     }
   }
-  if (now - defStart < 3200) {
-    const char *h = XT(X_TR_DEF_HINT);
-    setSize(1);
-    int w = textW(h, 1) + 26;
-    if (w > 270) w = 270;
-    uiButton(CX - w / 2, 400, w, 30, 15, UI_WHITE, ink);
-    drawFit(h, 406, w - 10, UI_INK, 1);
+  // el rival y su ataque
+  if (foePmd.loaded && defState != DQ_WAIT) {
+    uint8_t act = fly ? (st < 300 ? PMD_CHARGE : PMD_SHOOT) : PMD_IDLE;
+    if (act == PMD_SHOOT && !foePmd.has(act)) act = PMD_ATTACK;
+    if (!foePmd.has(act)) act = PMD_IDLE;
+    drawPmdActM(foePmd, act, DEF_FOE_X, DEF_FOE_G, now, true, false, 3, 90);
   }
+  // mi bicho
+  bool hurt = teach && st < 500;
+  if (pmd.loaded) {
+    uint8_t act = hurt ? PMD_HURT : PMD_IDLE;
+    if (!pmd.has(act)) act = PMD_IDLE;
+    drawPmdActM(pmd, act, DEF_PET_X + (hurt ? (int)(7 * sinf(st * 0.09f)) : 0), DEF_PET_G, now, true, false, 3, 90);
+  }
+  // la tecnica en vuelo: el tiempo que queda es lo que tarda en llegar
+  const int ax = DEF_FOE_X - 30, ay = DEF_FOE_G - 40, tx = DEF_PET_X + 20, ty = DEF_PET_G - 40;
+  if (fly) {
+    float p = (float)st / (float)defFlyMs;
+    if (p > 1) p = 1;
+    drawMoveFx(defAtk, ax, ay, tx, ty, 120 + (uint32_t)(p * 259), false, 2, moveTier(defFoeDex), 0);
+  } else if (blk) {  // parada: el escudo del tipo bueno delante de mi bicho
+    uint8_t ans = defOpt[defAns];
+    int r = 52 + (int)(st / 40);
+    for (int k = 0; k < 4; k++) gfx->drawCircle(tx - 10, ty, r - k, k < 2 ? typeColor(ans) : UI_WHITE);
+  }
+  // etiqueta del ataque bajo el rival
+  if (defState == DQ_FLY || blk || teach) {
+    int px = DEF_FOE_X - 74, py = DEF_FOE_G + 6;
+    uiButton(px, py, 148, 34, 17, typeColor(defAtk), UI_INK);
+    drawTypeGlyph(px + 22, py + 16, defAtk, false, typeColor(defAtk));
+    drawFitIn(typeName(defAtk), px + 38, py + 6, 104, UI_INK, 1);
+  }
+  // los 3 escudos
+  for (int i = 0; i < 3; i++) {
+    int bx = defBtnX(i), by = DEF_BTN_Y;
+    uint8_t t = defOpt[i];
+    bool dim = (blk || teach) && i != defAns && i != defPick;
+    uint16_t bg = dim ? lerp565(typeColor(t), UI_TRACK, 10, 16) : typeColor(t);
+    uiButton(bx, by, DEF_BTN_W, DEF_BTN_H, 16, bg, UI_INK);
+    drawTypeGlyph(bx + DEF_BTN_W / 2, by + 22, t, false, bg);
+    drawFitIn(typeName(t), bx + 2, by + 40, DEF_BTN_W - 4, UI_INK, 1);
+    if ((blk || teach) && i == defAns)
+      for (int k = 0; k < 3; k++) gfx->drawRoundRect(bx - 3 - k, by - 3 - k, DEF_BTN_W + 6 + 2 * k, DEF_BTN_H + 6 + 2 * k, 18, GREEN);
+    if (teach && i == defPick) {
+      gfx->drawLine(bx + 14, by + 12, bx + DEF_BTN_W - 14, by + DEF_BTN_H - 14, UI_BAR_BAD);
+      gfx->drawLine(bx + DEF_BTN_W - 14, by + 12, bx + 14, by + DEF_BTN_H - 14, UI_BAR_BAD);
+    }
+  }
+  if (defHits < 3 && fly) drawFit(XT(X_DEF_Q), 404, 260, ink, 1);
+  // juicio
+  if (defJudge && jt < 700 && !teach) {
+    XId id = defJudge == 1 ? X_DEF_FAST : X_DEF_GOOD;
+    defTextAt(XT(id), CX + 20, 268 - (int)(jt / 30), defJudge == 1 ? GREEN : C565(0xb8, 0x7a, 0x00), defJudge == 1 ? 3 : 2);
+  }
+  if (defStageT && now - defStageT < 2200 && !teach && defState != DQ_LEARN) defTextAt(XT(X_DEF_STAGE), 150, 158, GREEN, 2);
+  if (defState == DQ_LEARN) defCard(true);
+  else if (teach && st >= 450) defCard(false);
+  else if (teach) defTextAt(XT(defJudge == 4 ? X_DEF_LATE_T : X_DEF_LATE), CX + 20, 256, UI_BAR_BAD, 3);
   drawTrainQuit();  // ko12.9.14
   uiFlush();
 }
