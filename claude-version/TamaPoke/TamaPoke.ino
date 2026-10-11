@@ -46,7 +46,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.9.14"
+#define FW_VERSION "1.17-ko12.9.15"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -1608,7 +1608,8 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
   if (fastGame && pressed && !wasPressed) { fastT0 = millis(); fastX0 = x; fastY0 = y; }
   if (fastGame && pressed && fastT0 && millis() - fastT0 > TRAIN_QUIT_MS &&
       abs(x - fastX0) < 40 && abs(y - fastY0) < 40 &&
-      (!vbOpen || fastY0 < 104)) {  // ko11.9: en el voleibol se mantiene el dedo para moverse: solo el marcador
+      (!vbOpen || fastY0 < 104) &&  // ko11.9: en el voleibol se mantiene el dedo para moverse: solo el marcador
+      !defOpen) {  // ko12.9.15: en el escudo el dedo se queda apoyado (se sale con el [X])
     fastT0 = 0;
     sackOpen = false;
     trainingQuit();
@@ -1645,6 +1646,9 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
     if (pressed && !wasPressed) {
       lastInteract = millis();
       trainingPress(x, y);
+    } else if (pressed && defOpen) {  // ko12.9.15: el escudo sigue al dedo mientras esta apoyado
+      lastInteract = millis();
+      defenseTouch(x, y);
     }
     wasPressed = pressed;
     return;

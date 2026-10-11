@@ -2980,6 +2980,7 @@ void startWildIn(uint8_t region) {
   txFmt(bvL1, sizeof(bvL1), bGroup == WG_RARE ? X_WILD_RARE : X_WILD_AT,
         XT((XId)(X_REG_0 + bRegion)), dexName(bFoe.dex));
   bKind = BK_WILD;
+  if (box.full()) showToast(XT(X_BOX_FULL_WARN));  // ko12.9.15: avisa antes de capturar
   battleWeatherIntro();
   bPhase = BP_INTRO;
   bPhaseT = millis();
@@ -3766,10 +3767,11 @@ static void joinDecide(bool take) {
     dexRecordMoves(bFoe.dex, bFoe.mv, true);  // ko11.31
     txFmt(bNote, sizeof(bNote), X_JOIN_OK, dexName(bFoe.dex));
     sfxPlay(SFX_MEDAL);
-  } else {
-    strncpy(bNote, XT(X_BOX_FULL), sizeof(bNote) - 1);
+  } else {  // ko12.9.15: caja llena: caramelos en vez de nada
+    pet.addCandy(bFoe.dex, Pet::dupCandy(bvFoeShiny, bFoe.lvl));
+    strncpy(bNote, XT(X_BOX_FULL_CANDY), sizeof(bNote) - 1);
     bNote[sizeof(bNote) - 1] = 0;
-    sfxPlay(SFX_DENY);
+    sfxPlay(SFX_TAP);
   }
   bPhase = BP_NEXT;
   bPhaseT = millis();
@@ -3943,8 +3945,9 @@ void finishBattle(bool won, bool fled, bool caught) {
         bDupCaught = caught;
         bDupEpoch = e;
       } else {
-        bBoxMsg = !box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, caught, e, bFoe.mv) ? X_BOX_FULL
-                  : caught ? X_TO_BOX : X_JOINED;
+        bool in = box.add(bFoe.dex, bFoe.lvl, bvFoeShiny, caught, e, bFoe.mv);
+        if (!in) pet.addCandy(bFoe.dex, Pet::dupCandy(bvFoeShiny, bFoe.lvl));  // ko12.9.15: llena = caramelos
+        bBoxMsg = !in ? X_BOX_FULL_CANDY : caught ? X_TO_BOX : X_JOINED;
       }
     }
   }

@@ -82,6 +82,13 @@ static ExpReward expRes;
 static int16_t expResDex = 0, expNewDex = 0;
 static uint8_t expGotBalls = 0, expGotPotions = 0;
 static bool expGotLure = false;  // ko12.9.11
+// ko12.9.15: al volver, una tarjeta grande con [선물 받기] (antes una tira fina abajo que costaba tocar;
+// fallar la tira era "abajo = salir"). Con la caja llena: aviso + [확인] (se esconde hasta volver a abrir)
+static bool expCardHide = false;
+#define EXPC_BX 98
+#define EXPC_BY 306
+#define EXPC_BW 270
+#define EXPC_BH 62
 
 static void expSend(uint8_t idx, uint8_t hours) {
   BoxMon m;
@@ -149,6 +156,24 @@ static void expCollect() {
   pet.saveNow();
   expResOpen = true;
   sfxPlay(SFX_MEDAL);
+}
+
+static bool expCardShown() {
+  return pet.exped.on && clockEpoch() >= pet.exped.end && !expResOpen && !expPick && boxSel < 0 && !boxOrb &&
+         !expCardHide;
+}
+static void drawExpCard() {
+  bool full = box.full();
+  uiPanel(58, 98, 350, 290, 28, UI_WHITE, UI_INK);
+  char t[64];
+  txFmt(t, sizeof(t), X_EXPC_BACK, dexName(pet.exped.dex), nullptr);
+  drawFit(t, 116, 320, UI_INK, 3);
+  loadFoe(pet.exped.dex, pet.exped.flags & BOXF_SHINY);  // ya cargado: no hace nada
+  if (foePmd.loaded) drawPmdActM(foePmd, PMD_IDLE, CX, 268, millis(), true, false, 3, 100);
+  else drawThumbAt(pet.exped.dex, CX, 220, 4, false);
+  drawFit(XT(full ? X_EXP_FULL : X_EXPC_GIFT), 274, 300, full ? UI_BAR_BAD : C565(0x60, 0x68, 0x70), 2);
+  drawBtn(EXPC_BX, EXPC_BY, EXPC_BW, EXPC_BH, full ? UI_TRACK : UI_BAR_OK, full ? UI_INK : UI_WHITE,
+          XT(full ? X_EXPC_OK : X_EXPC_TAKE));
 }
 
 static void drawExpResult() {
@@ -225,6 +250,7 @@ static uint8_t boxPages() { return cb().count() ? (cb().count() + BOX_ROWS - 1) 
 
 void openBox() {
   retMark();
+  expCardHide = false;  // ko12.9.15
   cardOpen = false;
   boxHall = false;
   boxOrb = false;
@@ -551,7 +577,7 @@ void renderBox() {
     snprintf(pg, sizeof(pg), "%u/%u", boxPage + 1, boxPages());
     drawFit(pg, BOX_NAV_Y + 10, 100, UI_INK, 2);
   }
-  if (pet.exped.on) {  // ko11.7: la expedicion en curso (o de vuelta)
+  if (pet.exped.on && !expCardShown()) {  // ko11.7: la expedicion en curso (o de vuelta)
     char el[64];
     uint32_t now = clockEpoch();
     bool back = now >= pet.exped.end;
@@ -564,6 +590,7 @@ void renderBox() {
     drawBtn(98, EXP_STRIP_Y, 270, 30, back ? UI_BAR_OK : C565(0xd8, 0xea, 0xff), back ? UI_WHITE : UI_INK, el);
   }
   drawNav(NAV_L, UI_INK);  // ko11.8: salir con la flecha (antes solo tocando abajo)
+  if (expCardShown()) drawExpCard();  // ko12.9.15
   if (expResOpen) drawExpResult();
   uiFlush();
 }
@@ -589,6 +616,12 @@ static void boxTabTap(int16_t x) {
 
 void orbBagTap(int16_t x, int16_t y);
 void boxTap(int16_t x, int16_t y) {
+  if (expCardShown()) {  // ko12.9.15: la tarjeta de vuelta: tocar en cualquier sitio
+    if (navHit(NAV_L, x, y)) { sfxPlay(SFX_TAP); goBack(); return; }
+    if (box.full()) { expCardHide = true; sfxPlay(SFX_TAP); }
+    else expCollect();
+    return;
+  }
   if (boxOrb) { orbBagTap(x, y); return; }
   if (boxSel >= 0) {  // ficha: soltar (dos toques) o cerrar
     if (boxHall && memSel == boxSel) {  // ko12.4: recuerdos: <- vuelve a la ficha, tocar = la otra pagina

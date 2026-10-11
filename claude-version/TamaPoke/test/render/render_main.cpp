@@ -51,84 +51,6 @@ extern const char *gSdRoot;
 
 static void navCheck(const char *name, bool ok) { printf("  NAV %s: %s\n", ok ? "ok  " : "FAIL", name); }
 
-// ---- ko12.9.15: MAQUETAS para ensenar antes de hacerlo (no son pantallas reales) ----
-static void mockOrb(int x, int y, uint16_t c, float dirA) {
-  for (int k = 4; k >= 1; k--) {  // estela hacia fuera
-    int tx = x + (int)(cosf(dirA) * k * 12), ty = y + (int)(sinf(dirA) * k * 12);
-    gfx->fillCircle(tx, ty, 9 - k * 2 > 2 ? 9 - k * 2 : 2, lerp565(c, UI_WHITE, 6 + k * 2, 16));
-  }
-  gfx->fillCircle(x, y, 12, c);
-  gfx->fillCircle(x - 3, y - 3, 5, lerp565(c, UI_WHITE, 11, 16));
-  gfx->drawCircle(x, y, 12, UI_INK);
-}
-static void mockDefense(int mode) {  // 0 jugando, 1 parado, 2 le dio
-  const int cy = 246, ro = 132, ri = 114;
-  uint32_t now = gMockMillis;
-  drawGameScene();
-  drawFit(mode == 0 ? "7" : mode == 1 ? "8" : "8", 22, 200, UI_INK, 4);
-  int lives = mode == 2 ? 2 : 3;
-  for (int i = 0; i < 3; i++) {
-    if (i < lives) gfx->fillCircle(CX - 28 + i * 28, 70, 7, UI_BAR_BAD);
-    else gfx->drawCircle(CX - 28 + i * 28, 70, 7, UI_TRACK);
-  }
-  // orbita punteada
-  for (int k = 0; k < 48; k++) {
-    float a = k * 6.2832f / 48;
-    gfx->fillCircle(CX + (int)(cosf(a) * (ri + 9)), cy + (int)(sinf(a) * (ri + 9)), 2, lerp565(UI_WHITE, UI_INK, 4, 16));
-  }
-  if (pmd.loaded) drawPmdActM(pmd, mode == 2 ? PMD_HURT : PMD_IDLE, CX, cy + 46, now, true, false, 3, 96);
-  // escudo (arco de 70 grados) donde esta el dedo
-  int sa = mode == 0 ? 300 : mode == 1 ? 300 : 200;
-  const uint16_t SH = C565(0x3a, 0x8c, 0xe8), SHL = C565(0xb8, 0xe0, 0xff);
-  gfx->fillArc(CX, cy, ro, ri, sa - 35, sa + 35, SH);
-  gfx->fillArc(CX, cy, ri + 5, ri, sa - 35, sa + 35, SHL);
-  float sr = sa * 0.017453f;
-  int fx = CX + (int)(cosf(sr) * 196), fy = cy + (int)(sinf(sr) * 196);  // el dedo, mas afuera
-  gfx->drawCircle(fx, fy, 22, lerp565(UI_WHITE, UI_INK, 6, 16));
-  gfx->drawCircle(fx, fy, 21, lerp565(UI_WHITE, UI_INK, 6, 16));
-  if (mode == 0) {
-    // dos tecnicas que vienen: fuego desde arriba a la derecha (va al escudo) y agua desde la izquierda
-    float a1 = 305 * 0.017453f, a2 = 175 * 0.017453f;
-    mockOrb(CX + (int)(cosf(a1) * 172), cy + (int)(sinf(a1) * 172), C565(0xf0, 0x80, 0x30), a1);
-    mockOrb(CX + (int)(cosf(a2) * 196), cy + (int)(sinf(a2) * 196), C565(0x68, 0x90, 0xf0), a2);
-    // aviso en el borde por donde viene la siguiente
-    float a3 = 95 * 0.017453f;
-    int wx = CX + (int)(cosf(a3) * 214), wy = cy + (int)(sinf(a3) * 214);
-    if (wy < 452) gfx->fillTriangle(wx - 10, wy - 6, wx + 10, wy - 6, wx, wy - 20, UI_BAR_WARN);
-    drawFit("손가락을 대고 빙글 돌려 방패로 막아요!", 352, 330, UI_INK, 1);
-  } else if (mode == 1) {
-    float a1 = sr;
-    int bx = CX + (int)(cosf(a1) * (ro + 6)), by = cy + (int)(sinf(a1) * (ro + 6));
-    gfx->fillCircle(bx, by, 26, UI_WHITE);
-    for (int k = 0; k < 8; k++) {
-      float a = k * 0.785f;
-      gfx->drawLine(bx + (int)(cosf(a) * 30), by + (int)(sinf(a) * 30), bx + (int)(cosf(a) * 44), by + (int)(sinf(a) * 44), C565(0x4c, 0xc8, 0x5c));
-    }
-    setSize(3); gfx->setTextColor(C565(0x1a, 0x86, 0x34)); setCur(250, 96); printT("막았다!");
-    setSize(2); gfx->setTextColor(C565(0x1a, 0x86, 0x34)); setCur(96, 160); printT("4 콤보");
-  } else {
-    gfx->fillCircle(CX - 40, cy + 6, 18, C565(0xf0, 0x80, 0x30));
-    gfx->fillCircle(CX - 40, cy + 6, 9, C565(0xff, 0xe0, 0x40));
-    for (int k = 0; k < 4; k++) gfx->drawCircle(CX, CX, 232 - k, UI_BAR_BAD);
-    setSize(2); gfx->setTextColor(UI_BAR_BAD); setCur(280, 300); printT("맞았다!");
-  }
-  drawTrainQuit();
-  uiFlush();
-}
-static void mockExpCard() {
-  toastUntil = 0;
-  uint8_t on = pet.exped.on;
-  pet.exped.on = 0;  // sin la tira de abajo (la tarjeta la sustituye)
-  render();
-  pet.exped.on = on;
-  uiPanel(46, 92, 374, 300, 24, UI_WHITE, UI_INK);
-  drawFit("잠만보가 돌아왔어요!", 112, 330, UI_INK, 3);
-  loadFoe(143, false);
-  if (foePmd.loaded) drawPmdActM(foePmd, PMD_IDLE, CX, 268, gMockMillis, true, false, 3, 100);
-  drawFit("선물을 가져왔어요", 274, 300, C565(0x60, 0x68, 0x70), 2);
-  drawBtn(93, 306, 280, 66, UI_BAR_OK, UI_WHITE, "선물 받기");
-  uiFlush();
-}
 static void shot(const char *name) {
   char path[256];
   snprintf(path, sizeof(path), "build/shots/%s.raw", name);
@@ -674,43 +596,47 @@ static void scenes(bool ko, const char *sfx) {
     pet.speciesId = keepSp;
     pmd.load((uint8_t)keepSp, pet.shiny);
   }
-  // ko11.14: defensa por timing: el balon bajando hacia la franja, un PERFECTO con combo
+  // ko12.9.15: "빙글 방패": el escudo sigue al dedo; las tecnicas llegan desde el borde
   closeAll(); startDefense();
-  tick(3000); render();
-  defHits = 6; defScore = 11; defCombo = 3; defPerfectN = 5; defGoodN = 1; defMissN = 1;
-  defV = 260; defDropT = gMockMillis - (uint32_t)((DEF_ZONE_Y - 70 - DEF_Y0) * 1000 / defV);
-  render(); shot("05_train_defense");
-  tick((uint32_t)(70 * 1000 / defV)); defensePress(CX, 300);
-  tick(120); render(); shot("05b_train_defense_perfect");
-  defDropT = gMockMillis - (uint32_t)((DEF_ZONE_Y - 50 - DEF_Y0) * 1000 / defV); defensePress(CX, 300);
-  tick(120); render(); shot("05c_train_defense_early");
-  {  // ko12.9.14: tarde: la tecnica le da al bicho (pantalla en rojo)
+  tick(400); render(); shot("05_train_defense_hint");
+  {
+    defenseTouch(CX + 150, DEF_CY - 150);  // dedo arriba a la derecha (315 grados)
+    navCheck("방패: 손가락 방향을 따라감", defAngDiff(defShield, 315) < 2);
+    defenseTouch(CX + 5, DEF_CY + 5);  // en el centro no cambia
+    navCheck("방패: 가운데는 무시", defAngDiff(defShield, 315) < 2);
+    defHits = 10; defScore = 14; defCombo = 3; defPerfectN = 4; defGoodN = 6; defMissN = 1;
+    defAtk[0] = { true, 312, 170, 150, PT_FIRE };
+    defAtk[1] = { true, 170, 200, 150, PT_WATER };
+    defNextA = 80; defNextSpawn = gMockMillis + 300;
+    render(); shot("05_train_defense");
+    uint16_t sc0 = defScore;
+    for (int i = 0; i < 20 && defAtk[0].on; i++) { tick(30); render(); }
+    navCheck("방패: 방패 쪽은 막음 (+2 완벽)", defScore == sc0 + 2 && defJudge == 1);
+    tick(40); render(); shot("05b_train_defense_perfect");
+    defenseTouch(CX, DEF_CY - 150);  // el escudo arriba: la de la izquierda pasa
     uint16_t m0 = defMissN;
-    tick(1300); render();
-    defDropT = gMockMillis - (uint32_t)((DEF_ZONE_Y + DEF_GOOD + 2 - DEF_Y0) * 1000 / defV);
-    render(); tick(160); render(); shot("05e_train_defense_hit");
-    navCheck("막기: 늦으면 맞음", defMissN == m0 + 1 && defJudge == 4);
-    defMissN = m0;
+    for (int i = 0; i < 80 && defAtk[1].on; i++) { tick(30); render(); }
+    navCheck("방패: 방패 없는 쪽은 맞음", defMissN == m0 + 1 && defJudge == 4);
+    tick(30); render(); shot("05e_train_defense_hit");
+    for (auto &k : defAtk) k.on = false;
   }
   defScore = 34; defPerfectN = 14; defGoodN = 6; defMissN = DEF_LIVES; render(); tick(85); render(); shot("06_train_defense_result");
   {  // ko12.9.15: [X] arriba a la izquierda: para el juego y pregunta; [계속하기] sigue sin perder nada
     closeAll(); startDefense(); tick(1200); render();
     navCheck("훈련 X: 다른 곳 탭은 X가 아님", !trainQuitPress(CX, 300));
-    uint32_t drop0 = defDropT; uint16_t miss0 = defMissN;
+    uint32_t sp0 = defNextSpawn; uint16_t miss0 = defMissN;
     navCheck("훈련 X: 누르면 멈추고 물어봄", trainQuitPress(TQ_X, TQ_Y0) && trainPaused() && defOpen);
     render(); shot("05d_train_quit_ask");
     tick(5000); render(); render();
     navCheck("훈련 X: 멈춘 동안 시간이 안 감", defMissN == miss0 && trainPaused());
     navCheck("훈련 X: 빈 곳 탭은 아무 일 없음", trainQuitPress(CX, 180) && trainPaused());
     trainQuitPress(TP_RX + 20, TP_BY + 20);
-    navCheck("훈련 X: 계속하기 = 이어서", !trainPaused() && defOpen && (drop0 == 0 || defDropT >= drop0 + 5000));
+    navCheck("훈련 X: 계속하기 = 이어서", !trainPaused() && defOpen && defNextSpawn >= sp0 + 5000);
     render();
     trainQuitPress(TQ_X, TQ_Y0);
     trainQuitPress(TP_QX + 20, TP_BY + 20);
     navCheck("훈련 X: 그만하기 = 훈련 메뉴로", !defOpen && !trainPaused() && trainMenuOpen);
   }
-  closeAll(); startDefense(); tick(200); render();
-  mockDefense(0); shot("M2a_def_ring"); mockDefense(1); shot("M2b_def_ring_block"); mockDefense(2); shot("M2c_def_ring_hit");
   closeAll(); startSpeed();
   for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
   tick(300); render(); shot("07e_train_speed_hint");  // ko11.17: solo el 1o parpadea
@@ -1268,8 +1194,11 @@ static void scenes(bool ko, const char *sfx) {
   expPick = true; render(); shot("11e_exp_pick"); expPick = false;
   expSend(1, 4); boxSel = -1; render(); shot("11f_exp_away");
   pet.exped.end = clockEpoch(); render(); shot("11g_exp_back");
-  mockExpCard(); shot("M1_exp_card");
-  expCollect(); render(); shot("11h_exp_result"); expResOpen = false;
+  toastUntil = 0; render(); shot("11g2_exp_card");  // ko12.9.15: tarjeta grande al volver
+  navCheck("탐험 카드: 돌아오면 카드", expCardShown());
+  boxTap(CX, 200);  // ko12.9.15: tocar en cualquier sitio de la tarjeta = recoger
+  navCheck("탐험 카드: 아무 데나 눌러 받기", !pet.exped.on && expResOpen);
+  render(); shot("11h_exp_result"); expResOpen = false;
   // ko10.5: fin de un ciclo -> criado a la caja (corona) y eleccion del siguiente
   boxSel = -1;
   hall.addRaised(6, 36, false, 108, 101, 99, gMockEpoch);
