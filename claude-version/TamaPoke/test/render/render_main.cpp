@@ -614,13 +614,21 @@ static void scenes(bool ko, const char *sfx) {
     defMissN = m0;
   }
   defScore = 34; defPerfectN = 14; defGoodN = 6; defMissN = DEF_LIVES; render(); tick(85); render(); shot("06_train_defense_result");
-  {  // ko12.9.14: [X] arriba a la izquierda: un toque lo arma, otro sale al menu sin premio
-    closeAll(); startDefense(); tick(500); render();
+  {  // ko12.9.15: [X] arriba a la izquierda: para el juego y pregunta; [계속하기] sigue sin perder nada
+    closeAll(); startDefense(); tick(1200); render();
     navCheck("훈련 X: 다른 곳 탭은 X가 아님", !trainQuitPress(CX, 300));
-    navCheck("훈련 X: 1번 = 준비", trainQuitPress(TQ_X, TQ_Y0) && defOpen);
-    render(); shot("05d_train_quit_armed");
+    uint32_t drop0 = defDropT; uint16_t miss0 = defMissN;
+    navCheck("훈련 X: 누르면 멈추고 물어봄", trainQuitPress(TQ_X, TQ_Y0) && trainPaused() && defOpen);
+    render(); shot("05d_train_quit_ask");
+    tick(5000); render(); render();
+    navCheck("훈련 X: 멈춘 동안 시간이 안 감", defMissN == miss0 && trainPaused());
+    navCheck("훈련 X: 빈 곳 탭은 아무 일 없음", trainQuitPress(CX, 180) && trainPaused());
+    trainQuitPress(TP_RX + 20, TP_BY + 20);
+    navCheck("훈련 X: 계속하기 = 이어서", !trainPaused() && defOpen && (drop0 == 0 || defDropT >= drop0 + 5000));
+    render();
     trainQuitPress(TQ_X, TQ_Y0);
-    navCheck("훈련 X: 2번 = 훈련 메뉴로", !defOpen && trainMenuOpen);
+    trainQuitPress(TP_QX + 20, TP_BY + 20);
+    navCheck("훈련 X: 그만하기 = 훈련 메뉴로", !defOpen && !trainPaused() && trainMenuOpen);
   }
   closeAll(); startSpeed();
   for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }

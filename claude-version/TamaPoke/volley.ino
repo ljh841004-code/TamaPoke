@@ -61,6 +61,10 @@ void startVolley() {
   vbLastScore[0] = vbLastScore[1] = 0;
 }
 
+void vbShiftTime(uint32_t d) {  // ko12.9.15: tras la pausa del [X]
+  vbLast += d;
+  if (vbIntroUntil) vbIntroUntil += d;
+}
 bool vbPlaying() { return vbOpen && vb.state != VB_OVER; }  // ko12.9.14: muestra el [X]
 
 // ---- toques ----

@@ -561,6 +561,14 @@ uint8_t shellPhaseProbe() { return shPhase; }
 uint8_t shellCountProbe() { return shN; }
 int shellSlotXProbe(uint8_t i) { return shSlotX(i); }
 uint16_t shellScoreProbe() { return shScore; }
+void shellShiftTime(uint32_t d) {  // ko12.9.15: tras la pausa del [X]
+  shT0 += d; shLastT += d;
+  if (shPauseUntil) shPauseUntil += d;
+}
+void simonShiftTime(uint32_t d) {
+  smT0 += d;
+  if (smTapT) smTapT += d;
+}
 bool shellOverProbe() { return shOverUntil != 0; }
 uint8_t simonPhaseProbe() { return smPhase; }
 uint8_t simonNextPadProbe() { return smIdx < smLen ? smSeq[smIdx] : 255; }

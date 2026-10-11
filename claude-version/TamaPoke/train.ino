@@ -309,56 +309,87 @@ void drawPerfLine(int y, uint16_t ink) {
 
 // ko12.9.14: [X] para salir sin premio en todos los juegos (antes solo mantener el dedo 2 s).
 // Arriba a la izquierda, en la diagonal (en "따라 해 봐!" cae en la raya entre dos botones).
-// Un toque lo arma (rojo + "한 번 더!") y otro en 2,5 s sale; el toque no llega al juego
-#define TQ_X 88
-#define TQ_Y0 92
+// ko12.9.15: el [X] PARA el juego y pregunta "그만할까요?" [그만하기] / [계속하기] (antes dos toques
+// seguidos salian: con prisa podia pasar sin querer). Al seguir, los tiempos del juego se corren lo
+// que duro la pausa (no cuenta como fallo ni se acaba el tiempo)
+#define TQ_X 82   // ko12.9.15: un poco mas al borde (88,92 -> 82,86): no roza la diana de arriba a la izquierda
+#define TQ_Y0 86
 #define TQ_Y (vbOpen ? 150 : TQ_Y0)  // en el voleibol, debajo del nombre del jugador
 #define TQ_R 20
-#define TQ_ARM_MS 2500
-static uint32_t trainQuitArmT = 0;
+#define TP_BY 262   // botones del aviso
+#define TP_BH 58
+#define TP_QX 79
+#define TP_RX 239
+#define TP_BW 148
+static uint32_t trainPauseT = 0;  // 0 = jugando
 bool vbPlaying();      // volley.ino
 bool shellOverProbe();  // train_more.ino
 bool simonOverProbe();
+void shellShiftTime(uint32_t d);
+void simonShiftTime(uint32_t d);
+void vbShiftTime(uint32_t d);
 static bool trainQuitShown() {
   return (defOpen && !defOverUntil) || (spdOpen && !spdOverUntil) || (shellOpen && !shellOverProbe()) ||
          (simonOpen && !simonOverProbe()) || vbPlaying();
 }
+bool trainPaused() { return trainPauseT != 0 && trainingFast(); }
 void drawTrainQuit() {
-  if (!trainQuitShown()) { trainQuitArmT = 0; return; }
-  bool armed = trainQuitArmT && millis() - trainQuitArmT < TQ_ARM_MS;
-  if (armed) {
-    const char *t = XT(X_TQ_AGAIN);
-    setSize(1);
-    int w = textW(t, 1) + 20;
-    uiButton(TQ_X + TQ_R - 6, TQ_Y - 14, w + 10, 28, 14, UI_WHITE, UI_BAR_BAD);
-    gfx->setTextColor(UI_BAR_BAD);
-    setCur(TQ_X + TQ_R + 10, TQ_Y - 10);
-    printT(t);
-  }
-  gfx->fillCircle(TQ_X, TQ_Y, TQ_R, armed ? UI_BAR_BAD : UI_WHITE);
+  if (!trainQuitShown()) return;
+  gfx->fillCircle(TQ_X, TQ_Y, TQ_R, UI_WHITE);
   gfx->drawCircle(TQ_X, TQ_Y, TQ_R, UI_INK);
   gfx->drawCircle(TQ_X, TQ_Y, TQ_R - 1, UI_INK);
-  uint16_t c = armed ? UI_WHITE : UI_INK;
   for (int k = -1; k <= 1; k++) {
-    gfx->drawLine(TQ_X - 8 + k, TQ_Y - 8, TQ_X + 8 + k, TQ_Y + 8, c);
-    gfx->drawLine(TQ_X + 8 + k, TQ_Y - 8, TQ_X - 8 + k, TQ_Y + 8, c);
+    gfx->drawLine(TQ_X - 8 + k, TQ_Y - 8, TQ_X + 8 + k, TQ_Y + 8, UI_INK);
+    gfx->drawLine(TQ_X + 8 + k, TQ_Y - 8, TQ_X - 8 + k, TQ_Y + 8, UI_INK);
   }
 }
-// true = el toque era del [X] (no pasa al juego)
-bool trainQuitPress(int16_t x, int16_t y) {
-  if (!trainQuitShown()) return false;
-  int dx = x - TQ_X, dy = y - TQ_Y, rr = TQ_R + 10;
-  if (dx * dx + dy * dy > rr * rr) return false;
-  if (trainQuitArmT && millis() - trainQuitArmT < TQ_ARM_MS) {
-    trainQuitArmT = 0;
-    trainingQuit();
-    backToTrainMenu();
-    sfxPlay(SFX_DENY);
-  } else {
-    trainQuitArmT = millis();
-    if (!trainQuitArmT) trainQuitArmT = 1;
-    sfxPlay(SFX_TAP);
+// el aviso (el juego queda parado debajo: solo el paisaje)
+void renderTrainPause() {
+  drawGameScene();
+  uiPanel(56, 120, 354, 218, 18, UI_WHITE, UI_INK);
+  drawFit(XT(X_TQ_TITLE), 150, 320, UI_INK, 3);
+  drawFit(XT(X_TQ_SUB), 208, 320, C565(0x60, 0x68, 0x70), 2);
+  drawBtn(TP_QX, TP_BY, TP_BW, TP_BH, UI_BAR_BAD, UI_WHITE, XT(X_TQ_QUIT));
+  drawBtn(TP_RX, TP_BY, TP_BW, TP_BH, UI_BAR_OK, UI_WHITE, XT(X_TQ_RESUME));
+  uiFlush();
+}
+static void trainShiftTime(uint32_t d) {
+  if (defOpen) {
+    defStart += d; defLastStep += d; defNextSpawn += d;
+    if (defDropT) defDropT += d;
+    if (defJudgeT) defJudgeT += d;
   }
+  if (spdOpen) {
+    spdUntil += d; spdShowAt += d;
+    for (auto &t : spdTapT) t += d;
+    if (spdWrongT) spdWrongT += d;
+  }
+  if (shellOpen) shellShiftTime(d);
+  if (simonOpen) simonShiftTime(d);
+  if (vbOpen) vbShiftTime(d);
+}
+// true = el toque era del [X] o del aviso (no pasa al juego)
+bool trainQuitPress(int16_t x, int16_t y) {
+  if (trainPaused()) {
+    if (y >= TP_BY && y < TP_BY + TP_BH) {
+      if (x >= TP_QX && x < TP_QX + TP_BW) {  // [그만하기]
+        trainingQuit();
+        backToTrainMenu();
+        sfxPlay(SFX_DENY);
+      } else if (x >= TP_RX && x < TP_RX + TP_BW) {  // [계속하기]
+        trainShiftTime(millis() - trainPauseT);
+        trainPauseT = 0;
+        sfxPlay(SFX_TAP);
+      }
+    }
+    return true;  // con el aviso abierto nada llega al juego
+  }
+  if (!trainQuitShown()) return false;
+  int dx = x - TQ_X, dy = y - TQ_Y, rr = TQ_R + 4;
+  if (dx * dx + dy * dy > rr * rr) return false;
+  trainPauseT = millis();
+  if (!trainPauseT) trainPauseT = 1;
+  sfxPlay(SFX_TAP);
   return true;
 }
 
@@ -843,6 +874,7 @@ void renderSpeed() {
 
 bool trainingRender() {
   if (trainMenuOpen) { renderTrainMenu(); return true; }
+  if (trainPaused()) { renderTrainPause(); return true; }  // ko12.9.15
   if (defOpen) { renderDefense(); return true; }
   if (spdOpen) { renderSpeed(); return true; }
   if (vbOpen) { renderVolley(); return true; }  // ko11.9
@@ -865,7 +897,7 @@ void trainingPress(int16_t x, int16_t y) {  // al apoyar el dedo (juegos rapidos
 }
 
 // ko9.1: abandonar sin premio (mantener el dedo 2 s, ver handleTouch)
-void trainingQuit() { defOpen = spdOpen = vbOpen = shellOpen = simonOpen = false; }
+void trainingQuit() { defOpen = spdOpen = vbOpen = shellOpen = simonOpen = false; trainPauseT = 0; }
 
 bool trainingSwipe() {
   if (trainMenuOpen) { trainMenuClose(); return true; }
