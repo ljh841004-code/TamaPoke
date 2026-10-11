@@ -656,6 +656,14 @@ static void scenes(bool ko, const char *sfx) {
   tick(defFlyMs + 40); render();
   navCheck("상성: 시간 안에 못 고르면 맞음", defMissN == 2 && defState == DQ_TEACH && defJudge == 4);
   tick(500); render(); shot("05f_train_defense_late");
+  {  // ko12.9.19: los 16 tipos en vuelo (todos se tienen que ver)
+    uint8_t keepAtk = defAtk; uint8_t keepSt = defState; uint32_t keepT = defStateT;
+    for (uint8_t t = 0; t < PT_COUNT; t++) {
+      defAtk = t; defState = DQ_FLY; defStateT = gMockMillis - defFlyMs / 2;
+      render(); char nm[40]; snprintf(nm, sizeof(nm), "05t_def_type_%02u", t); shot(nm);
+    }
+    defAtk = keepAtk; defState = keepSt; defStateT = keepT;
+  }
   {  // etapas: con aciertos salen tipos nuevos
     defHits = 12; defMissN = 0; tick(400); defensePress(CX, 200);
     for (int i = 0; i < 40 && defState == DQ_WAIT; i++) { tick(30); render(); }

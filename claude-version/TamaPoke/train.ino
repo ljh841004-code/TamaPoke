@@ -635,6 +635,20 @@ void renderDefense() {
     float p = (float)st / (float)defFlyMs;
     if (p > 1) p = 1;
     drawMoveFx(defAtk, ax, ay, tx, ty, 120 + (uint32_t)(p * 259), false, 2, moveTier(defFoeDex), 0);
+    // ko12.9.19: algunos tipos (roca, normal, lucha, acero...) solo pintan el golpe al llegar, no el viaje:
+    // por encima va siempre una bola del color del tipo con su dibujo, que se ve en todos
+    uint16_t tc = typeColor(defAtk);
+    for (int k = 3; k >= 1; k--) {  // estela
+      float q = p - k * 0.06f;
+      if (q < 0) continue;
+      int x = ax + (int)((tx - ax) * q), y = ay + (int)((ty - ay) * q) - (int)(20 * sinf(q * 3.1416f));
+      gfx->fillCircle(x, y, 13 - k * 3, lerp565(tc, UI_WHITE, 4 + k * 3, 16));
+    }
+    int ox = ax + (int)((tx - ax) * p), oy = ay + (int)((ty - ay) * p) - (int)(20 * sinf(p * 3.1416f));
+    gfx->fillCircle(ox, oy, 18, UI_INK);
+    gfx->fillCircle(ox, oy, 16, tc);
+    gfx->drawCircle(ox, oy, 13, lerp565(tc, UI_WHITE, 8, 16));
+    drawTypeGlyph(ox, oy, defAtk, false, tc);
   } else if (blk) {  // parada: el escudo del tipo bueno delante de mi bicho
     uint8_t ans = defOpt[defAns];
     int r = 52 + (int)(st / 40);
