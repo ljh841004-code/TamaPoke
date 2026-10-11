@@ -1403,7 +1403,7 @@ void Pet::setBirthday(uint8_t m, uint8_t d) {
 }
 
 bool Pet::birthdayGift(uint16_t year) {
-  if (!bdayM || bdayYear == year) return false;
+  if (!bdayM || bdayYear >= year) return false;  // ko12.9.17: solo un ano POSTERIOR (cambiar el ano atras y adelante no repite)
   bdayYear = year;
   if (!isEgg()) { joy = clamp100(joy + 30); addBond(2); }
   if (rareCandy < CANDY_MAX) rareCandy++;

@@ -2064,3 +2064,18 @@ TEST(tama, genes_del_caramelo_sobreviven_a_la_caja) {
   p.adoptMon(100, 20, false, 130, 80, 100);  // fuera de rango: se recorta a 90..115
   CHECK_EQ((int)p.geneAtk, 115); CHECK_EQ((int)p.geneDef, 90); CHECK_EQ((int)p.geneSpe, 100);
 }
+
+// ko12.9.17: el regalo de cumpleanos, una vez por ano y solo hacia delante (cambiar la fecha o el ano no repite)
+TEST(pet, regalo_de_cumple_una_vez_y_hacia_delante) {
+  Pet p;
+  makePet(p, 4);
+  p.setBirthday(5, 10);
+  uint16_t c0 = p.rareCandy;
+  CHECK(p.birthdayGift(2026));
+  CHECK(!p.birthdayGift(2026));      // mismo ano
+  p.setBirthday(6, 1);               // cambiar el dia no lo repite
+  CHECK(!p.birthdayGift(2026));
+  CHECK(!p.birthdayGift(2025));      // ano de antes: no
+  CHECK(p.birthdayGift(2027));       // el ano siguiente, si
+  CHECK_EQ(p.rareCandy, (uint16_t)(c0 + 2));
+}

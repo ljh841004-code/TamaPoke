@@ -50,6 +50,20 @@ extern bool gMockPortal;
 extern const char *gSdRoot;
 
 static void navCheck(const char *name, bool ok) { printf("  NAV %s: %s\n", ok ? "ok  " : "FAIL", name); }
+// ko12.9.17: tocar el boton de ajustes con esa accion (en su pagina)
+static void setTapId(int id) {
+  uint8_t ids[16];
+  uint8_t n = setItems(ids);
+  for (uint8_t i = 0; i < n; i++) {
+    if (ids[i] != id) continue;
+    gSetPage = i / SET_PER;
+    uint8_t from = gSetPage * SET_PER, on = n - from > SET_PER ? SET_PER : n - from;
+    int x, y;
+    setCell(i - from, on, x, y);
+    settingsTap(x + SET_W / 2, y + SET_H / 2);
+    return;
+  }
+}
 
 
 static void shot(const char *name) {
@@ -231,7 +245,14 @@ static void scenes(bool ko, const char *sfx) {
     pet.roomOn = 0; render(); shot("01r_main_outdoor_deco");
     pet.bestStreak = 9; pet.allGameHi = 25;
     openSettings(); render(); shot("01s_settings");
-    settingsTap(150, SET_Y0 + 3 * SET_DY + 10);  // [방 꾸미기]
+    settingsSwipe(-1);  // ko12.9.17: deslizar = pagina 2
+    navCheck("설정: 옆으로 밀면 2쪽", gSetPage == 1 && xScreen == XS_SET);
+    render(); shot("01s_settings_p2");
+    settingsTap(100, SET_NAV_Y + 20);
+    navCheck("설정: [<] = 1쪽", gSetPage == 0);
+    settingsTap(CX, 440);
+    navCheck("설정: 아래 탭은 안 나감", xScreen == XS_SET);
+    setTapId(8);  // [방 꾸미기]
     navCheck("ajustes -> decorar", xScreen == XS_ROOM);
     render(); shot("01t_room_menu");
     roomTap(300, ROOM_TOG_Y + 10);  // [방]
@@ -244,7 +265,7 @@ static void scenes(bool ko, const char *sfx) {
     roomTap(300, ROOM_GRID_Y + 2 * 52 + 10);  // muneco: bloqueado
     navCheck("decorar: bloqueado no se elige", roomSel < 0);
     roomTap(30, NAV_Y); navCheck("decorar: <- vuelve", xScreen == XS_SET);
-    settingsTap(320, SET_Y0 + 3 * SET_DY + 10);  // [산책]
+    setTapId(9);  // [산책]
     navCheck("ajustes -> paseo", xScreen == XS_WALK);
     render(); shot("01v_walk_nosensor");
     imuAddr = 0x6B;  // como si la placa tuviera el sensor
@@ -1575,11 +1596,8 @@ static void navChecks() {
   navCheck("ficha -> tongsin -> [<]", xScreen == XS_NONE && cardOpen);
   // ko11.26: menu de ajustes (flecha de arriba); cada boton y su [<]
   const int SX[2] = { 147, 319 };
-  auto setBtn = [&](int a) {  // a = accion (0 hora ... 10 cumpleanos); ko12.8: busca su casilla en SET_ORDER
-    int i = 0;
-    while (i < SET_N - 1 && SET_ORDER[i] != a) i++;
-    settingsTap(i == 10 ? SET_XC + SET_W / 2 : SX[i % 2], SET_Y0 + (i / 2) * SET_DY + SET_H / 2);
-  };
+  (void)SX;
+  auto setBtn = [&](int a) { setTapId(a); };  // a = accion (0 hora ... 10 cumpleanos); ko12.9.17: en su pagina
   closeAll(); tick(3000); onTap(233, 20);
   navCheck("principal: flecha de arriba = ajustes", xScreen == XS_SET && !clockOpen);
   closeAll(); onSwipeV(1);
@@ -1636,10 +1654,10 @@ static void navChecks() {
     sdCheckTap(LX, LY);
     navCheck("SD 파일 점검 -> [<] = SD 업데이트", xScreen == XS_UPD);
   }
-  pet.endSeen = 1; closeAll(); openSettings(); render(); shot("90c_settings_master");
-  settingsTap(100 + 60, SET_Y0 + 5 * SET_DY + 20);
+  pet.endSeen = 1; closeAll(); openSettings(); settingsSwipe(-1); render(); shot("90c_settings_master");
+  setTapId(SET_ID_END);
   navCheck("ajustes -> [엔딩 다시 보기]", xScreen == XS_ENDING && endReplay);
-  closeAll(); openSettings(); settingsTap(236 + 60, SET_Y0 + 5 * SET_DY + 20);
+  closeAll(); openSettings(); setTapId(7);
   navCheck("ajustes (maestro) -> [새로 시작]", xScreen == XS_RESET);
   closeAll(); openSettings(); setBtn(10);
   navCheck("ajustes (maestro) -> [내 생일]", xScreen == XS_BDAY);

@@ -1757,6 +1757,7 @@ void onSwipe(int dir) {
   if (gymSwipe(dir)) return;          // ko10.4: paginas de gimnasios
   if (candyBagSwipe(dir)) return;     // ko10.11: paginas de la bolsa de caramelos
   if (fameSwipe(dir)) return;         // ko11.1: paginas del salon de la fama
+  if (settingsSwipe(dir)) return;     // ko12.9.17: paginas de ajustes
   if (extraSwipe()) return;           // fork KO: pantallas nuevas
   if (trainMenuSwipe(dir)) return;    // ko9.1: menu de entrenamiento <-> batallas
   if (trainingSwipe()) return;        // fork KO (ko4): entrenamiento

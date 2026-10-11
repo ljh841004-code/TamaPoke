@@ -2618,25 +2618,39 @@ void partyPickTap(int16_t x, int16_t y) {
 // sonido -> brillo, WiFi -> SD update / copias, idioma y nuevo comienzo.
 // Ahora cada cosa del aparato es un boton de esta rejilla 2x4
 // ======================================================================
-#define SET_X1 66
+// ko12.9.17: paginas de 6 botones grandes (3 filas x 2) con [<] 1/2 [>] abajo y deslizar a los lados
+// (antes 11 en una sola pantalla; caben mas en el futuro). Pagina 1: el aparato; pagina 2: la vida
+// diaria, la SD y las copias, y al final [새로 시작] (y [엔딩 다시 보기] tras el final)
+#define SET_X1 60
 #define SET_X2 238
-#define SET_W 162
-#define SET_H 48
-#define SET_Y0 80
-#define SET_DY 56
-#define SET_N 11  // ko12.4: 5 filas (+ decorar, paseo); ko12.6: + cumpleanos (sexta fila, centrado)
-#define SET_XC 152  // boton suelto de la ultima fila (la pantalla redonda se estrecha)
-#define SET_HX1 100  // ko12.7: ... o dos medios botones (tras el final)
-#define SET_HX2 236
-#define SET_HW 130
-// ko12.8: orden en pantalla (accion de cada casilla): ajustes del aparato, luego la vida diaria
-// (idioma, cumpleanos, habitacion, paseo), la SD y las copias, y abajo del todo [새로 시작]
-// (con el final visto, a medias con [엔딩 다시 보기])
-static const uint8_t SET_ORDER[SET_N] = { 0, 1, 2, 3, 6, 10, 8, 9, 4, 5, 7 };
+#define SET_W 168
+#define SET_H 54
+#define SET_Y0 84
+#define SET_DY 64
+#define SET_PER 6
+#define SET_NAV_Y 286
+#define SET_ID_END 11   // [엔딩 다시 보기] (solo tras el final)
+static const uint8_t SET_ORDER_ALL[] = { 0, 1, 2, 3, 6, 10, 8, 9, 4, 5, SET_ID_END, 7 };
+static uint8_t gSetPage = 0;
+static uint8_t setItems(uint8_t *out) {
+  uint8_t n = 0;
+  for (uint8_t id : SET_ORDER_ALL) {
+    if (id == SET_ID_END && !pet.endSeen) continue;
+    out[n++] = id;
+  }
+  return n;
+}
+static uint8_t setPages() { uint8_t t[16]; uint8_t n = setItems(t); return (uint8_t)((n + SET_PER - 1) / SET_PER); }
+// casilla k de la pagina (la ultima, si va sola, centrada)
+static void setCell(uint8_t k, uint8_t onPage, int &x, int &y) {
+  y = SET_Y0 + (k / 2) * SET_DY;
+  x = (k == onPage - 1 && (onPage & 1)) ? (int)(CX - SET_W / 2) : (k & 1) ? SET_X2 : SET_X1;
+}
 static bool gClockFromSet = false;
 
 void openSettings() {
   retMark();
+  gSetPage = 0;  // ko12.9.17
   clockOpen = false;
   cardOpen = false;
   xScreen = XS_SET;
@@ -2653,7 +2667,7 @@ void renderSettings() {
   drawFit(XT(X_SET_TITLE), 36, 300, UI_INK, 3);
   char lang[24];
   snprintf(lang, sizeof(lang), XT(X_SET_LANG_FMT), LANG_CODES[gLang]);
-  struct { const char *t; uint16_t bg, fg; } b[SET_N] = {
+  struct { const char *t; uint16_t bg, fg; } b[SET_ID_END + 1] = {
     { XT(X_SET_TIME), UI_WHITE, UI_INK },
     { XT(X_SET_SOUND), (uint16_t)(audioEnabled() ? UI_BAR_OK : UI_WHITE), (uint16_t)(audioEnabled() ? UI_WHITE : UI_INK) },
     { XT(X_SET_SCREEN), UI_WHITE, UI_INK },
@@ -2665,20 +2679,29 @@ void renderSettings() {
     { XT(X_ROOM_BTN), C565(0xe8, 0x80, 0xa8), UI_WHITE },  // ko12.4
     { XT(X_WALK_BTN), C565(0x8a, 0x5a, 0x3a), UI_WHITE },
     { XT(X_BDAY_BTN), C565(0xf0, 0x60, 0x80), UI_WHITE },  // ko12.6
+    { XT(X_END_BTN), C565(0xf0, 0xc0, 0x30), UI_INK },     // ko12.7
   };
-  for (int s = 0; s < SET_N; s++) {
-    const auto &k = b[SET_ORDER[s]];
-    if (s == 10 && pet.endSeen) {  // ko12.7: tras el final, [엔딩 다시 보기] y [새로 시작] a medias
-      drawBtn(SET_HX1, SET_Y0 + 5 * SET_DY, SET_HW, SET_H, C565(0xf0, 0xc0, 0x30), UI_INK, XT(X_END_BTN));
-      drawBtn(SET_HX2, SET_Y0 + 5 * SET_DY, SET_HW, SET_H, k.bg, k.fg, k.t);
-      continue;
-    }
-    drawBtn(s == 10 ? SET_XC : s % 2 ? SET_X2 : SET_X1, SET_Y0 + (s / 2) * SET_DY, SET_W, SET_H, k.bg, k.fg, k.t);
+  uint8_t ids[16];
+  uint8_t n = setItems(ids), pages = setPages();
+  if (gSetPage >= pages) gSetPage = pages - 1;
+  uint8_t from = gSetPage * SET_PER, on = n - from > SET_PER ? SET_PER : n - from;
+  for (uint8_t k = 0; k < on; k++) {
+    const auto &it = b[ids[from + k]];
+    int x, y;
+    setCell(k, on, x, y);
+    drawBtn(x, y, SET_W, SET_H, it.bg, it.fg, it.t);
+  }
+  if (pages > 1) {
+    drawBtn(78, SET_NAV_Y, 120, 44, gSetPage ? UI_WHITE : UI_TRACK, UI_INK, "<");
+    drawBtn(268, SET_NAV_Y, 120, 44, gSetPage + 1 < pages ? UI_WHITE : UI_TRACK, UI_INK, ">");
+    char pg[12];
+    snprintf(pg, sizeof(pg), "%u/%u", gSetPage + 1, pages);
+    drawFit(pg, SET_NAV_Y + 12, 60, UI_INK, 2);
   }
   // version del firmware (antes en la pantalla de la hora)
   char ver[40];
   snprintf(ver, sizeof(ver), "TamaPoke v%s", FW_VERSION);
-  int vy = SET_Y0 + 6 * SET_DY + 2;
+  int vy = SET_NAV_Y + 62;
   gfx->setTextColor(UI_INK);
   setSize(1);
   setCur(centerX(ver, 1), vy);
@@ -2688,18 +2711,35 @@ void renderSettings() {
   uiFlush();
 }
 
+// ko12.9.17: deslizar a los lados = otra pagina (izquierda avanza, como la ficha)
+bool settingsSwipe(int dir) {
+  if (xScreen != XS_SET) return false;
+  int p = (int)gSetPage + (dir > 0 ? -1 : 1);
+  if (p >= 0 && p < setPages() && p != gSetPage) { gSetPage = (uint8_t)p; sfxPlay(SFX_TAP); }
+  return true;
+}
+
 void settingsTap(int16_t x, int16_t y) {
   if (navHit(NAV_L, x, y) || y < 60) { sfxPlay(SFX_TAP); goBack(); return; }
-  if (y < SET_Y0 || x < SET_X1 || x >= SET_X2 + SET_W) return;
-  int row = (y - SET_Y0) / SET_DY;
-  if (row > SET_N / 2 || (y - SET_Y0) % SET_DY >= SET_H) return;
-  if (row == 5 && pet.endSeen) {  // ko12.7
-    if (x >= SET_HX1 && x < SET_HX1 + SET_HW) { sfxPlay(SFX_TAP); openEnding((pet.endSeen & 2) ? 2 : 1, true); return; }
-    if (x < SET_HX2 || x >= SET_HX2 + SET_HW) return;
-  } else if (row == 5 && (x < SET_XC || x >= SET_XC + SET_W)) return;
-  int i = SET_ORDER[row == 5 ? 10 : row * 2 + (x >= SET_X2 - 5 ? 1 : 0)];
+  uint8_t pages = setPages();
+  if (pages > 1 && y >= SET_NAV_Y - 8 && y < SET_NAV_Y + 54) {  // [<] / [>]: media pantalla cada uno
+    if (x < CX) { if (gSetPage) { gSetPage--; sfxPlay(SFX_TAP); } }
+    else if (gSetPage + 1 < pages) { gSetPage++; sfxPlay(SFX_TAP); }
+    return;
+  }
+  uint8_t ids[16];
+  uint8_t n = setItems(ids);
+  if (gSetPage >= pages) gSetPage = pages - 1;
+  uint8_t from = gSetPage * SET_PER, on = n - from > SET_PER ? SET_PER : n - from;
+  int hit = -1;
+  for (uint8_t k = 0; k < on; k++) {
+    int bx, by;
+    setCell(k, on, bx, by);
+    if (inRect(x, y, bx, by, SET_W, SET_H)) hit = ids[from + k];
+  }
+  if (hit < 0) return;
   sfxPlay(SFX_TAP);
-  switch (i) {
+  switch (hit) {
     case 0: xScreen = XS_NONE; gClockFromSet = true; openClock(); break;
     case 1: openSound(); break;
     case 2: xScreen = XS_BRIGHT; break;
@@ -2711,5 +2751,7 @@ void settingsTap(int16_t x, int16_t y) {
     case 8: openRoom(); break;  // ko12.4
     case 9: openWalk(); break;
     case 10: openBday(); break;  // ko12.6
+    case SET_ID_END: openEnding((pet.endSeen & 2) ? 2 : 1, true); break;  // ko12.7
   }
 }
+
