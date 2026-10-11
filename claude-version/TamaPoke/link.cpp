@@ -100,6 +100,8 @@ uint32_t linkSeed() { return gCore.seed(); }
 void linkTradeAccept() { gCore.accept(); }
 void linkTradeDecline() { gCore.decline(); }
 bool linkTakeTrade(TradePet &out) { return gCore.takeTrade(out); }
+void linkSetTurn(uint16_t turn, uint8_t act) { gCore.setTurn(turn, act); }
+bool linkPartnerAct(uint16_t turn, uint8_t *act) { return gCore.partnerAct(turn, act); }
 
 void linkPoll(uint32_t now) {
   if (!linkActive() || gError) return;

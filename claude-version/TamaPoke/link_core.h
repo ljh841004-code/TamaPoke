@@ -24,6 +24,10 @@ struct __attribute__((packed)) LinkMsg {
   // ko10.4 (proto 4): la hora local del que envia, y si es de fiar
   uint32_t clock;
   uint8_t clockOk;
+  // ko12.9.16 (proto 7): combate por turnos. turn = el turno en el que esta; act = lo que eligio para
+  // ese turno (LA_WAIT = aun nada); prev = lo que eligio para el anterior (por si el otro aun lo espera)
+  uint16_t turn;
+  uint8_t act, prev;
 };
 
 class LinkCore {
@@ -49,6 +53,8 @@ public:
   bool partnerAccepted() const { return theirAccept; }
   bool iAmA() const { return memcmp(myMac, peer, 6) < 0; }
   uint32_t seed() const;
+  void setTurn(uint16_t turn, uint8_t act);
+  bool partnerAct(uint16_t turn, uint8_t *act) const;
 
 private:
   void send(uint8_t type, uint32_t now);
@@ -63,6 +69,8 @@ private:
   uint8_t declineLeft = 0;
   uint32_t myClock = 0, myClockAt = 0, theirClock = 0, theirClockAt = 0;
   bool myClockOk = false, theirClockOk = false;
+  uint16_t myTurn = 0, theirTurn = 0;
+  uint8_t myAct = LA_WAIT, myPrev = LA_WAIT, theirAct = LA_WAIT, theirPrev = LA_WAIT;
   SendFn sendFn = nullptr;
   void *sendCtx = nullptr;
 };

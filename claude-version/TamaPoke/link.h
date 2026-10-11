@@ -22,16 +22,28 @@ enum LinkState : uint8_t {
   LS_OFF = 0, LS_SEARCH, LS_READY, LS_TRADE_WAIT, LS_TRADE_DONE, LS_DECLINED, LS_LOST, LS_ERROR,
 };
 
+// ko12.9.16: un luchador del equipo de tongsin (el que crias + hasta 2 de la caja), con SU nivel
+// y sus movimientos. Las dos placas montan el combate con estos mismos datos (LINK_TEAM: battle.h)
+struct __attribute__((packed)) LinkMon {
+  int16_t dex;
+  uint16_t lvl, atk, def, spe;
+  uint8_t mv[4];
+  uint8_t shiny;
+};
 struct __attribute__((packed)) LinkPet {
   TradePet t;                       // el individuo entero (para el intercambio)
   uint16_t lvl, atk, def, spe;      // stats de batalla tal como las calcula su dueno
+  LinkMon team[LINK_TEAM];          // ko12.9.16: team[0] = el que crias
+  uint8_t teamN;
 };
+
 
 // 2 (ko8): el apodo del intercambio pasa de 12 a 20 bytes (hangul). Con otro
 // tamano de mensaje la version 1 ni se oye (se descarta por longitud).
 // 3 (ko10): especies de gen 2 (152-251); un ko9 no sabria que hacer con ellas
 // 4 (ko10.4): cada mensaje lleva la hora; el que la perdio la toma del otro
-#define LINK_PROTO_VER 6  // ko11.31: 4 movimientos, PP y estados (cambian las batallas simuladas)
+// 7 (ko12.9.16): equipo de 3 y combate por turnos (cada uno elige; se intercambian las acciones)
+#define LINK_PROTO_VER 7
 
 void linkStart(LinkMode mode, const LinkPet &mine);
 void linkStop();
@@ -50,3 +62,6 @@ void linkTradeDecline();
 void linkPoll(uint32_t nowMs);
 // true UNA vez cuando hay que aplicar el intercambio; out = Pokemon recibido
 bool linkTakeTrade(TradePet &out);
+// ko12.9.16: combate por turnos. Mi eleccion para el turno t (LA_WAIT = aun nada) y la del otro
+void linkSetTurn(uint16_t turn, uint8_t act);
+bool linkPartnerAct(uint16_t turn, uint8_t *act);

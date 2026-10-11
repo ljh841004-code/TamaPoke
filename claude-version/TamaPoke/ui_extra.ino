@@ -509,7 +509,8 @@ void loadFoe(int16_t dex, bool shiny) {
 // BP_DUP (ko10.4): repetido capturado -> quedarselo (caja) o cambiarlo por caramelos
 enum : uint8_t { BP_INTRO = 0, BP_MENU, BP_PLAY, BP_RESULT, BP_NEXT, BP_DUP,
                  BP_JOIN,   // ko11.8: el vencido quiere venir -> preguntar
-                 BP_SWAP };  // ko11.8: el vencido quiere venir -> preguntar
+                 BP_SWAP,   // ko11.20: elegir quien sale
+                 BP_WAIT };  // ko12.9.16: tongsin: esperando la eleccion del otro
 #define BD_MS 20000UL  // sin elegir en 20 s: se lo queda (no se pierde nada)
 #define BDUP_KEEP_X 70  // botones de BP_DUP
 #define BDUP_CANDY_X 240
@@ -596,6 +597,17 @@ uint8_t bSwapMode = 0;  // BP_SWAP: 0 obligado (cayo el mio), 1 rival nuevo (pue
 PmdMon helperPmd;
 int16_t helperPmdDex = 0;
 bool helperPmdShiny = false;
+// ko12.9.16: tongsin por turnos (3 contra 3). lkMine / lkTheirs mandan; bMe / bFoe son la vista
+LinkSide lkMine, lkTheirs;
+uint16_t lkTurn = 0;
+uint8_t lkMyAct = LA_WAIT;
+bool lkReplace = false;        // este turno solo se elige quien sale (tras un desmayo)
+bool lkPlayAfterIntro = false; // tras ensenar el cambio, los ataques
+uint32_t lkIntroMs = 2500, lkMenuT = 0, lkGiveUpArm = 0;
+int8_t lkPick[2] = { -1, -1 };     // los 2 de la caja elegidos (indices)
+#define LK_CHOOSE_MS 45000UL   // sin elegir en 45 s: elige solo (el otro no espera para siempre)
+#define PP_LINK 0x40           // ppKind: la eleccion de equipo del tongsin
+static void lkChoose(uint8_t act);
 // eleccion antes del combate (pantalla XS_PARTY, ui_more.ino)
 uint8_t ppKind = 0, ppRegion = 0, ppN = 0, ppFrom = 0, ppPage = 0;
 Battler ppTeam[CHAMP_TEAM];
@@ -2134,7 +2146,7 @@ static const uint8_t BM_ACT[2][3] = { { BA_TACKLE, BA_TYPE, BA_GUARD }, { BA_POT
 uint8_t autoCount = 1, autoLeft = 0, autoPotions = 0;
 static uint32_t autoMenuT = 0;
 static void battleDoAction(int a);
-static bool autoAllowed() { return !bLink; }  // ko11.31: tambien en salvaje
+static bool autoAllowed() { return true; }  // ko11.31: tambien en salvaje (ko12.9.16: y en tongsin)
 static uint8_t autoRemaining() { return bKind != BK_WILD && bTeamN > bTeamI ? (uint8_t)(bTeamN - bTeamI) : 1; }
 static bool autoHardFoe() {
   return bKind == BK_CHAMP || bFoe.lvl > bMe.lvl + 2 || typeEff(bFoe.type, bMe.type) > 2 ||
@@ -2300,7 +2312,7 @@ void drawTypeGlyph(int x, int y, uint8_t t, bool status, uint16_t bg) {
 #define MV_Y1 328
 #define MV_BACK_X 36  // ko12.8: 30/32 y mas alto: la esquina de abajo se salia del circulo
 #define MV_BACK_W 30
-enum : int { BMH_FIGHT = 100, BMH_AUTO, BMH_COUNT, BMH_BACK };
+enum : int { BMH_FIGHT = 100, BMH_AUTO, BMH_COUNT, BMH_BACK, BMH_SWAP, BMH_GIVEUP };  // ko12.9.16: los 2 ultimos, tongsin
 
 // boton de un movimiento: nombre, y debajo tipo + PP (en rojo si quedan pocos)
 // mark (ko12.8): 0 nada, MVK_SUPER muy eficaz (*), MVK_WEAK poco eficaz (triangulo hacia abajo),
@@ -2360,6 +2372,13 @@ void drawBattleMenu() {
   drawBtn(x1, BM_Y1, BM_W, BM_H, 0x4C98, UI_WHITE, XT(X_GUARD));
   drawBtn(x2, BM_Y1, BM_W, BM_H, autoAllowed() ? C565(0x6a, 0x4c, 0xf0) : UI_TRACK, autoAllowed() ? UI_WHITE : 0x8410,
           XT(X_AUTO_BTN));
+  if (bLink) {  // ko12.9.16: tongsin: [교체] y [항복] (sin objetos)
+    bool sw = linkSideCanSwap(lkMine);
+    drawBtn(x0, BM_Y2, BM_W, BM_H, sw ? 0x4C98 : UI_TRACK, sw ? UI_WHITE : 0x8410, XT(X_LK_SWAP));
+    bool arm = lkGiveUpArm && millis() - lkGiveUpArm < 3000;
+    drawBtn(x2, BM_Y2, BM_W, BM_H, arm ? UI_BAR_BAD : UI_TRACK, arm ? UI_WHITE : UI_INK, XT(arm ? X_LK_GIVEUP_Q : X_LK_GIVEUP));
+    return;
+  }
   drawBtn(x0, BM_Y2, BM_W, BM_H, pet.potions ? UI_BAR_OK : UI_TRACK, pet.potions ? UI_WHITE : UI_INK, pot);
   if (bKind != BK_WILD) {  // ko11.19: entrenadores: [N마리] (cuantos en automatico) en vez de ball / huir
     char cnt[16];
@@ -2383,6 +2402,7 @@ int battleMenuHit(int16_t x, int16_t y) {
   int col = (x - BM_X) / (BM_W + BM_GAP);
   if (col > 2 || (x - BM_X) % (BM_W + BM_GAP) >= BM_W) return -1;
   if (row == 0) return col == 0 ? (int)BMH_FIGHT : col == 1 ? (int)BA_GUARD : (int)BMH_AUTO;
+  if (bLink) return col == 0 ? (int)BMH_SWAP : col == 2 ? (int)BMH_GIVEUP : -1;  // ko12.9.16
   if (bKind != BK_WILD) return col == 0 ? (int)BA_POTION : col == 1 ? (int)BMH_COUNT : -1;
   return BM_ACT[row][col];
 }
@@ -2477,7 +2497,17 @@ static void drawMiniBall(int cx, int cy, bool alive, bool cur) {
 }
 // bolas del equipo: las del rival bajo su caja, las mias bajo la mia
 static void drawPartyBalls() {
-  if (bKind == BK_WILD || bLink) return;
+  if (bLink) {  // ko12.9.16: tongsin: los 3 de cada uno
+    if (lkTheirs.n > 1)
+      for (uint8_t i = 0; i < lkTheirs.n; i++)
+        drawMiniBall(96 + i * 18, 118, (i == lkTheirs.cur ? bFoe.hp : lkTheirs.mon[i].hp) > 0, i == lkTheirs.cur);
+    if (lkMine.n > 1)
+      for (uint8_t i = 0; i < lkMine.n; i++)
+        drawMiniBall(400 - (lkMine.n - 1 - i) * 18, 244, (i == lkMine.cur ? bMe.hp : lkMine.mon[i].hp) > 0,
+                     i == lkMine.cur);
+    return;
+  }
+  if (bKind == BK_WILD) return;
   for (uint8_t i = 0; i < bTeamN; i++)
     drawMiniBall(96 + i * 18, 118, i > bTeamI || (i == bTeamI && bFoe.hp > 0), i == bTeamI);
   if (pN > 1)
@@ -2545,6 +2575,11 @@ static void swapTap(int16_t x, int16_t y) {
     if (x < xs[i] || x >= xs[i] + ws[i]) continue;
     sfxPlay(SFX_TAP);
     uint8_t mode = bSwapMode;
+    if (bLink) {  // ko12.9.16: tongsin: la eleccion se manda; el cambio se hace al resolver el turno
+      if (who[i] < 0) { bPhase = BP_MENU; txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName); bvL2[0] = 0; return; }
+      lkChoose((uint8_t)(LA_SWAP + who[i]));
+      return;
+    }
     if (who[i] < 0) {  // quedarse / cancelar
       bPhase = BP_MENU;
       autoMenuT = millis();
@@ -3365,7 +3400,34 @@ static void partyOpen(uint8_t kind, uint8_t region, const Battler *team, uint8_t
   xScreen = XS_PARTY;
   sfxPlay(SFX_TAP);
 }
+// ko12.9.16: tongsin: elegir hasta 2 de la caja (los de la ultima vez ya marcados; sin limite del dia)
+static int16_t lkLastDex[2] = { 0, 0 };
+static uint32_t lkLastEpoch[2] = { 0, 0 };
+void lkPickOpen() {
+  ppKind = PP_LINK;
+  ppN = LINK_TEAM;
+  ppFrom = XS_LINKMENU;
+  uint8_t ng = 0;
+  for (uint8_t k = 0; k < TEAM_HELPERS; k++) ppPick[k] = -1;
+  for (uint8_t k = 0; k < 2; k++)
+    for (uint8_t i = 0; lkLastDex[k] && i < box.count(); i++)
+      if (box.at(i).dex == lkLastDex[k] && box.at(i).epoch == lkLastEpoch[k] && (ng == 0 || ppPick[0] != (int8_t)i)) {
+        ppPick[ng++] = (int8_t)i;
+        break;
+      }
+  ppPage = 0;
+  xScreen = XS_PARTY;
+}
 void partyStart(bool solo) {
+  if (ppKind == PP_LINK) {  // ko12.9.16: a buscar pareja con este equipo
+    for (uint8_t k = 0; k < 2; k++) {
+      lkPick[k] = !solo && ppPick[k] >= 0 && ppPick[k] < box.count() ? ppPick[k] : -1;
+      lkLastDex[k] = lkPick[k] >= 0 ? box.at((uint8_t)lkPick[k]).dex : 0;
+      lkLastEpoch[k] = lkPick[k] >= 0 ? box.at((uint8_t)lkPick[k]).epoch : 0;
+    }
+    lkBeginSearch();
+    return;
+  }
   ppArmed = !solo;
   for (uint8_t k = 0; ppArmed && k < TEAM_HELPERS; k++)  // un uso del dia para cada ayudante
     if (ppPick[k] >= 0 && ppPick[k] < box.count()) helperUse(box.at((uint8_t)ppPick[k]));
@@ -4099,6 +4161,55 @@ void myLinkPet(LinkPet &lp) {
   lp.atk = pet.atkStat();
   lp.def = pet.defStat();
   lp.spe = pet.speStat();
+  // ko12.9.16: el equipo: el que crias y los de la caja elegidos, con SU nivel (sin igualar)
+  Battler b = makeBattler(pet.speciesId, lp.lvl, lp.atk, lp.def, lp.spe);
+  petMovesInto(b);
+  LinkMon &m0 = lp.team[0];
+  m0.dex = pet.speciesId; m0.lvl = lp.lvl; m0.atk = lp.atk; m0.def = lp.def; m0.spe = lp.spe;
+  memcpy(m0.mv, b.mv, 4);
+  m0.shiny = pet.shiny ? 1 : 0;
+  lp.teamN = 1;
+  for (uint8_t k = 0; k < 2; k++) {
+    int8_t bi = lkPick[k];
+    if (bi < 0 || bi >= box.count()) continue;
+    const BoxMon &bm = box.at((uint8_t)bi);
+    Battler h = makeBoxBattler(bm.dex, bm.lvl, 0xFFFF, bm.geneAtk, bm.geneDef, bm.geneSpe);
+    LinkMon &m = lp.team[lp.teamN++];
+    m.dex = h.dex; m.lvl = h.lvl; m.atk = h.atk; m.def = h.def; m.spe = h.spe;
+    memcpy(m.mv, moveCount(bm.mv) ? bm.mv : h.mv, 4);
+    m.shiny = (bm.flags & BOXF_SHINY) ? 1 : 0;
+  }
+}
+
+// ko12.9.16: el equipo que llega (o el mio, tal como se envio) -> luchadores con PP llenos
+static void lkBuild(LinkSide &s, const LinkPet &lp) {
+  s.n = 0;
+  s.cur = 0;
+  for (uint8_t i = 0; i < lp.teamN && i < LINK_TEAM; i++) {
+    const LinkMon &m = lp.team[i];
+    if (m.dex < 1 || m.dex > DEX_COUNT) continue;
+    Battler b = makeBattler(m.dex, m.lvl, m.atk, m.def, m.spe);
+    if (moveCount(m.mv)) { memcpy(b.mv, m.mv, 4); movesFillPP(b); }
+    s.mon[s.n++] = b;
+  }
+  if (!s.n) {  // por si acaso: el de siempre
+    s.mon[0] = makeBattler(lp.t.dex >= 1 && lp.t.dex <= DEX_COUNT ? lp.t.dex : 1, lp.lvl, lp.atk, lp.def, lp.spe);
+    s.n = 1;
+  }
+}
+static bool lkShiny(const LinkPet &lp, uint8_t i) { return i < lp.teamN && lp.team[i].shiny; }
+
+// ko12.9.16: empieza a buscar pareja con el equipo elegido
+void lkBeginSearch() {
+  LinkPet lp;
+  myLinkPet(lp);
+  linkSetClock(clockEpoch(), gClockTrusted);  // ko10.4: la hora viaja en cada mensaje
+  linkStart(LINK_BATTLE, lp);
+  linkEndAt = 0;
+  linkEndMsg = nullptr;
+  linkBattleStarted = false;
+  linkTradeApplied = false;
+  xScreen = XS_LINK;
 }
 
 void renderLinkMenu() {
@@ -4127,6 +4238,12 @@ void linkMenuTap(int16_t x, int16_t y) {
   if (!pet.canBattle() || netBusy()) { sfxPlay(SFX_DENY); return; }
   if (m == LINK_BATTLE && pet.tooTiredToBattle()) { showToast(XT(X_TOO_TIRED)); sfxPlay(SFX_DENY); return; }
   sfxPlay(SFX_TAP);
+  if (m == LINK_BATTLE) {  // ko12.9.16: primero el equipo (hasta 2 de la caja)
+    lkPick[0] = lkPick[1] = -1;
+    if (box.count()) { lkPickOpen(); return; }
+    lkBeginSearch();
+    return;
+  }
   LinkPet lp;
   myLinkPet(lp);
   linkSetClock(clockEpoch(), gClockTrusted);  // ko10.4: la hora viaja en cada mensaje
@@ -4141,6 +4258,7 @@ void linkMenuTap(int16_t x, int16_t y) {
 void closeLink() {
   linkStop();
   foePmd.unload();
+  partyEnd();  // ko12.9.16: el equipo del tongsin
   xScreen = XS_NONE;
 }
 
@@ -4160,44 +4278,245 @@ const char *partnerName(char *buf, size_t n) {
   return buf;
 }
 
+// ======================================================================
+// ko12.9.16: tongsin por turnos, 3 contra 3, como un combate salvaje: cada uno elige
+// (movimiento, protegerse, cambiar, automatico o rendirse); las elecciones se intercambian y las dos
+// placas resuelven el MISMO turno con la misma semilla (lado A = la de MAC menor). Tras un desmayo
+// el que cayo elige quien sale. Cada uno lucha con SU nivel: el que mas ha criado, gana
+// ======================================================================
+static void lkSyncView() {
+  bMe = lkMine.act();
+  bFoe = lkTheirs.act();
+  for (uint8_t i = 0; i < lkMine.n; i++) pMon[i] = lkMine.mon[i];
+  pCur = lkMine.cur;
+}
+static void lkFoeName(char *out, size_t n) {
+  if (lkTheirs.cur == 0) {
+    char pn[40];
+    partnerName(pn, sizeof(pn));
+    snprintf(out, n, "%s", pn[0] == '*' ? pn + 1 : pn);
+  } else {
+    snprintf(out, n, "%s", dexName(lkTheirs.act().dex));
+  }
+}
+static void lkShowFoe() {  // sale otro del rival: su sprite, nombre y vida
+  char fn[40];
+  lkFoeName(fn, sizeof(fn));
+  bvSetup(bMe, bFoe, fn, lkShiny(linkPartner(), lkTheirs.cur));
+  partyMeName();
+  bLink = true;
+}
+
 void startLinkBattle() {
   partyEnd();  // ko11.20.1
   const LinkPet &th = linkPartner();
   if (th.t.dex < 1 || th.t.dex > DEX_COUNT) { linkFinish(XT(X_LINK_LOST), 2500); return; }
   // la instantanea que se envio, no las stats de ahora: si el nivel cambiara
   // entre el emparejamiento y aqui, las dos placas simularian batallas distintas
-  const LinkPet &mine = linkMine();
-  Battler me = makeBattler(mine.t.dex, mine.lvl, mine.atk, mine.def, mine.spe);
-  Battler foe = makeBattler(th.t.dex, th.lvl, th.atk, th.def, th.spe);
-  bool iA = linkIAmA();
-  int n = 0;
-  uint8_t winner = iA ? battleAuto(me, foe, linkSeed(), bq, BQ_MAX, &n)
-                      : battleAuto(foe, me, linkSeed(), bq, BQ_MAX, &n);
-  char pn[40];
-  partnerName(pn, sizeof(pn));
-  bvSetup(me, foe, pn[0] == '*' ? pn + 1 : pn, th.t.shiny);
-  bqAisMe = iA;
-  bqN = n;
-  bLink = true;
-  bWon = (winner == 0) == iA;
+  lkBuild(lkMine, linkMine());
+  lkBuild(lkTheirs, th);
+  battleSetWeather(WX_CLEAR);  // las dos placas, el mismo tiempo (su reloj puede no coincidir)
+  bRng = BRng(linkSeed());
+  pN = lkMine.n; pCur = 0; pUsed = 1; pShiny = 0; pSlot0Pet = true;
+  for (uint8_t i = 0; i < pN; i++) {
+    pMon[i] = lkMine.mon[i];
+    pBox[i] = -1;
+    if (lkShiny(linkMine(), i)) pShiny |= (uint8_t)(1 << i);
+  }
+  bMe = lkMine.act();
+  bFoe = lkTheirs.act();
+  bKind = BK_WILD;
+  autoLeft = 0;
+  lkShowFoe();
+  bqAisMe = linkIAmA();
+  lkTurn = 0;
+  lkMyAct = LA_WAIT;
+  lkReplace = lkPlayAfterIntro = false;
+  lkGiveUpArm = 0;
+  linkSetTurn(0, LA_WAIT);
   snprintf(bvL1, sizeof(bvL1), "%s  VS  %s", bvMeName, bvFoeName);
+  bvL2[0] = 0;
+  lkIntroMs = 2500;
   bPhase = BP_INTRO;
   bPhaseT = millis();
   linkBattleStarted = true;
   sfxPlay(SFX_MEDAL);
   audioSetBattleMusic(false, true);
-  audioCry(th.t.dex);
+  audioCry(bFoe.dex);
+}
+
+// el automatico elige con su propio azar (el del combate es comun y no se puede tocar)
+static uint8_t lkAutoPick() {
+  BRng r(esp_random() ^ millis());
+  uint32_t hpPct = (uint32_t)bMe.hp * 100 / (bMe.maxHp ? bMe.maxHp : 1);
+  if (typeEff(bFoe.type, bMe.type) >= 4 && hpPct < 70 && r.below(100) < 25) return BA_GUARD;
+  uint8_t a = battleAi(bMe, bFoe, r, 0);
+  if (a == BA_POTION || a == BA_BALL || a == BA_RUN || a >= BA_COUNT) a = BA_TACKLE;
+  return a;
+}
+
+static void lkChoose(uint8_t act) {
+  lkMyAct = act;
+  linkSetTurn(lkTurn, act);
+  bMoveMenu = false;
+  bPhase = BP_WAIT;
+  strncpy(bvL1, XT(X_LK_WAIT), sizeof(bvL1) - 1);
+  bvL1[sizeof(bvL1) - 1] = 0;
+  bvL2[0] = 0;
+}
+
+// empieza el turno: elegir accion, o (tras un desmayo) quien sale
+static void lkNextChoice() {
+  uint32_t now = millis();
+  lkMenuT = now;
+  autoMenuT = now;
+  if (lkReplace) {
+    if (!bMe.hp && linkSideCanSwap(lkMine)) { partyAskSwap(0); return; }
+    lkChoose(LA_NONE);  // el mio sigue en pie: espero a que el otro elija
+    return;
+  }
+  bPhase = BP_MENU;
+  txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
+  bvL2[0] = 0;
+}
+
+static void lkEnd(bool won) {
+  lkSyncView();
+  finishBattle(won, false, false);
+}
+
+static void lkResolve(uint8_t theirAct) {
+  uint8_t myAct = lkMyAct;
+  if (myAct == LA_GIVEUP || theirAct == LA_GIVEUP) {  // rendirse: gana el otro
+    lkEnd(theirAct == LA_GIVEUP && myAct != LA_GIVEUP);
+    return;
+  }
+  bool iA = linkIAmA();
+  LinkSide &A = iA ? lkMine : lkTheirs, &B = iA ? lkTheirs : lkMine;
+  uint8_t aAct = iA ? myAct : theirAct, bAct = iA ? theirAct : myAct;
+  uint8_t myOld = lkMine.cur, thOld = lkTheirs.cur;
+  bMe = lkMine.act();
+  linkApplySwap(A, aAct);
+  linkApplySwap(B, bAct);
+  bool swapped = false;
+  if (lkMine.cur != myOld) {  // los mios: como el cambio de los entrenadores (sprite, nombre, grito)
+    for (uint8_t i = 0; i < lkMine.n; i++) pMon[i] = lkMine.mon[i];
+    pCur = myOld;
+    bMe = lkMine.mon[myOld];
+    partySwitchTo(lkMine.cur);
+    swapped = true;
+  }
+  if (lkTheirs.cur != thOld) {
+    bMe = lkMine.act();
+    bFoe = lkTheirs.act();
+    lkShowFoe();
+    txFmt(bvL2, sizeof(bvL2), X_LK_FOE_SEND, dexName(bFoe.dex));
+    if (!swapped) { strncpy(bvL1, bvL2, sizeof(bvL1) - 1); bvL1[sizeof(bvL1) - 1] = 0; bvL2[0] = 0; }
+    audioCry(bFoe.dex);
+    swapped = true;
+  }
+  lkReplace = false;
+  int n = linkAttacks(A, B, aAct, bAct, bRng, bq, BATTLE_MAX_EVENTS);
+  lkSyncView();
+  lkTurn++;
+  linkSetTurn(lkTurn, LA_WAIT);
+  lkMyAct = LA_WAIT;
+  for (int i = n - 1; i >= 0; i--) if (bq[i].kind == EV_USE) fxWant(bq[i].mid);
+  bqN = n;
+  bqI = 0;
+  bqAisMe = iA;
+  if (swapped || n == 0) {  // primero se ve quien sale; luego, si hay, los ataques
+    lkPlayAfterIntro = n > 0;
+    lkIntroMs = 1500;
+    bPhase = BP_INTRO;
+    bPhaseT = millis();
+    return;
+  }
+  bPhase = BP_PLAY;
+  startEvent(0);
+}
+
+static void lkAfterEvents() {
+  bool mineAlive = linkSideAlive(lkMine), theirsAlive = linkSideAlive(lkTheirs);
+  if (!mineAlive || !theirsAlive) { lkEnd(mineAlive && !theirsAlive); return; }
+  lkReplace = !bMe.hp || !bFoe.hp;
+  lkNextChoice();
 }
 
 void updateLinkBattle() {
   uint32_t now = millis();
+  if (bPhase != BP_RESULT && (linkState() == LS_LOST || linkState() == LS_ERROR)) {  // se fue el otro
+    linkBattleStarted = false;
+    partyEnd();
+    linkFinish(XT(X_LINK_LOST), 2500);
+    return;
+  }
   if (bPhase == BP_INTRO) {
-    if (now - bPhaseT > 2500) { bPhase = BP_PLAY; startEvent(0); }
+    if (bPhaseT == 0 || now - bPhaseT > lkIntroMs) {
+      if (lkPlayAfterIntro) { lkPlayAfterIntro = false; bPhase = BP_PLAY; startEvent(0); }
+      else lkNextChoice();
+    }
+  } else if (bPhase == BP_MENU) {
+    if ((autoLeft && now - autoMenuT > AUTO_STEP_MS) || now - lkMenuT > LK_CHOOSE_MS) lkChoose(lkAutoPick());
+  } else if (bPhase == BP_SWAP) {
+    if ((autoLeft && now - autoMenuT > AUTO_STEP_MS) || now - lkMenuT > LK_CHOOSE_MS) {
+      int8_t j = partyBest(true);
+      if (j >= 0) lkChoose((uint8_t)(LA_SWAP + j));
+    }
+  } else if (bPhase == BP_WAIT) {
+    uint8_t th;
+    if (linkPartnerAct(lkTurn, &th)) lkResolve(th);
   } else if (bPhase == BP_PLAY) {
-    if (stepEvents()) finishBattle(bWon, false, false);
+    if (stepEvents()) lkAfterEvents();
   } else if (bPhase == BP_RESULT) {
     if (now - bPhaseT > 3800) closeLink();
   }
+}
+
+// toques durante el combate
+static void lkTap(int16_t x, int16_t y) {
+  if (bPhase == BP_RESULT) { if (millis() - bPhaseT > 800) closeLink(); return; }
+  if (autoLeft) {
+    autoLeft = 0;
+    strncpy(bvL1, XT(X_AUTO_STOP), sizeof(bvL1) - 1); bvL2[0] = 0;
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  if (bPhase == BP_INTRO) { if (!lkPlayAfterIntro) bPhaseT = 0; return; }
+  if (bPhase == BP_SWAP) { swapTap(x, y); return; }
+  if (bPhase != BP_MENU) return;
+  if (battleArtTap(x, y)) return;
+  if (inRect(x, y, 236, 176, 176, 58) && linkSideCanSwap(lkMine)) { sfxPlay(SFX_TAP); partyAskSwap(2); return; }
+  int a = battleMenuHit(x, y);
+  if (a < 0) return;
+  if (a != BMH_GIVEUP) lkGiveUpArm = 0;
+  if (a == BMH_FIGHT) { bMoveMenu = true; sfxPlay(SFX_TAP); return; }
+  if (a == BMH_BACK) { bMoveMenu = false; sfxPlay(SFX_TAP); return; }
+  if (a >= BA_M0 && a <= BA_M3 && battleHasPP(bMe) && !bMe.pp[a - BA_M0]) { sfxPlay(SFX_DENY); return; }
+  if (a >= BA_M0 && a <= BA_M3 && battleResting(bMe, bMe.mv[a - BA_M0])) { sfxPlay(SFX_DENY); return; }
+  if (a == BMH_AUTO) {  // hasta tocar la pantalla
+    uint8_t alive = 0;
+    for (uint8_t i = 0; i < lkMine.n; i++) alive += lkMine.mon[i].hp > 0;
+    autoLeft = alive ? alive : 1;
+    autoMenuT = millis();
+    bMoveMenu = false;
+    sfxPlay(SFX_MEDAL);
+    return;
+  }
+  if (a == BMH_SWAP) {
+    if (!linkSideCanSwap(lkMine)) { sfxPlay(SFX_DENY); return; }
+    sfxPlay(SFX_TAP);
+    partyAskSwap(2);
+    return;
+  }
+  if (a == BMH_GIVEUP) {  // dos toques
+    if (lkGiveUpArm && millis() - lkGiveUpArm < 3000) { lkGiveUpArm = 0; sfxPlay(SFX_DENY); lkChoose(LA_GIVEUP); }
+    else { lkGiveUpArm = millis() ? millis() : 1; sfxPlay(SFX_TAP); }
+    return;
+  }
+  if (a >= BA_COUNT || a == BA_POTION || a == BA_BALL || a == BA_RUN) return;
+  sfxPlay(SFX_TAP);
+  lkChoose((uint8_t)a);
 }
 
 void renderLinkSearch(const char *title) {
@@ -4260,10 +4579,7 @@ void renderLink() {
 }
 
 void linkTap(int16_t x, int16_t y) {
-  if (linkBattleStarted) {
-    if (bPhase == BP_RESULT) closeLink();
-    return;
-  }
+  if (linkBattleStarted) { lkTap(x, y); return; }  // ko12.9.16
   if (linkEndAt) return;
   LinkState st = linkState();
   if (st == LS_READY && linkMode() == LINK_TRADE) {

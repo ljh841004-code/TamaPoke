@@ -270,6 +270,27 @@ uint16_t counterDamage(const Battler &at, const Battler &df, BRng &rng, uint8_t 
 // ev puede ser nullptr (solo el resultado); nEv recibe cuantos eventos se escribieron.
 uint8_t battleAuto(Battler a, Battler b, uint32_t seed, BEvent *ev, int maxEv, int *nEv);
 
+// ---- ko12.9.16: tongsin por turnos, equipo de 3 contra 3 ----
+// Cada placa elige su accion; se intercambian y las dos resuelven el MISMO turno con la misma
+// semilla (lado A = la placa de MAC menor). Primero los cambios, luego los ataques.
+#define LINK_TEAM 3
+#define LA_SWAP 100     // 100 + j: sale el j del equipo
+#define LA_NONE 250     // no hace nada (el otro elige quien sale tras un desmayo)
+#define LA_GIVEUP 251   // se rinde
+#define LA_WAIT 0xFE    // aun no ha elegido
+struct LinkSide {
+  Battler mon[LINK_TEAM];
+  uint8_t n = 1, cur = 0;
+  Battler &act() { return mon[cur < n ? cur : 0]; }
+};
+bool linkSideAlive(const LinkSide &s);       // le queda alguien en pie
+bool linkSideCanSwap(const LinkSide &s);     // tiene otro en pie aparte del que lucha
+// aplica el cambio de un lado (true si cambio). Un cambio a uno caido o inexistente no hace nada,
+// salvo si el que lucha esta caido: entonces sale el primero en pie
+bool linkApplySwap(LinkSide &s, uint8_t act);
+// los ataques del turno (los cambios ya aplicados): ev igual que battleTurn (lado 0 = A)
+int linkAttacks(LinkSide &A, LinkSide &B, uint8_t actA, uint8_t actB, BRng &rng, BEvent *ev, int maxEv);
+
 // ---- fork KO (ko7): niveles por experiencia, como PokeRogue/los juegos ----
 // curva "media-rapida": el nivel n empieza en n^3 de EXP (tope nivel 100)
 #define LEVEL_MAX 100

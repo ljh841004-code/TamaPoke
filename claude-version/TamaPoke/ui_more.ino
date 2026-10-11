@@ -2523,7 +2523,8 @@ void renderPartyPick() {
     int w = textW(t, 1) + 28;
     drawBtn(CX - w / 2, 58, w, 28, orbColor((uint8_t)ft), UI_WHITE, t);
   } else {
-    snprintf(t, sizeof(t), XT(X_PT_VS_N_FMT), ppN);
+    if (ppKind == PP_LINK) strncpy(t, XT(X_LK_PICK_SUB), sizeof(t) - 1), t[sizeof(t) - 1] = 0;  // ko12.9.16
+    else snprintf(t, sizeof(t), XT(X_PT_VS_N_FMT), ppN);
     drawFit(t, 64, 330, UI_INK, 1);
   }
   uint16_t pl = pet.level();
@@ -2534,7 +2535,7 @@ void renderPartyPick() {
     const BoxMon &m = box.at(bi);
     int y = PP_ROW_Y + r * (PP_ROW_H + PP_ROW_GAP);
     bool sel = ppPicked((int8_t)bi);
-    uint8_t left = helperUsesLeft(m);  // ko11.20: hoy le quedan
+    uint8_t left = ppKind == PP_LINK ? 1 : helperUsesLeft(m);  // ko11.20: hoy le quedan
     uiButton(73, y, 320, PP_ROW_H, 10, sel ? C565(0xe6, 0xf8, 0xdc) : left ? UI_WHITE : UI_TRACK, sel ? UI_BAR_OK : UI_INK);
     drawThumbAt(m.dex, 100, y + PP_ROW_H / 2, 1, false);
     char l[48];
@@ -2544,15 +2545,17 @@ void renderPartyPick() {
     setCur(126, y + 3);
     printT(l);
     uint8_t ty = DEX_TBL[m.dex].ptype;
-    snprintf(l, sizeof(l), "Lv%u  %s", m.lvl < pl ? m.lvl : pl, typeName(ty));
+    snprintf(l, sizeof(l), "Lv%u  %s", m.lvl < pl || ppKind == PP_LINK ? m.lvl : pl, typeName(ty));  // ko12.9.16: tongsin = su nivel
     setSize(1);
     gfx->setTextColor(orbColor(ty));
     setCur(126, y + 26);
     printT(l);
-    snprintf(l, sizeof(l), XT(X_PT_USES_FMT), left, (unsigned)HELPER_USES_PER_DAY);
-    gfx->setTextColor(left ? 0x8410 : UI_BAR_BAD);
-    setCur(126 + textW("Lv100  ", 1) + textW(typeName(ty), 1) + 6, y + 26);
-    printT(l);
+    if (ppKind != PP_LINK) {  // ko12.9.16: el tongsin no gasta los usos del dia
+      snprintf(l, sizeof(l), XT(X_PT_USES_FMT), left, (unsigned)HELPER_USES_PER_DAY);
+      gfx->setTextColor(left ? 0x8410 : UI_BAR_BAD);
+      setCur(126 + textW("Lv100  ", 1) + textW(typeName(ty), 1) + 6, y + 26);
+      printT(l);
+    }
     if (ft >= 0) {
       int8_t tm = typeMatch(ty, (uint8_t)ft);
       if (tm) drawBtn(286, y + 9, 50, 26, tm > 0 ? UI_BAR_OK : UI_BAR_BAD, UI_WHITE, XT(tm > 0 ? X_PT_GOOD : X_PT_BAD));
@@ -2591,7 +2594,7 @@ void partyPickTap(int16_t x, int16_t y) {
   int k = ppPage * PP_ROWS + r;
   if (k >= ppViewN) return;
   int8_t bi = (int8_t)ppView[k];
-  if (!ppPicked(bi) && !helperUsesLeft(box.at((uint8_t)bi))) { sfxPlay(SFX_DENY); return; }  // hoy ya no
+  if (ppKind != PP_LINK && !ppPicked(bi) && !helperUsesLeft(box.at((uint8_t)bi))) { sfxPlay(SFX_DENY); return; }  // hoy ya no
   // ko12.2: hasta ppMaxHelpers() (los mismos que el rival). Quitar = los de detras avanzan; lleno = el mas viejo sale
   uint8_t mx = ppMaxHelpers(), n = ppPickN();
   int at = -1;

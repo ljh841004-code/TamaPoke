@@ -28,6 +28,8 @@ void LinkCore::start(LinkMode mode, const LinkPet &mine, const uint8_t mac[6], u
   theirNonce = 0;
   theirClock = theirClockAt = 0;
   theirClockOk = false;
+  myTurn = theirTurn = 0;
+  myAct = myPrev = theirAct = theirPrev = LA_WAIT;
   sendFn = fn;
   sendCtx = ctx;
   st = LS_SEARCH;
@@ -66,8 +68,27 @@ void LinkCore::send(uint8_t type, uint32_t now) {
   m.pet = me;
   m.clock = myClock ? myClock + (now - myClockAt) / 1000 : 0;
   m.clockOk = myClockOk && myClock ? 1 : 0;
+  m.turn = myTurn;
+  m.act = myAct;
+  m.prev = myPrev;
   if (sendFn) sendFn(sendCtx, m);
   lastTx = now;
+}
+
+void LinkCore::setTurn(uint16_t turn, uint8_t act) {
+  if (turn != myTurn) { myPrev = myAct; myTurn = turn; }
+  if (act == myAct) return;
+  myAct = act;
+  lastTx = lastTx - LINK_HELLO_MS;  // que salga ya en el proximo poll
+}
+
+bool LinkCore::partnerAct(uint16_t turn, uint8_t *act) const {
+  uint8_t a = LA_WAIT;
+  if (theirTurn == turn) a = theirAct;
+  else if (theirTurn == (uint16_t)(turn + 1)) a = theirPrev;  // ya paso al siguiente
+  if (a == LA_WAIT) return false;
+  if (act) *act = a;
+  return true;
 }
 
 void LinkCore::accept() {
@@ -120,6 +141,11 @@ void LinkCore::receive(const uint8_t src[6], const LinkMsg &m, uint32_t now) {
   if (!sameMac(src, peer)) return;
   lastRx = now;
   if (m.clockOk && m.clock) { theirClock = m.clock; theirClockAt = now; theirClockOk = true; }
+  if ((int16_t)(m.turn - theirTurn) >= 0) {  // ko12.9.16: los viejos (fuera de orden) no cuentan
+    theirTurn = m.turn;
+    theirAct = m.act;
+    theirPrev = m.prev;
+  }
   if (m.type == MSG_HELLO) {
     if (st == LS_SEARCH && sameMac(m.peerMac, myMac)) st = LS_READY;  // nos vemos los dos
   } else if (m.type == MSG_ACCEPT) {

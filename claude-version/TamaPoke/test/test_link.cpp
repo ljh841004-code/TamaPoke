@@ -262,3 +262,138 @@ TEST(link, el_que_sobra_sigue_buscando) {
   CHECK_EQ(ready, 2);
   CHECK_EQ(search, 1);
 }
+
+// ---------------------------------------------------------------- ko12.9.16: combate por turnos
+static LinkPet teamOf(int16_t d0, int16_t d1, int16_t d2, uint16_t lvl) {
+  LinkPet p = petOf(d0, lvl);
+  const int16_t ds[3] = { d0, d1, d2 };
+  for (int i = 0; i < 3; i++) {
+    Battler b = makeBattler(ds[i], lvl, 60 + lvl, 50 + lvl, 55 + lvl);
+    LinkMon &m = p.team[i];
+    m.dex = ds[i]; m.lvl = lvl; m.atk = b.atk; m.def = b.def; m.spe = b.spe;
+    memcpy(m.mv, b.mv, 4);
+  }
+  p.teamN = 3;
+  return p;
+}
+static void buildSide(LinkSide &s, const LinkPet &lp) {
+  s.n = 0; s.cur = 0;
+  for (uint8_t i = 0; i < lp.teamN; i++) {
+    const LinkMon &m = lp.team[i];
+    Battler b = makeBattler(m.dex, m.lvl, m.atk, m.def, m.spe);
+    memcpy(b.mv, m.mv, 4);
+    movesFillPP(b);
+    s.mon[s.n++] = b;
+  }
+}
+
+TEST(link, el_turno_viaja_y_el_anterior_sigue_llegando) {
+  for (uint32_t loss : { 0u, 40u }) {
+    Air a; a.lossPct = loss; a.rng = 3 + loss;
+    Node x, y;
+    a.nodes = { &x, &y };
+    startNode(x, a, 1, LINK_BATTLE, teamOf(7, 25, 1, 20), 11);
+    startNode(y, a, 2, LINK_BATTLE, teamOf(4, 16, 19, 22), 22);
+    run(a, 3000);
+    CHECK_EQ(x.core.state(), (LinkState)LS_READY);
+    CHECK_EQ(y.core.partner().teamN, (uint8_t)3);
+    CHECK_EQ(y.core.partner().team[1].dex, (int16_t)25);
+    uint8_t act = 0;
+    CHECK(!x.core.partnerAct(0, &act));  // aun no ha elegido
+    x.core.setTurn(0, BA_M0 + 1);
+    run(a, 1500);
+    CHECK(y.core.partnerAct(0, &act));
+    CHECK_EQ(act, (uint8_t)(BA_M0 + 1));
+    CHECK(!x.core.partnerAct(0, &act));
+    y.core.setTurn(0, LA_SWAP + 2);
+    run(a, 1500);
+    CHECK(x.core.partnerAct(0, &act));
+    CHECK_EQ(act, (uint8_t)(LA_SWAP + 2));
+    // x ya resolvio y pasa al turno 1: y aun puede leer lo que x eligio en el 0
+    x.core.setTurn(1, LA_WAIT);
+    run(a, 1500);
+    CHECK(y.core.partnerAct(0, &act));
+    CHECK_EQ(act, (uint8_t)(BA_M0 + 1));
+    CHECK(!y.core.partnerAct(1, &act));
+    x.core.stop(); y.core.stop();
+  }
+}
+
+// las dos placas resuelven los mismos turnos (cada una con su punto de vista) y acaban igual
+TEST(link, tres_contra_tres_las_dos_placas_ven_lo_mismo) {
+  LinkPet pa = teamOf(6, 9, 3, 40), pb = teamOf(65, 68, 94, 41);
+  for (uint32_t seed : { 1u, 77u, 4242u }) {
+    LinkSide A1, B1, A2, B2;
+    buildSide(A1, pa); buildSide(B1, pb);
+    buildSide(A2, pa); buildSide(B2, pb);
+    BRng r1(seed), r2(seed), pick(seed * 3 + 1);
+    BEvent ev1[BATTLE_MAX_EVENTS], ev2[BATTLE_MAX_EVENTS];
+    int turns = 0;
+    while (linkSideAlive(A1) && linkSideAlive(B1) && turns < 200) {
+      // eleccion de cada lado (igual para las dos placas: se intercambia)
+      uint8_t aAct, bAct;
+      if (!A1.act().hp || !B1.act().hp) {  // tras un desmayo: quien sale
+        aAct = A1.act().hp ? LA_NONE : (uint8_t)(LA_SWAP + pick.below(3));
+        bAct = B1.act().hp ? LA_NONE : (uint8_t)(LA_SWAP + pick.below(3));
+      } else {
+        uint32_t k = pick.below(10);
+        aAct = k == 0 ? (uint8_t)(LA_SWAP + pick.below(3)) : k == 1 ? (uint8_t)BA_GUARD : (uint8_t)(BA_M0 + pick.below(4));
+        k = pick.below(10);
+        bAct = k == 0 ? (uint8_t)(LA_SWAP + pick.below(3)) : k == 1 ? (uint8_t)BA_GUARD : (uint8_t)(BA_M0 + pick.below(4));
+      }
+      linkApplySwap(A1, aAct); linkApplySwap(B1, bAct);
+      linkApplySwap(A2, aAct); linkApplySwap(B2, bAct);
+      int n1 = linkAttacks(A1, B1, aAct, bAct, r1, ev1, BATTLE_MAX_EVENTS);
+      int n2 = linkAttacks(A2, B2, aAct, bAct, r2, ev2, BATTLE_MAX_EVENTS);
+      CHECK_EQ(n1, n2);
+      for (int i = 0; i < n1 && i < n2; i++) {
+        CHECK_EQ(ev1[i].kind, ev2[i].kind);
+        CHECK_EQ(ev1[i].hpA, ev2[i].hpA);
+        CHECK_EQ(ev1[i].hpB, ev2[i].hpB);
+      }
+      if (n1) {  // las barras del ultimo evento cuadran con el estado (lado 0 = A)
+        CHECK_EQ(ev1[n1 - 1].hpA, A1.act().hp);
+        CHECK_EQ(ev1[n1 - 1].hpB, B1.act().hp);
+      }
+      CHECK(!A1.act().hp || A1.act().hp <= A1.act().maxHp);
+      turns++;
+    }
+    CHECK(turns < 200);  // se acaba
+    CHECK(linkSideAlive(A1) != linkSideAlive(B1));
+    CHECK_EQ(linkSideAlive(A1), linkSideAlive(A2));
+    for (int i = 0; i < 3; i++) CHECK_EQ(A1.mon[i].hp, A2.mon[i].hp);
+  }
+}
+
+TEST(link, cambiar_y_solo_ataca_el_otro) {
+  LinkPet pa = teamOf(6, 9, 3, 30), pb = teamOf(65, 68, 94, 30);
+  LinkSide A, B;
+  buildSide(A, pa); buildSide(B, pb);
+  BRng r(5);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  // A cambia al 2; B ataca: le da al que entra
+  CHECK(linkApplySwap(A, LA_SWAP + 2));
+  CHECK_EQ(A.cur, (uint8_t)2);
+  uint16_t hp0 = A.act().hp;
+  int n = linkAttacks(A, B, LA_SWAP + 2, BA_TACKLE, r, ev, BATTLE_MAX_EVENTS);
+  CHECK(n > 0);
+  CHECK_EQ(ev[0].side, (uint8_t)1);
+  CHECK(A.act().hp <= hp0);
+  CHECK_EQ(ev[n - 1].hpA, A.act().hp);
+  // solo ataca A (B cambia): los eventos quedan del lado 0
+  linkApplySwap(B, LA_SWAP + 1);
+  uint16_t hpb = B.act().hp;
+  n = linkAttacks(A, B, BA_TACKLE, LA_SWAP + 1, r, ev, BATTLE_MAX_EVENTS);
+  CHECK(n > 0);
+  CHECK_EQ(ev[0].side, (uint8_t)0);
+  CHECK(B.act().hp <= hpb);
+  CHECK_EQ(ev[n - 1].hpB, B.act().hp);
+  // protegerse mientras el otro cambia: no pasa nada
+  CHECK_EQ(linkAttacks(A, B, BA_GUARD, LA_SWAP + 0, r, ev, BATTLE_MAX_EVENTS), 0);
+  // cambiar a uno caido no vale; si el que lucha esta caido, sale el primero en pie
+  A.mon[0].hp = 0;
+  CHECK(!linkApplySwap(A, LA_SWAP + 0));
+  A.act().hp = 0;
+  CHECK(linkApplySwap(A, LA_NONE));
+  CHECK(A.act().hp > 0);
+}

@@ -1240,6 +1240,53 @@ static void scenes(bool ko, const char *sfx) {
     while (box.count() > n0) box.release((uint8_t)(box.count() - 1));
     boxPage = 0;
   }
+  {  // ko12.9.16: tongsin por turnos, 3 contra 3: elegir equipo, menu, esperar, golpes, cambiar
+    extern LinkPet gLp; extern LinkState gStubLinkState; extern LinkMode gStubLinkMode; extern uint8_t gStubPartnerAct;
+    closeAll(); openLinkMenu();
+    linkMenuTap(LM_BTN_X + 20, LM_BATTLE_Y + 20);
+    navCheck("통신 배틀: 먼저 팀 고르기", xScreen == XS_PARTY && ppKind == PP_LINK);
+    partyPickTap(200, PP_ROW_Y + 10);
+    render(); shot("24f_link_team_pick");
+    memset(&gLp, 0, sizeof(gLp));
+    gLp.t.dex = 6; gLp.lvl = 36; strcpy(gLp.t.nick, "RIVAL");
+    const int16_t ds[3] = { 6, 130, 25 };
+    for (int i = 0; i < 3; i++) {
+      Battler b = makeBattler(ds[i], (uint16_t)(36 - i * 4), (uint16_t)(90 - i * 8), (uint16_t)(80 - i * 6), (uint16_t)(85 - i * 5));
+      LinkMon &m = gLp.team[i];
+      m.dex = ds[i]; m.lvl = b.lvl; m.atk = b.atk; m.def = b.def; m.spe = b.spe;
+      memcpy(m.mv, b.mv, 4);
+    }
+    gLp.teamN = 3;
+    gStubLinkState = LS_READY; gStubLinkMode = LINK_BATTLE; gStubPartnerAct = LA_WAIT;
+    xScreen = XS_LINK; linkBattleStarted = false; linkEndAt = 0;
+    startLinkBattle();
+    navCheck("통신 배틀: 3마리씩", lkMine.n == 3 && lkTheirs.n == 3 && bLink);
+    tick(2600); updateLinkBattle(); render(); shot("24g_link_menu");
+    navCheck("통신 배틀: 내 차례 메뉴", bPhase == BP_MENU);
+    lkTap(BM_X + 20, BM_Y1 + 20);  // [싸운다]
+    render(); shot("24h_link_moves");
+    lkTap(MV_X0 + 10, MV_Y0 + 10);  // 첫 기술
+    navCheck("통신 배틀: 고르면 상대를 기다림", bPhase == BP_WAIT && lkMyAct == BA_M0);
+    tick(100); updateLinkBattle(); render(); shot("24i_link_wait");
+    gStubPartnerAct = BA_M0 + 1;
+    updateLinkBattle();
+    navCheck("통신 배틀: 둘 다 고르면 턴 진행", bPhase == BP_PLAY && lkTurn == 1);
+    gStubPartnerAct = LA_WAIT;
+    for (int i = 0; i < 12; i++) { tick(110); updateLinkBattle(); render(); }
+    shot("24j_link_play");
+    for (int i = 0; i < 80 && bPhase == BP_PLAY; i++) { tick(120); updateLinkBattle(); }
+    render();
+    if (bPhase == BP_MENU) {
+      lkTap(BM_X + 20, BM_Y2 + 20);  // [교체]
+      render(); shot("24k_link_swap");
+      navCheck("통신 배틀: 교체 고르기", bPhase == BP_SWAP);
+    }
+    gStubLinkState = LS_LOST;
+    updateLinkBattle();
+    navCheck("통신 배틀: 연결이 끊기면 끝", !linkBattleStarted && linkEndAt);
+    gStubLinkState = LS_OFF; gStubLinkMode = LINK_NONE; linkEndAt = 0; closeLink(); closeAll();
+    openBox();  // sigue la caja
+  }
   boxSel = 1; render(); shot("11_box_detail");
   {  // ko11.15: al soltar un capturado: aviso visible tambien en la caja
     char t[72];

@@ -125,6 +125,13 @@ void linkTradeAccept() {}
 void linkTradeDecline() {}
 void linkPoll(uint32_t) {}
 bool linkTakeTrade(TradePet &) { return false; }
+uint8_t gStubPartnerAct = LA_WAIT;  // ko12.9.16: lo que "elige" el otro en el tongsin por turnos
+void linkSetTurn(uint16_t, uint8_t) {}
+bool linkPartnerAct(uint16_t, uint8_t *a) {
+  if (gStubPartnerAct == LA_WAIT) return false;
+  if (a) *a = gStubPartnerAct;
+  return true;
+}
 
 // ---- audio ----
 static bool gOn = true;

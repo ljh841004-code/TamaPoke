@@ -1209,6 +1209,50 @@ void battleClearVolatile(Battler &b) {
   b.stg[0] = b.stg[1] = b.stg[2] = 0;
 }
 
+bool linkSideAlive(const LinkSide &s) {
+  for (uint8_t i = 0; i < s.n && i < LINK_TEAM; i++) if (s.mon[i].hp) return true;
+  return false;
+}
+bool linkSideCanSwap(const LinkSide &s) {
+  for (uint8_t i = 0; i < s.n && i < LINK_TEAM; i++) if (i != s.cur && s.mon[i].hp) return true;
+  return false;
+}
+bool linkApplySwap(LinkSide &s, uint8_t act) {
+  uint8_t j = 255;
+  if (act >= LA_SWAP && act < LA_SWAP + LINK_TEAM) j = (uint8_t)(act - LA_SWAP);
+  if (j >= s.n || j == s.cur || !s.mon[j].hp) {
+    if (s.act().hp) return false;  // cambio no valido: se queda el que estaba
+    j = 255;
+    for (uint8_t i = 0; i < s.n && i < LINK_TEAM; i++) if (s.mon[i].hp) { j = i; break; }
+    if (j == 255) return false;
+  }
+  Battler &o = s.act();  // el que se va: pierde los cambios de caracteristicas y la confusion
+  o.stg[0] = o.stg[1] = o.stg[2] = 0;
+  o.cnf = 0;
+  o.flinch = o.guard = false;
+  s.cur = j;
+  return true;
+}
+int linkAttacks(LinkSide &A, LinkSide &B, uint8_t actA, uint8_t actB, BRng &rng, BEvent *ev, int maxEv) {
+  bool atkA = actA < BA_COUNT, atkB = actB < BA_COUNT;
+  Battler &a = A.act(), &b = B.act();
+  if (!a.hp || !b.hp) return 0;
+  if (atkA != atkB) {  // uno cambia y el otro se protege: no pasa nada (protegerse solo vale contra un golpe)
+    if ((atkA && actA == BA_GUARD) || (atkB && actB == BA_GUARD)) return 0;
+  }
+  if (atkA && atkB) return battleTurn(a, b, (BAct)actA, (BAct)actB, rng, ev, maxEv, false);
+  if (atkB) return battleFoeOnly(a, b, (BAct)actB, rng, ev, maxEv);
+  if (atkA) {  // solo A: se simula al reves y se dan la vuelta los eventos
+    int n = battleFoeOnly(b, a, (BAct)actA, rng, ev, maxEv);
+    for (int i = 0; ev && i < n; i++) {
+      ev[i].side ^= 1;
+      uint16_t t = ev[i].hpA; ev[i].hpA = ev[i].hpB; ev[i].hpB = t;
+    }
+    return n;
+  }
+  return 0;
+}
+
 uint8_t battleAuto(Battler a, Battler b, uint32_t seed, BEvent *ev, int maxEv, int *nEv) {
   // tongsin: los dos aparatos simulan la misma batalla; su reloj puede no
   // coincidir, asi que aqui siempre hace buen tiempo (si no, se desincronizan)
