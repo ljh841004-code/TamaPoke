@@ -51,6 +51,68 @@ extern const char *gSdRoot;
 
 static void navCheck(const char *name, bool ok) { printf("  NAV %s: %s\n", ok ? "ok  " : "FAIL", name); }
 
+// ---- ko12.9.16: MAQUETA "네 방향 막기" (solo para ensenar; no es la pantalla real) ----
+static void mk4Orb(int x, int y, uint16_t c, int dx, int dy, bool poison) {
+  for (int k = 4; k >= 1; k--)
+    gfx->fillCircle(x + dx * k * 11, y + dy * k * 11, 9 - k * 2 > 2 ? 9 - k * 2 : 2, lerp565(c, UI_WHITE, 6 + k * 2, 16));
+  gfx->fillCircle(x, y, 14, c);
+  gfx->fillCircle(x - 4, y - 4, 5, lerp565(c, UI_WHITE, 11, 16));
+  gfx->drawCircle(x, y, 14, UI_INK);
+  if (poison) {  // no se para: se esquiva (no tocar)
+    for (int k = -1; k <= 1; k++) {
+      gfx->drawLine(x - 6 + k, y - 6, x + 6 + k, y + 6, UI_WHITE);
+      gfx->drawLine(x + 6 + k, y - 6, x - 6 + k, y + 6, UI_WHITE);
+    }
+  }
+}
+static void mock4Way(int mode) {  // 0 viene por la derecha, 1 parado, 2 dos a la vez + veneno
+  const int cy = 246;
+  const uint16_t SH = C565(0x3a, 0x8c, 0xe8), SHL = C565(0xb8, 0xe0, 0xff);
+  const uint16_t ZONE = lerp565(UI_WHITE, C565(0x3a, 0x8c, 0xe8), 4, 16);
+  drawGameScene();
+  // las 4 zonas de toque en el borde (arcos claros con una flecha hacia dentro)
+  const int ang[4] = { 270, 0, 90, 180 };
+  int lit = mode == 1 ? 1 : -1;
+  for (int i = 0; i < 4; i++) {
+    gfx->fillArc(CX, cy, 230, 206, ang[i] - 33, ang[i] + 33, i == lit ? SHL : ZONE);
+    float a = ang[i] * 0.017453f, ca = cosf(a), sa = sinf(a);
+    int tx = CX + (int)(ca * 208), ty = cy + (int)(sa * 208), bx = CX + (int)(ca * 226), by = cy + (int)(sa * 226);
+    int px = (int)(-sa * 9), py = (int)(ca * 9);
+    gfx->fillTriangle(bx + px, by + py, bx - px, by - py, tx, ty, lerp565(UI_WHITE, UI_INK, 7, 16));
+  }
+  // anillo de guardia punteado
+  for (int k = 0; k < 40; k++) {
+    float a = k * 6.2832f / 40;
+    gfx->fillCircle(CX + (int)(cosf(a) * 100), cy + (int)(sinf(a) * 100), 2, lerp565(UI_WHITE, UI_INK, 4, 16));
+  }
+  if (pmd.loaded) drawPmdActM(pmd, PMD_IDLE, CX, cy + 46, gMockMillis, true, false, 3, 96);
+  drawFit(mode == 0 ? "6" : mode == 1 ? "8" : "15", 52, 200, UI_INK, 3);
+  for (int i = 0; i < 3; i++) gfx->fillCircle(CX - 22 + i * 22, 98, 6, UI_BAR_BAD);
+  if (mode == 0) {
+    mk4Orb(CX + 158, cy, C565(0xf0, 0x80, 0x30), 1, 0, false);
+    uiButton(113, 380, 240, 30, 15, UI_WHITE, UI_INK);
+    drawFit("날아오는 쪽 가장자리를 톡!", 386, 230, UI_INK, 1);
+  } else if (mode == 1) {
+    gfx->fillArc(CX, cy, 118, 98, -40, 40, SH);  // escudo a la derecha
+    gfx->fillArc(CX, cy, 103, 98, -40, 40, SHL);
+    gfx->fillCircle(CX + 122, cy, 22, UI_WHITE);
+    for (int k = 0; k < 8; k++) {
+      float a = k * 0.785f;
+      gfx->drawLine(CX + 122 + (int)(cosf(a) * 26), cy + (int)(sinf(a) * 26), CX + 122 + (int)(cosf(a) * 38),
+                    cy + (int)(sinf(a) * 38), C565(0x4c, 0xc8, 0x5c));
+    }
+    drawFit("완벽 방어!", 352, 300, C565(0x1a, 0x86, 0x34), 3);
+    drawFit("3 콤보", 116, 200, C565(0x1a, 0x86, 0x34), 2);
+  } else {
+    mk4Orb(CX, cy - 140, C565(0x68, 0x90, 0xf0), 0, -1, false);   // agua por arriba
+    mk4Orb(CX - 150, cy, C565(0xa0, 0x40, 0xa0), -1, 0, true);    // veneno por la izquierda: NO tocar
+    uiButton(103, 380, 260, 30, 15, UI_WHITE, C565(0x80, 0x30, 0x90));
+    drawFit("보라색 X는 막지 말고 그냥 둬요!", 386, 250, C565(0x80, 0x30, 0x90), 1);
+  }
+  drawTrainQuit();
+  uiFlush();
+}
+
 static void shot(const char *name) {
   char path[256];
   snprintf(path, sizeof(path), "build/shots/%s.raw", name);
@@ -637,6 +699,8 @@ static void scenes(bool ko, const char *sfx) {
     trainQuitPress(TP_QX + 20, TP_BY + 20);
     navCheck("훈련 X: 그만하기 = 훈련 메뉴로", !defOpen && !trainPaused() && trainMenuOpen);
   }
+  closeAll(); startDefense(); tick(200); render();
+  mock4Way(0); shot("M3a_def_4way"); mock4Way(1); shot("M3b_def_4way_block"); mock4Way(2); shot("M3c_def_4way_poison");
   closeAll(); startSpeed();
   for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
   tick(300); render(); shot("07e_train_speed_hint");  // ko11.17: solo el 1o parpadea
