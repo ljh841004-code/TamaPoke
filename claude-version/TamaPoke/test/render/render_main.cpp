@@ -975,6 +975,31 @@ static void scenes(bool ko, const char *sfx) {
     render(); shot("54_gym_intro");
     // ko11.19: [자동] [N마리] y el combate automatico
     tick(2300); updateWild(); render(); shot("54b_gym_auto_menu");
+    {  // ko12.9.20: [물약] abre un aviso; [사용하기] gasta, la casilla decide el automatico
+      uint8_t p0 = pet.potions; uint16_t hp0 = bMe.hp;
+      pet.potions = 3; bMe.hp = bMe.maxHp / 2; pet.potAuto = true;
+      wildTap(BM_X + 10, BM_Y2 + 10);
+      navCheck("물약: 첫 탭은 확인창만 (안 씀)", bPotAsk && pet.potions == 3 && bPhase == BP_MENU);
+      render(); shot("54e_potion_ask");
+      wildTap(POT_CX + 20, POT_CY + 20);
+      navCheck("물약: 체크 끄기 = 자동 전투에서 안 씀", !pet.potAuto && bPotAsk);
+      render(); shot("54f_potion_ask_off");
+      wildTap(CX, POT_PY + 30);  // dentro del panel, en ningun boton
+      navCheck("물약: 창 안 빈 곳 = 아무 일 없음", bPotAsk && pet.potions == 3);
+      wildTap(CX, 100);
+      navCheck("물약: 바깥 탭 = 닫기 (안 씀)", !bPotAsk && pet.potions == 3);
+      bMe.hp = bMe.maxHp;
+      wildTap(BM_X + 10, BM_Y2 + 10); render(); shot("54g_potion_full");
+      wildTap(POT_UX + 20, POT_UY + 20);
+      navCheck("물약: 체력 가득이면 사용 안 됨", bPotAsk && pet.potions == 3 && bPhase == BP_MENU);
+      wildTap(POT_XX + 20, POT_XY + 10);
+      navCheck("물약: 닫기", !bPotAsk);
+      bMe.hp = bMe.maxHp / 2;
+      wildTap(BM_X + 10, BM_Y2 + 10); wildTap(POT_UX + 20, POT_UY + 20);
+      navCheck("물약: 사용하기 = 1개 씀", !bPotAsk && pet.potions == 2 && bPhase != BP_MENU);
+      for (int i = 0; i < 60 && bPhase != BP_MENU; i++) { tick(300); updateWild(); render(); }
+      pet.potions = p0; bMe.hp = hp0; pet.potAuto = true;
+    }
     wildTap(BM_X + BM_W + BM_GAP + 10, BM_Y2 + 10);  // N -> 1 (ko11.31: [N마리] abajo en el centro)
     render(); shot("54c_gym_auto_count");
     navCheck("auto: N마리 1..restantes", autoCount == 1);
@@ -988,6 +1013,9 @@ static void scenes(bool ko, const char *sfx) {
       navCheck("auto: pocion segun rival", (autoPick() == BA_POTION) == hard);
       bMe.hp = bMe.maxHp / 5;
       navCheck("auto: pocion bajo 30 %", autoPick() == BA_POTION);
+      pet.potAuto = false;
+      navCheck("auto: 물약 체크 끄면 안 씀", autoPick() != BA_POTION);
+      pet.potAuto = true;
       bMe.hp = hp0; pet.potions = p0; }
     tick(800); updateWild();
     navCheck("auto: juega solo", bPhase == BP_PLAY);

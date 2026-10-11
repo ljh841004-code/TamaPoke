@@ -2159,7 +2159,7 @@ static uint8_t autoPick() {
   uint32_t hpPct = (uint32_t)bMe.hp * 100 / (bMe.maxHp ? bMe.maxHp : 1);
   uint32_t foePct = (uint32_t)bFoe.hp * 100 / (bFoe.maxHp ? bFoe.maxHp : 1);
   bool foeAlmostDown = foePct <= 15 && hpPct >= 15;  // rematar antes que curarse
-  if (pet.potions && !foeAlmostDown && hpPct < (hard ? AUTO_POTION_HP_HARD : AUTO_POTION_HP) &&
+  if (pet.potAuto && pet.potions && !foeAlmostDown && hpPct < (hard ? AUTO_POTION_HP_HARD : AUTO_POTION_HP) &&
       (hard || autoPotions < AUTO_POTION_MAX))
     return BA_POTION;
   if (typeEff(bFoe.type, bMe.type) >= 4 && hpPct < 70 && bRng.below(100) < 25) return BA_GUARD;
@@ -2407,6 +2407,93 @@ int battleMenuHit(int16_t x, int16_t y) {
   if (bKind != BK_WILD) return col == 0 ? (int)BA_POTION : col == 1 ? (int)BMH_COUNT : -1;
   return BM_ACT[row][col];
 }
+
+// ko12.9.20: [물약] ya no gasta al primer toque: abre un aviso con [사용하기] (segundo toque) y la casilla
+// "자동 전투에서 사용" (pet.potAuto: si esta quitada, el automatico no usa pociones)
+#define POT_PX 78
+#define POT_PY 120
+#define POT_PW 310
+#define POT_PH 262
+#define POT_UX 128
+#define POT_UY 204
+#define POT_UW 210
+#define POT_UH 52
+#define POT_CX 100
+#define POT_CY 270
+#define POT_CW 266
+#define POT_CH 44
+#define POT_XX 168
+#define POT_XY 328
+#define POT_XW 130
+#define POT_XH 40
+bool bPotAsk = false;
+static void lkChoose(uint8_t act);
+static bool potCanUse() { return pet.potions && bMe.hp < bMe.maxHp; }
+void drawPotAsk() {
+  uiPanel(POT_PX, POT_PY, POT_PW, POT_PH, 26, UI_WHITE, UI_INK);
+  char t[40];
+  snprintf(t, sizeof(t), XT(X_POT_TITLE_FMT), pet.potions);
+  drawFit(t, POT_PY + 14, POT_PW - 40, UI_INK, 2);
+  snprintf(t, sizeof(t), XT(X_POT_HP_FMT), bMe.hp, bMe.maxHp);
+  drawFit(t, POT_PY + 50, POT_PW - 40, C565(0x60, 0x68, 0x70), 1);
+  bool ok = potCanUse();
+  drawBtn(POT_UX, POT_UY, POT_UW, POT_UH, ok ? UI_BAR_OK : UI_TRACK, ok ? UI_WHITE : 0x8410, XT(X_POT_USE));
+  if (!ok) drawFit(XT(pet.potions ? X_LK_FULL_HP : X_NO_POTION), POT_UY + POT_UH + 2, POT_PW - 40, UI_BAR_BAD, 1);
+  // la casilla
+  int bx = POT_CX + 12, by = POT_CY + (POT_CH - 26) / 2;
+  gfx->fillRoundRect(bx, by, 26, 26, 6, pet.potAuto ? UI_BAR_OK : UI_WHITE);
+  gfx->drawRoundRect(bx, by, 26, 26, 6, UI_INK);
+  gfx->drawRoundRect(bx + 1, by + 1, 24, 24, 5, UI_INK);
+  if (pet.potAuto)
+    for (int k = 0; k < 3; k++) {
+      gfx->drawLine(bx + 6, by + 13 + k, bx + 11, by + 18 + k, UI_WHITE);
+      gfx->drawLine(bx + 11, by + 18 + k, bx + 20, by + 7 + k, UI_WHITE);
+    }
+  setSize(1);
+  gfx->setTextColor(UI_INK);
+  setCur(bx + 38, POT_CY + (POT_CH - 22) / 2);
+  printT(XT(X_POT_AUTO));
+  drawBtn(POT_XX, POT_XY, POT_XW, POT_XH, UI_TRACK, UI_INK, XT(X_CLOSE));
+}
+static void potUse() {
+  bPotAsk = false;
+  if (!potCanUse()) {
+    strncpy(bvL1, XT(pet.potions ? X_LK_FULL_HP : X_NO_POTION), sizeof(bvL1) - 1); bvL2[0] = 0;
+    sfxPlay(SFX_DENY);
+    return;
+  }
+  if (bLink) {
+    if (!pet.usePotion()) { sfxPlay(SFX_DENY); return; }
+    sfxPlay(SFX_TAP);
+    lkChoose(BA_POTION);
+    return;
+  }
+  bMoveMenu = false;
+  battleDoAction(BA_POTION);
+}
+// true = el toque era del aviso (abierto)
+static bool potAskTap(int16_t x, int16_t y) {
+  if (!bPotAsk) return false;
+  if (bPhase != BP_MENU) { bPotAsk = false; return false; }
+  if (inRect(x, y, POT_UX - 6, POT_UY - 6, POT_UW + 12, POT_UH + 12)) {
+    if (potCanUse()) potUse(); else sfxPlay(SFX_DENY);
+    return true;
+  }
+  if (inRect(x, y, POT_CX, POT_CY, POT_CW, POT_CH)) {
+    pet.potAuto = !pet.potAuto;
+    pet.saveNow();
+    sfxPlay(SFX_TAP);
+    return true;
+  }
+  // [닫기] o fuera del panel: cerrar; dentro del panel en otro sitio: nada
+  if (inRect(x, y, POT_XX - 6, POT_XY - 6, POT_XW + 12, POT_XH + 12) ||
+      !inRect(x, y, POT_PX, POT_PY, POT_PW, POT_PH)) {
+    bPotAsk = false;
+    sfxPlay(SFX_TAP);
+  }
+  return true;
+}
+static void potAskOpen() { bPotAsk = true; bMoveMenu = false; sfxPlay(SFX_TAP); }
 
 // ======================================================================
 // ko11.20: equipo (el que crias + 2 ayudantes de la caja) contra entrenadores.
@@ -2747,6 +2834,7 @@ static void renderBattleViewImpl() {
     if (bPhase == BP_SWAP) drawSwapPanel();  // ko11.20
     else if (!(bPhase == BP_MENU && bMoveMenu && !autoLeft)) drawBattleMsg();  // ko11.31: los 4 movimientos ocupan su sitio
     if (bPhase == BP_MENU && !autoLeft) { drawBattleMenu(); if (xScreen == XS_WILD) drawBattleArtChip(); }  // ko11.16
+    if (bPhase == BP_MENU && !autoLeft && bPotAsk) drawPotAsk();  // ko12.9.20
     if (autoLeft && bPhase != BP_RESULT && bPhase != BP_SWAP) drawAutoBanner();  // ko11.19
     if (bPhase == BP_MENU && !autoLeft && xScreen == XS_WILD && (bKind == BK_STORY || bKind == BK_ROGUE)) {  // ko11.23.1: salir
       drawNav(NAV_L, UI_INK);
@@ -2896,7 +2984,7 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
   }
   else txFmt(bvL1, sizeof(bvL1), X_DAILY_INTRO, XT((XId)(X_REG_0 + bRegion)));
   battleWeatherIntro();
-  bPhase = BP_INTRO;
+  bPhase = BP_INTRO; bPotAsk = false;
   bPhaseT = millis();
   xScreen = XS_WILD;
   sfxPlay(SFX_MEDAL);
@@ -2933,7 +3021,7 @@ static bool nextTrainerMon() {
   txFmt(bvL1, sizeof(bvL1), X_TRAINER_NEXT, who, dexName(bFoe.dex));
   bvL2[0] = 0;
   if (healed) snprintf(bvL2, sizeof(bvL2), XT(X_DAILY_HEAL_FMT), (unsigned)healed);
-  bPhase = BP_INTRO;
+  bPhase = BP_INTRO; bPotAsk = false;
   bPhaseT = millis();
   audioCry(bFoe.dex);
   return true;
@@ -3018,7 +3106,7 @@ void startWildIn(uint8_t region) {
   bKind = BK_WILD;
   if (box.full()) showToast(XT(X_BOX_FULL_WARN));  // ko12.9.15: avisa antes de capturar
   battleWeatherIntro();
-  bPhase = BP_INTRO;
+  bPhase = BP_INTRO; bPotAsk = false;
   bPhaseT = millis();
   xScreen = XS_WILD;
   sfxPlay(bGroup == WG_RARE ? SFX_EVOLVE : SFX_MEDAL);
@@ -3645,6 +3733,7 @@ void wildTap(int16_t x, int16_t y) {
     return;
   }
   if (bPhase == BP_INTRO) { bPhaseT = 0; return; }  // saltar la intro
+  if (potAskTap(x, y)) return;  // ko12.9.20
   // ko9.2: tocar el resultado pasa ya a la pregunta
   if (bPhase == BP_RESULT && millis() - bPhaseT > 800) { afterResult(); return; }
   if (bPhase == BP_DUP) { wildDupTap(x, y); return; }
@@ -3692,6 +3781,7 @@ void wildTap(int16_t x, int16_t y) {
     sfxPlay(SFX_TAP);
     return;
   }
+  if (a == BA_POTION) { potAskOpen(); return; }  // ko12.9.20: primero el aviso
   bMoveMenu = false;
   battleDoAction(a);
 }
@@ -3865,6 +3955,7 @@ static void petPPAfter(bool won) {
 void finishBattle(bool won, bool fled, bool caught) {
   autoLeft = 0;  // ko11.19
   bMoveMenu = false;
+  bPotAsk = false;  // ko12.9.20
   if (!bRewarded) petPPAfter(won);
   if (won && !bRewarded) vibBattle(255, 0, false, true);  // ko11.28: victoria "ba-bam ba-bam-"
   bWon = won;
@@ -4338,7 +4429,7 @@ void startLinkBattle() {
   snprintf(bvL1, sizeof(bvL1), "%s  VS  %s", bvMeName, bvFoeName);
   bvL2[0] = 0;
   lkIntroMs = 2500;
-  bPhase = BP_INTRO;
+  bPhase = BP_INTRO; bPotAsk = false;
   bPhaseT = millis();
   linkBattleStarted = true;
   sfxPlay(SFX_MEDAL);
@@ -4350,7 +4441,7 @@ void startLinkBattle() {
 static uint8_t lkAutoPick() {
   BRng r(esp_random() ^ millis());
   uint32_t hpPct = (uint32_t)bMe.hp * 100 / (bMe.maxHp ? bMe.maxHp : 1);
-  if (hpPct < AUTO_POTION_HP && pet.potions && pet.usePotion()) return BA_POTION;  // de mi bolsa
+  if (pet.potAuto && hpPct < AUTO_POTION_HP && pet.potions && pet.usePotion()) return BA_POTION;  // de mi bolsa
   if (typeEff(bFoe.type, bMe.type) >= 4 && hpPct < 70 && r.below(100) < 25) return BA_GUARD;
   uint8_t a = battleAi(bMe, bFoe, r, 0);
   if (a == BA_POTION || a == BA_BALL || a == BA_RUN || a >= BA_COUNT) a = BA_TACKLE;
@@ -4487,6 +4578,7 @@ static void lkTap(int16_t x, int16_t y) {
   if (bPhase == BP_INTRO) { if (!lkPlayAfterIntro) bPhaseT = 0; return; }
   if (bPhase == BP_SWAP) { swapTap(x, y); return; }
   if (bPhase != BP_MENU) return;
+  if (potAskTap(x, y)) return;  // ko12.9.20
   if (battleArtTap(x, y)) return;
   if (inRect(x, y, 236, 176, 176, 58) && linkSideCanSwap(lkMine)) { sfxPlay(SFX_TAP); partyAskSwap(2); return; }
   int a = battleMenuHit(x, y);
@@ -4517,13 +4609,7 @@ static void lkTap(int16_t x, int16_t y) {
     return;
   }
   if (a >= BA_COUNT || a == BA_BALL || a == BA_RUN) return;
-  if (a == BA_POTION) {  // de mi bolsa: solo los que tengo
-    if (bMe.hp >= bMe.maxHp || !pet.usePotion()) {
-      strncpy(bvL1, XT(bMe.hp >= bMe.maxHp ? X_LK_FULL_HP : X_NO_POTION), sizeof(bvL1) - 1); bvL2[0] = 0;
-      sfxPlay(SFX_DENY);
-      return;
-    }
-  }
+  if (a == BA_POTION) { potAskOpen(); return; }  // ko12.9.20: de mi bolsa, tras el aviso
   sfxPlay(SFX_TAP);
   lkChoose((uint8_t)a);
 }

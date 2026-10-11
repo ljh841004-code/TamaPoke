@@ -196,8 +196,12 @@ TEST(items, premio_salvaje_por_probabilidad_y_tope) {
   CHECK_EQ(p.potions, (uint8_t)1);
   mockForceRandom(99);  // nunca sale
   CHECK_EQ(p.wildWinItems(), (uint8_t)0);
-  mockForceRandom(35);  // bola (40%) si, pocion (30%) no
-  CHECK_EQ(p.wildWinItems(), (uint8_t)1);
+  mockForceRandom(42);  // bola (40%) no, pocion (45%, ko12.9.20) si
+  CHECK_EQ(p.wildWinItems(), (uint8_t)2);
+  mockForceRandom(44);  // pocion: 44 < 45 si
+  CHECK_EQ(p.wildWinItems(), (uint8_t)2);
+  mockForceRandom(45);  // pocion: 45 no (antes 35 %: tampoco)
+  CHECK_EQ(p.wildWinItems(), (uint8_t)0);
   p.balls = BALL_MAX; p.potions = POTION_MAX;
   mockForceRandom(0);
   CHECK_EQ(p.wildWinItems(), (uint8_t)0);  // tope

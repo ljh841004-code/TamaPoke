@@ -196,6 +196,7 @@ static const char *const XS[2][X_COUNT] = {
     "Ball+Potion", "My candy +2", "Lure Orb",
     "Which shield resists it?", "NEW MATCHUP!", "Block it like this!", "{1} attack: use {2}!", "Not very effective (half)",
     "No effect at all!", "{1} shield is weak to {2}!", "{1} shield takes normal damage", "Tap to go on", "New types join!", "FAST!", "Too slow!",
+    "Potions: %u", "HP %u/%u  (heals half)", "USE", "Use in auto battle",
   },
   // ---------------- KO ----------------
   {
@@ -386,6 +387,7 @@ static const char *const XS[2][X_COUNT] = {
     "볼+상처약", "내 사탕 +2", "부르는 구슬",
     "어떤 방패가 버틸까?", "새 상성!", "이렇게 막아요!", "{1} 공격엔 {2} 방패!", "효과가 별로예요 (절반)",
     "아무 효과가 없어요!", "{1} 방패는 {2}에 약해요!", "{1} 방패는 그냥 맞아요", "탭해서 계속", "새 타입 등장!", "빠르다!", "늦었다!",
+    "물약 %u개", "체력 %u/%u  (절반 회복)", "사용하기", "자동 전투에서 사용",
   },
 };
 

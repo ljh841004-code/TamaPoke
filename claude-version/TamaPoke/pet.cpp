@@ -1558,6 +1558,7 @@ void Pet::save() {
   prefs.putUShort("trd", trades);
   prefs.putUChar("balls", balls);
   prefs.putUChar("potn", potions);
+  prefs.putBool("potau", potAuto);  // ko12.9.20
   prefs.putUShort("dh2", defHi);  // ko11.14: defensa por timing, records nuevos desde 0
   prefs.putUShort("vbs", vbStreak);  // ko11.9
   prefs.putUShort("vbb", vbBest);
@@ -1746,6 +1747,7 @@ void Pet::load(bool *migrated) {
   trades = prefs.getUShort("trd", 0);
   balls = prefs.getUChar("balls", 5);   // partidas anteriores a ko4: kit inicial
   potions = prefs.getUChar("potn", 2);
+  potAuto = prefs.getBool("potau", true);
   defHi = prefs.getUShort("dh2", 0);  // ko11.14 (la clave "dhi" era del juego viejo)
   vbStreak = prefs.getUShort("vbs", 0);  // ko11.9
   vbBest = prefs.getUShort("vbb", 0);
@@ -1882,8 +1884,8 @@ uint8_t Pet::releaseGift(int16_t dex, uint16_t *orbOut) {
   if (orbOut) *orbOut = 0;
   uint32_t r = random(100);
   uint8_t g;
-  if (r < 35) g = RG_BALL;
-  else if (r < 65) g = RG_POTION;
+  if (r < 30) g = RG_BALL;
+  else if (r < 65) g = RG_POTION;  // ko12.9.20: pocion 35 % (antes 30, ball 35 -> 30)
   else if (r < 90) g = RG_SHARD;
   else if (r < 97) g = RG_EXP;
   else g = RG_ORB;

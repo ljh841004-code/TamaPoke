@@ -144,7 +144,7 @@ constexpr uint8_t FRIEND_EVO_BOND = 70;  // ko11.7
 constexpr uint8_t BALL_MAX = 20;
 constexpr uint8_t POTION_MAX = 15;  // ko11.6.1: antes 10
 constexpr uint8_t WILD_BALL_PCT = 40;
-constexpr uint8_t WILD_POTION_PCT = 35;  // ko11.6.1: antes 30
+constexpr uint8_t WILD_POTION_PCT = 45;  // ko12.9.20: antes 35 (ko11.6.1: 30)
 
 class Pet {
 public:
@@ -305,6 +305,7 @@ public:
   // fork KO (ko4): objetos de batalla y records de los entrenamientos nuevos
   uint8_t balls = 5;       // pokeballs (ko11.1: 40% por victoria salvaje, tope BALL_MAX)
   uint8_t potions = 2;     // pociones: curan la mitad de la vida en batalla
+  bool potAuto = true;     // ko12.9.20: el combate automatico puede usar pociones (casilla del aviso)
   uint16_t defHi = 0;      // record del entrenamiento de defensa (pokeballs paradas)
   // ko10.7: premio de cada sesion de entrenamiento (pantalla de resultado)
   uint32_t lastTrainExp = 0;
