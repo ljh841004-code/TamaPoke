@@ -1234,13 +1234,27 @@ bool linkApplySwap(LinkSide &s, uint8_t act) {
   return true;
 }
 int linkAttacks(LinkSide &A, LinkSide &B, uint8_t actA, uint8_t actB, BRng &rng, BEvent *ev, int maxEv) {
+  // ko12.9.16: en tongsin vale la pocion (la gasta cada uno de su bolsa al elegir); huir y la ball no
+  if (actA == BA_RUN || actA == BA_BALL) actA = BA_TACKLE;
+  if (actB == BA_RUN || actB == BA_BALL) actB = BA_TACKLE;
   bool atkA = actA < BA_COUNT, atkB = actB < BA_COUNT;
   Battler &a = A.act(), &b = B.act();
   if (!a.hp || !b.hp) return 0;
+  if (atkA != atkB && (actA == BA_POTION || actB == BA_POTION)) {  // solo uno actua y se cura
+    int n = 0;
+    uint8_t s = actA == BA_POTION ? 0 : 1;
+    Battler &me = s ? b : a;
+    uint16_t heal = me.maxHp / 2;
+    if (heal < 1) heal = 1;
+    if (me.hp + heal > me.maxHp) heal = me.maxHp - me.hp;
+    me.hp += heal;
+    push(ev, maxEv, n, s, EV_HEAL, BA_POTION, 2, false, heal, a, b);
+    return n < maxEv ? n : maxEv;
+  }
   if (atkA != atkB) {  // uno cambia y el otro se protege: no pasa nada (protegerse solo vale contra un golpe)
     if ((atkA && actA == BA_GUARD) || (atkB && actB == BA_GUARD)) return 0;
   }
-  if (atkA && atkB) return battleTurn(a, b, (BAct)actA, (BAct)actB, rng, ev, maxEv, false);
+  if (atkA && atkB) return battleTurn(a, b, (BAct)actA, (BAct)actB, rng, ev, maxEv, true);  // true: deja la pocion
   if (atkB) return battleFoeOnly(a, b, (BAct)actB, rng, ev, maxEv);
   if (atkA) {  // solo A: se simula al reves y se dan la vuelta los eventos
     int n = battleFoeOnly(b, a, (BAct)actA, rng, ev, maxEv);

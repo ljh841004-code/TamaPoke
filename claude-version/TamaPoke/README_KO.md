@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko12.9.15)
+# TamaPoke KO (v1.17-ko12.9.16)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko12.9.16: 통신 = LINK_PROTO_VER 7, LinkPet.team[3]/teamN (LinkMon), LinkMsg turn/act/prev, LinkCore::setTurn/partnerAct (이전 턴 선택도 보냄). battle.cpp LinkSide/linkApplySwap/linkAttacks(교체 먼저, 한쪽만 공격이면 battleFoeOnly + 이벤트 뒤집기, 상처약 한쪽만이면 EV_HEAL). ui_extra lkMine/lkTheirs, BP_WAIT, lkChoose/lkResolve/lkAfterEvents, 기절 후 lkReplace, 45초 자동, 끊기면 결과 없음, 팀 고르기 = 파티 화면 PP_LINK (실제 레벨, 하루 횟수 안 씀), 상처약 = pet.usePotion. 방어 = 네 방향 막기 (DEF_RG 100, 방패 380ms, 160ms 안 = 완벽, 보라색 X 12번째부터 20%). 테스트 4개 + 화면 동작
 - ✅ ko12.9.15: 방어 = 빙글 방패 (DEF_CY/RO/RI/HALF/PERF, defAtk[3], defenseTouch() 누르고 있는 동안 매 루프, 2초 누르기 나가기에서 defOpen 제외). 탐험 expCardShown()/drawExpCard() 아무 데나 탭 = expCollect, 가득이면 expCardHide. 보관함 BOXP_* 큰 버튼, 구슬 ORBP_* + orbPageTap, 위:아래 탭 나가기 삭제. 가득 = dupCandy 사탕 (X_BOX_FULL_CANDY), 야생 시작 때 X_BOX_FULL_WARN. trainPauseT 멈춤 + trainShiftTime. 화면 동작 검사 추가
 - ✅ ko12.9.14: wildTier()/wildJoinPct() 15/25/35, wildTierBonus(사탕 3/5 + 특별은 orbDrop), Pet.wildStreak/wildBest (NVS wstk/wsbe), wildStreakWin() 3/5/10, bPartyNote 96. 번호 과녁 SPD_RING_* 좁혀지는 원 + 마지막 1/4 깜빡임/틱. 막기: defFoeDex(loadFoe) 오른쪽 위에서 drawMoveFx로 방패(DEF_ZONE_Y)까지, 막음 섬광 / 맞음 흔들림+빨강 테두리. drawTrainQuit()/trainQuitPress() X 두 번 (TQ_ARM_MS 2500). 테스트 2개 + 화면 동작 7개
 - ✅ ko12.9.13: shSwapMs 380-26r(최소 200), SH_PAUSE_MS 50, SH_MIN_FRAMES 5, shSwapN 5+(r+1)/2, SH_PET_SWAP_PCT 65(shA=shPet), shA/shB 무작위 교환(위로 가는 볼이 단서가 되지 않게)

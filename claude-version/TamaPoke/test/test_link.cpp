@@ -397,3 +397,30 @@ TEST(link, cambiar_y_solo_ataca_el_otro) {
   CHECK(linkApplySwap(A, LA_NONE));
   CHECK(A.act().hp > 0);
 }
+
+TEST(link, pocion_en_tongsin) {
+  LinkPet pa = teamOf(6, 9, 3, 30), pb = teamOf(65, 68, 94, 30);
+  LinkSide A, B;
+  buildSide(A, pa); buildSide(B, pb);
+  BRng r(9);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  A.act().hp = A.act().maxHp / 4;
+  uint16_t h0 = A.act().hp;
+  // A se cura y B ataca: la pocion va antes
+  int n = linkAttacks(A, B, BA_POTION, BA_TACKLE, r, ev, BATTLE_MAX_EVENTS);
+  CHECK(n > 0);
+  CHECK_EQ(ev[0].kind, (uint8_t)EV_HEAL);
+  CHECK_EQ(ev[0].side, (uint8_t)0);
+  // A se cura mientras B cambia: solo la cura, del lado de A
+  A.act().hp = h0;
+  linkApplySwap(B, LA_SWAP + 1);
+  n = linkAttacks(A, B, BA_POTION, LA_SWAP + 1, r, ev, BATTLE_MAX_EVENTS);
+  CHECK_EQ(n, 1);
+  CHECK_EQ(ev[0].kind, (uint8_t)EV_HEAL);
+  CHECK_EQ(ev[0].side, (uint8_t)0);
+  CHECK(A.act().hp > h0);
+  CHECK_EQ(ev[0].hpA, A.act().hp);
+  // huir o la ball no valen: placaje
+  n = linkAttacks(A, B, BA_RUN, BA_BALL, r, ev, BATTLE_MAX_EVENTS);
+  for (int i = 0; i < n; i++) CHECK(ev[i].kind != EV_RUN_OK && ev[i].kind != EV_CATCH && ev[i].kind != EV_BREAK);
+}

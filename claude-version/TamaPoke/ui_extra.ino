@@ -2375,6 +2375,7 @@ void drawBattleMenu() {
   if (bLink) {  // ko12.9.16: tongsin: [교체] y [항복] (sin objetos)
     bool sw = linkSideCanSwap(lkMine);
     drawBtn(x0, BM_Y2, BM_W, BM_H, sw ? 0x4C98 : UI_TRACK, sw ? UI_WHITE : 0x8410, XT(X_LK_SWAP));
+    drawBtn(x1, BM_Y2, BM_W, BM_H, pet.potions ? UI_BAR_OK : UI_TRACK, pet.potions ? UI_WHITE : UI_INK, pot);  // los mios
     bool arm = lkGiveUpArm && millis() - lkGiveUpArm < 3000;
     drawBtn(x2, BM_Y2, BM_W, BM_H, arm ? UI_BAR_BAD : UI_TRACK, arm ? UI_WHITE : UI_INK, XT(arm ? X_LK_GIVEUP_Q : X_LK_GIVEUP));
     return;
@@ -2402,7 +2403,7 @@ int battleMenuHit(int16_t x, int16_t y) {
   int col = (x - BM_X) / (BM_W + BM_GAP);
   if (col > 2 || (x - BM_X) % (BM_W + BM_GAP) >= BM_W) return -1;
   if (row == 0) return col == 0 ? (int)BMH_FIGHT : col == 1 ? (int)BA_GUARD : (int)BMH_AUTO;
-  if (bLink) return col == 0 ? (int)BMH_SWAP : col == 2 ? (int)BMH_GIVEUP : -1;  // ko12.9.16
+  if (bLink) return col == 0 ? (int)BMH_SWAP : col == 1 ? (int)BA_POTION : (int)BMH_GIVEUP;  // ko12.9.16
   if (bKind != BK_WILD) return col == 0 ? (int)BA_POTION : col == 1 ? (int)BMH_COUNT : -1;
   return BM_ACT[row][col];
 }
@@ -4349,6 +4350,7 @@ void startLinkBattle() {
 static uint8_t lkAutoPick() {
   BRng r(esp_random() ^ millis());
   uint32_t hpPct = (uint32_t)bMe.hp * 100 / (bMe.maxHp ? bMe.maxHp : 1);
+  if (hpPct < AUTO_POTION_HP && pet.potions && pet.usePotion()) return BA_POTION;  // de mi bolsa
   if (typeEff(bFoe.type, bMe.type) >= 4 && hpPct < 70 && r.below(100) < 25) return BA_GUARD;
   uint8_t a = battleAi(bMe, bFoe, r, 0);
   if (a == BA_POTION || a == BA_BALL || a == BA_RUN || a >= BA_COUNT) a = BA_TACKLE;
@@ -4514,7 +4516,14 @@ static void lkTap(int16_t x, int16_t y) {
     else { lkGiveUpArm = millis() ? millis() : 1; sfxPlay(SFX_TAP); }
     return;
   }
-  if (a >= BA_COUNT || a == BA_POTION || a == BA_BALL || a == BA_RUN) return;
+  if (a >= BA_COUNT || a == BA_BALL || a == BA_RUN) return;
+  if (a == BA_POTION) {  // de mi bolsa: solo los que tengo
+    if (bMe.hp >= bMe.maxHp || !pet.usePotion()) {
+      strncpy(bvL1, XT(bMe.hp >= bMe.maxHp ? X_LK_FULL_HP : X_NO_POTION), sizeof(bvL1) - 1); bvL2[0] = 0;
+      sfxPlay(SFX_DENY);
+      return;
+    }
+  }
   sfxPlay(SFX_TAP);
   lkChoose((uint8_t)a);
 }

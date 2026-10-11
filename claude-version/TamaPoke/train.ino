@@ -28,35 +28,39 @@ const char *trainMsg = nullptr;
 #define TRM_GAP 6
 #define TRM_N 5
 
-// ---------- defensa (ko12.9.15): "빙글 방패" ----------
-// El bicho en el centro y un escudo (arco) que gira a su alrededor siguiendo el dedo (mantenerlo
-// apoyado y girar). Tecnicas de colores llegan desde el borde; el escudo las para. Centro del
-// escudo = PERFECTO (2 puntos), el resto del arco = BIEN (1). Si llega al bicho: fallo (3 = fin).
-// Cada vez mas rapidas y mas a la vez; antes de salir, un triangulo en el borde avisa por donde
+// ---------- defensa (ko12.9.16): "네 방향 막기" ----------
+// El bicho en el centro; las tecnicas llegan por arriba, abajo, izquierda o derecha. Se toca el borde
+// por donde viene y sale un escudo ahi un momento: si la tecnica cruza el anillo con el escudo puesto,
+// parada (recien puesto = PERFECTO 2 puntos, si no 1). Las moradas con X no se paran: se dejan pasar
+// (pararlas cuesta una vida). 3 vidas. Cada vez mas rapidas y mas a la vez; un triangulo avisa
 #define DEF_LIVES 3     // ko10.6: fallos permitidos (antes 20 s fijos)
-#define DEF_CY 246      // centro de la orbita (el bicho)
-#define DEF_RO 132      // escudo: radio exterior / interior
-#define DEF_RI 114
-#define DEF_HALF 32     // medio arco del escudo (grados)
-#define DEF_PERF 11     // +-grados del centro del escudo: perfecto
-#define DEF_ORB_R 12
+#define DEF_CY 246      // centro (el bicho)
+#define DEF_RG 100      // anillo de guardia
+#define DEF_ORB_R 14
 #define DEF_START_R 236 // de donde salen (el borde)
-#define DEF_HIT_R 40    // aqui ya le dio al bicho
+#define DEF_HIT_R 34    // aqui ya le dio al bicho
 #define DEF_MAXA 3      // a la vez como mucho
 #define DEF_WARN_MS 650 // aviso antes de salir
+#define DEF_SHIELD_MS 380
+#define DEF_PERF_MS 160 // parada con el escudo recien puesto: perfecto
+#define DEF_TAP_MIN_R 70 // tocar mas cerca del centro no cuenta (el bicho)
+#define DEF_POISON_FROM 12  // desde esta parada salen moradas (20 %)
 bool defOpen = false;
 uint32_t defStart = 0, defOverUntil = 0, defLastStep = 0, defNextSpawn = 0;
 uint16_t defScore = 0, defMissN = 0;
 uint8_t defGain = 0;
 bool defNewHi = false;
 uint16_t defHits = 0, defPerfectN = 0, defGoodN = 0, defCombo = 0;
-uint8_t defJudge = 0;         // 1 perfecto, 2 bien, 4 le dio
+uint8_t defJudge = 0;         // 1 perfecto, 2 bien, 4 le dio, 5 paro una morada, 6 dejo pasar una morada
 uint32_t defJudgeT = 0;
-float defJudgeA = 0;          // donde paso (grados)
-float defShield = 270;        // angulo del escudo (grados; 270 = arriba)
-float defNextA = 0;           // por donde saldra la siguiente
-struct DefAtk { bool on; float a, r, v; uint8_t type; };
+uint8_t defJudgeD = 0;        // por donde (0 arriba, 1 derecha, 2 abajo, 3 izquierda)
+int8_t defShieldD = -1;       // escudo puesto (direccion) o -1
+uint32_t defShieldT = 0;
+uint8_t defNextD = 0;         // por donde saldra la siguiente
+uint32_t defPoisonHintUntil = 0;
+struct DefAtk { bool on, poison; uint8_t d; float r, v; uint8_t type; };
 DefAtk defAtk[DEF_MAXA];
+static const int16_t DEF_ANG[4] = { 270, 0, 90, 180 };
 
 // ---------- velocidad: reflejos izquierda/derecha ----------
 #define SPD_ROUNDS 15
@@ -361,6 +365,8 @@ static void trainShiftTime(uint32_t d) {
   if (defOpen) {
     defStart += d; defLastStep += d; defNextSpawn += d;
     if (defJudgeT) defJudgeT += d;
+    if (defShieldT) defShieldT += d;
+    if (defPoisonHintUntil) defPoisonHintUntil += d;
   }
   if (spdOpen) {
     spdUntil += d; spdShowAt += d;
@@ -402,10 +408,6 @@ void drawTimeBar(uint32_t left, uint32_t total, int y) {
 }
 
 // ---------- defensa ----------
-static float defAngDiff(float a, float b) {  // |a - b| en grados (0..180)
-  float d = fmodf(fabsf(a - b), 360.0f);
-  return d > 180 ? 360 - d : d;
-}
 static uint8_t defActive() {
   uint8_t n = 0;
   for (auto &k : defAtk) n += k.on;
@@ -413,15 +415,17 @@ static uint8_t defActive() {
 }
 static uint8_t defMaxActive() { uint8_t m = (uint8_t)(1 + defHits / 8); return m > DEF_MAXA ? DEF_MAXA : m; }
 static void defPlanNext(uint32_t now) {
-  uint32_t gap = defHits * 30 >= 900 ? 600 : 1500 - defHits * 30;
+  uint32_t gap = defHits * 30 >= 850 ? 650 : 1500 - defHits * 30;
   defNextSpawn = now + gap + random(400);
-  // lejos de las que ya vienen (que no salgan dos por el mismo sitio)
-  for (int tries = 0; tries < 12; tries++) {
-    defNextA = (float)random(360);
+  for (int tries = 0; tries < 8; tries++) {  // no por donde ya viene otra
+    defNextD = (uint8_t)random(4);
     bool ok = true;
-    for (auto &k : defAtk) if (k.on && defAngDiff(k.a, defNextA) < 50) ok = false;
+    for (auto &k : defAtk) if (k.on && k.d == defNextD) ok = false;
     if (ok) break;
   }
+}
+static bool defShieldOn(uint8_t d, uint32_t now) {
+  return defShieldD == (int8_t)d && now - defShieldT < DEF_SHIELD_MS;
 }
 
 void startDefense() {
@@ -433,24 +437,26 @@ void startDefense() {
   defHits = defPerfectN = defGoodN = defCombo = 0;
   defNewHi = false;
   defJudge = 0; defJudgeT = 0;
-  defShield = 270;
+  defShieldD = -1;
+  defPoisonHintUntil = 0;
   for (auto &k : defAtk) k.on = false;
   defPlanNext(defStart + 900);  // un respiro para leer la ayuda
 }
 
-static void defSetJudge(uint8_t j, float a) {
-  defJudge = j; defJudgeT = millis(); defJudgeA = a;
+static void defSetJudge(uint8_t j, uint8_t d) {
+  defJudge = j; defJudgeT = millis(); defJudgeD = d;
 }
 
-// dedo apoyado (cada vuelta mientras esta apoyado): el escudo mira hacia el dedo
-void defenseTouch(int16_t x, int16_t y) {
+// toque: el escudo sale en el lado del toque (lejos del centro)
+void defensePress(int16_t x, int16_t y) {
   if (defOverUntil) return;
   int dx = x - CX, dy = y - DEF_CY;
-  if (dx * dx + dy * dy < 30 * 30) return;  // en el centro no se sabe hacia donde
-  float a = atan2f((float)dy, (float)dx) * 57.29578f;
-  defShield = a < 0 ? a + 360 : a;
+  if (dx * dx + dy * dy < DEF_TAP_MIN_R * DEF_TAP_MIN_R) return;
+  uint8_t d = abs(dx) > abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
+  defShieldD = (int8_t)d;
+  defShieldT = millis();
+  sfxPlay(SFX_TAP);
 }
-void defensePress(int16_t x, int16_t y) { defenseTouch(x, y); }
 
 void stepDefense() {
   uint32_t now = millis();
@@ -458,14 +464,15 @@ void stepDefense() {
   if (dt > 100) dt = 100;  // tras un fotograma lento no saltan de golpe
   defLastStep = now;
   if (defOverUntil) return;
-  // sale la siguiente
   if ((int32_t)(now - defNextSpawn) >= 0) {
     if (defActive() < defMaxActive()) {
       for (auto &k : defAtk) if (!k.on) {
-        k.on = true; k.a = defNextA; k.r = DEF_START_R;
-        float v = 95.0f + defHits * 4.0f;
-        k.v = (v > 270 ? 270 : v) * (0.9f + random(21) / 100.0f);
+        k.on = true; k.d = defNextD; k.r = DEF_START_R;
+        float v = 110.0f + defHits * 4.0f;
+        k.v = (v > 280 ? 280 : v) * (0.9f + random(21) / 100.0f);
+        k.poison = defHits >= DEF_POISON_FROM && random(100) < 20;
         k.type = (uint8_t)random(PT_COUNT);
+        if (k.poison && !defPoisonHintUntil) defPoisonHintUntil = now + 3500;
         break;
       }
     }
@@ -475,38 +482,50 @@ void stepDefense() {
     if (!k.on) continue;
     float r0 = k.r;
     k.r -= k.v * dt / 1000.0f;
-    // cruza el escudo: lo para si el escudo esta ahi
-    if (r0 > DEF_RO + DEF_ORB_R && k.r <= DEF_RO + DEF_ORB_R) {
-      float d = defAngDiff(k.a, defShield);
-      if (d <= DEF_HALF + 6) {
-        bool perf = d <= DEF_PERF;
+    if (r0 > DEF_RG + DEF_ORB_R && k.r <= DEF_RG + DEF_ORB_R && defShieldOn(k.d, now)) {  // cruza el anillo con escudo
+      if (k.poison) {  // la morada no se para
+        defMissN++; defCombo = 0;
+        defSetJudge(5, k.d);
+        sfxPlay(SFX_DENY);
+      } else {
+        bool perf = now - defShieldT <= DEF_PERF_MS;
         defScore += perf ? 2 : 1;
         defHits++; defCombo++;
         if (perf) defPerfectN++; else defGoodN++;
-        defSetJudge(perf ? 1 : 2, k.a);
+        defSetJudge(perf ? 1 : 2, k.d);
         sfxPlay(perf ? SFX_MEDAL : SFX_PLAY);
-        k.on = false;
-        continue;
       }
+      k.on = false;
+      continue;
     }
-    if (k.r <= DEF_HIT_R) {  // le dio
-      defMissN++; defCombo = 0;
-      defSetJudge(4, k.a);
-      sfxPlay(SFX_DENY);
+    if (k.r <= DEF_HIT_R) {
+      if (k.poison) {  // bien dejada pasar: se deshace
+        defScore += 1; defHits++; defGoodN++;
+        defSetJudge(6, k.d);
+        sfxPlay(SFX_PLAY);
+      } else {  // le dio
+        defMissN++; defCombo = 0;
+        defSetJudge(4, k.d);
+        sfxPlay(SFX_DENY);
+      }
       k.on = false;
     }
   }
 }
 
-static void defOrb(int x, int y, uint16_t c, float outA) {  // la tecnica con su estela hacia fuera
-  float ca = cosf(outA), sa = sinf(outA);
+static void defOrb(int x, int y, uint16_t c, int dx, int dy, bool poison) {  // estela hacia fuera
   for (int k = 4; k >= 1; k--)
-    gfx->fillCircle(x + (int)(ca * k * 11), y + (int)(sa * k * 11), 9 - k * 2 > 2 ? 9 - k * 2 : 2,
-                    lerp565(c, UI_WHITE, 6 + k * 2, 16));
+    gfx->fillCircle(x + dx * k * 11, y + dy * k * 11, 9 - k * 2 > 2 ? 9 - k * 2 : 2, lerp565(c, UI_WHITE, 6 + k * 2, 16));
   gfx->fillCircle(x, y, DEF_ORB_R, c);
-  gfx->fillCircle(x - 3, y - 3, 5, lerp565(c, UI_WHITE, 11, 16));
+  gfx->fillCircle(x - 4, y - 4, 5, lerp565(c, UI_WHITE, 11, 16));
   gfx->drawCircle(x, y, DEF_ORB_R, UI_INK);
+  if (poison)
+    for (int k = -1; k <= 1; k++) {
+      gfx->drawLine(x - 6 + k, y - 6, x + 6 + k, y + 6, UI_WHITE);
+      gfx->drawLine(x + 6 + k, y - 6, x - 6 + k, y + 6, UI_WHITE);
+    }
 }
+static const int8_t DEF_DX[4] = { 0, 1, 0, -1 }, DEF_DY[4] = { -1, 0, 1, 0 };
 
 void renderDefense() {
   uint32_t now = millis();
@@ -532,13 +551,24 @@ void renderDefense() {
   uint16_t ink = night ? UI_INK_NIGHT : UI_INK;
   const uint16_t perfC = C565(0x4c, 0xc8, 0x5c), goodC = C565(0xf4, 0xc4, 0x3c);
   const uint16_t SH = C565(0x3a, 0x8c, 0xe8), SHL = C565(0xb8, 0xe0, 0xff);
+  const uint16_t ZONE = lerp565(UI_WHITE, SH, 4, 16);
   uint32_t jt = defJudge ? now - defJudgeT : 9999;
-  bool hurt = defJudge == 4 && jt < 450;
-  // orbita punteada
-  for (int k = 0; k < 48; k++) {
-    float a = k * 6.2832f / 48;
-    gfx->fillCircle(CX + (int)(cosf(a) * (DEF_RI + 9)), DEF_CY + (int)(sinf(a) * (DEF_RI + 9)), 2,
-                    lerp565(UI_WHITE, ink, 4, 16));
+  bool hurt = (defJudge == 4 || defJudge == 5) && jt < 450;
+  // las 4 zonas del borde (la del escudo, encendida) con su flecha hacia dentro
+  bool warn = defActive() < defMaxActive() && (int32_t)(defNextSpawn - now) < DEF_WARN_MS && (now / 110) % 2 == 0;
+  for (uint8_t i = 0; i < 4; i++) {
+    bool lit = defShieldOn(i, now);
+    gfx->fillArc(CX, DEF_CY, 230, 206, DEF_ANG[i] - 33, DEF_ANG[i] + 33, lit ? SHL : ZONE);
+    float a = DEF_ANG[i] * 0.017453f, ca = cosf(a), sa = sinf(a);
+    int tx = CX + (int)(ca * 208), ty = DEF_CY + (int)(sa * 208), bx = CX + (int)(ca * 226), by = DEF_CY + (int)(sa * 226);
+    int px = (int)(-sa * 9), py = (int)(ca * 9);
+    uint16_t ac = warn && i == defNextD ? UI_BAR_WARN : lerp565(UI_WHITE, ink, 7, 16);
+    gfx->fillTriangle(bx + px, by + py, bx - px, by - py, tx, ty, ac);
+  }
+  // anillo de guardia punteado
+  for (int k = 0; k < 40; k++) {
+    float a = k * 6.2832f / 40;
+    gfx->fillCircle(CX + (int)(cosf(a) * DEF_RG), DEF_CY + (int)(sinf(a) * DEF_RG), 2, lerp565(UI_WHITE, ink, 4, 16));
   }
   if (pmd.loaded) {
     uint8_t act = hurt ? PMD_HURT : PMD_IDLE;
@@ -546,30 +576,21 @@ void renderDefense() {
     int sh = hurt ? (int)(7 * sinf(jt * 0.09f)) : 0;
     drawPmdActM(pmd, act, CX + sh, DEF_CY + 46, now, true, false, 3, 96);
   }
-  // escudo: arco azul, con una raya verde en el centro (perfecto)
-  int s0 = (int)defShield;
-  gfx->fillArc(CX, DEF_CY, DEF_RO, DEF_RI, s0 - DEF_HALF, s0 + DEF_HALF, SH);
-  gfx->fillArc(CX, DEF_CY, DEF_RI + 5, DEF_RI, s0 - DEF_HALF, s0 + DEF_HALF, SHL);
-  gfx->fillArc(CX, DEF_CY, DEF_RO + 4, DEF_RO, s0 - DEF_PERF, s0 + DEF_PERF, perfC);
-  // aviso de la siguiente
-  if (!defOverUntil && defActive() < defMaxActive() && (int32_t)(defNextSpawn - now) < DEF_WARN_MS &&
-      (now / 110) % 2 == 0) {
-    float a = defNextA * 0.017453f, ca = cosf(a), sa = sinf(a);
-    int wx = CX + (int)(ca * 206), wy = DEF_CY + (int)(sa * 206);
-    int tx = CX + (int)(ca * 186), ty = DEF_CY + (int)(sa * 186);  // punta hacia dentro
-    int px = (int)(-sa * 11), py = (int)(ca * 11);
-    gfx->fillTriangle(wx + px, wy + py, wx - px, wy - py, tx, ty, UI_BAR_WARN);
+  // el escudo puesto
+  if (defShieldD >= 0 && defShieldOn((uint8_t)defShieldD, now)) {
+    int a0 = DEF_ANG[defShieldD];
+    gfx->fillArc(CX, DEF_CY, DEF_RG + 18, DEF_RG - 2, a0 - 40, a0 + 40, SH);
+    gfx->fillArc(CX, DEF_CY, DEF_RG + 3, DEF_RG - 2, a0 - 40, a0 + 40, SHL);
   }
   for (auto &k : defAtk) {
     if (!k.on) continue;
-    float a = k.a * 0.017453f;
-    defOrb(CX + (int)(cosf(a) * k.r), DEF_CY + (int)(sinf(a) * k.r), typeColor(k.type), a);
+    int x = CX + (int)(DEF_DX[k.d] * k.r), y = DEF_CY + (int)(DEF_DY[k.d] * k.r);
+    defOrb(x, y, k.poison ? C565(0xa0, 0x40, 0xa0) : typeColor(k.type), DEF_DX[k.d], DEF_DY[k.d], k.poison);
   }
   // juicio
   if (defJudge && jt < 600) {
-    float a = defJudgeA * 0.017453f;
+    int bx = CX + DEF_DX[defJudgeD] * (DEF_RG + 6), by = DEF_CY + DEF_DY[defJudgeD] * (DEF_RG + 6);
     if (defJudge <= 2) {  // parado: destello en el escudo
-      int bx = CX + (int)(cosf(a) * (DEF_RO + 4)), by = DEF_CY + (int)(sinf(a) * (DEF_RO + 4));
       if (jt < 110) gfx->fillCircle(bx, by, 24, UI_WHITE);
       int r = 26 + (int)(jt / 12);
       for (int k = 0; k < 8; k++) {
@@ -577,27 +598,34 @@ void renderDefense() {
         gfx->drawLine(bx + (int)(cosf(q) * r), by + (int)(sinf(q) * r), bx + (int)(cosf(q) * (r + 12)),
                       by + (int)(sinf(q) * (r + 12)), defJudge == 1 ? perfC : goodC);
       }
-    } else if (jt < 300) {  // le dio: borde rojo
+    } else if ((defJudge == 4 || defJudge == 5) && jt < 300) {  // le dio: borde rojo
       for (int k = 0; k < 4; k++) gfx->drawCircle(CX, CX, 232 - k, UI_BAR_BAD);
     }
-    XId id = defJudge == 1 ? X_DEF_PERFECT : defJudge == 2 ? X_DEF_GOOD : X_DEF_LATE;
-    uint8_t sz = defJudge == 1 ? 3 : 2;
-    drawFit(XT(id), 352 - (int)(jt / 30), 320,
-            defJudge == 1 ? C565(0x1a, 0x86, 0x34) : defJudge == 2 ? C565(0xb8, 0x7a, 0x00) : UI_BAR_BAD, sz);
+    XId id = defJudge == 1 ? X_DEF_PERFECT : defJudge == 2 ? X_DEF_GOOD : defJudge == 5 ? X_DEF_POISON_BAD
+           : defJudge == 6 ? X_DEF_POISON_OK : X_DEF_LATE;
+    uint16_t c = defJudge == 1 ? C565(0x1a, 0x86, 0x34) : defJudge == 2 || defJudge == 6 ? C565(0xb8, 0x7a, 0x00) : UI_BAR_BAD;
+    drawFit(XT(id), 352 - (int)(jt / 30), 300, c, defJudge == 1 ? 3 : 2);
   }
   char b[8];
   snprintf(b, sizeof(b), "%u", defScore);
-  drawFit(b, 22, 200, ink, 4);
-  for (int i = 0; i < DEF_LIVES; i++) {  // ko10.6: vidas (como el juego de pelota)
-    if (i < DEF_LIVES - (int)defMissN) gfx->fillCircle(CX - 28 + i * 28, 70, 7, UI_BAR_BAD);
-    else gfx->drawCircle(CX - 28 + i * 28, 70, 7, UI_TRACK);
+  drawFit(b, 52, 200, ink, 3);
+  for (int i = 0; i < DEF_LIVES; i++) {
+    if (i < DEF_LIVES - (int)defMissN) gfx->fillCircle(CX - 22 + i * 22, 98, 6, UI_BAR_BAD);
+    else gfx->drawCircle(CX - 22 + i * 22, 98, 6, UI_TRACK);
   }
   if (defCombo >= 2) {
     char cb[20];
     snprintf(cb, sizeof(cb), XT(X_DEF_COMBO_FMT), defCombo);
-    drawFit(cb, 92, 200, C565(0x1a, 0x86, 0x34), 2);
+    drawFit(cb, 116, 200, C565(0x1a, 0x86, 0x34), 2);
   }
-  if (now - defStart < 2800) drawFit(XT(X_TR_DEF_HINT), 392, 300, ink, 1);
+  const char *hint = timeLeft(defPoisonHintUntil) ? XT(X_DEF_POISON_HINT) : now - defStart < 3000 ? XT(X_TR_DEF_HINT) : nullptr;
+  if (hint) {
+    setSize(1);
+    int w = textW(hint, 1) + 26;
+    if (w > 300) w = 300;
+    uiButton(CX - w / 2, 380, w, 30, 15, UI_WHITE, timeLeft(defPoisonHintUntil) ? C565(0x80, 0x30, 0x90) : ink);
+    drawFit(hint, 386, w - 10, timeLeft(defPoisonHintUntil) ? C565(0x80, 0x30, 0x90) : UI_INK, 1);
+  }
   drawTrainQuit();  // ko12.9.14
   uiFlush();
 }
