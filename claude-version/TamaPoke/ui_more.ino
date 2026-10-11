@@ -10,6 +10,9 @@
 #define BOX_ROW_H 46
 #define BOX_ROW_GAP 4
 #define BOX_NAV_Y 352
+#define BOXP_LX 78   // ko12.9.15: botones de pagina
+#define BOXP_RX 268
+#define BOXP_W 120
 // ko11.8: pestanas un poco mas abajo y estrechas (antes y=34, 150 de ancho: en la
 // pantalla redonda se cortaban las esquinas)
 // ko11.16: tres pestanas [caja] [corona] [orbe], algo mas abajo (y=48: la pantalla
@@ -32,6 +35,11 @@ static const char *orbMsg = nullptr;
 static uint32_t orbMsgUntil = 0;
 // ko11.19: fusion (3 orbes de la bolsa -> 1 del tipo del Pokemon que crias)
 #define SYN_BTN_Y 364
+#define ORBP_Y 406   // ko12.9.15: botones de pagina de los orbes
+#define ORBP_H 32
+#define ORBP_W 64
+#define ORBP_LX (CX - 104)
+#define ORBP_RX (CX + 40)
 #define SYN_ANIM_MS 1500
 static bool synMode = false;
 static uint8_t synPick[3], synN = 0;   // posiciones en pet.orbBag
@@ -536,8 +544,9 @@ void renderBox() {
   }
   // paginas
   if (boxPages() > 1) {
-    drawBtn(113, BOX_NAV_Y, 60, 36, boxPage ? UI_WHITE : UI_TRACK, UI_INK, "<");
-    drawBtn(293, BOX_NAV_Y, 60, 36, boxPage + 1 < boxPages() ? UI_WHITE : UI_TRACK, UI_INK, ">");
+    // ko12.9.15: botones de pagina grandes (antes 60x36: al fallar se tocaba "abajo = salir")
+    drawBtn(BOXP_LX, BOX_NAV_Y - 4, BOXP_W, 44, boxPage ? UI_WHITE : UI_TRACK, UI_INK, "<");
+    drawBtn(BOXP_RX, BOX_NAV_Y - 4, BOXP_W, 44, boxPage + 1 < boxPages() ? UI_WHITE : UI_TRACK, UI_INK, ">");
     char pg[12];
     snprintf(pg, sizeof(pg), "%u/%u", boxPage + 1, boxPages());
     drawFit(pg, BOX_NAV_Y + 10, 100, UI_INK, 2);
@@ -659,8 +668,9 @@ void boxTap(int16_t x, int16_t y) {
   if (navHit(NAV_L, x, y)) { sfxPlay(SFX_TAP); goBack(); return; }  // ko11.8: <- salir (ko11.17: a donde estaba)
   // ko10.5: pestanas caja / salon de la fama
   if (y >= BOX_TAB_Y && y < BOX_TAB_Y + BOX_TAB_H) { boxTabTap(x); return; }
-  if (y < BOX_TAB_Y - 10 || y >= 392) { goBack(); return; }  // arriba / abajo: salir (como antes)
-  if (y >= BOX_NAV_Y && y < BOX_NAV_Y + 36) {
+  // ko12.9.15: tocar arriba / abajo ya NO sale (al fallar la flecha de pagina se salia): solo [<] o deslizar
+  if (y < BOX_TAB_Y - 10 || y >= 400) return;
+  if (y >= BOX_NAV_Y - 12 && boxPages() > 1) {  // media pantalla de cada lado: pagina
     if (x < CX && boxPage > 0) boxPage--;
     else if (x >= CX && boxPage + 1 < boxPages()) boxPage++;
     sfxPlay(SFX_TAP);
@@ -703,6 +713,15 @@ static uint16_t orbViewAt(int k, bool &worn) {
     k--;
   }
   return (k >= 0 && k < pet.orbN) ? pet.orbBag[k] : 0;
+}
+static uint8_t orbPages();
+// ko12.9.15: [<] / [>] de abajo (con margen: la fila entera de cada lado)
+static bool orbPageTap(int16_t x, int16_t y) {
+  if (orbPages() <= 1 || y < ORBP_Y - 6 || y >= ORBP_Y + ORBP_H + 14) return false;
+  if (x < CX) { if (orbPage > 0) orbPage--; }
+  else if (orbPage + 1 < orbPages()) orbPage++;
+  sfxPlay(SFX_TAP);
+  return true;
 }
 static uint8_t orbPages() { return orbViewN() ? (uint8_t)((orbViewN() + ORB_PER_PAGE - 1) / ORB_PER_PAGE) : 1; }
 static void orbCell(int i, int &cx, int &cy) {
@@ -770,12 +789,13 @@ void renderOrbBag() {
   } else if (n && !synShow && !synAnimT) {
     drawBtn(CX - 80, SYN_BTN_Y, 160, 36, C565(0x6a, 0x4c, 0xf0), UI_WHITE, XT(X_SYN_BTN));
   }
-  if (orbPages() > 1) {
+  if (orbPages() > 1) {  // ko12.9.15: [<] 1/2 [>] abajo (antes las flechas de los lados; la izquierda tambien salia)
     snprintf(b, sizeof(b), XT(X_ORB_PAGE_FMT), orbPage + 1, orbPages());
-    drawFit(b, SYN_BTN_Y + 42, 100, UI_INK, 1);
+    drawBtn(ORBP_LX, ORBP_Y, ORBP_W, ORBP_H, orbPage ? UI_WHITE : UI_TRACK, UI_INK, "<");
+    drawBtn(ORBP_RX, ORBP_Y, ORBP_W, ORBP_H, orbPage + 1 < orbPages() ? UI_WHITE : UI_TRACK, UI_INK, ">");
+    drawFit(b, ORBP_Y + 8, 80, UI_INK, 1);
   }
-  drawNav(NAV_L, UI_INK);  // pagina anterior, o salir en la primera
-  if (orbPage + 1 < orbPages()) drawNav(NAV_R, UI_INK);
+  drawNav(NAV_L, UI_INK);  // salir (en el modo de sintesis: cancelar)
   // ventana del orbe elegido
   if (orbSel >= 0 && orbSel < n) {
     bool worn;
@@ -896,8 +916,8 @@ void orbBagTap(int16_t x, int16_t y) {
     }
   }
   if (synMode) {  // elegir materiales (el equipado no)
-    if (navHit(NAV_L, x, y)) { if (orbPage > 0) orbPage--; else synReset(); sfxPlay(SFX_TAP); return; }
-    if (navHit(NAV_R, x, y)) { if (orbPage + 1 < orbPages()) orbPage++; sfxPlay(SFX_TAP); return; }
+    if (navHit(NAV_L, x, y)) { synReset(); sfxPlay(SFX_TAP); return; }  // ko12.9.15: solo cancelar
+    if (orbPageTap(x, y)) return;
     for (int i = 0; i < ORB_PER_PAGE; i++) {
       int k = orbPage * ORB_PER_PAGE + i;
       if (k >= n) break;
@@ -936,15 +956,10 @@ void orbBagTap(int16_t x, int16_t y) {
     else sfxPlay(SFX_DENY);
     return;
   }
-  if (navHit(NAV_L, x, y)) {
-    if (orbPage > 0) orbPage--;
-    else goBack();
-    sfxPlay(SFX_TAP);
-    return;
-  }
-  if (navHit(NAV_R, x, y)) { if (orbPage + 1 < orbPages()) orbPage++; sfxPlay(SFX_TAP); return; }
+  if (navHit(NAV_L, x, y)) { sfxPlay(SFX_TAP); goBack(); return; }  // ko12.9.15: [<] solo sale
+  if (orbPageTap(x, y)) return;
   if (y >= BOX_TAB_Y && y < BOX_TAB_Y + BOX_TAB_H) { boxTabTap(x); return; }
-  if (y < BOX_TAB_Y - 10 || y >= 392) { goBack(); return; }
+  if (y < BOX_TAB_Y - 10 || y >= 400) return;  // ko12.9.15: tocar arriba / abajo ya no sale
   for (int i = 0; i < ORB_PER_PAGE; i++) {
     int k = orbPage * ORB_PER_PAGE + i;
     if (k >= n) break;
