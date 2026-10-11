@@ -435,7 +435,6 @@ bool bvMeFainted = false, bvFoeFainted = false;  // ya se reprodujo su desmayo
 bool bvFoeCaught = false;  // fork KO (ko4): el rival ya esta dentro de la pokeball
 bool bCaught = false;      // la batalla acabo en captura
 int16_t bBoxMsg = -1;      // XId del aviso de la caja en el resultado (-1 = nada)
-#define BOX_JOIN_PCT 20    // ko5: % de salvajes vencidos que se unen a la caja
 PmdMon foePmd;
 // ko11.16: el orbe equipado sube ataque o defensa (solo si es de su tipo)
 void applyOrb(Battler &b) {
@@ -606,7 +605,7 @@ uint32_t ppPickEpoch[TEAM_HELPERS] = { 0 };
 // ko12.2: cuantos ayudantes caben: los mismos que el rival (contando al que crias), hasta 5
 uint8_t ppMaxHelpers() { uint8_t m = ppN > 1 ? ppN - 1 : 0; return m > TEAM_HELPERS ? TEAM_HELPERS : m; }
 bool ppArmed = false;                             // startTrainer usa ppPick
-char bPartyNote[40] = "";                         // "도우미 Lv+1" en el resultado
+char bPartyNote[96] = "";  // ko12.9.14: 40 -> 96 (tambien la racha salvaje)                         // "도우미 Lv+1" en el resultado
 
 // ko11.20: cada ayudante, HELPER_USES_PER_DAY combates al dia (espacio "tpparty":
 // el dia y {especie, llegada a la caja, veces}; se reconoce por especie + fecha)
@@ -2907,6 +2906,32 @@ static bool nextTrainerMon() {
 // ko12.9.11: 부르는 구슬
 static bool lureIsNew(int16_t d) { return !dexDiscovered(d); }
 
+// ko12.9.14: premio seguro por ganar (o capturar) a un raro / legendario / shiny
+static void wildTierBonus(uint8_t tier) {
+  uint16_t n = tier >= WT_SPECIAL ? WILD_SPECIAL_CANDY : WILD_RARE_CANDY;
+  pet.addCandy(bFoe.dex, n);
+  if (tier >= WT_SPECIAL) orbDrop(DEX_TBL[bFoe.dex].ptype);
+  char t[64];
+  snprintf(t, sizeof(t), XT(tier >= WT_SPECIAL ? X_WT_SPECIAL_FMT : X_WT_RARE_FMT), (unsigned)n);
+  size_t l = strlen(bNote);
+  if (l && l + 3 < sizeof(bNote)) { strcpy(bNote + l, " / "); l += 3; }
+  if (l + 1 < sizeof(bNote)) { strncpy(bNote + l, t, sizeof(bNote) - l - 1); bNote[sizeof(bNote) - 1] = 0; }
+  pet.saveNow();
+}
+
+// ko12.9.14: racha salvaje: premio cada 3 / 5 / 10 seguidas; perder o huir la corta
+static void wildStreakNote(bool good) {
+  if (!good) { pet.wildStreakLost(); return; }
+  uint8_t bits = pet.wildStreakWin();
+  if (pet.wildStreak < 2) return;
+  int k = snprintf(bPartyNote, sizeof(bPartyNote), XT(bits ? X_WS_WIN_FMT : X_WS_RUN_FMT), (unsigned)pet.wildStreak);
+  const XId part[3] = { X_WS_ITEMS, X_WS_CANDY, X_WS_LURE };
+  for (uint8_t i = 0; i < 3 && k > 0 && k < (int)sizeof(bPartyNote); i++)
+    if (bits & (1 << i)) k += snprintf(bPartyNote + k, sizeof(bPartyNote) - k, " %s", XT(part[i]));
+  if (bits) sfxPlay(SFX_MEDAL);
+  pet.saveNow();
+}
+
 void lureDrop() {
   if (pet.lureN >= LURE_MAX) return;
   pet.lureN++;
@@ -3798,7 +3823,10 @@ void finishBattle(bool won, bool fled, bool caught) {
     sfxPlay(pet.lastLvlUp ? SFX_LEVEL : won || caught ? SFX_MEDAL : SFX_BYE);  // ko7: subida de nivel
     // fork KO: el capturado va siempre a la caja; el vencido, solo a veces
     // (ko5: 1 de cada 5 "quiere unirse"; si no, la pokeball no servia de nada)
-    bool joins = won && bKind == BK_WILD && (uint32_t)random(100) < BOX_JOIN_PCT;
+    // ko12.9.14: los raros / legendarios / shiny quieren venir mas (15 / 25 / 35 %)
+    bool wildSolo = bKind == BK_WILD && !bLink;
+    uint8_t tier = wildSolo ? wildTier(bFoe.dex, bGroup == WG_RARE, bvFoeShiny) : (uint8_t)WT_NORMAL;
+    bool joins = won && bKind == BK_WILD && (uint32_t)random(100) < wildJoinPct(tier);
     bNote[0] = 0;
     // ko10.11: a veces, un caramelo universal (salvaje ganado o capturado)
     if (bKind == BK_WILD && !bLink && (won || caught) && (uint32_t)random(100) < RARE_CANDY_PCT) {
@@ -3808,8 +3836,10 @@ void finishBattle(bool won, bool fled, bool caught) {
       pet.saveNow();
     }
     // ko11.16: a veces un orbe del tipo del rival (con aviso)
-    if (bKind == BK_WILD && !bLink && (won || caught) && (uint32_t)random(100) < ORB_WILD_PCT)
+    if (wildSolo && (won || caught) && tier < WT_SPECIAL && (uint32_t)random(100) < ORB_WILD_PCT)
       orbDrop(DEX_TBL[bFoe.dex].ptype);
+    if (wildSolo && (won || caught) && tier > WT_NORMAL) wildTierBonus(tier);  // ko12.9.14
+    if (wildSolo) wildStreakNote(won || caught);
     if (won && bKind == BK_GYM && !(pet.badges & (1 << bGym))) {  // ko10.4: medalla nueva
       pet.badges |= (uint8_t)(1 << bGym);
       char nb[4];

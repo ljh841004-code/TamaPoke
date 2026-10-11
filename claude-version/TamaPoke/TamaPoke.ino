@@ -1618,6 +1618,12 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
     return;
   }
   if (!pressed) fastT0 = 0;
+  // ko12.9.14: [X] arriba a la izquierda: dos toques = salir
+  if (trainingFast() && pressed && !wasPressed && trainQuitPress(x, y)) {
+    lastInteract = millis();
+    wasPressed = pressed;
+    return;
+  }
 
   // saco de entrenamiento: cada toque cuenta al instante (aporrear rapido)
   if (sackOpen) {

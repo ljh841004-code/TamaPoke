@@ -321,6 +321,15 @@ DayEvent dayEvent(uint32_t e) {
   return ev;
 }
 
+uint8_t wildTier(int16_t dex, bool rareGroup, bool shiny) {
+  if (shiny || (dex >= 1 && dex <= DEX_COUNT && DEX_TBL[dex].rarity == R_LEGENDARIO)) return WT_SPECIAL;
+  return rareGroup ? WT_RARE : WT_NORMAL;
+}
+
+uint8_t wildJoinPct(uint8_t tier) {
+  return tier >= WT_SPECIAL ? WILD_JOIN_SPECIAL_PCT : tier == WT_RARE ? WILD_JOIN_RARE_PCT : WILD_JOIN_PCT;
+}
+
 uint32_t wildRareMult(int16_t dex, const DayEvent *ev) {
   if (!ev) return 1;
   bool legend = DEX_TBL[dex].rarity == R_LEGENDARIO;

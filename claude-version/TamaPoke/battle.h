@@ -137,6 +137,16 @@ struct DayEvent { uint8_t kind; uint8_t ptype; bool moonNight;
 #define LURE_DAILY_PCT 20   // premio del reto del dia
 #define LURE_EXPED8_PCT 30  // expedicion de 8 h
 uint32_t wildRareMult(int16_t dex, const DayEvent *ev);  // multiplicador de un raro de WILD_RARE
+// ko12.9.14: rango del salvaje vencido: 0 normal, 1 raro (salio del grupo WG_RARE), 2 legendario o shiny.
+// Cuanto mas raro, mas quiere unirse a la caja y mas premio da
+enum : uint8_t { WT_NORMAL = 0, WT_RARE, WT_SPECIAL };
+#define WILD_JOIN_PCT 15          // normal (antes 20 para todos)
+#define WILD_JOIN_RARE_PCT 25
+#define WILD_JOIN_SPECIAL_PCT 35
+#define WILD_RARE_CANDY 3         // caramelos de su familia al ganar a un raro
+#define WILD_SPECIAL_CANDY 5      // ... a un legendario / shiny (y un orbe de su tipo seguro)
+uint8_t wildTier(int16_t dex, bool rareGroup, bool shiny);
+uint8_t wildJoinPct(uint8_t tier);
 bool fullMoon(uint32_t epoch);            // luna llena ese dia (±1 dia)
 DayEvent dayEvent(uint32_t localEpoch);   // 0 = sin reloj: sin evento
 // ko11.19: combate automatico (entrenadores): medicina segun lo dificil que sea

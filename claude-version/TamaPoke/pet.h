@@ -298,6 +298,7 @@ public:
   uint16_t strHi = 0;      // record de golpes al saco
   // batallas e intercambios (del jugador: persisten entre crianzas)
   uint16_t wildWins = 0;   // victorias contra salvajes
+  uint16_t wildStreak = 0, wildBest = 0;  // ko12.9.14: racha de salvajes ganados (y la mejor)
   uint16_t linkWins = 0;   // victorias en tongsin (ESP-NOW)
   uint16_t linkBattles = 0;
   uint16_t trades = 0;     // intercambios completados
@@ -379,6 +380,15 @@ public:
   void giveItems(uint8_t b, uint8_t p);
   // ko11.1: premio de victoria salvaje por probabilidad; devuelve bits 1=bola 2=pocion
   uint8_t wildWinItems();
+  // ko12.9.14: racha de salvajes ganados (o capturados). Cada 3: ball + pocion; cada 5: 2 caramelos
+  // suyos; cada 10: un "부르는 구슬". Perder o huir la deja a 0. Devuelve los bits WS_*
+  uint8_t wildStreakWin();
+#define WSTREAK_ITEMS 3
+#define WSTREAK_CANDY 5
+#define WSTREAK_CANDY_N 2
+#define WSTREAK_LURE 10
+  enum : uint8_t { WS_ITEMS = 1, WS_CANDY = 2, WS_LURE = 4 };
+  void wildStreakLost() { if (wildStreak) { wildStreak = 0; pendingSave = true; } }
   // fork KO (ko4): el siguiente a criar sale de la caja (tras la despedida)
   void adoptMon(int16_t dex, uint16_t lvl, bool shiny, uint8_t gA, uint8_t gD, uint8_t gS);
   // ko10.5: lo llama update() al acabar una ceremonia (how = CER_*), ANTES de

@@ -248,6 +248,19 @@ TEST(battle, huir_falla_mas_y_pega_flojo) {
   CHECK(dodge > 40);
 }
 
+// ko12.9.14: rango del salvaje y ganas de unirse
+TEST(battle, rango_salvaje_y_union) {
+  CHECK_EQ(wildTier(16, false, false), (uint8_t)WT_NORMAL);
+  CHECK_EQ(wildTier(16, true, false), (uint8_t)WT_RARE);
+  CHECK_EQ(wildTier(16, false, true), (uint8_t)WT_SPECIAL);
+  CHECK_EQ(wildTier(150, false, false), (uint8_t)WT_SPECIAL);  // legendario
+  CHECK_EQ(wildTier(150, true, false), (uint8_t)WT_SPECIAL);
+  CHECK_EQ(wildJoinPct(WT_NORMAL), (uint8_t)WILD_JOIN_PCT);
+  CHECK_EQ(wildJoinPct(WT_RARE), (uint8_t)WILD_JOIN_RARE_PCT);
+  CHECK_EQ(wildJoinPct(WT_SPECIAL), (uint8_t)WILD_JOIN_SPECIAL_PCT);
+  CHECK(WILD_JOIN_PCT < WILD_JOIN_RARE_PCT && WILD_JOIN_RARE_PCT < WILD_JOIN_SPECIAL_PCT);
+}
+
 TEST(battle, el_hp_de_los_eventos_cuadra) {
   BRng rng(99);
   Battler a = makeBattler(1, 25, 70, 70, 60), b = makeBattler(4, 25, 75, 60, 70);

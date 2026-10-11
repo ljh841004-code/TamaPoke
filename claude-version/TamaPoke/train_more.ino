@@ -290,6 +290,7 @@ void renderShell() {
     snprintf(b, sizeof(b), "+%u", (unsigned)shLastPts);
     drawFit(b, 104 - (int)(t / 90), 120, C565(0x1a, 0x86, 0x34), 3);  // encima de la tapa abierta
   }
+  drawTrainQuit();  // ko12.9.14
   uiFlush();
 }
 
@@ -550,6 +551,7 @@ void renderSimon() {
     uiPanel(43, 206, 380, 56, 16, UI_WHITE, UI_INK);
     drawFit(XT(X_SM_HOW), 222, 360, UI_INK, 2);
   }
+  drawTrainQuit();  // ko12.9.14
   uiFlush();
 }
 

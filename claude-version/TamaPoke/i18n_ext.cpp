@@ -45,7 +45,7 @@ static const char *const XS[2][X_COUNT] = {
     "WiFi, sound and language stay", "HOLD 3s", "Keep the button pressed for 3 s", "Starting over...",
     "Scan with phone camera", "WiFi", "PASSWORD", "ADDRESS",
     "SPACE", "DEL", "KOREAN",
-    "CANDY", "or ~%luh %lum of raising", "or ~%lu min of raising", "Hold 2 s in a game to quit",
+    "CANDY", "or ~%luh %lum of raising", "or ~%lu min of raising", "In a game: tap X (top left) twice to quit",
     "JOY + ENERGY UP!", "Beat the record for a bonus", "ENERGY +5 (record = JOY too)",
     "Look for another Pokemon?", "KEEP GOING", "EXIT",
     "Looking for WiFi...", "AUTO ON", "AUTO OFF", "OPEN WiFi ON", "OPEN WiFi OFF", " +%u",
@@ -188,6 +188,9 @@ static const char *const XS[2][X_COUNT] = {
     "Lure Orb! (%u)", "Brought back a Lure Orb!", "Lure Orb x%u - tap to use", "Tap again to use (%u left)",
     "Lure Orb on: %u wild battles left", "Lure Orb used! Rare x2, legends x3", "A Lure Orb is already working",
     "Got hit from behind!", "Dodged the attack!",
+    "Tap again to quit",
+    "Rare bonus! Candy +%u", "Special bonus! Candy +%u, orb", "%u wins in a row!", "%u-win streak",
+    "Ball+Potion", "My candy +2", "Lure Orb",
   },
   // ---------------- KO ----------------
   {
@@ -228,7 +231,7 @@ static const char *const XS[2][X_COUNT] = {
     "WiFi, 소리, 언어 설정은 남아요", "3초 누르기", "버튼을 3초 동안 누르고 있으세요", "처음부터 시작해요!",
     "카메라로 QR 찍기", "WiFi", "비밀번호", "주소",
     "띄움", "지움", "한글",
-    "사탕", "또는 육성 약 %lu시간 %lu분", "또는 육성 약 %lu분", "게임 중 2초 누르면 그만",
+    "사탕", "또는 육성 약 %lu시간 %lu분", "또는 육성 약 %lu분", "게임 중 왼쪽 위 X 두 번: 그만",
     "기분, 기력 상승!", "최고 기록을 넘으면 기분, 기력 상승", "기력 +5 (기록을 넘으면 기분도 상승)",
     "다른 포켓몬을 계속 만날까요?", "계속 만나기", "나가기",
     "WiFi 찾는 중...", "자동 켬", "자동 끔", "개방 WiFi 켬", "개방 WiFi 끔", " 외 %u개",
@@ -370,6 +373,9 @@ static const char *const XS[2][X_COUNT] = {
     "부르는 구슬 획득! (%u개)", "부르는 구슬을 주워 왔어요!", "부르는 구슬 %u개: 눌러서 사용", "한 번 더 누르면 사용 (%u개)",
     "부르는 구슬 효과: 야생 %u번 남음", "부르는 구슬 사용! 희귀 x2, 전설 x3", "부르는 구슬 효과가 이미 있어요",
     "등 뒤를 공격당했다!", "공격을 아슬아슬 피했다!",
+    "한 번 더 누르면 나가기",
+    "희귀 보너스! 사탕 +%u", "특별 보너스! 사탕 +%u, 구슬", "%u연승!", "%u연승 중",
+    "볼+상처약", "내 사탕 +2", "부르는 구슬",
   },
 };
 

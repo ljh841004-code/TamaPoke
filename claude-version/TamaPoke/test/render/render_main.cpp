@@ -606,6 +606,14 @@ static void scenes(bool ko, const char *sfx) {
   defDropT = gMockMillis - (uint32_t)((DEF_ZONE_Y - 50 - DEF_Y0) * 1000 / defV); defensePress(CX, 300);
   tick(120); render(); shot("05c_train_defense_early");
   defScore = 34; defPerfectN = 14; defGoodN = 6; defMissN = DEF_LIVES; render(); tick(85); render(); shot("06_train_defense_result");
+  {  // ko12.9.14: [X] arriba a la izquierda: un toque lo arma, otro sale al menu sin premio
+    closeAll(); startDefense(); tick(500); render();
+    navCheck("훈련 X: 다른 곳 탭은 X가 아님", !trainQuitPress(CX, 300));
+    navCheck("훈련 X: 1번 = 준비", trainQuitPress(TQ_X, TQ_Y0) && defOpen);
+    render(); shot("05d_train_quit_armed");
+    trainQuitPress(TQ_X, TQ_Y0);
+    navCheck("훈련 X: 2번 = 훈련 메뉴로", !defOpen && trainMenuOpen);
+  }
   closeAll(); startSpeed();
   for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
   tick(300); render(); shot("07e_train_speed_hint");  // ko11.17: solo el 1o parpadea
@@ -797,6 +805,22 @@ static void scenes(bool ko, const char *sfx) {
     render(); shot("09a_battle_win_items");
     pet.balls = b0; pet.potions = p0;
     bPhase = BP_MENU; bqN = 0; bRewarded = false; bWon = false; bItems = 0; bNote[0] = 0; bBoxMsg = -1;
+  }
+  {  // ko12.9.14: racha salvaje (5 = caramelos) + premio seguro por ganar a un raro
+    uint8_t g0 = bGroup;
+    uint16_t c0 = pet.candyOf(bFoe.dex), s0 = pet.wildStreak;
+    pet.wildStreak = 4; bGroup = WG_RARE;
+    mockForceRandom(25);
+    finishBattle(true, false, false);
+    mockClearForcedRandom();
+    render(); shot("09c_battle_win_rare_streak");
+    navCheck("야생 연승 5 = 사탕", pet.wildStreak == 5 && bPartyNote[0]);
+    navCheck("희귀 승리 = 그 포켓몬 사탕 +3", pet.candyOf(bFoe.dex) >= c0 + WILD_RARE_CANDY);
+    bPhase = BP_MENU; bqN = 0; bRewarded = false; bWon = false; bItems = 0; bNote[0] = 0; bBoxMsg = -1; bPartyNote[0] = 0;
+    finishBattle(false, true, false);
+    navCheck("도망치면 연승 끝", pet.wildStreak == 0);
+    pet.wildStreak = s0; bGroup = g0;
+    bPhase = BP_MENU; bqN = 0; bRewarded = false; bWon = false; bFled = false; bItems = 0; bNote[0] = 0; bBoxMsg = -1;
   }
   bvFoeHp = bvFoeTgt = bFoe.hp = bFoe.maxHp / 3;
   finishBattle(false, false, true);

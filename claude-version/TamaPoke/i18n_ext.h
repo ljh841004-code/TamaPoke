@@ -177,6 +177,8 @@ enum XId : uint16_t {  // ko10.6: pasaron de 255
   X_LURE_GOT_FMT, X_EXP_LURE, X_LURE_PILL_FMT, X_LURE_ARM_FMT, X_LURE_ON_FMT, X_LURE_USED,
   X_LURE_BUSY,  // ko12.9.11: 부르는 구슬
   X_RUN_HIT, X_RUN_DODGE,  // ko12.9.13: 도망 실패 때 등 뒤 타격
+  X_TQ_AGAIN,  // ko12.9.14
+  X_WT_RARE_FMT, X_WT_SPECIAL_FMT, X_WS_WIN_FMT, X_WS_RUN_FMT, X_WS_ITEMS, X_WS_CANDY, X_WS_LURE,  // ko12.9.14
   X_COUNT
 };
 

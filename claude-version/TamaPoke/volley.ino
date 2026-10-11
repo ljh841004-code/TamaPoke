@@ -61,6 +61,8 @@ void startVolley() {
   vbLastScore[0] = vbLastScore[1] = 0;
 }
 
+bool vbPlaying() { return vbOpen && vb.state != VB_OVER; }  // ko12.9.14: muestra el [X]
+
 // ---- toques ----
 void vbPress(int16_t x, int16_t y) {
   crumb(0x010A);
@@ -235,6 +237,7 @@ void renderVolley() {
     if (now - vbOverAt > VBC_RESULT_MIN_MS) drawFit(XT(X_VB_TAP_CLOSE), 332, 300, 0x8410, 1);
   }
   crumb(0x0107);
+  drawTrainQuit();  // ko12.9.14
   uiFlush();
   crumb(0x0108);
 }

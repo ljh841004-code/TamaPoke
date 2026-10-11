@@ -302,6 +302,61 @@ void drawPerfLine(int y, uint16_t ink) {
                 (unsigned)perfRenderMax, (unsigned)perfStallMax);
 }
 
+// ko12.9.14: [X] para salir sin premio en todos los juegos (antes solo mantener el dedo 2 s).
+// Arriba a la izquierda, en la diagonal (en "따라 해 봐!" cae en la raya entre dos botones).
+// Un toque lo arma (rojo + "한 번 더!") y otro en 2,5 s sale; el toque no llega al juego
+#define TQ_X 88
+#define TQ_Y0 92
+#define TQ_Y (vbOpen ? 150 : TQ_Y0)  // en el voleibol, debajo del nombre del jugador
+#define TQ_R 20
+#define TQ_ARM_MS 2500
+static uint32_t trainQuitArmT = 0;
+bool vbPlaying();      // volley.ino
+bool shellOverProbe();  // train_more.ino
+bool simonOverProbe();
+static bool trainQuitShown() {
+  return (defOpen && !defOverUntil) || (spdOpen && !spdOverUntil) || (shellOpen && !shellOverProbe()) ||
+         (simonOpen && !simonOverProbe()) || vbPlaying();
+}
+void drawTrainQuit() {
+  if (!trainQuitShown()) { trainQuitArmT = 0; return; }
+  bool armed = trainQuitArmT && millis() - trainQuitArmT < TQ_ARM_MS;
+  if (armed) {
+    const char *t = XT(X_TQ_AGAIN);
+    setSize(1);
+    int w = textW(t, 1) + 20;
+    uiButton(TQ_X + TQ_R - 6, TQ_Y - 14, w + 10, 28, 14, UI_WHITE, UI_BAR_BAD);
+    gfx->setTextColor(UI_BAR_BAD);
+    setCur(TQ_X + TQ_R + 10, TQ_Y - 10);
+    printT(t);
+  }
+  gfx->fillCircle(TQ_X, TQ_Y, TQ_R, armed ? UI_BAR_BAD : UI_WHITE);
+  gfx->drawCircle(TQ_X, TQ_Y, TQ_R, UI_INK);
+  gfx->drawCircle(TQ_X, TQ_Y, TQ_R - 1, UI_INK);
+  uint16_t c = armed ? UI_WHITE : UI_INK;
+  for (int k = -1; k <= 1; k++) {
+    gfx->drawLine(TQ_X - 8 + k, TQ_Y - 8, TQ_X + 8 + k, TQ_Y + 8, c);
+    gfx->drawLine(TQ_X + 8 + k, TQ_Y - 8, TQ_X - 8 + k, TQ_Y + 8, c);
+  }
+}
+// true = el toque era del [X] (no pasa al juego)
+bool trainQuitPress(int16_t x, int16_t y) {
+  if (!trainQuitShown()) return false;
+  int dx = x - TQ_X, dy = y - TQ_Y, rr = TQ_R + 10;
+  if (dx * dx + dy * dy > rr * rr) return false;
+  if (trainQuitArmT && millis() - trainQuitArmT < TQ_ARM_MS) {
+    trainQuitArmT = 0;
+    trainingQuit();
+    backToTrainMenu();
+    sfxPlay(SFX_DENY);
+  } else {
+    trainQuitArmT = millis();
+    if (!trainQuitArmT) trainQuitArmT = 1;
+    sfxPlay(SFX_TAP);
+  }
+  return true;
+}
+
 void drawTimeBar(uint32_t left, uint32_t total, int y) {
   int bw = 280, fw = (int)((uint64_t)bw * left / total);
   uiGauge(CX - bw / 2, y, bw, 14, fw * 1000 / bw, UI_BAR_OK, UI_TRACK);  // ko11.12
@@ -454,6 +509,7 @@ void renderDefense() {
     printT(cb);
   }
   if (now - defStart < 2500) drawFit(XT(X_TR_DEF_HINT), 188, 320, ink, 2);
+  drawTrainQuit();  // ko12.9.14
   uiFlush();
 }
 
@@ -713,6 +769,7 @@ void renderSpeed() {
   } else if (spdRound == 0 && spdPhase == SP_WAIT) {
     drawFit(XT(X_TR_SPE_HINT), 200, 320, ink, 2);
   }
+  drawTrainQuit();  // ko12.9.14
   uiFlush();
 }
 

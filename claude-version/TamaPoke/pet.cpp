@@ -1485,6 +1485,8 @@ void Pet::save() {
   prefs.putUShort("rcandy", rareCandy);
   prefs.putUShort("rshd", rareShards);  // ko11.15.1
   prefs.putUChar("lurn", lureN);         // ko12.9.11
+  prefs.putUShort("wstk", wildStreak);   // ko12.9.14
+  prefs.putUShort("wsbe", wildBest);
   prefs.putUChar("lurl", lureLeft);
   prefs.putUShort("orb", orb);           // ko11.16
   {  // ko11.31: los 4 movimientos y sus PP
@@ -1615,6 +1617,9 @@ void Pet::load(bool *migrated) {
   rareCandy = prefs.getUShort("rcandy", 0);
   rareShards = prefs.getUShort("rshd", 0);
   lureN = prefs.getUChar("lurn", 0);  // ko12.9.11
+  wildStreak = prefs.getUShort("wstk", 0);  // ko12.9.14
+  wildBest = prefs.getUShort("wsbe", 0);
+  if (wildBest < wildStreak) wildBest = wildStreak;
   lureLeft = prefs.getUChar("lurl", 0);
   if (lureN > LURE_MAX) lureN = LURE_MAX;
   if (lureLeft > LURE_BATTLES) lureLeft = LURE_BATTLES;
@@ -1937,6 +1942,17 @@ uint8_t Pet::wildWinItems() {
   uint8_t bits = 0;
   if (balls < BALL_MAX && random(100) < WILD_BALL_PCT) { balls++; bits |= 1; }
   if (potions < POTION_MAX && random(100) < WILD_POTION_PCT) { potions++; bits |= 2; }
+  return bits;
+}
+
+uint8_t Pet::wildStreakWin() {
+  if (wildStreak < 65535) wildStreak++;
+  if (wildStreak > wildBest) wildBest = wildStreak;
+  uint8_t bits = 0;
+  if (wildStreak % WSTREAK_ITEMS == 0) { giveItems(1, 1); bits |= WS_ITEMS; }
+  if (wildStreak % WSTREAK_CANDY == 0) { addCandy(speciesId, WSTREAK_CANDY_N); bits |= WS_CANDY; }
+  if (wildStreak % WSTREAK_LURE == 0 && lureN < LURE_MAX) { lureN++; bits |= WS_LURE; }
+  pendingSave = true;
   return bits;
 }
 
