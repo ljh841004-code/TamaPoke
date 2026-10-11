@@ -618,44 +618,46 @@ static void scenes(bool ko, const char *sfx) {
     pet.speciesId = keepSp;
     pmd.load((uint8_t)keepSp, pet.shiny);
   }
-  // ko12.9.16: "네 방향 막기": tocar el borde por donde viene
+  // ko12.9.17: "반사 방패": justo = devolver, casi = parar, pronto = escudo gastado, tarde = me da
   closeAll(); startDefense();
   tick(400); render(); shot("05_train_defense_hint");
   {
-    defensePress(CX + 5, DEF_CY + 5);
-    navCheck("4방향: 가운데 탭은 무시", defShieldD < 0);
-    defHits = 10; defScore = 14; defCombo = 3; defPerfectN = 4; defGoodN = 6; defMissN = 1;
-    defAtk[0] = { true, false, 1, 170, 150, PT_FIRE };   // por la derecha
-    defAtk[1] = { true, false, 0, 190, 150, PT_WATER };  // por arriba
-    defNextD = 2; defNextSpawn = gMockMillis + 300;
-    render(); shot("05_train_defense");
-    uint16_t sc0 = defScore;
-    for (int i = 0; i < 20 && defAtk[0].on; i++) {  // escudo a la derecha justo antes del anillo
-      if (defAtk[0].r < DEF_RG + DEF_ORB_R + 12 && defShieldD != 1) defensePress(CX + 180, DEF_CY);
-      tick(30); render();
-    }
-    navCheck("4방향: 오른쪽 톡 = 완벽 방어", defScore == sc0 + 2 && defJudge == 1);
-    tick(30); render(); shot("05b_train_defense_perfect");
+    auto shootAt = [](float y) {  // una tecnica en vuelo a esa altura
+      defWindT = 0; defShot = { true, false, y, 300, (uint8_t)DEX_TBL[defFoeDex].ptype };
+    };
+    defHits = 6; defScore = 11; defCombo = 3; defPerfectN = 4; defGoodN = 2; defMissN = 1;
+    defNextSpawn = gMockMillis + 99999;
+    shootAt(DEF_SHIELD_Y - 70); render(); shot("05_train_defense");
+    uint8_t hp0 = defFoeHp;
+    shootAt(DEF_SHIELD_Y - 3); defensePress(CX, 200);
+    navCheck("반사: 딱 맞으면 되받아침 (+2)", defShot.back && defJudge == 1 && defScore == 13);
+    tick(120); render(); shot("05b_train_defense_perfect");
+    for (int i = 0; i < 30 && defShot.on; i++) { tick(30); render(); }
+    navCheck("반사: 되받아친 기술이 상대 체력을 깎음", defFoeHp == hp0 - 1);
+    tick(400); defShieldCD = 0;
+    shootAt(DEF_SHIELD_Y - 20); defensePress(CX, 200);
+    navCheck("반사: 조금 어긋나면 막기만 (+1)", !defShot.on && defJudge == 2 && defScore == 14);
+    tick(500); defShieldCD = 0;
+    shootAt(DEF_SHIELD_Y - 120); defensePress(CX, 200);
+    navCheck("반사: 너무 일찍 = 방패가 잠깐 회색", defJudge == 3 && defShieldCD > gMockMillis);
+    render(); shot("05c_train_defense_early");
     uint16_t m0 = defMissN;
-    for (int i = 0; i < 80 && defAtk[1].on; i++) { tick(30); render(); }  // la de arriba sin escudo: le da
-    navCheck("4방향: 안 막으면 맞음", defMissN == m0 + 1 && defJudge == 4);
+    for (int i = 0; i < 30 && defShot.on; i++) { tick(30); render(); }
+    navCheck("반사: 못 막으면 맞음", defMissN == m0 + 1 && defJudge == 4);
     tick(30); render(); shot("05e_train_defense_hit");
-    for (auto &k : defAtk) k.on = false;
-    // morada: dejarla pasar suma; pararla cuesta una vida
-    defMissN = 0;
-    defAtk[0] = { true, true, 3, 150, 150, PT_POISON };
-    defPoisonHintUntil = gMockMillis + 3000;
-    render(); shot("05f_train_defense_poison");
-    uint16_t s1 = defScore;
-    for (int i = 0; i < 80 && defAtk[0].on; i++) { tick(30); render(); }
-    navCheck("4방향: 보라색은 그냥 두면 +1", defScore == s1 + 1 && defMissN == 0);
-    defAtk[0] = { true, true, 3, 150, 150, PT_POISON };
-    for (int i = 0; i < 80 && defAtk[0].on; i++) {
-      if (defAtk[0].r < DEF_RG + DEF_ORB_R + 12 && defShieldD != 3) defensePress(CX - 180, DEF_CY);
-      tick(30); render();
-    }
-    navCheck("4방향: 보라색을 막으면 -1 목숨", defMissN == 1 && defJudge == 5);
-    for (auto &k : defAtk) k.on = false;
+    // amago: cargar sin disparar; tocar ahi = "속았다!"
+    tick(600); defShieldCD = 0; defShot.on = false;
+    defWindT = gMockMillis; defFeint = true; render(); shot("05f_train_defense_wind");
+    defensePress(CX, 200);
+    navCheck("반사: 쏘는 척(속임)에 누르면 속았다", defJudge == 5);
+    // vencer al rival: sale otro
+    defShieldCD = 0; defFoeHp = 1; shootAt(DEF_SHIELD_Y); defensePress(CX, 200);
+    for (int i = 0; i < 30 && defShot.on; i++) { tick(30); render(); }
+    navCheck("반사: 상대를 쓰러뜨리면 +3, 다음 상대", defFoeSwapT && defFoeHp == 0);
+    render(); shot("05g_train_defense_ko");
+    for (int i = 0; i < 50 && defFoeSwapT; i++) { tick(30); render(); }
+    navCheck("반사: 다음 상대 등장", defFoeN == 1 && defFoeHp == defFoeMax);
+    defShot.on = false; defMissN = 0;
   }
   defScore = 34; defPerfectN = 14; defGoodN = 6; defMissN = DEF_LIVES; render(); tick(85); render(); shot("06_train_defense_result");
   {  // ko12.9.15: [X] arriba a la izquierda: para el juego y pregunta; [계속하기] sigue sin perder nada
