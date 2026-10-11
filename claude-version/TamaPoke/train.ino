@@ -48,6 +48,11 @@ uint16_t defHits = 0, defPerfectN = 0, defGoodN = 0, defCombo = 0;
 uint8_t defJudge = 0;         // 1 perfecto, 2 bien, 3 pronto, 4 tarde
 uint32_t defJudgeT = 0;
 int16_t defJudgeY = 0;
+// ko12.9.14: un rival arriba a la derecha lanza su tecnica hacia el escudo (el centro de la franja)
+int16_t defFoeDex = 4;
+#define DEF_FOE_X (CX + 128)
+#define DEF_FOE_G 158         // suelo del rival
+#define DEF_L_X (DEF_FOE_X - 26)  // de donde sale el ataque (a la altura DEF_Y0)
 
 // ---------- velocidad: reflejos izquierda/derecha ----------
 #define SPD_ROUNDS 15
@@ -380,8 +385,19 @@ static void defNextBall(uint32_t now, uint32_t wait) {
   defV = v * (0.88f + random(25) / 100.0f);
 }
 
+static int16_t defPickFoe() {
+  for (int tries = 0; tries < 40; tries++) {
+    int16_t d = (int16_t)(1 + random(DEX_COUNT));
+    if (d == pet.speciesId || DEX_TBL[d].rarity == R_LEGENDARIO) continue;
+    return d;
+  }
+  return 4;
+}
+
 void startDefense() {
   perfReset();  // ko11.3
+  defFoeDex = defPickFoe();
+  loadFoe(defFoeDex, false);
   defOpen = true;
   defStart = defLastStep = millis();
   defOverUntil = 0;
@@ -463,49 +479,84 @@ void renderDefense() {
     if (i < DEF_LIVES - (int)defMissN) gfx->fillCircle(CX - 28 + i * 28, 70, 7, UI_BAR_BAD);
     else gfx->drawCircle(CX - 28 + i * 28, 70, 7, UI_TRACK);
   }
-  // carril (medidor): pista hundida, franja amarilla (bien) con centro verde (perfecto)
-  const int rx = CX - DEF_RAIL_W / 2, rt = DEF_Y0 - 30, rb = DEF_ZONE_Y + DEF_GOOD + 20;
-  uiShade(rx, rt, DEF_RAIL_W, rb - rt, DEF_RAIL_W / 2, 4);
-  gfx->drawRoundRect(rx, rt, DEF_RAIL_W, rb - rt, DEF_RAIL_W / 2, C565(0xf0, 0xf0, 0xf0));
-  uint16_t goodC = C565(0xf4, 0xc4, 0x3c), perfC = C565(0x4c, 0xc8, 0x5c);
-  gfx->fillRoundRect(rx - 10, DEF_ZONE_Y - DEF_GOOD, DEF_RAIL_W + 20, 2 * DEF_GOOD, 8, goodC);
-  gfx->fillRoundRect(rx - 10, DEF_ZONE_Y - DEF_PERFECT, DEF_RAIL_W + 20, 2 * DEF_PERFECT, 6, perfC);
-  gfx->drawRoundRect(rx - 10, DEF_ZONE_Y - DEF_GOOD, DEF_RAIL_W + 20, 2 * DEF_GOOD, 8, ink);
-  gfx->drawFastHLine(rx - 16, DEF_ZONE_Y, DEF_RAIL_W + 32, UI_WHITE);
+  // ko12.9.14: el rival (arriba a la derecha) lanza su tecnica por una linea que pasa por el
+  // centro del escudo; el juicio sigue siendo la altura (defBallY) como antes
+  const uint16_t goodC = C565(0xf4, 0xc4, 0x3c), perfC = C565(0x4c, 0xc8, 0x5c), shC = C565(0x8c, 0xd8, 0xff);
+  const uint8_t ft = DEX_TBL[defFoeDex].ptype;
+  const int lx = DEF_L_X, ly = DEF_Y0, zx = CX, zy = DEF_ZONE_Y;
+  const int ey = DEF_ZONE_Y + DEF_GOOD + 20, ex = lx + (zx - lx) * (ey - ly) / (zy - ly);  // fin del recorrido
+  uint32_t jt = defJudge ? now - defJudgeT : 9999;
+  bool hurt = defJudge == 4 && jt < 500;
+  int shake = hurt ? (int)(8 * sinf(jt * 0.09f)) : 0;
+  // camino punteado del rival al escudo
+  for (int i = 1; i < 9; i++) {
+    int px = lx + (zx - lx) * i / 9, py = ly + (zy - ly) * i / 9;
+    gfx->fillCircle(px, py, 2, lerp565(UI_WHITE, ink, 3, 16));
+  }
+  // escudo: aro amarillo (bien) con el centro verde (perfecto)
+  gfx->fillCircle(zx, zy, DEF_GOOD + 6, lerp565(shC, UI_WHITE, 8, 16));
+  gfx->fillCircle(zx, zy, DEF_GOOD, goodC);
+  gfx->fillCircle(zx, zy, DEF_PERFECT + 2, perfC);
+  gfx->drawCircle(zx, zy, DEF_GOOD + 6, shC);
+  gfx->drawCircle(zx, zy, DEF_GOOD, ink);
+  gfx->drawCircle(zx, zy, DEF_PERFECT + 2, ink);
   if (pmd.loaded) {  // x3,5 como en el voleibol
-    uint8_t act = defJudge == 4 && now - defJudgeT < 500 ? PMD_HURT : PMD_IDLE;
+    uint8_t act = hurt ? PMD_HURT : PMD_IDLE;
     if (!pmd.has(act)) act = PMD_IDLE;
-    drawPmdActM(pmd, act, CX, 394, now, true, false, 4, 124);
+    drawPmdActM(pmd, act, CX + shake, 394, now, true, false, 4, 124);
   }
-  // balon (esperando arriba: tiembla un poco)
-  if (!defOverUntil) {
-    int by = (int)defBallY(now);
-    int bx = CX + (defDropT ? 0 : (int)(3 * sinf(now * 0.03f)));
-    if (by <= rb) drawMap(SPR_ICON_PLAY, 16, bx - 24, by - 24, 3, false);
+  // el rival: carga (esperando), dispara (al soltar) o quieto
+  if (foePmd.loaded) {
+    uint8_t act = !defDropT ? PMD_CHARGE : now - defDropT < 300 ? PMD_SHOOT : PMD_IDLE;
+    if (act == PMD_SHOOT && !foePmd.has(act)) act = PMD_ATTACK;
+    if (!foePmd.has(act)) act = PMD_IDLE;
+    drawPmdActM(foePmd, act, DEF_FOE_X, DEF_FOE_G, now, true, false, 3, 100);
   }
-  // juicio: aro + texto que sube
-  if (defJudge && now - defJudgeT < 650) {
-    uint32_t t = now - defJudgeT;
-    uint16_t c = defJudge == 1 ? perfC : defJudge == 2 ? goodC : UI_BAR_BAD;
-    int r = 26 + (int)(t / 10);
-    gfx->drawCircle(CX, defJudgeY, r, c);
-    gfx->drawCircle(CX, defJudgeY, r - 2, c);
+  if (!defDropT) {  // cargando: una bola de su color que late
+    int r = 6 + (int)((now / 70) % 5);
+    gfx->fillCircle(lx, ly, r + 3, lerp565(typeColor(ft), UI_WHITE, 8, 16));
+    gfx->fillCircle(lx, ly, r, typeColor(ft));
+  } else {  // en vuelo: el efecto de su tipo (el mismo de los combates)
+    float p = (defBallY(now) - ly) / (float)(ey - ly);
+    if (p <= 1.0f) drawMoveFx(ft, lx, ly, ex, ey, 120 + (uint32_t)(p * 260), false, 2, moveTier(defFoeDex), 0);
+  }
+  // juicio
+  if (defJudge && jt < 650) {
+    if (defJudge <= 2) {  // parado: destello del escudo + chispas
+      if (jt < 120) gfx->fillCircle(zx, zy, DEF_GOOD + 10, UI_WHITE);
+      int r = DEF_GOOD + 8 + (int)(jt / 8);
+      uint16_t c = lerp565(shC, UI_WHITE, (int)(jt / 50), 16);
+      for (int k = 0; k < 3; k++) gfx->drawCircle(zx, zy, r - k * 2, c);
+      for (int k = 0; k < 8; k++) {
+        float a = k * 0.785f + 0.39f;
+        int r0 = r + 4, r1 = r + 14;
+        gfx->drawLine(zx + (int)(cosf(a) * r0), zy + (int)(sinf(a) * r0), zx + (int)(cosf(a) * r1),
+                      zy + (int)(sinf(a) * r1), defJudge == 1 ? perfC : goodC);
+      }
+    } else if (defJudge == 4) {  // le dio: el golpe en el bicho y la pantalla en rojo
+      drawMoveFx(ft, lx, ly, CX + shake, 330, 350 + jt, true, 2, moveTier(defFoeDex), 0);
+      if (jt < 300) for (int k = 0; k < 4; k++) gfx->drawCircle(CX, CX, 232 - k, UI_BAR_BAD);
+    } else if (jt < 300) {  // pronto: se deshace en humo
+      for (int k = 0; k < 5; k++)
+        gfx->fillCircle(zx + (k - 2) * 9, defJudgeY - 30 - (int)(jt / 12) + (k % 2) * 6, 7 - (int)(jt / 60),
+                        lerp565(UI_TRACK, UI_WHITE, 8, 16));
+    }
     XId id = defJudge == 1 ? X_DEF_PERFECT : defJudge == 2 ? X_DEF_GOOD : defJudge == 3 ? X_DEF_EARLY : X_DEF_LATE;
-    // a la derecha del carril, subiendo un poco
     uint8_t sz = defJudge == 1 ? 3 : 2;
-    const char *jt = XT(id);
+    const char *jtx = XT(id);
+    int tx0 = zx + DEF_GOOD + 24;
+    if (textW(jtx, sz) > LCD_WIDTH - tx0 - 30) sz = 2;
     setSize(sz);
-    if (textW(jt, sz) > LCD_WIDTH - (rx + DEF_RAIL_W + 18) - 30) { sz = 2; setSize(sz); }
     gfx->setTextColor(defJudge == 1 ? C565(0x1a, 0x86, 0x34) : defJudge == 2 ? C565(0xb8, 0x7a, 0x00) : UI_BAR_BAD);  // texto mas oscuro que el aro
-    setCur(rx + DEF_RAIL_W + 18, DEF_ZONE_Y - 60 - (int)(t / 25));
-    printT(jt);
+    setCur(tx0, DEF_ZONE_Y - 20 - (int)(jt / 25));
+    printT(jtx);
   }
-  if (defCombo >= 2) {  // a la izquierda del carril
+  if (defCombo >= 2) {  // a la izquierda del escudo
     char cb[20];
     snprintf(cb, sizeof(cb), XT(X_DEF_COMBO_FMT), defCombo);
     setSize(2);
     gfx->setTextColor(C565(0x1a, 0x86, 0x34));
-    setCur(rx - 18 - textW(cb, 2), DEF_ZONE_Y - 12);
+    setCur(zx - DEF_GOOD - 24 - textW(cb, 2), DEF_ZONE_Y - 12);
     printT(cb);
   }
   if (now - defStart < 2500) drawFit(XT(X_TR_DEF_HINT), 188, 320, ink, 2);
@@ -645,6 +696,12 @@ void stepSpeed() {
   }
 }
 
+// ko12.9.14: aro de tiempo que se cierra (centro en el de la rejilla de dianas)
+#define SPD_RING_CY 222
+#define SPD_RING_MAX 226
+#define SPD_RING_MIN 30
+#define SPD_RING_W 10
+
 // ko12.9.5: diana roja y blanca (el numero va encima, en el circulo blanco del centro)
 static void drawTarget(int x, int y, int r) {
   const uint16_t RED = C565(0xe0, 0x40, 0x30);
@@ -675,13 +732,22 @@ void renderSpeed() {
   bool night = sceneHour() < 6 || sceneHour() >= 20;
   uint16_t ink = night ? UI_INK_NIGHT : UI_INK;
   const uint16_t okC = C565(0x4c, 0xc8, 0x5c);
-  // ko11.16: el tiempo es un aro alrededor de la pantalla redonda (verde -> rojo)
+  // ko12.9.14: el tiempo es un aro grueso que se cierra hacia el centro de las dianas
+  // (antes un arco fino en el borde que costaba ver). Verde -> amarillo -> rojo; al final parpadea
+  // y hace tic. Se dibuja antes que las dianas: pasa por detras
   if (spdPhase == SP_SHOW) {
+    static uint8_t tickLast = 0;
     uint32_t lim = spdLimit(), left = timeLeft(spdUntil);
     float f = lim ? (float)left / lim : 0;
     uint16_t rc = f > 0.5f ? okC : f > 0.25f ? UI_BAR_WARN : UI_BAR_BAD;
-    gfx->fillArc(CX, CX, 232, 222, 0, 360, lerp565(UI_TRACK, UI_INK, 2, 16));
-    if (f > 0.01f) gfx->fillArc(CX, CX, 232, 222, 270, 270 + f * 360.0f, rc);
+    int r = SPD_RING_MIN + (int)((SPD_RING_MAX - SPD_RING_MIN) * f);
+    bool blink = f <= 0.25f && (now / 120) % 2;
+    if (!blink) gfx->fillArc(CX, SPD_RING_CY, r, r - SPD_RING_W, 0, 360, rc);
+    gfx->drawCircle(CX, SPD_RING_CY, r, ink);
+    if (f <= 0.25f) {  // tic cada 250 ms en el ultimo cuarto
+      uint8_t tk = (uint8_t)(left / 250 + 1);
+      if (tk != tickLast) { tickLast = tk; sfxPlay(SFX_TAP); }
+    } else tickLast = 0;
   }
   // puntos arriba y 15 puntitos de progreso (verde bien, rojo fallo, aro = ahora)
   char b[24];

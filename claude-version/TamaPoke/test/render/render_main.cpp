@@ -605,6 +605,14 @@ static void scenes(bool ko, const char *sfx) {
   tick(120); render(); shot("05b_train_defense_perfect");
   defDropT = gMockMillis - (uint32_t)((DEF_ZONE_Y - 50 - DEF_Y0) * 1000 / defV); defensePress(CX, 300);
   tick(120); render(); shot("05c_train_defense_early");
+  {  // ko12.9.14: tarde: la tecnica le da al bicho (pantalla en rojo)
+    uint16_t m0 = defMissN;
+    tick(1300); render();
+    defDropT = gMockMillis - (uint32_t)((DEF_ZONE_Y + DEF_GOOD + 2 - DEF_Y0) * 1000 / defV);
+    render(); tick(160); render(); shot("05e_train_defense_hit");
+    navCheck("막기: 늦으면 맞음", defMissN == m0 + 1 && defJudge == 4);
+    defMissN = m0;
+  }
   defScore = 34; defPerfectN = 14; defGoodN = 6; defMissN = DEF_LIVES; render(); tick(85); render(); shot("06_train_defense_result");
   {  // ko12.9.14: [X] arriba a la izquierda: un toque lo arma, otro sale al menu sin premio
     closeAll(); startDefense(); tick(500); render();
@@ -634,6 +642,7 @@ static void scenes(bool ko, const char *sfx) {
     if (r == 7) {  // ko11.16: a media partida (puntos de progreso, aro de tiempo)
       for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
       tick(700); render(); shot("07d_train_speed_mid");
+      tick(1900); render(); shot("07h_train_speed_ring_late");  // ko12.9.14: el aro ya cerca del centro
     }
     for (int i = 0; i < 400 && spdPhase != SP_SHOW; i++) { tick(20); render(); }
     if (r == 5) {  // ko12.9.5: el 3er toque equivocado de la ronda si la falla
