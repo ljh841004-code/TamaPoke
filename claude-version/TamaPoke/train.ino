@@ -28,37 +28,45 @@ const char *trainMsg = nullptr;
 #define TRM_GAP 6
 #define TRM_N 5
 
-// ---------- defensa (ko12.9.18): "상성 방패" ----------
-// Sale un rival de un tipo y lanza su tecnica hacia mi bicho. Abajo hay 3 escudos de tipos: hay que
-// tocar el que AGUANTA ese tipo (poco eficaz o inmune) antes de que llegue: pronto = +2, a tiempo = +1.
-// Escudo malo o tarde = una vida menos y la tarjeta "X 공격엔 Y 방패!"; ese ataque vuelve pronto (repaso).
-// Para quien no sabe de tipos: empieza solo con fuego/agua/planta/electrico, cada pareja nueva se
-// ensena antes con una tarjeta ("새 상성!") y luego se van sumando tipos. 3 vidas
+// ---------- defensa (ko12.9.21): "성벽 쌓기" ----------
+// Un bloque va y viene encima del muro; tocar lo deja caer. Lo que sobresale de la fila de abajo se
+// corta (el muro se estrecha); casi justo (+-STK_PERF px) = perfecto: no corta y ensancha un poco.
+// Cada STK_EVERY pisos el rival ataca el muro: si la fila de arriba es al menos tan ancha como lo que
+// pide (STK_NEED), aguanta (+3); si no, se cae un trozo (vida -1) y se repara. Fallar entero = vida -1.
+// Puntos: perfecto 2, normal 1. 3 vidas
 #define DEF_LIVES 3
-#define DEF_FOE_X 318
-#define DEF_FOE_G 196
-#define DEF_PET_X 142
-#define DEF_PET_G 306
-#define DEF_BTN_Y 322
-#define DEF_BTN_W 94
-#define DEF_BTN_H 72
-#define DEF_BTN_DX 102
-#define DEF_FLY_MAX 3600  // tiempo para elegir (ms), baja con los aciertos
-#define DEF_FLY_MIN 1500
-enum : uint8_t { DQ_WAIT = 0, DQ_LEARN, DQ_FLY, DQ_BLOCK, DQ_TEACH };
+#define STK_G 420        // suelo del muro
+#define STK_RH 24        // alto de una fila
+#define STK_VIS 7        // filas que se ven (la camara sube)
+#define STK_W0 220       // ancho de la base (y maximo)
+#define STK_PERF 6       // +-px para "perfecto"
+#define STK_GROW 8       // un perfecto ensancha esto
+#define STK_EVERY 5      // ataque cada N pisos
+#define STK_XMIN (CX - 178)
+#define STK_XMAX (CX + 178)
+#define STK_FOE_X 92
+#define STK_FOE_G 300
+#define STK_REPAIR 120   // tras caer un trozo, el muro se repara a este ancho
+enum : uint8_t { STK_PLAY = 0, STK_ATK };
+struct StkRow { int16_t x, w; };
 bool defOpen = false;
-uint32_t defStart = 0, defOverUntil = 0, defStateT = 0, defFlyMs = DEF_FLY_MAX;
+uint32_t defStart = 0, defOverUntil = 0;
 uint16_t defScore = 0, defMissN = 0;
 uint8_t defGain = 0;
 bool defNewHi = false;
-uint16_t defHits = 0, defPerfectN = 0, defGoodN = 0, defCombo = 0;
-uint8_t defState = DQ_WAIT, defStage = 0;
-uint8_t defAtk = PT_FIRE, defOpt[3] = { PT_WATER, PT_GRASS, PT_ELECTRIC }, defAns = 0, defPick = 0xFF;
-uint8_t defJudge = 0;   // 1 pronto, 2 a tiempo, 3 escudo malo, 4 tarde
-uint32_t defJudgeT = 0, defStageT = 0;
-int16_t defFoeDex = 4;
-uint16_t defLearned[PT_COUNT];        // bit d de [a]: ya se enseno "a contra d" (esta partida)
-uint8_t defReview[4], defReviewN = 0;  // ataques fallados: vuelven pronto
+uint16_t defPerfectN = 0, defGoodN = 0, defCombo = 0;
+uint8_t defJudge = 0;   // 1 perfecto, 2 bien, 3 fuera (vida), 4 aguanto, 5 se cayo un trozo
+uint32_t defJudgeT = 0;
+StkRow stk[STK_VIS];
+uint8_t stkN = 0, stkState = STK_PLAY, stkAtkN = 0;
+uint16_t stkFloors = 0;
+int16_t stkW = STK_W0;
+uint16_t stkSpeed = 150;      // px/s del bloque
+bool stkFromRight = false, stkAtkJudged = false;
+uint32_t stkMoveT0 = 0, stkStateT = 0;
+int16_t stkCutX = 0, stkCutW = 0, stkCutY = 0;  // el trozo cortado que cae
+uint32_t stkCutT = 0;
+int16_t defFoeDex = 54;
 
 // ---------- velocidad: reflejos izquierda/derecha ----------
 #define SPD_ROUNDS 15
@@ -361,9 +369,9 @@ void renderTrainPause() {
 }
 static void trainShiftTime(uint32_t d) {
   if (defOpen) {
-    defStart += d; defStateT += d;
+    defStart += d; stkMoveT0 += d; stkStateT += d;
     if (defJudgeT) defJudgeT += d;
-    if (defStageT) defStageT += d;
+    if (stkCutT) stkCutT += d;
   }
   if (spdOpen) {
     spdUntil += d; spdShowAt += d;
@@ -405,70 +413,41 @@ void drawTimeBar(uint32_t left, uint32_t total, int y) {
 }
 
 // ---------- defensa ----------
-// tipos que van saliendo: 4 faciles, luego tierra/roca/hielo, luego 5 mas, luego todos
-static const uint8_t DEF_POOL[PT_COUNT] = { PT_FIRE, PT_WATER, PT_GRASS, PT_ELECTRIC, PT_GROUND, PT_ROCK, PT_ICE,
-                                            PT_FIGHT, PT_PSYCHIC, PT_BUG, PT_POISON, PT_GHOST,
-                                            PT_NORMAL, PT_DRAGON, PT_DARK, PT_STEEL };
-static const uint8_t DEF_POOL_N[4] = { 4, 7, 12, PT_COUNT };
-static const uint8_t DEF_STAGE_AT[4] = { 0, 5, 12, 20 };  // aciertos para pasar de etapa
-
-static bool defResists(uint8_t atk, uint8_t d) { return typeEff(atk, d) <= 1; }
-static int16_t defFoeOfType(uint8_t t) {
-  for (int tries = 0; tries < 300; tries++) {
+static int16_t defPickFoe() {
+  for (int tries = 0; tries < 40; tries++) {
     int16_t d = (int16_t)(1 + random(DEX_COUNT));
-    if (DEX_TBL[d].ptype == t && DEX_TBL[d].rarity != R_LEGENDARIO && d != pet.speciesId) return d;
+    if (d == pet.speciesId || DEX_TBL[d].rarity == R_LEGENDARIO) continue;
+    return d;
   }
-  for (int16_t d = 1; d <= DEX_COUNT; d++)
-    if (DEX_TBL[d].ptype == t) return d;
-  return 4;
+  return 54;
 }
-// elige ataque y 3 escudos: uno que aguanta y dos que no
-static bool defBuild(uint8_t a, uint8_t n, bool commit) {
-  uint8_t good[PT_COUNT], bad[PT_COUNT], ng = 0, nb = 0;
-  for (int i = 0; i < n; i++) {
-    uint8_t d = DEF_POOL[i];
-    if (defResists(a, d)) good[ng++] = d; else bad[nb++] = d;
-  }
-  if (!ng || nb < 2) return false;
-  if (!commit) return true;
-  uint8_t ans = good[random(ng)];
-  int b1 = random(nb), b2 = random(nb - 1);
-  if (b2 >= b1) b2++;
-  defAns = (uint8_t)random(3);
-  uint8_t k = 0;
-  for (int i = 0; i < 3; i++) defOpt[i] = i == defAns ? ans : (k++ ? bad[b2] : bad[b1]);
-  defAtk = a;
-  return true;
+static uint16_t stkNeed() { return (uint16_t)(60 + (stkAtkN < 8 ? stkAtkN : 8) * 10); }  // 60..140 px
+static int stkTopY() { return STK_G - stkN * STK_RH; }
+static int stkBlockY() { int y = stkTopY() - 112; return y < 136 ? 136 : y > 214 ? 214 : y; }
+static uint16_t stkToAttack() { return (uint16_t)(STK_EVERY - stkFloors % STK_EVERY); }
+// donde esta el bloque que se mueve (va y viene entre STK_XMIN y STK_XMAX)
+static int16_t stkBlockX(uint32_t now) {
+  int L = STK_XMAX - STK_XMIN - stkW;
+  if (L < 1) L = 1;
+  uint32_t pos = (uint32_t)((uint64_t)(now - stkMoveT0) * stkSpeed / 1000) + (stkFromRight ? L : 0);
+  pos %= (uint32_t)(2 * L);
+  return (int16_t)(STK_XMIN + (pos < (uint32_t)L ? pos : 2 * L - pos));
 }
-static void defNewQuestion(uint32_t now) {
-  while (defStage < 3 && defHits >= DEF_STAGE_AT[defStage + 1]) { defStage++; defStageT = now; }
-  uint8_t n = DEF_POOL_N[defStage];
-  bool ok = false;
-  if (defReviewN && random(100) < 60) {  // repaso de un fallo
-    uint8_t a = defReview[0];
-    for (int i = 1; i < defReviewN; i++) defReview[i - 1] = defReview[i];
-    defReviewN--;
-    ok = defBuild(a, n, true);
-  }
-  for (int tries = 0; !ok && tries < 40; tries++) {
-    uint8_t a = DEF_POOL[random(n)];
-    if (a == defAtk && tries < 20) continue;  // no el mismo ataque dos veces seguidas
-    ok = defBuild(a, n, true);
-  }
-  if (!ok) defBuild(PT_FIRE, DEF_POOL_N[0], true);
-  defFoeDex = defFoeOfType(defAtk);
-  loadFoe(defFoeDex, false);
-  int fly = DEF_FLY_MAX - defHits * 70;
-  defFlyMs = (uint32_t)(fly < DEF_FLY_MIN ? DEF_FLY_MIN : fly);
-  defPick = 0xFF;
-  uint8_t ans = defOpt[defAns];
-  if (!(defLearned[defAtk] & (1u << ans))) {  // pareja nueva: primero se ensena
-    defLearned[defAtk] |= (uint16_t)(1u << ans);
-    defState = DQ_LEARN;
-  } else defState = DQ_FLY;
-  defStateT = now;
+static void stkNewBlock(uint32_t now) {
+  uint16_t v = 150 + stkFloors * 7;
+  stkSpeed = v > 380 ? 380 : v;
+  stkFromRight = !stkFromRight;
+  stkMoveT0 = now;
+  stkState = STK_PLAY;
 }
-static void defWait(uint32_t now, uint32_t ms) { defState = DQ_WAIT; defStateT = now + ms; }
+static void stkPush(int16_t x, int16_t w) {
+  if (stkN >= STK_VIS) {  // la camara sube: se olvida la fila de abajo
+    memmove(stk, stk + 1, sizeof(StkRow) * (STK_VIS - 1));
+    stkN = STK_VIS - 1;
+  }
+  stk[stkN++] = { x, w };
+}
+static void defSetJudge(uint8_t j) { defJudge = j; defJudgeT = millis(); }
 
 void startDefense() {
   perfReset();  // ko11.3
@@ -476,101 +455,107 @@ void startDefense() {
   defStart = millis();
   defOverUntil = 0;
   defScore = defMissN = 0;
-  defHits = defPerfectN = defGoodN = defCombo = 0;
+  defPerfectN = defGoodN = defCombo = 0;
   defNewHi = false;
-  defJudge = 0; defJudgeT = 0; defStageT = 0;
-  defStage = 0; defReviewN = 0; defAtk = 0xFF;
-  memset(defLearned, 0, sizeof(defLearned));
-  defNewQuestion(defStart);
-}
-
-static void defSetJudge(uint8_t j) { defJudge = j; defJudgeT = millis(); }
-static int defBtnX(int i) { return CX + (i - 1) * DEF_BTN_DX - DEF_BTN_W / 2; }
-static void defMiss(uint32_t now, uint8_t j) {
-  defMissN++; defCombo = 0;
-  defSetJudge(j);
-  if (defReviewN < 4) defReview[defReviewN++] = defAtk;
-  sfxPlay(SFX_DENY);
-  defState = DQ_TEACH; defStateT = now;
+  defJudge = 0; defJudgeT = 0;
+  stkN = 0; stkFloors = 0; stkAtkN = 0; stkCutT = 0;
+  stkPush(CX - STK_W0 / 2, STK_W0);  // la base
+  stkW = STK_W0;
+  stkFromRight = true;
+  defFoeDex = defPickFoe();
+  loadFoe(defFoeDex, false);
+  stkNewBlock(defStart);
 }
 
 void defensePress(int16_t x, int16_t y) {
+  (void)x; (void)y;  // en cualquier sitio
   uint32_t now = millis();
-  if (defOverUntil) return;
-  if (defState == DQ_LEARN) {  // "새 상성!": tocar = empezar
-    if (now - defStateT >= 500) { defState = DQ_FLY; defStateT = now; sfxPlay(SFX_TAP); }
-    return;
+  if (defOverUntil || stkState != STK_PLAY || defMissN >= DEF_LIVES) return;
+  int16_t bx = stkBlockX(now), w = stkW;
+  const StkRow top = stk[stkN - 1];
+  int by = stkBlockY();
+  if (abs(bx - top.x) <= STK_PERF) {  // perfecto: sin cortar, y un poco mas ancho
+    int16_t nw = top.w + STK_GROW > STK_W0 ? STK_W0 : top.w + STK_GROW;
+    int16_t nx = top.x - (nw - top.w) / 2;
+    stkPush(nx, nw);
+    defScore += 2; defPerfectN++; defCombo++;
+    defSetJudge(1);
+    sfxPlay(SFX_MEDAL);
+  } else {
+    int16_t ox = bx > top.x ? bx : top.x, oe = bx + w < top.x + top.w ? bx + w : top.x + top.w;
+    if (oe - ox <= 0) {  // fuera: cae entero
+      stkCutX = bx; stkCutW = w; stkCutY = by; stkCutT = now ? now : 1;
+      defMissN++; defCombo = 0;
+      defSetJudge(3);
+      sfxPlay(SFX_DENY);
+      vibPulse(120, 1, 0);
+      stkNewBlock(now);
+      return;
+    }
+    // lo que sobresale se corta y cae
+    stkCutX = bx < top.x ? bx : oe;
+    stkCutW = w - (oe - ox);
+    stkCutY = by; stkCutT = now ? now : 1;
+    stkPush(ox, oe - ox);
+    defScore += 1; defGoodN++; defCombo = 0;
+    defSetJudge(2);
+    sfxPlay(SFX_PLAY);
   }
-  if (defState == DQ_TEACH) {
-    if (now - defStateT >= 800) defWait(now, 250);
-    return;
-  }
-  if (defState != DQ_FLY) return;
-  if (y < DEF_BTN_Y - 8 || y > DEF_BTN_Y + DEF_BTN_H + 8) return;
-  int i = -1;
-  for (int k = 0; k < 3; k++)
-    if (x >= defBtnX(k) - 4 && x < defBtnX(k) + DEF_BTN_W + 4) i = k;
-  if (i < 0) return;
-  defPick = (uint8_t)i;
-  if (i != defAns) { defMiss(now, 3); return; }
-  bool fast = (now - defStateT) * 100 < defFlyMs * 45;
-  defScore += fast ? 2 : 1;
-  if (fast) defPerfectN++; else defGoodN++;
-  defHits++; defCombo++;
-  defSetJudge(fast ? 1 : 2);
-  sfxPlay(fast ? SFX_MEDAL : SFX_PLAY);
-  defState = DQ_BLOCK; defStateT = now;
+  stkFloors++;
+  stkW = stk[stkN - 1].w;
+  if (stkFloors % STK_EVERY == 0) {  // el rival ataca el muro
+    stkState = STK_ATK; stkStateT = now; stkAtkJudged = false;
+  } else stkNewBlock(now);
 }
 
 void stepDefense() {
   uint32_t now = millis();
-  if (defOverUntil) return;
-  switch (defState) {
-    case DQ_WAIT: if ((int32_t)(now - defStateT) >= 0) defNewQuestion(now); break;
-    case DQ_LEARN: break;  // espera el toque
-    case DQ_FLY: if (now - defStateT >= defFlyMs) defMiss(now, 4); break;
-    case DQ_BLOCK: if (now - defStateT >= 700) defWait(now, 250); break;
-    case DQ_TEACH: if (now - defStateT >= 6000) defWait(now, 250); break;  // si no toca, sigue solo
+  if (defOverUntil || stkState != STK_ATK) return;
+  uint32_t t = now - stkStateT;
+  if (!stkAtkJudged && t >= 650) {
+    stkAtkJudged = true;
+    StkRow &top = stk[stkN - 1];
+    if (top.w >= stkNeed()) {  // aguanta
+      defScore += 3;
+      defSetJudge(4);
+      sfxPlay(SFX_EVOLVE);
+    } else {  // se cae un trozo: vida -1 y se repara
+      defMissN++; defCombo = 0;
+      defSetJudge(5);
+      sfxPlay(SFX_DENY);
+      vibPulse(200, 2, 80);
+      int16_t c = top.x + top.w / 2, nw = STK_REPAIR;
+      int16_t nx = c - nw / 2;
+      if (nx < STK_XMIN) nx = STK_XMIN;
+      if (nx + nw > STK_XMAX) nx = STK_XMAX - nw;
+      top.x = nx; top.w = nw;
+      stkW = nw;
+    }
+  }
+  if (t >= 1500) {
+    stkAtkN++;
+    defFoeDex = defPickFoe();
+    loadFoe(defFoeDex, false);
+    stkNewBlock(now);
   }
 }
 
-// circulo de color con el dibujo del tipo
-static void defTypeDot(int x, int y, int r, uint8_t t) {
-  gfx->fillCircle(x, y, r + 2, UI_INK);
-  gfx->fillCircle(x, y, r, typeColor(t));
-  drawTypeGlyph(x, y, t, false, typeColor(t));
+static void stkDrawRow(int x, int y, int w, uint16_t base, int i) {
+  uint16_t c = lerp565(base, (i & 1) ? UI_WHITE : UI_INK, (i & 1) ? 3 : 2, 16);
+  gfx->fillRect(x, y, w, STK_RH - 2, c);
+  if (w > 6) gfx->drawFastHLine(x + 2, y + 2, w - 4, lerp565(c, UI_WHITE, 9, 16));
+  gfx->drawRect(x, y, w, STK_RH - 2, UI_INK);
+  for (int bx = x + ((i & 1) ? 20 : 40); bx < x + w - 6; bx += 40) gfx->drawFastVLine(bx, y + 2, STK_RH - 6, lerp565(c, UI_INK, 5, 16));
 }
-static void defTextAt(const char *s, int cx, int y, uint16_t c, uint8_t sz) {
+static void stkTextC(const char *s, int cx, int y, uint16_t c, uint8_t sz) {
   setSize(sz);
+  int w = textW(s, sz);
+  for (int dx = -2; dx <= 2; dx += 2)
+    for (int dy = -2; dy <= 2; dy += 2)
+      if (dx || dy) { gfx->setTextColor(UI_WHITE); setCur(cx - w / 2 + dx, y + dy); printT(s); }
   gfx->setTextColor(c);
-  setCur(cx - textW(s, sz) / 2, y);
+  setCur(cx - w / 2, y);
   printT(s);
-}
-// tarjeta: ataque -> escudo que aguanta (y si fallo, por que no valia el mio)
-static void defCard(bool learn) {
-  const uint16_t GREEN = C565(0x1a, 0x86, 0x34);
-  uiPanel(58, 98, 350, 290, 28, UI_WHITE, UI_INK);
-  uint8_t ans = defOpt[defAns];
-  drawFit(XT(learn ? X_DEF_NEW : X_DEF_OOPS), 116, 300, learn ? GREEN : UI_BAR_BAD, 3);
-  defTypeDot(150, 196, 26, defAtk);
-  defTextAt(typeName(defAtk), 150, 232, UI_INK, 1);
-  gfx->fillTriangle(214, 184, 214, 208, 236, 196, UI_INK);
-  gfx->fillRect(196, 192, 20, 8, UI_INK);
-  defTypeDot(316, 196, 26, ans);
-  defTextAt(typeName(ans), 316, 232, UI_INK, 1);
-  // escudo alrededor del bueno
-  for (int k = 0; k < 3; k++) gfx->drawCircle(316, 196, 32 + k, GREEN);
-  char l[64];
-  txFmt(l, sizeof(l), X_DEF_RULE_FMT, typeName(defAtk), typeName(ans));
-  drawFit(l, 262, 320, UI_INK, 2);
-  drawFit(XT(typeEff(defAtk, ans) == 0 ? X_DEF_ZERO : X_DEF_HALF), 296, 300, C565(0x60, 0x68, 0x70), 1);
-  if (!learn && defPick < 3) {  // por que el mio no
-    uint8_t w = defOpt[defPick];
-    if (typeEff(defAtk, w) >= 4) txFmt(l, sizeof(l), X_DEF_WEAK_FMT, typeName(w), typeName(defAtk));
-    else txFmt(l, sizeof(l), X_DEF_NORM_FMT, typeName(w), nullptr);
-    drawFit(l, 322, 300, UI_BAR_BAD, 1);
-  }
-  drawFit(XT(X_DEF_TAP), 352, 280, C565(0x60, 0x68, 0x70), 1);
 }
 
 void renderDefense() {
@@ -584,7 +569,7 @@ void renderDefense() {
     drawTrainResult(s, g, 0x4C98, defNewHi && defScore > 0, pet.defHi, sub);
     return;
   }
-  if (defMissN >= DEF_LIVES && defState != DQ_TEACH) {
+  if (defMissN >= DEF_LIVES && stkState == STK_PLAY && now - defJudgeT > 700) {
     defNewHi = defScore > pet.defHi;
     defGain = pet.trainDefense(defScore);
     sfxPlay(defNewHi ? SFX_MEDAL : SFX_PLAY);
@@ -595,98 +580,99 @@ void renderDefense() {
   drawGameScene();
   bool night = sceneHour() < 6 || sceneHour() >= 20;
   uint16_t ink = night ? UI_INK_NIGHT : UI_INK;
-  const uint16_t GREEN = C565(0x1a, 0x86, 0x34);
-  uint32_t st = (int32_t)(now - defStateT) > 0 ? now - defStateT : 0;
+  const uint16_t GREEN = C565(0x1a, 0x86, 0x34), GOLD = C565(0xff, 0xe0, 0x40);
+  uint16_t base = typeColor(DEX_TBL[pet.speciesId].ptype);
   uint32_t jt = defJudge ? now - defJudgeT : 9999;
-  bool fly = defState == DQ_FLY, blk = defState == DQ_BLOCK, teach = defState == DQ_TEACH;
-  // puntos y vidas arriba
+  bool atk = stkState == STK_ATK;
+  uint32_t at = atk ? now - stkStateT : 0;
+  bool broke = atk && stkAtkJudged && defJudge == 5;
+  // el muro
+  for (int i = 0; i < stkN; i++) {
+    int y = STK_G - (i + 1) * STK_RH, sh = 0;
+    if (atk && at > 500 && at < 1100 && i >= stkN - 2) sh = (int)(5 * sinf(at * 0.08f)) * (broke ? 2 : 1);
+    stkDrawRow(stk[i].x + sh, y, stk[i].w, base, (int)(stkFloors + i));
+  }
+  int topY = stkTopY();
+  const StkRow &top = stk[stkN - 1];
+  if (defJudge == 1 && jt < 400)  // perfecto: brillo
+    for (int k = 0; k < 3; k++) gfx->drawRect(top.x - 3 - k * 3, topY - 3 - k * 3, top.w + 6 + k * 6, STK_RH + 4 + k * 6, GOLD);
+  // lo que pide el proximo ataque: marcas a los lados de la fila de arriba (en los 2 ultimos pisos)
+  if (!atk && stkToAttack() <= 2) {
+    int need = stkNeed(), cx = top.x + top.w / 2;
+    uint16_t mc = top.w >= need ? GREEN : UI_BAR_BAD;
+    for (int k = 0; k < 3; k++) {
+      gfx->drawFastVLine(cx - need / 2 - k, topY - 10, 12, mc);
+      gfx->drawFastVLine(cx + need / 2 + k, topY - 10, 12, mc);
+    }
+    gfx->drawFastHLine(cx - need / 2, topY - 10, need, mc);
+  }
+  // mi bicho arriba del muro
+  if (pmd.loaded) {
+    bool hurt = (defJudge == 5 || defJudge == 3) && jt < 500;
+    uint8_t act = hurt ? PMD_HURT : (defJudge == 4 && jt < 700) ? PMD_HOP : PMD_IDLE;
+    if (!pmd.has(act)) act = PMD_IDLE;
+    drawPmdActM(pmd, act, top.x + top.w / 2 + (hurt ? (int)(5 * sinf(jt * 0.09f)) : 0), topY, now, true, false, 2, 64);
+  }
+  // el trozo cortado cae
+  if (stkCutT && now - stkCutT < 700) {
+    uint32_t ct = now - stkCutT;
+    int y = stkCutY + (int)(ct * ct / 900), dx = stkCutX < top.x ? -(int)(ct / 12) : (int)(ct / 12);
+    if (stkCutW > 0) {
+      gfx->fillRect(stkCutX + dx, y, stkCutW, STK_RH - 2, lerp565(base, UI_WHITE, 5, 16));
+      gfx->drawRect(stkCutX + dx, y, stkCutW, STK_RH - 2, UI_INK);
+    }
+  }
+  // el bloque que se mueve
+  if (!atk && defMissN < DEF_LIVES) {
+    int bx = stkBlockX(now), by = stkBlockY();
+    uint16_t c = lerp565(base, UI_WHITE, 5, 16);
+    gfx->fillRect(bx, by, stkW, STK_RH - 2, c);
+    gfx->drawRect(bx, by, stkW, STK_RH - 2, UI_INK);
+    gfx->fillTriangle(bx - 16, by + 11, bx - 6, by + 3, bx - 6, by + 19, ink);
+    gfx->fillTriangle(bx + stkW + 16, by + 11, bx + stkW + 6, by + 3, bx + stkW + 6, by + 19, ink);
+  }
+  // el rival y su ataque
+  if (foePmd.loaded) {
+    uint8_t act = atk && at < 700 ? PMD_SHOOT : PMD_IDLE;
+    if (act == PMD_SHOOT && !foePmd.has(act)) act = PMD_ATTACK;
+    if (!foePmd.has(act)) act = PMD_IDLE;
+    drawPmdActM(foePmd, act, STK_FOE_X, STK_FOE_G, now, true, false, 2, 64);
+  }
+  if (atk) {
+    drawMoveFx(DEX_TBL[defFoeDex].ptype, STK_FOE_X + 20, STK_FOE_G - 40, top.x + top.w / 2, topY + 10, at < 900 ? at : 900, true, 2,
+               moveTier(defFoeDex), 0);
+  } else {
+    char b[32];
+    snprintf(b, sizeof(b), XT(X_STK_NEXT_FMT), stkToAttack());
+    int w = textW(b, 1) + 24;
+    uiButton(STK_FOE_X - w / 2, STK_FOE_G + 12, w, 32, 16, stkToAttack() <= 2 ? C565(0xff, 0xe8, 0xe0) : UI_WHITE, UI_INK);
+    drawFitIn(b, STK_FOE_X - w / 2, STK_FOE_G + 18, w, UI_INK, 1);
+  }
+  // pisos y vidas
   {
-    char b[12];
-    snprintf(b, sizeof(b), "%u", defScore);
-    defTextAt(b, CX, 30, ink, 3);
+    char b[16];
+    snprintf(b, sizeof(b), XT(X_STK_FLOORS_FMT), stkFloors);
+    stkTextC(b, CX, 26, ink, 3);
     for (int i = 0; i < DEF_LIVES; i++) {
       int hx = CX - 22 + i * 22, hy = 84;
       if (i < DEF_LIVES - (int)defMissN) gfx->fillCircle(hx, hy, 6, UI_BAR_BAD);
       else gfx->drawCircle(hx, hy, 6, UI_TRACK);
     }
-    if (defCombo >= 2) {
-      char cb[20];
-      snprintf(cb, sizeof(cb), XT(X_DEF_COMBO_FMT), defCombo);
-      defTextAt(cb, 112, 120, GREEN, 1);
-    }
   }
-  // el rival y su ataque
-  if (foePmd.loaded && defState != DQ_WAIT) {
-    uint8_t act = fly ? (st < 300 ? PMD_CHARGE : PMD_SHOOT) : PMD_IDLE;
-    if (act == PMD_SHOOT && !foePmd.has(act)) act = PMD_ATTACK;
-    if (!foePmd.has(act)) act = PMD_IDLE;
-    drawPmdActM(foePmd, act, DEF_FOE_X, DEF_FOE_G, now, true, false, 3, 90);
-  }
-  // mi bicho
-  bool hurt = teach && st < 500;
-  if (pmd.loaded) {
-    uint8_t act = hurt ? PMD_HURT : PMD_IDLE;
-    if (!pmd.has(act)) act = PMD_IDLE;
-    drawPmdActM(pmd, act, DEF_PET_X + (hurt ? (int)(7 * sinf(st * 0.09f)) : 0), DEF_PET_G, now, true, false, 3, 90);
-  }
-  // la tecnica en vuelo: el tiempo que queda es lo que tarda en llegar
-  const int ax = DEF_FOE_X - 30, ay = DEF_FOE_G - 40, tx = DEF_PET_X + 20, ty = DEF_PET_G - 40;
-  if (fly) {
-    float p = (float)st / (float)defFlyMs;
-    if (p > 1) p = 1;
-    drawMoveFx(defAtk, ax, ay, tx, ty, 120 + (uint32_t)(p * 259), false, 2, moveTier(defFoeDex), 0);
-    // ko12.9.19: algunos tipos (roca, normal, lucha, acero...) solo pintan el golpe al llegar, no el viaje:
-    // por encima va siempre una bola del color del tipo con su dibujo, que se ve en todos
-    uint16_t tc = typeColor(defAtk);
-    for (int k = 3; k >= 1; k--) {  // estela
-      float q = p - k * 0.06f;
-      if (q < 0) continue;
-      int x = ax + (int)((tx - ax) * q), y = ay + (int)((ty - ay) * q) - (int)(20 * sinf(q * 3.1416f));
-      gfx->fillCircle(x, y, 13 - k * 3, lerp565(tc, UI_WHITE, 4 + k * 3, 16));
-    }
-    int ox = ax + (int)((tx - ax) * p), oy = ay + (int)((ty - ay) * p) - (int)(20 * sinf(p * 3.1416f));
-    gfx->fillCircle(ox, oy, 18, UI_INK);
-    gfx->fillCircle(ox, oy, 16, tc);
-    gfx->drawCircle(ox, oy, 13, lerp565(tc, UI_WHITE, 8, 16));
-    drawTypeGlyph(ox, oy, defAtk, false, tc);
-  } else if (blk) {  // parada: el escudo del tipo bueno delante de mi bicho
-    uint8_t ans = defOpt[defAns];
-    int r = 52 + (int)(st / 40);
-    for (int k = 0; k < 4; k++) gfx->drawCircle(tx - 10, ty, r - k, k < 2 ? typeColor(ans) : UI_WHITE);
-  }
-  // etiqueta del ataque bajo el rival
-  if (defState == DQ_FLY || blk || teach) {
-    int px = DEF_FOE_X - 74, py = DEF_FOE_G + 6;
-    uiButton(px, py, 148, 34, 17, typeColor(defAtk), UI_INK);
-    drawTypeGlyph(px + 22, py + 16, defAtk, false, typeColor(defAtk));
-    drawFitIn(typeName(defAtk), px + 38, py + 6, 104, UI_INK, 1);
-  }
-  // los 3 escudos
-  for (int i = 0; i < 3; i++) {
-    int bx = defBtnX(i), by = DEF_BTN_Y;
-    uint8_t t = defOpt[i];
-    bool dim = (blk || teach) && i != defAns && i != defPick;
-    uint16_t bg = dim ? lerp565(typeColor(t), UI_TRACK, 10, 16) : typeColor(t);
-    uiButton(bx, by, DEF_BTN_W, DEF_BTN_H, 16, bg, UI_INK);
-    drawTypeGlyph(bx + DEF_BTN_W / 2, by + 22, t, false, bg);
-    drawFitIn(typeName(t), bx + 2, by + 40, DEF_BTN_W - 4, UI_INK, 1);
-    if ((blk || teach) && i == defAns)
-      for (int k = 0; k < 3; k++) gfx->drawRoundRect(bx - 3 - k, by - 3 - k, DEF_BTN_W + 6 + 2 * k, DEF_BTN_H + 6 + 2 * k, 18, GREEN);
-    if (teach && i == defPick) {
-      gfx->drawLine(bx + 14, by + 12, bx + DEF_BTN_W - 14, by + DEF_BTN_H - 14, UI_BAR_BAD);
-      gfx->drawLine(bx + DEF_BTN_W - 14, by + 12, bx + 14, by + DEF_BTN_H - 14, UI_BAR_BAD);
-    }
-  }
-  if (defHits < 3 && fly) drawFit(XT(X_DEF_Q), 404, 260, ink, 1);
   // juicio
-  if (defJudge && jt < 700 && !teach) {
-    XId id = defJudge == 1 ? X_DEF_FAST : X_DEF_GOOD;
-    defTextAt(XT(id), CX + 20, 268 - (int)(jt / 30), defJudge == 1 ? GREEN : C565(0xb8, 0x7a, 0x00), defJudge == 1 ? 3 : 2);
+  if (defJudge && jt < 900) {
+    XId id = defJudge == 1 ? X_STK_PERFECT : defJudge == 2 ? X_NICE : defJudge == 3 ? X_STK_MISS
+           : defJudge == 4 ? X_STK_HELD : X_STK_BROKE;
+    uint16_t c = defJudge == 1 || defJudge == 4 ? GREEN : defJudge == 2 ? C565(0xb8, 0x7a, 0x00) : UI_BAR_BAD;
+    if (defJudge != 2 || jt < 400) stkTextC(XT(id), CX, 104 - (int)(jt / 40), c, defJudge == 2 ? 2 : 3);
   }
-  if (defStageT && now - defStageT < 2200 && !teach && defState != DQ_LEARN) defTextAt(XT(X_DEF_STAGE), 150, 158, GREEN, 2);
-  if (defState == DQ_LEARN) defCard(true);
-  else if (teach && st >= 450) defCard(false);
-  else if (teach) defTextAt(XT(defJudge == 4 ? X_DEF_LATE_T : X_DEF_LATE), CX + 20, 256, UI_BAR_BAD, 3);
+  if (now - defStart < 3000 && !defJudge) {  // ayuda
+    const char *h = XT(X_TR_DEF_HINT);
+    int w = textW(h, 1) + 26;
+    if (w > 300) w = 300;
+    uiButton(CX - w / 2, 104, w, 30, 15, UI_WHITE, ink);
+    drawFit(h, 110, w - 10, UI_INK, 1);
+  }
   drawTrainQuit();  // ko12.9.14
   uiFlush();
 }

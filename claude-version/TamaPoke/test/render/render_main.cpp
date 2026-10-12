@@ -618,81 +618,71 @@ static void scenes(bool ko, const char *sfx) {
     pet.speciesId = keepSp;
     pmd.load((uint8_t)keepSp, pet.shiny);
   }
-  // ko12.9.18: "상성 방패": cada pareja nueva se ensena primero; luego se elige el escudo que aguanta
+  // ko12.9.21: "성벽 쌓기": tocar cuando el bloque esta encima; perfecto = no corta; cada 5 pisos ataque
   closeAll(); randomSeed(5); startDefense();
-  navCheck("상성: 처음 보는 상성은 먼저 알려줌", defState == DQ_LEARN && typeEff(defAtk, defOpt[defAns]) <= 1);
-  navCheck("상성: 처음엔 쉬운 4타입만", defStage == 0);
+  tick(300); render(); shot("05_train_defense_hint");
   {
-    bool okOpts = true;
-    for (int i = 0; i < 3; i++) okOpts &= (i == defAns) == (typeEff(defAtk, defOpt[i]) <= 1);
-    navCheck("상성: 방패 3개 중 버티는 건 딱 1개", okOpts);
-  }
-  tick(300); render(); shot("05_train_defense_learn");
-  tick(300); defensePress(CX, 200);
-  navCheck("상성: 탭하면 공격 시작", defState == DQ_FLY);
-  tick(500); render(); shot("05_train_defense");
-  auto btnX = [](int i) { return CX + (i - 1) * DEF_BTN_DX; };
-  defensePress(btnX(defAns), DEF_BTN_Y + 30);
-  navCheck("상성: 빨리 맞히면 +2", defState == DQ_BLOCK && defJudge == 1 && defScore == 2);
-  tick(150); render(); shot("05b_train_defense_block");
-  for (int i = 0; i < 40 && defState != DQ_FLY && defState != DQ_LEARN; i++) { tick(30); render(); }
-  if (defState == DQ_LEARN) { tick(600); defensePress(CX, 200); }
-  tick(defFlyMs * 6 / 10);
-  defensePress(btnX(defAns), DEF_BTN_Y + 30);
-  navCheck("상성: 늦게 맞히면 +1", defJudge == 2 && defScore == 3);
-  for (int i = 0; i < 40 && defState != DQ_FLY && defState != DQ_LEARN; i++) { tick(30); render(); }
-  if (defState == DQ_LEARN) { tick(600); defensePress(CX, 200); }
-  {
-    uint8_t wrong = (uint8_t)((defAns + 1) % 3), atk = defAtk;
-    defensePress(btnX(wrong), DEF_BTN_Y + 30);
-    navCheck("상성: 틀리면 목숨 -1 + 알려주는 카드", defMissN == 1 && defState == DQ_TEACH && defReviewN == 1 && defReview[0] == atk);
-    tick(100); render(); shot("05c_train_defense_wrong");
-    tick(500); render(); shot("05e_train_defense_teach");
-    tick(300); defensePress(CX, 200);
-    navCheck("상성: 카드는 탭하면 넘어감", defState == DQ_WAIT);
-  }
-  for (int i = 0; i < 40 && defState != DQ_FLY && defState != DQ_LEARN; i++) { tick(30); render(); }
-  if (defState == DQ_LEARN) { tick(600); defensePress(CX, 200); }
-  tick(defFlyMs + 40); render();
-  navCheck("상성: 시간 안에 못 고르면 맞음", defMissN == 2 && defState == DQ_TEACH && defJudge == 4);
-  tick(500); render(); shot("05f_train_defense_late");
-  {  // ko12.9.19: los 16 tipos en vuelo (todos se tienen que ver)
-    uint8_t keepAtk = defAtk; uint8_t keepSt = defState; uint32_t keepT = defStateT;
-    for (uint8_t t = 0; t < PT_COUNT; t++) {
-      defAtk = t; defState = DQ_FLY; defStateT = gMockMillis - defFlyMs / 2;
-      render(); char nm[40]; snprintf(nm, sizeof(nm), "05t_def_type_%02u", t); shot(nm);
-    }
-    defAtk = keepAtk; defState = keepSt; defStateT = keepT;
-  }
-  {  // etapas: con aciertos salen tipos nuevos
-    defHits = 12; defMissN = 0; tick(400); defensePress(CX, 200);
-    for (int i = 0; i < 40 && defState == DQ_WAIT; i++) { tick(30); render(); }
-    navCheck("상성: 12번 맞히면 3단계 (타입 12개)", defStage == 2);
-    if (defState == DQ_LEARN) { tick(600); defensePress(CX, 200); }
-    tick(400); render(); shot("05g_train_defense_stage");
-    bool ok = true;
-    for (int k = 0; k < 300; k++) {  // muchas preguntas al azar: siempre 1 bueno y 2 malos, todos distintos
-      defNewQuestion(gMockMillis);
-      for (int i = 0; i < 3; i++) ok &= (i == defAns) == (typeEff(defAtk, defOpt[i]) <= 1);
-      ok &= defOpt[0] != defOpt[1] && defOpt[1] != defOpt[2] && defOpt[0] != defOpt[2];
-      ok &= DEX_TBL[defFoeDex].ptype == defAtk;
-    }
-    navCheck("상성: 문제 300개 모두 정답 1개 + 상대 타입 일치", ok);
+    auto waitX = [](int16_t want, int tol) {  // espera a que el bloque pase por x = want (+-tol)
+      for (int i = 0; i < 4000; i++) { if (abs(stkBlockX(gMockMillis) - want) <= tol) return true; tick(1); }
+      return false;
+    };
+    navCheck("성벽: 처음엔 바닥 한 줄", stkN == 1 && stkFloors == 0 && stk[0].w == STK_W0);
+    // perfecto
+    waitX(stk[0].x, 2); defensePress(CX, 200);
+    navCheck("성벽: 딱 맞으면 퍼펙트 (+2, 안 잘림)", defJudge == 1 && defScore == 2 && stkFloors == 1 && stk[stkN - 1].w == STK_W0);
+    tick(120); render(); shot("05b_train_defense_perfect");
+    // un poco desplazado: se corta
+    int16_t tx = stk[stkN - 1].x;
+    waitX(tx + 30, 2); int16_t w0 = stk[stkN - 1].w; defensePress(CX, 200);
+    navCheck("성벽: 어긋나면 삐져나온 만큼 잘림 (+1)", defJudge == 2 && defScore == 3 && abs(stk[stkN - 1].w - (w0 - 30)) <= 3);
+    tick(150); render(); shot("05_train_defense");
+    // del todo fuera: vida -1
+    { stk[stkN - 1].x = CX - 30; stk[stkN - 1].w = 60; stkW = 60;  // estrecho: se puede fallar entero
+      int16_t L = stk[stkN - 1].x + stk[stkN - 1].w + 5;
+      bool ok = waitX(L > STK_XMAX - stkW ? STK_XMAX - stkW : L, 3);
+      uint16_t m0 = defMissN, f0 = stkFloors;
+      if (ok && stkBlockX(gMockMillis) > stk[stkN - 1].x + stk[stkN - 1].w) { defensePress(CX, 200);
+        navCheck("성벽: 완전히 빗나가면 목숨 -1", defMissN == m0 + 1 && stkFloors == f0 && defJudge == 3); }
+      else navCheck("성벽: 완전히 빗나가면 목숨 -1 (위치 못 맞춤)", false);
+      tick(200); render(); shot("05c_train_defense_miss"); }
+    // hasta el 5o piso: ataque
+    while (stkFloors < 4) { waitX(stk[stkN - 1].x, 2); defensePress(CX, 200); tick(50); }
+    render(); shot("05d_train_defense_warn");
+    waitX(stk[stkN - 1].x, 2); defensePress(CX, 200);
+    navCheck("성벽: 5층마다 상대 공격", stkState == STK_ATK && stkFloors == 5);
+    tick(500); render(); shot("05e_train_defense_attack");
+    uint16_t sc0 = defScore;
+    tick(300); render();
+    navCheck("성벽: 넓으면 버팀 (+3)", defJudge == 4 && defScore == sc0 + 3);
+    shot("05f_train_defense_held");
+    for (int i = 0; i < 60 && stkState == STK_ATK; i++) { tick(30); render(); }
+    navCheck("성벽: 공격 뒤 다음 블록", stkState == STK_PLAY && stkAtkN == 1);
+    // ataque con muro estrecho: se cae un trozo
+    stk[stkN - 1].w = 40; stkW = 40; stkFloors = 9;
+    waitX(stk[stkN - 1].x, 2); defensePress(CX, 200);
+    uint16_t m1 = defMissN;
+    tick(800); render();
+    navCheck("성벽: 좁으면 무너짐 (목숨 -1, 보수)", defJudge == 5 && defMissN == m1 + 1 && stk[stkN - 1].w == STK_REPAIR);
+    shot("05g_train_defense_broke");
+    for (int i = 0; i < 60 && stkState == STK_ATK; i++) { tick(30); render(); }
+    // muchas filas: la camara sube
+    for (int k = 0; k < 9; k++) { waitX(stk[stkN - 1].x, 2); defensePress(CX, 200); for (int i = 0; i < 60 && stkState == STK_ATK; i++) { tick(30); render(); } }
+    navCheck("성벽: 높아지면 화면이 따라 올라감", stkN == STK_VIS && stkFloors >= 18);
+    render(); shot("05h_train_defense_tall");
     defMissN = 0;
   }
   defScore = 34; defPerfectN = 14; defGoodN = 6; defMissN = DEF_LIVES; render(); tick(85); render(); shot("06_train_defense_result");
   {  // ko12.9.15: [X] arriba a la izquierda: para el juego y pregunta; [계속하기] sigue sin perder nada
     closeAll(); startDefense(); tick(1200); render();
     navCheck("훈련 X: 다른 곳 탭은 X가 아님", !trainQuitPress(CX, 300));
-    if (defState == DQ_LEARN) { tick(600); defensePress(CX, 200); }
-    uint32_t sp0 = defStateT; uint16_t miss0 = defMissN;
+    uint32_t sp0 = stkMoveT0; uint16_t miss0 = defMissN;
     navCheck("훈련 X: 누르면 멈추고 물어봄", trainQuitPress(TQ_X, TQ_Y0) && trainPaused() && defOpen);
     render(); shot("05d_train_quit_ask");
     tick(5000); render(); render();
     navCheck("훈련 X: 멈춘 동안 시간이 안 감", defMissN == miss0 && trainPaused());
     navCheck("훈련 X: 빈 곳 탭은 아무 일 없음", trainQuitPress(CX, 180) && trainPaused());
     trainQuitPress(TP_RX + 20, TP_BY + 20);
-    navCheck("훈련 X: 계속하기 = 이어서", !trainPaused() && defOpen && defStateT >= sp0 + 5000);
+    navCheck("훈련 X: 계속하기 = 이어서", !trainPaused() && defOpen && stkMoveT0 >= sp0 + 5000);
     render();
     trainQuitPress(TQ_X, TQ_Y0);
     trainQuitPress(TP_QX + 20, TP_BY + 20);
