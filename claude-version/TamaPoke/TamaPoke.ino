@@ -4634,8 +4634,13 @@ static void smEpx2(const uint8_t *src, int w, int h, uint8_t *dst) {
 // src: w*h indices de paleta (0xFF = transparente); pinta en (x0,y0).
 // ko11.10.1: escala en cuartos de pixel (s4 = 22 -> x5,5): el bicho del menu
 // principal puede crecer sin llegar a x6 y tapar el reloj
+// ko12.9.22: dibujar en espejo (izquierda <-> derecha); lo pone quien lo necesita y lo quita despues
+bool gBlitFlipX = false;
 void smoothBlitQ(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, int y0, int s4, bool sil) {
   if (w <= 0 || h <= 0 || s4 <= 0) return;
+  const int fw = w * s4 / 4;  // ancho total en pantalla (para el espejo)
+#define SB_FILL(xa, ya, ww, hh, col) \
+  gfx->fillRect(gBlitFlipX ? x0 + fw - ((xa) - x0) - (ww) : (xa), ya, ww, hh, col)
   if (gSmoothGfx && s4 >= 8 && w <= SM_MAX && h <= SM_MAX && !gSmA) {
     gSmA = (uint8_t *)ps_malloc(SM_MAX * SM_MAX * 4);
     gSmB = (uint8_t *)ps_malloc(SM_MAX * SM_MAX * 16);
@@ -4646,7 +4651,7 @@ void smoothBlitQ(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, 
         uint8_t v = src[r * w + c];
         if (v == 0xFF) continue;
         int xa = x0 + c * s4 / 4, xb = x0 + (c + 1) * s4 / 4, ya = y0 + r * s4 / 4, yb = y0 + (r + 1) * s4 / 4;
-        if (xb > xa && yb > ya) gfx->fillRect(xa, ya, xb - xa, yb - ya, sil ? INK_K : pal[v]);
+        if (xb > xa && yb > ya) SB_FILL(xa, ya, xb - xa, yb - ya, sil ? INK_K : pal[v]);
       }
     return;
   }
@@ -4664,11 +4669,12 @@ void smoothBlitQ(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, 
       int c2 = c + 1;
       while (c2 < W && row[c2] == v) c2++;
       int xa = x0 + c * s4 / d, xb = x0 + c2 * s4 / d;
-      if (xb > xa) gfx->fillRect(xa, ya, xb - xa, yb - ya, sil ? INK_K : pal[v]);
+      if (xb > xa) SB_FILL(xa, ya, xb - xa, yb - ya, sil ? INK_K : pal[v]);
       c = c2;
     }
   }
 }
+#undef SB_FILL
 void smoothBlit(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, int y0, int s, bool sil) {
   smoothBlitQ(src, w, h, pal, x0, y0, s * 4, sil);
 }

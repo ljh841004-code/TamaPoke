@@ -130,14 +130,23 @@ static void vbDrawPlayer(int s, uint32_t now) {
   int sw = 36 - (int)(q.y / 7);  // ko11.12: sombra acorde al tamano
   if (sw < 14) sw = 14;
   gfx->fillEllipse(x, VB_GROUND + 2, sw, 6, C565(0x40, 0x40, 0x40));
+  // ko12.9.22: se miran: parados, saltando o rematando de 3/4 hacia la red (fila "abajo-izquierda";
+  // el mio, a la izquierda, en espejo). Andando, de lado. Sprites viejos sin esas filas: de frente como antes
+  PmdMon &m = s == 0 ? pmd : foePmd;
+  bool spike = vb.t - q.spikeT < 350 && q.spikeT;
+  bool walk = !vb.airborne(s) && q.moving && fabsf(q.targetX - q.x) > 3;
   uint8_t act = PMD_IDLE;
-  if (vb.t - q.spikeT < 350 && q.spikeT) act = PMD_ATTACK;
+  bool flip = false;
+  if (walk) act = q.targetX > q.x ? PMD_WALKR : PMD_WALKL;
+  else if (m.has(PMD_IDLE_DL) && m.has(PMD_ATTACK_DL)) { act = spike ? PMD_ATTACK_DL : PMD_IDLE_DL; flip = s == 0; }
+  else if (spike) act = PMD_ATTACK;
   else if (vb.airborne(s)) act = PMD_HOP;
-  else if (q.moving && fabsf(q.targetX - q.x) > 3) act = q.targetX > q.x ? PMD_WALKR : PMD_WALKL;
   if (s == 0) {
     if (pmd.loaded) {
-      if (!pmd.has(act)) act = pmd.has(PMD_HOP) && vb.airborne(0) ? PMD_HOP : PMD_IDLE;
+      if (!pmd.has(act)) { act = pmd.has(PMD_HOP) && vb.airborne(0) ? PMD_HOP : PMD_IDLE; flip = false; }
+      gBlitFlipX = flip;
       drawPmdActM(pmd, act, x, g, now, true, false, VB_MON_MAXS, VB_MON_FITH);  // ko11.12: x3
+      gBlitFlipX = false;
     } else {
       const uint8_t *th = thumbs.get(pet.speciesId);
       if (th) drawThumb(th, x - GAL_CELL / 2, g - GAL_CELL, 2, false);
