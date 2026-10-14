@@ -52,6 +52,15 @@ int main(int argc, char **argv) {
     std::string e2 = importPak(std::vector<int>{ bfd });
     close(bfd);
     check("pak roto -> mensaje", !e2.empty() && haveMons());
+    // music.pak (sin thumbs): se añade sin borrar lo que habia
+    if (const char *mp = getenv("MUSIC_PAK")) {
+      std::vector<int> m{ open(mp, O_RDONLY) };
+      std::string e3 = importPak(m);
+      close(m[0]);
+      struct stat st;
+      check("music.pak se añade", e3.empty() && gImportMerged && stat((gSdDir + "/mons/bgm.wav").c_str(), &st) == 0 &&
+            stat((gSdDir + "/mons/thumbs2.bin").c_str(), &st) == 0);
+    }
   }
   setup();
   run(1500);

@@ -113,6 +113,7 @@ struct PakSrc {
 };
 
 // devuelve "" si fue bien, o el motivo
+static bool gImportMerged = false;  // el ultimo paquete se añadio (musica) en vez de sustituir
 static std::string importPak(const std::vector<int> &fds) {
   PakSrc src;
   for (int f : fds)
@@ -167,6 +168,22 @@ static std::string importPak(const std::vector<int> &fds) {
     }
     fclose(out);
   }
+  // un paquete solo con musica (music.pak: sin thumbs) se AÑADE a lo que ya hay; uno completo lo sustituye
+  struct stat st;
+  bool full = stat((tmp + "/thumbs.bin").c_str(), &st) == 0 || stat((tmp + "/thumbs2.bin").c_str(), &st) == 0;
+  if (!full && stat(fin.c_str(), &st) == 0) {
+    gImportMerged = true;
+    for (uint32_t i = 0; i < idx.n; i++) {
+      std::string rel(idx.e[i].name, idx.e[i].len);
+      if (rel.find("..") != std::string::npos || rel[0] == '/') continue;
+      size_t slash = rel.rfind('/');
+      if (slash != std::string::npos) mkdir((fin + "/" + rel.substr(0, slash)).c_str(), 0755);
+      if (rename((tmp + "/" + rel).c_str(), (fin + "/" + rel).c_str()) != 0) return "파일을 옮길 수 없어요";
+    }
+    rmTree(tmp);
+    return "";
+  }
+  gImportMerged = false;
   rmTree(fin);
   if (rename(tmp.c_str(), fin.c_str()) != 0) return "폴더를 바꿀 수 없어요";
   return "";
@@ -177,9 +194,10 @@ static void runImport(const std::vector<int> &fds) {
   std::string err = !fds.empty() ? importPak(fds) : "파일이 없어요";
   for (int f : fds) close(f);
   if (err.empty()) {
-    progressScreen("완료! 그림과 소리를 불러와요", "", 1, 1);
+    progressScreen(gImportMerged ? "추가 완료! (음악 등)" : "완료! 그림과 소리를 불러와요", "", 1, 1);
     sdDirty = true;
     monFor = -1;
+    audioScanBgm();
     audioLoadMusic();
   } else {
     rmTree(gSdDir + "/mons_new");
