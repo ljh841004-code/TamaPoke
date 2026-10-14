@@ -751,6 +751,18 @@ static void scenes(bool ko, const char *sfx) {
     wildTap(CX, 200);
     navCheck("전설: 탭하면 연출 건너뜀", bLegendT == 0);
     tick(100); render(); shot("08L4_legend_battle");
+    {  // ko12.9.23: el legendario ataca: anillos de energia alrededor antes del golpe
+      bPhase = BP_PLAY; bqAisMe = true; bqN = 1; bqI = 0;
+      memset(&bq[0], 0, sizeof(bq[0]));
+      bq[0].side = 1; bq[0].kind = EV_HIT; bq[0].move = BA_TYPE; bq[0].eff = 2; bq[0].dmg = 5;
+      bq[0].hpA = bMe.hp; bq[0].hpB = bFoe.hp;
+      bqT = gMockMillis; gMockMillis = bqT + 200; render(); shot("08L5_legend_charge");
+      bPhase = BP_MENU; bqN = 0;
+    }
+    bFoe = makeBattler(128, 30, 100, 95, 110);  // ko12.9.23: raro (Tauros): halo violeta y "희귀" en la caja
+    bvSetup(bMe, bFoe, nullptr, false);
+    bPhase = BP_MENU; txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
+    tick(100); render(); shot("08R1_rare_battle");
     bFoe = keepFoe; bvSetup(bMe, bFoe, nullptr, false);
     bPhase = BP_MENU; txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
   }

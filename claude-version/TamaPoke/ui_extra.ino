@@ -999,8 +999,30 @@ void drawBattleBg() {
 static uint16_t nameInkFor(int16_t dex) { return dex > 151 ? UI_GEN2_INK : UI_INK; }
 
 void drawHpBox(int x, int y, int w, const char *name, uint16_t lvl, float hp, uint16_t maxHp, bool showNum,
-               uint16_t nameInk, int8_t ptype) {
-  uiPanel(x, y, w, showNum ? 58 : 46, 10, UI_WHITE, UI_INK);  // ko11.12
+               uint16_t nameInk, int8_t ptype, uint8_t rk) {
+  int ph = showNum ? 58 : 46;
+  if (rk) {  // ko12.9.23: raro (violeta) / legendario (dorado): marco de color alrededor del panel
+    uint16_t c = rk == 2 ? C565(0xff, 0xc0, 0x20) : C565(0xa0, 0x70, 0xff);
+    gfx->fillRoundRect(x - 3, y - 3, w + 6, ph + 6, 13, c);
+  }
+  uiPanel(x, y, w, ph, 10, UI_WHITE, UI_INK);  // ko11.12
+  if (rk) {  // ko12.9.23: pestana "희귀" / "전설" con estrella, encima del borde de arriba
+    const char *rn = XT(rk == 2 ? X_RARITY_LEGEND : X_RARITY_RARE);
+    setSize(1);
+    int rw = textW(rn, 1) + 26, rx = x + 12, ry = y - 13;
+    uint16_t rc = rk == 2 ? C565(0xff, 0xc0, 0x20) : C565(0xa0, 0x70, 0xff);
+    gfx->fillRoundRect(rx, ry, rw, 19, 9, rc);
+    gfx->drawRoundRect(rx, ry, rw, 19, 9, rk == 2 ? C565(0xb0, 0x70, 0x10) : C565(0x60, 0x38, 0xc0));
+    int sx = rx + 10, sy = ry + 9;  // estrella de 4 puntas
+    uint16_t sc = rk == 2 ? C565(0x80, 0x48, 0x00) : UI_WHITE;
+    gfx->fillTriangle(sx - 2, sy, sx + 2, sy, sx, sy - 6, sc);
+    gfx->fillTriangle(sx - 2, sy, sx + 2, sy, sx, sy + 6, sc);
+    gfx->fillTriangle(sx, sy - 2, sx, sy + 2, sx - 6, sy, sc);
+    gfx->fillTriangle(sx, sy - 2, sx, sy + 2, sx + 6, sy, sc);
+    gfx->setTextColor(rk == 2 ? C565(0x50, 0x30, 0x00) : UI_WHITE);
+    setCur(rx + 19, ry);
+    printT(rn);
+  }
   char lv[12];
   snprintf(lv, sizeof(lv), "Lv%u", lvl);
   setSize(1);
@@ -2010,6 +2032,61 @@ bool battleFxPlaying() {
 }
 
 // dibuja los dos Pokemon; anima al que actua segun el evento en curso
+// ko12.9.23: raros y legendarios en combate. Sin tocar los sprites ni los efectos de los ataques: un halo
+// en el suelo que late, chispas que suben (doradas el legendario, violetas el raro) y, cuando atacan, un
+// anillo de energia que se abre alrededor antes del golpe
+static uint8_t rarityKind(int16_t dex) {
+  if (dex < 1 || dex > DEX_COUNT) return 0;
+  uint8_t r = DEX_TBL[dex].rarity;
+  return r == R_LEGENDARIO ? 2 : r == R_RARO ? 1 : 0;
+}
+static uint16_t rarityCol(uint8_t rk, bool light) {
+  if (rk == 2) return light ? C565(0xff, 0xec, 0x90) : C565(0xff, 0xc0, 0x20);
+  return light ? C565(0xe0, 0xc8, 0xff) : C565(0xa0, 0x70, 0xff);
+}
+static void drawRarityAura(int cx, int g, uint8_t rk, uint32_t now) {
+  if (!rk) return;
+  uint16_t c = rarityCol(rk, false), cl = rarityCol(rk, true);
+  float p = 0.5f + 0.5f * sinf(now / (rk == 2 ? 260.0f : 380.0f));
+  int rx = 62 + (int)(8 * p), ry = 14 + (int)(3 * p);
+  gfx->drawEllipse(cx, g - 2, rx, ry, c);
+  gfx->drawEllipse(cx, g - 2, rx - 1, ry - 1, c);
+  gfx->drawEllipse(cx, g - 2, rx - 14, ry - 4, cl);
+  int n = rk == 2 ? 10 : 6;
+  for (int k = 0; k < n; k++) {  // chispas que suben desde el halo
+    uint32_t ph = (now / (rk == 2 ? 9 : 12) + k * 37) % 120;
+    int sx = cx - rx + 8 + (int)((k * 53 + (now / 700) * 17) % (2 * rx - 16));
+    int sy = g - 4 - (int)ph;
+    int l = ph < 90 ? 2 + (k & 1) : 1;
+    uint16_t col = (k % 3) ? c : cl;
+    gfx->fillRect(sx - l, sy, 2 * l + 1, 1, col);
+    gfx->fillRect(sx, sy - l, 1, 2 * l + 1, col);
+  }
+  if (rk == 2) {  // legendario: destello que gira despacio sobre la cabeza
+    float a = now / 900.0f;
+    for (int k = 0; k < 3; k++) {
+      float b = a + k * 2.094f;
+      int sx = cx + (int)(54 * cosf(b)), sy = g - 70 + (int)(22 * sinf(b));
+      gfx->fillRect(sx - 4, sy - 1, 9, 3, cl);
+      gfx->fillRect(sx - 1, sy - 4, 3, 9, cl);
+    }
+  }
+}
+// al atacar: anillos que se abren alrededor del que ataca (primeros 380 ms, antes del golpe)
+static void drawRarityCharge(int cx, int cy, uint8_t rk, uint32_t t) {
+  if (!rk || t > 380) return;
+  uint16_t c = rarityCol(rk, false), cl = rarityCol(rk, true);
+  int r = 20 + (int)(t / 5);
+  gfx->drawCircle(cx, cy, r, c);
+  gfx->drawCircle(cx, cy, r + 1, c);
+  if (rk == 2) gfx->drawCircle(cx, cy, r + 10, cl);
+  for (int k = 0; k < 8; k++) {
+    float a = k * 0.785f + t / 200.0f;
+    int sx = cx + (int)((r + 6) * cosf(a)), sy = cy + (int)((r + 6) * sinf(a));
+    gfx->fillRect(sx - 1, sy - 1, 3, 3, cl);
+  }
+}
+
 void drawBattlers() {
   uint32_t now = millis();
   int meX = 140 + bvShakeX, meG = 250 + bvShakeY, foeX = 316 + bvShakeX, foeG = 156 + bvShakeY;
@@ -2083,6 +2160,8 @@ void drawBattlers() {
       gfx->fillRect(sx - 1, sy - l, 3, 2 * l + 1, gold);
     }
   }
+  if (!foeGone && !foeSil) drawRarityAura(foeX, foeG, rarityKind(bvFoeDex), now);  // ko12.9.23
+  if (!meGone && !meSil) drawRarityAura(meX, meG, rarityKind(bvMeDex), now);
   if (!foeHide && !foeGone && prgFoe.loaded && prgFoe.has(PMD_IDLE)) {  // ko11.16: estilo juego, de frente
     drawPrgBattler(prgFoe, PMD_IDLE, foeX + 14, foeG, now, foeSil, 12, 124);  // x3 (x2 si es grande)
   } else if (!foeHide && !foeGone) {
@@ -2119,6 +2198,7 @@ void drawBattlers() {
       bool typed = moveDecode(e.mid, &mt, &mtier, &mvar);
       uint8_t fx = typed ? mt : 0xFF;
       int ax = me ? 140 : 316, ay = me ? 200 : 116, tx = me ? 316 : 140, ty = me ? 116 : 200;
+      if (e.kind != EV_USE) drawRarityCharge((me ? meX : foeX), (me ? meG - 60 : foeG - 50), rarityKind(me ? bvMeDex : bvFoeDex), t);  // ko12.9.23
       if (fxa) fxa->drawFg(gfx->getFramebuffer(), fxSide, t, bvShakeX, bvShakeY);
       else if (e.kind == EV_USE) drawStatusMoveFx(e.mid, ax + bvShakeX, ay + bvShakeY, tx + bvShakeX, ty + bvShakeY, t);
       else drawMoveFx(fx, ax + bvShakeX, ay + bvShakeY, tx + bvShakeX, ty + bvShakeY, t,
@@ -2806,8 +2886,8 @@ static void renderBattleViewImpl() {
   updateShake(now);
   drawBattleBg();
   drawBattlers();
-  drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true, nameInkFor(bvFoeDex), bvFoeDex >= 1 && bvFoeDex <= DEX_COUNT ? (int8_t)DEX_TBL[bvFoeDex].ptype : -1);  // ko9: rival con numeros
-  drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true, nameInkFor(bvMeDex), bvMeDex >= 1 && bvMeDex <= DEX_COUNT ? (int8_t)DEX_TBL[bvMeDex].ptype : -1);
+  drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true, nameInkFor(bvFoeDex), bvFoeDex >= 1 && bvFoeDex <= DEX_COUNT ? (int8_t)DEX_TBL[bvFoeDex].ptype : -1, rarityKind(bvFoeDex));  // ko9: rival con numeros
+  drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true, nameInkFor(bvMeDex), bvMeDex >= 1 && bvMeDex <= DEX_COUNT ? (int8_t)DEX_TBL[bvMeDex].ptype : -1, rarityKind(bvMeDex));
   if (!bvFoeFainted) drawStatusBadge(206, 112, bFoe);  // ko11.31
   if (!bvMeFainted) drawStatusBadge(350, 150, bMe);
   drawPartyBalls();  // ko11.20
