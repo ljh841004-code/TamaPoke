@@ -402,15 +402,17 @@ TEST(level, sale_de_la_exp_con_curva_cubica) {
   CHECK_EQ(p.level(), (uint16_t)16);
 }
 
-TEST(level, tope_en_100) {
+TEST(level, tope_en_150) {  // ko12.9.23: 150 (antes 100)
   Pet p;
   makePet(p, 4);
   p.exp = 0xFFFFFFF0u;
-  CHECK_EQ(p.level(), (uint16_t)100);
-  p.exp = expForLevel(100) - 5;
+  CHECK_EQ(p.level(), (uint16_t)150);
+  p.exp = expForLevel(150) - 5;
   p.addExp(0xFFFFFFFFu);  // no desborda
-  CHECK_EQ(p.exp, expForLevel(100));
-  CHECK_EQ(p.level(), (uint16_t)100);
+  CHECK_EQ(p.exp, expForLevel(150));
+  CHECK_EQ(p.level(), (uint16_t)150);
+  p.exp = expForLevel(120);
+  CHECK_EQ(p.level(), (uint16_t)120);
 }
 
 TEST(level, addexp_cuenta_los_niveles_subidos) {

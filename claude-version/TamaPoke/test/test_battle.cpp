@@ -36,9 +36,11 @@ TEST(battle, todas_las_especies_tienen_tipo_valido) {
   CHECK_EQ(DEX_TBL[94].ptype, (uint8_t)PT_GHOST);
 }
 
-TEST(battle, hp_crece_con_el_nivel_y_se_topa_en_100) {
+TEST(battle, hp_crece_con_el_nivel_y_se_topa_en_150) {  // ko12.9.23: antes se paraba en 100
   CHECK(battleHp(45, 10) < battleHp(45, 50));
-  CHECK_EQ(battleHp(45, 100), battleHp(45, 999));
+  CHECK(battleHp(45, 100) < battleHp(45, 150));
+  CHECK_EQ(battleHp(45, 150), battleHp(45, 999));
+  CHECK(battleHp(255, 150) < 4000);  // cabe de sobra en uint16
   Battler b = makeBattler(4, 20, 60, 50, 70);
   CHECK_EQ(b.hp, b.maxHp);
   CHECK_EQ(b.type, (uint8_t)PT_FIRE);
@@ -411,12 +413,14 @@ TEST(trade, rechaza_datos_basura) {
   CHECK_EQ(a.nick[0], (char)0);
 }
 
-// fork KO (ko7): el salvaje sigue al nivel de la mascota y se topa en 100
-TEST(battle, salvaje_nivel_topado_en_100) {
+// fork KO (ko7): el salvaje sigue al nivel de la mascota y se topa en LEVEL_MAX (ko12.9.23: 150)
+TEST(battle, salvaje_nivel_topado_en_150) {
   BRng rng(99);
   for (int i = 0; i < 200; i++) {
-    Battler w = makeWild(100, rng);
-    CHECK(w.lvl >= 96 && w.lvl <= 100);
+    Battler w = makeWild(150, rng);
+    CHECK(w.lvl >= 146 && w.lvl <= 150);
+    Battler u = makeWild(100, rng);
+    CHECK(u.lvl >= 96 && u.lvl <= 101);
     Battler v = makeWild(5, rng);
     CHECK(v.lvl >= 2 && v.lvl <= 6);
   }
@@ -428,7 +432,8 @@ TEST(battle, exp_de_batalla_crece_con_el_nivel_del_rival) {
   CHECK_EQ(battleExp(0, 10), (uint32_t)0);
   CHECK(battleExp(129, 1) >= 1);
   CHECK_EQ(levelForExp(expForLevel(37)), (uint16_t)37);
-  CHECK_EQ(careMinutesForLevel(100), (uint32_t)0);
+  CHECK_EQ(careMinutesForLevel(150), (uint32_t)0);
+  CHECK(battleExp(16, 140) > battleExp(16, 100));  // ko12.9.23: tambien por encima de 100
   CHECK_EQ(careMinutesForLevel(1), (uint32_t)15);   // ko10.2: 15 min x nivel
   CHECK_EQ(careMinutesForLevel(2), (uint32_t)30);
   CHECK_EQ(careMinutesForLevel(35), (uint32_t)525);
@@ -1153,4 +1158,24 @@ TEST(battle, legendario_mas_fuerte_que_el_normal) {
     CHECK(battlerPower(b) * 100 >= battlerPower(me) * 115);
     CHECK(battlerPower(b) > battlerPower(a));
   }
+}
+
+// ko12.9.23 (test/sim): el raro sale algo mas fuerte que el comun, y el tipo pesa menos: el que te gana
+// por tipo baja su fuerza y el que pierde por tipo la sube
+TEST(battle, fuerza_del_salvaje_por_rareza_y_tipo) {
+  Battler me = makeBattler(25, 60, 150, 120, 160);  // Pikachu (electrico) Lv60
+  uint64_t com = 0, rar = 0, bad = 0, good = 0;
+  for (int k = 0; k < 60; k++) {
+    BRng r1(500 + k), r2(500 + k), r3(500 + k), r4(500 + k);
+    Battler c = makeBattler(19, 58, 100, 100, 100);   // Rattata (normal, comun)
+    Battler r = makeBattler(128, 58, 100, 100, 100);  // Tauros (normal, raro)
+    Battler g = makeBattler(50, 58, 100, 100, 100);   // Diglett (tierra: le gana al electrico)
+    Battler w = makeBattler(129, 58, 100, 100, 100);  // Magikarp (agua: pierde contra electrico)
+    CHECK_EQ(DEX_TBL[128].rarity, (uint8_t)R_RARO);
+    wildMatchPower(c, me, r1); wildMatchPower(r, me, r2); wildMatchPower(g, me, r3); wildMatchPower(w, me, r4);
+    com += battlerPower(c); rar += battlerPower(r); bad += battlerPower(g); good += battlerPower(w);
+  }
+  CHECK(rar > com);              // raro mas fuerte
+  CHECK(bad * 100 < com * 95);   // el de tipo ventajoso para el, mas flojo
+  CHECK(good > com);             // el que pierde por tipo, algo mas fuerte
 }

@@ -183,6 +183,13 @@ void dailyTeam(uint32_t day, uint16_t petLvl, Battler out[DAILY_TEAM]);
 // ko10.11: ajusta el nivel del salvaje para que su fuerza (vida + ataque + defensa
 // + velocidad) quede cerca de la tuya (90-105 %): especies flojas salen con mas
 // nivel, y las fuertes con menos (entre -6 y +10 del nivel que traia)
+// ko12.9.23: fuerza del salvaje en % de la tuya (+0..15 al azar). Ajustado con test/sim (make -C test/sim)
+#define WILD_POW_LOW 85        // comun, tu nivel < 20
+#define WILD_POW_NORMAL 90     // comun
+#define WILD_POW_RARE 98       // raro (antes como el comun)
+#define WILD_POW_LEGEND 125    // legendario a Lv120+ (ko12.9.22); mas abajo hasta -8
+#define WILD_POW_TYPE_BAD 88   // te gana por tipo: x0,88
+#define WILD_POW_TYPE_GOOD 106 // le ganas por tipo: x1,06
 #define WILD_LVL_OVER 3  // ko11.12: el salvaje como mucho 3 niveles por encima del tuyo
 void wildMatchPower(Battler &foe, const Battler &me, BRng &rng, bool legend = false);
 uint32_t battlerPower(const Battler &b);
@@ -292,8 +299,8 @@ bool linkApplySwap(LinkSide &s, uint8_t act);
 int linkAttacks(LinkSide &A, LinkSide &B, uint8_t actA, uint8_t actB, BRng &rng, BEvent *ev, int maxEv);
 
 // ---- fork KO (ko7): niveles por experiencia, como PokeRogue/los juegos ----
-// curva "media-rapida": el nivel n empieza en n^3 de EXP (tope nivel 100)
-#define LEVEL_MAX 100
+// curva "media-rapida": el nivel n empieza en n^3 de EXP (tope LEVEL_MAX)
+#define LEVEL_MAX 150  // ko12.9.23: 150 (antes 100)
 uint32_t expForLevel(uint16_t lvl);      // EXP donde empieza ese nivel (1 -> 0)
 uint16_t levelForExp(uint32_t exp);      // nivel que da esa EXP (1..LEVEL_MAX)
 // EXP de derrotar/capturar a un rival: rendimiento de la especie x nivel / 4

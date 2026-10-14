@@ -55,7 +55,7 @@ void Box::begin() {
     if (!moveCount(mons[i].mv)) { movesDefault(mons[i].dex, mons[i].lvl, mons[i].mv); fixed = true; }
     // fork KO (ko7): tope nivel 100. Los de ko6 (nivel por horas, Lv300+)
     // vuelven a empezar en Lv5
-    if (mons[i].lvl > 100) { mons[i].lvl = 5; fixed = true; }
+    if (mons[i].lvl > LEVEL_MAX) { mons[i].lvl = 5; fixed = true; }
     mons[n++] = mons[i];
   }
   if (fixed) save();
@@ -71,7 +71,7 @@ bool Box::add(int16_t dex, uint16_t lvl, bool shiny, bool caught, uint32_t epoch
   if (full() || dex < 1 || dex > DexLog::N) return false;
   BoxMon &m = mons[n++];
   m.dex = dex;
-  m.lvl = lvl < 1 ? 1 : (lvl > 100 ? 100 : lvl);
+  m.lvl = lvl < 1 ? 1 : (lvl > LEVEL_MAX ? LEVEL_MAX : lvl);
   m.flags = (shiny ? BOXF_SHINY : 0) | (caught ? BOXF_CAUGHT : 0);
   m.geneAtk = 90 + random(21);
   m.geneDef = 90 + random(21);
@@ -88,7 +88,7 @@ bool Box::addRaised(int16_t dex, uint16_t lvl, bool shiny, uint8_t gA, uint8_t g
   if (full() || dex < 1 || dex > DexLog::N) return false;
   BoxMon &m = mons[n++];
   m.dex = dex;
-  m.lvl = lvl < 1 ? 1 : (lvl > 100 ? 100 : lvl);
+  m.lvl = lvl < 1 ? 1 : (lvl > LEVEL_MAX ? LEVEL_MAX : lvl);
   m.flags = (shiny ? BOXF_SHINY : 0) | BOXF_RAISED;
   m.geneAtk = gA; m.geneDef = gD; m.geneSpe = gS;
   m.epoch = epoch;
@@ -126,7 +126,7 @@ void Box::markFlag(uint8_t i, uint8_t f) {
 }
 
 bool Box::bumpLevel(uint8_t i, uint16_t cap) {
-  if (i >= n || mons[i].lvl >= cap || mons[i].lvl >= 100) return false;
+  if (i >= n || mons[i].lvl >= cap || mons[i].lvl >= LEVEL_MAX) return false;
   mons[i].lvl++;
   save();
   return true;

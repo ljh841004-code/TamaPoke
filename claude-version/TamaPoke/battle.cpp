@@ -38,7 +38,7 @@ uint8_t typeEff(uint8_t atkType, uint8_t defType) {
   return TYPE_CHART[atkType][defType];
 }
 
-static uint16_t lvlCap(uint16_t lvl) { return lvl > 100 ? 100 : (lvl < 1 ? 1 : lvl); }
+static uint16_t lvlCap(uint16_t lvl) { return lvl > LEVEL_MAX ? LEVEL_MAX : (lvl < 1 ? 1 : lvl); }  // ko12.9.23: hasta 150
 
 uint16_t battleHp(uint8_t baseHp, uint16_t lvl) {
   // x2 sobre la formula clasica: con 1 pantalla de golpe a golpe, las peleas de
@@ -1423,7 +1423,17 @@ static int bestLevelFor(int16_t dex, uint32_t target, int lo, int hi) {
 
 void wildMatchPower(Battler &foe, const Battler &me, BRng &rng, bool legend) {
   // ko12.9.22: un legendario no es "de tu talla": 125-140 % de tu fuerza y hasta 8 niveles por encima
-  uint32_t target = battlerPower(me) * (legend ? 125 + rng.below(16) : 90 + rng.below(16)) / 100;  // 90-105 %
+  // ko12.9.23 (test/sim): el raro un poco mas fuerte que el comun (salia MAS facil), los primeros niveles
+  // algo mas suaves, y el tipo pesa menos (con desventaja se perdia ~70 %): el salvaje que te gana por
+  // tipo baja su fuerza y el que pierde por tipo la sube un poco
+  uint32_t pct;
+  if (legend) pct = WILD_POW_LEGEND - 12 + (me.lvl > 120 ? 120 : me.lvl) / 10 + rng.below(16);  // Lv40 116..131, Lv120+ 125..140
+  else if (DEX_TBL[foe.dex].rarity == R_RARO) pct = (me.lvl < 20 ? WILD_POW_RARE - 6 : WILD_POW_RARE) + rng.below(16);
+  else pct = (me.lvl < 20 ? WILD_POW_LOW : WILD_POW_NORMAL) + rng.below(16);
+  int8_t tm = typeMatch(me.type, foe.type);
+  if (tm < 0) pct = pct * WILD_POW_TYPE_BAD / 100;
+  else if (tm > 0) pct = pct * WILD_POW_TYPE_GOOD / 100;
+  uint32_t target = battlerPower(me) * pct / 100;
   int anchor = foe.lvl;
   int16_t dex = foe.dex;
   int best = anchor;
