@@ -136,9 +136,9 @@ static void expCollect() {
   expGotBalls = pet.balls - b0;
   expGotPotions = pet.potions - p0;
   if (expRes.rare && pet.rareCandy < 999) pet.rareCandy++;
-  // ko11.16: a veces trae un orbe de su tipo (2 h 10 %, 4 h 20 %, 8 h 35 %)
+  // ko11.16: a veces trae un orbe de su tipo (ko12.9.22: 2 h 7 %, 4 h 15 %, 8 h 25 %; antes 10/20/35)
   {
-    uint8_t h = pet.exped.hours, pc = h >= 8 ? 35 : h >= 4 ? 20 : 10;
+    uint8_t h = pet.exped.hours, pc = h >= 8 ? 25 : h >= 4 ? 15 : 7;
     if ((uint32_t)random(100) < pc) orbDrop(DEX_TBL[m.dex].ptype);
   }
   expGotLure = pet.exped.hours >= 8 && (uint32_t)random(100) < LURE_EXPED8_PCT && pet.lureN < LURE_MAX;  // ko12.9.11

@@ -36,6 +36,7 @@ using std::abs;
 uint32_t millis();
 uint32_t micros();
 void delay(uint32_t);
+inline bool setCpuFrequencyMhz(uint32_t) { return true; }
 void yield();
 long random(long howbig);
 long random(long lo, long hi);

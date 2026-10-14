@@ -184,7 +184,7 @@ void dailyTeam(uint32_t day, uint16_t petLvl, Battler out[DAILY_TEAM]);
 // + velocidad) quede cerca de la tuya (90-105 %): especies flojas salen con mas
 // nivel, y las fuertes con menos (entre -6 y +10 del nivel que traia)
 #define WILD_LVL_OVER 3  // ko11.12: el salvaje como mucho 3 niveles por encima del tuyo
-void wildMatchPower(Battler &foe, const Battler &me, BRng &rng);
+void wildMatchPower(Battler &foe, const Battler &me, BRng &rng, bool legend = false);
 uint32_t battlerPower(const Battler &b);
 // ---- ko10.11: revancha de gimnasio (con la medalla) y liga (con las 8)
 extern const uint8_t GYM_TYPE[GYM_COUNT];   // tipo de cada gimnasio (roca, agua...)

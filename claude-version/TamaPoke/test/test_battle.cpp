@@ -1141,3 +1141,16 @@ TEST(wild, sin_evolucionar_sigue_asi_tras_ajustar) {
   }
   CHECK(kept > 10);
 }
+
+// ko12.9.22: el legendario salvaje sale mas fuerte que tu (125-140 %), el normal de tu talla
+TEST(battle, legendario_mas_fuerte_que_el_normal) {
+  Battler me = makeBattler(25, 45, 120, 100, 110);
+  for (int k = 0; k < 30; k++) {
+    BRng r1(1000 + k), r2(1000 + k);
+    Battler a = makeBattler(144, 40, 100, 100, 100), b = makeBattler(144, 40, 100, 100, 100);
+    wildMatchPower(a, me, r1, false);
+    wildMatchPower(b, me, r2, true);
+    CHECK(battlerPower(b) * 100 >= battlerPower(me) * 115);
+    CHECK(battlerPower(b) > battlerPower(a));
+  }
+}

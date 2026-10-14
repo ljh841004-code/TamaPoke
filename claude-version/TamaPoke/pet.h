@@ -1,5 +1,6 @@
 #pragma once
 #define GAME_SMALL_ENERGY 5  // ko10.3: juego de pelota sin record (con al menos 1 toque)
+#include <math.h>
 #include <Arduino.h>
 #include <Preferences.h>
 #include "battle.h"  // fork KO (ko7): curva de EXP y niveles de evolucion
@@ -105,11 +106,11 @@ static const uint8_t CANDY_COST[CU_COUNT] = { 3, 1, 5, 10, 5 };
 #define ORB_MAX_PCT 25
 #define ORB_EVO_CANDY 3       // al evolucionar a otro tipo: el orbe -> 3 caramelos
 #define ORB_EVO_RARE_PCT 10   //   ... o (10 %) 1 caramelo raro
-#define ORB_WILD_PCT 8        // salvaje ganado o capturado: orbe de su tipo
-#define ORB_GYM_PCT 50        // revancha de gimnasio con premio del dia
+#define ORB_WILD_PCT 6        // salvaje ganado o capturado: orbe de su tipo (ko12.9.22: antes 8)
+#define ORB_GYM_PCT 35        // revancha de gimnasio con premio del dia (ko12.9.22: antes 50)
 // ko11.19: fusion de orbes: 3 cualesquiera -> 1 del tipo del Pokemon que crias
 #define ORB_SYNTH_FAIL_PCT 20   // 1 de cada 5 falla (los 3 se pierden; consuelo: 2 trozos)
-#define ORB_SYNTH_GREAT_PCT 5   // exito grande: +25 %
+#define ORB_SYNTH_GREAT_PCT 3   // exito grande: +25 % (ko12.9.22: antes 5)
 #define ORB_SYNTH_FAIL_SHARDS 2
 // ko12.2.1: rara vez la fusion sale "arcoiris": sube ataque Y defensa a la vez (bit 13)
 #define ORB_SYNTH_DUAL_PCT 4    // de las fusiones que salen bien
@@ -117,6 +118,13 @@ static const uint8_t CANDY_COST[CU_COUNT] = { 3, 1, 5, 10, 5 };
 #define ORB_EVO_DUAL_CANDY 10     // arcoiris que ya no sirve al evolucionar: 10 caramelos (normal: 3)
 #define ORB_EVO_DUAL_RARE_PCT 30  //   ... y a veces (30 %) ademas 1 caramelo raro
 enum : uint8_t { RG_BALL = 1, RG_POTION, RG_SHARD, RG_EXP, RG_ORB };  // regalo al soltar (seguidores)
+// ko12.9.22: % de un orbe nuevo: los bajos son lo normal y los altos, raros (antes 10..25 a partes iguales:
+// 20 % o mas salia 6 de cada 16). u^3,5: 10-14 % ~ 71 %, 15-19 % ~ 17 %, 20-24 % ~ 11 %, 25 % ~ 1 %
+static inline uint8_t orbRollPct(uint32_t r1000) {
+  float u = (r1000 % 1000) / 999.0f, v = powf(u, 3.5f);
+  int p = ORB_MIN_PCT + (int)(v * (ORB_MAX_PCT - ORB_MIN_PCT) + 0.5f);
+  return (uint8_t)(p > ORB_MAX_PCT ? ORB_MAX_PCT : p);
+}
 static inline uint16_t orbMake(uint8_t type, bool def, uint8_t pct) {
   return (uint16_t)(0x8000 | (def ? 0x4000 : 0) | ((type & 15) << 8) | pct);
 }

@@ -198,6 +198,7 @@ static const char *const XS[2][X_COUNT] = {
     "No effect at all!", "{1} shield is weak to {2}!", "{1} shield takes normal damage", "Tap to go on", "New types join!", "FAST!", "Too slow!",
     "Potions: %u", "HP %u/%u  (heals half)", "USE", "Use in auto battle",
     "Attack in %u", "%u F", "PERFECT!", "MISSED!", "IT HELD!", "IT CRUMBLED!",
+    "A LEGENDARY POKEMON!", "{1} appeared!",
   },
   // ---------------- KO ----------------
   {
@@ -390,6 +391,7 @@ static const char *const XS[2][X_COUNT] = {
     "아무 효과가 없어요!", "{1} 방패는 {2}에 약해요!", "{1} 방패는 그냥 맞아요", "탭해서 계속", "새 타입 등장!", "빠르다!", "늦었다!",
     "물약 %u개", "체력 %u/%u  (절반 회복)", "사용하기", "자동 전투에서 사용",
     "공격까지 %u층", "%u층", "퍼펙트!", "떨어졌다!", "버텼다!", "무너졌다!",
+    "전설의 포켓몬!", "{1}{이} 나타났다!",
   },
 };
 

@@ -1421,8 +1421,9 @@ static int bestLevelFor(int16_t dex, uint32_t target, int lo, int hi) {
   return best;
 }
 
-void wildMatchPower(Battler &foe, const Battler &me, BRng &rng) {
-  uint32_t target = battlerPower(me) * (90 + rng.below(16)) / 100;  // 90-105 %
+void wildMatchPower(Battler &foe, const Battler &me, BRng &rng, bool legend) {
+  // ko12.9.22: un legendario no es "de tu talla": 125-140 % de tu fuerza y hasta 8 niveles por encima
+  uint32_t target = battlerPower(me) * (legend ? 125 + rng.below(16) : 90 + rng.below(16)) / 100;  // 90-105 %
   int anchor = foe.lvl;
   int16_t dex = foe.dex;
   int best = anchor;
@@ -1435,7 +1436,8 @@ void wildMatchPower(Battler &foe, const Battler &me, BRng &rng) {
   // ko11.12: y nunca mas de 3 niveles por encima del tuyo (un Pichu Lv9 muy
   // entrenado veia salvajes Lv17-20); lo que falte de fuerza va a las stats
   int hi = anchor + 10;
-  if (hi > (int)me.lvl + WILD_LVL_OVER) hi = (int)me.lvl + WILD_LVL_OVER;
+  int over = legend ? 8 : WILD_LVL_OVER;
+  if (hi > (int)me.lvl + over) hi = (int)me.lvl + over;
   int lo = anchor - 6;
   if (lo > hi) lo = hi;
   for (int pass = 0; pass < 3; pass++) {

@@ -1039,7 +1039,8 @@ void loop() {
   // volcado). Es la mayor carga evitable de la placa. Cada render repinta la
   // escena entera, asi que no queda nada a medias; y al quedarse lastRender
   // congelado, el primer frame tras despertar sale en el acto.
-  if (!screenOff && now - lastRender >= (uint32_t)((gameOpen || sackOpen || trainingFast()) ? 85 : 100)) {
+  // ko12.9.22: muy atenuado (5 min sin tocar) se redibuja 2-3 veces por segundo, no 10 (ahorro de bateria)
+  if (!screenOff && now - lastRender >= (uint32_t)((gameOpen || sackOpen || trainingFast()) ? 85 : dimStage == 2 ? 400 : 100)) {
     lastRender = now;
     uint32_t r0 = millis();
     bootDiagLoop();  // ko11.5
@@ -1047,6 +1048,10 @@ void loop() {
     renderMs = millis() - r0;
     if (!bootDraw1Ms) bootDraw1Ms = renderMs ? renderMs : 1;  // ko12.8.5
   }
+  // ko12.9.22: con la pantalla apagada (o muy atenuada) la CPU descansa entre vueltas en vez de girar
+  // a tope: el boton, el reloj, la vibracion y las alarmas siguen igual (miran cada 250 ms o menos)
+  if (screenOff) delay(40);
+  else if (dimStage == 2) delay(15);
   if (fastGameNow()) {
     uint32_t stall = millis() - loopT0 - renderMs;
     if (renderMs) { perfFrames++; perfRenderSum += renderMs; if (renderMs > perfRenderMax) perfRenderMax = (uint16_t)renderMs; }
@@ -1115,6 +1120,22 @@ void updateBrightness(uint32_t now) {
   else if (dimStage == 2) target = 8;
   if (screenOff) target = 0;
   static uint8_t current = 255;
+  // ko12.9.22: pantalla apagada con el PWR = el panel AMOLED duerme (DISPOFF + SLPIN; antes solo brillo 0 y
+  // seguia gastando) y la CPU baja a 80 MHz. Al encenderla, todo vuelve como estaba
+  static bool panelAsleep = false;
+  if (screenOff != panelAsleep) {
+    panelAsleep = screenOff;
+    flushWaitIdle();
+    if (screenOff) {
+      panel->setBrightness(0);
+      panel->displayOff();
+      setCpuFrequencyMhz(80);
+    } else {
+      setCpuFrequencyMhz(240);
+      panel->displayOn();
+      current = 255;  // que se vuelva a mandar el brillo
+    }
+  }
   if (target != current) {
     current = target;
     flushWaitIdle();  // ko12.1: el panel puede estar recibiendo un fotograma del combate

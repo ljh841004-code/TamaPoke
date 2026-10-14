@@ -16,4 +16,6 @@ public:
   void draw16bitRGBBitmap(int16_t, int16_t, uint16_t *, int16_t, int16_t) override {}
   void draw24bitRGBBitmap(int16_t, int16_t, uint8_t *, int16_t, int16_t) override {}
   void setBrightness(uint8_t) {}
+  void displayOn() {}
+  void displayOff() {}
 };

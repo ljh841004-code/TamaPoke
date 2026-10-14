@@ -1505,7 +1505,7 @@ TEST(orb, fusion_tres_en_uno_con_fallos) {
       if (r == 3) dual++;
       CHECK_EQ(r == 3, orbDual(out));  // ko12.2.1: arcoiris
       CHECK_EQ(orbType(out), (uint8_t)PT_FIRE);
-      CHECK(orbPct(out) >= 17 && orbPct(out) <= 25);  // media 20: -3 .. +5
+      CHECK(orbPct(out) >= 16 && orbPct(out) <= 25);  // media 20: -4 .. +3 (ko12.9.22)
       CHECK_EQ(p.orbN, (uint8_t)2);
     }
   }
@@ -2078,4 +2078,19 @@ TEST(pet, regalo_de_cumple_una_vez_y_hacia_delante) {
   CHECK(!p.birthdayGift(2025));      // ano de antes: no
   CHECK(p.birthdayGift(2027));       // el ano siguiente, si
   CHECK_EQ(p.rareCandy, (uint16_t)(c0 + 2));
+}
+
+// ko12.9.22: % de los orbes nuevos: los bajos lo normal, 20 % o mas poco (antes 6 de cada 16)
+TEST(orbs, porcentaje_nuevo_sesgado_a_bajo) {
+  int hi = 0, top = 0, lo = 0;
+  for (uint32_t r = 0; r < 1000; r++) {
+    uint8_t p = orbRollPct(r);
+    CHECK(p >= ORB_MIN_PCT && p <= ORB_MAX_PCT);
+    if (p >= 20) hi++;
+    if (p == ORB_MAX_PCT) top++;
+    if (p <= 14) lo++;
+  }
+  CHECK(hi >= 80 && hi <= 160);   // ~12 % (antes 37,5 %)
+  CHECK(top >= 1 && top <= 30);   // raro
+  CHECK(lo >= 650);               // la mayoria 10-14 %
 }

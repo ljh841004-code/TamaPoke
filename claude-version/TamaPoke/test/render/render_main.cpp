@@ -726,6 +726,21 @@ static void scenes(bool ko, const char *sfx) {
   closeAll(); pet.energy = 80; startWild();
   bPhase = BP_MENU; txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
   render(); shot("08_battle_menu");
+  {  // ko12.9.22: 전설 등장 (grande, destello, rayos, nombre) y se salta tocando
+    Battler keepFoe = bFoe;
+    bFoe = makeBattler(150, 50, 160, 120, 150);
+    bvSetup(bMe, bFoe, nullptr, false);
+    bLegendT = gMockMillis; bPhase = BP_INTRO;
+    tick(300); render(); shot("08L1_legend_flash");
+    tick(500); render(); shot("08L2_legend_silhouette");
+    tick(1200); render(); shot("08L3_legend_reveal");
+    navCheck("전설: 연출 중엔 전투가 시작 안 함", bPhase == BP_INTRO && bLegendT != 0);
+    wildTap(CX, 200);
+    navCheck("전설: 탭하면 연출 건너뜀", bLegendT == 0);
+    tick(100); render(); shot("08L4_legend_battle");
+    bFoe = keepFoe; bvSetup(bMe, bFoe, nullptr, false);
+    bPhase = BP_MENU; txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
+  }
   battleArtTap(BART_X + 10, BART_Y + 10); render(); shot("08q_battle_art_prg");  // ko11.16: PMD <-> PokeRogue
   battleArtTap(BART_X + 10, BART_Y + 10);
   {  // ko11.31: [싸운다] -> los 4 movimientos; estados junto a las cajas de vida

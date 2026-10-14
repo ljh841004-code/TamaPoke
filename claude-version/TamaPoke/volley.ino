@@ -48,10 +48,10 @@ void startVolley() {
   vb.autoMove0 = true;
   const DexEntry &e = DEX_TBL[vbFoeDex];
   // ko12.9.12: rival algo mas rapido, remata mas fuerte y recibe mejor (+15 px/s, +25, +8 %)
-  vb.p[1].speed = 185 + vbClampf(e.bSpe, 0, 150) * 0.3f + lvl * 10;  // ko11.9.3: +10
-  vb.p[1].spikePow = 485 + vbClampf(e.bAtk, 0, 150) * 0.5f + lvl * 15;
+  vb.p[1].speed = 195 + vbClampf(e.bSpe, 0, 150) * 0.3f + lvl * 10;  // ko11.9.3: +10 (ko12.9.22: +10 mas)
+  vb.p[1].spikePow = 500 + vbClampf(e.bAtk, 0, 150) * 0.5f + lvl * 15;  // ko12.9.22: +15
   vb.p[1].hitR = 30 + vbClampf(e.bDef, 0, 150) / 50.0f;
-  vb.p[1].dig = (uint8_t)(38 + lvl * 8 + vbClampf(e.bDef, 0, 150) / 15.0f);  // 38..88 % (ko11.9.3: +10)
+  vb.p[1].dig = (uint8_t)(43 + lvl * 8 + vbClampf(e.bDef, 0, 150) / 15.0f);  // ko12.9.22: +5  // 38..88 % (ko11.9.3: +10)
   vbOpen = true;
   vbLast = millis();
   vbIntroUntil = vbLast + 1600;

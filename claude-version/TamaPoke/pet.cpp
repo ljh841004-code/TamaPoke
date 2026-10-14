@@ -1900,7 +1900,7 @@ uint8_t Pet::releaseGift(int16_t dex, uint16_t *orbOut) {
     case RG_EXP: addExp(20 + level() * 2); break;
     case RG_ORB: {
       uint16_t o = orbMake(DEX_TBL[dex].ptype, random(2) != 0,
-                           (uint8_t)(ORB_MIN_PCT + random(ORB_MAX_PCT - ORB_MIN_PCT + 1)));
+                           orbRollPct((uint32_t)random(1000)));  // ko12.9.22
       gainOrb(o);
       if (orbOut) *orbOut = o;
       break;
@@ -1931,7 +1931,7 @@ uint8_t Pet::synthOrbs(const uint8_t idx[3], uint16_t &out) {
     return 0;
   }
   bool great = (int)random(100) < ORB_SYNTH_GREAT_PCT;
-  int pct = great ? ORB_MAX_PCT : (int)(sum / 3) - 3 + (int)random(9);  // media -3 .. +5
+  int pct = great ? ORB_MAX_PCT : (int)(sum / 3) - 4 + (int)random(8);  // media -4 .. +3 (ko12.9.22: antes -3..+5)
   if (pct < ORB_MIN_PCT) pct = ORB_MIN_PCT;
   if (pct > ORB_MAX_PCT) pct = ORB_MAX_PCT;
   bool dual = (int)random(100) < ORB_SYNTH_DUAL_PCT;  // ko12.2.1

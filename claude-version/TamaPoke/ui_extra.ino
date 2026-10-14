@@ -86,7 +86,7 @@ void orbPctText(uint16_t o, char *out, size_t n) {
 
 // ko11.16: un orbe del tipo dado (ataque o defensa y % al azar) a la bolsa, con aviso
 uint8_t orbDrop(uint8_t type) {
-  uint16_t o = orbMake(type, random(2) != 0, (uint8_t)(ORB_MIN_PCT + random(ORB_MAX_PCT - ORB_MIN_PCT + 1)));
+  uint16_t o = orbMake(type, random(2) != 0, orbRollPct((uint32_t)random(1000)));  // ko12.9.22
   uint8_t r = pet.gainOrb(o);
   if (!r) return 0;
   char nm[40], t[96];
@@ -999,7 +999,7 @@ void drawBattleBg() {
 static uint16_t nameInkFor(int16_t dex) { return dex > 151 ? UI_GEN2_INK : UI_INK; }
 
 void drawHpBox(int x, int y, int w, const char *name, uint16_t lvl, float hp, uint16_t maxHp, bool showNum,
-               uint16_t nameInk) {
+               uint16_t nameInk, int8_t ptype) {
   uiPanel(x, y, w, showNum ? 58 : 46, 10, UI_WHITE, UI_INK);  // ko11.12
   char lv[12];
   snprintf(lv, sizeof(lv), "Lv%u", lvl);
@@ -1028,6 +1028,17 @@ void drawHpBox(int x, int y, int w, const char *name, uint16_t lvl, float hp, ui
     setSize(1);
     setCur(x + w - textW(hs, 1) - 8, y + 43);
     printT(hs);
+  }
+  if (ptype >= 0 && ptype < PT_COUNT) {  // ko12.9.22: el tipo, abajo a la izquierda
+    const char *tn = typeName((uint8_t)ptype);
+    int tw = textW(tn, 1) + 14, ty = y + (showNum ? 41 : 30);
+    uint16_t tc = typeColor((uint8_t)ptype);
+    gfx->fillRoundRect(bx, ty, tw, 16, 8, tc);
+    gfx->drawRoundRect(bx, ty, tw, 16, 8, uiLerp(tc, UI_INK, 8, 16));
+    setSize(1);
+    gfx->setTextColor(uiLerp(tc, UI_INK, 13, 16));
+    setCur(bx + 7, ty - 1);
+    printT(tn);
   }
 }
 
@@ -2148,8 +2159,11 @@ static uint32_t autoMenuT = 0;
 static void battleDoAction(int a);
 static bool autoAllowed() { return true; }  // ko11.31: tambien en salvaje (ko12.9.16: y en tongsin)
 static uint8_t autoRemaining() { return bKind != BK_WILD && bTeamN > bTeamI ? (uint8_t)(bTeamN - bTeamI) : 1; }
+// ko12.9.22: el legendario salvaje no es torpe (los demas salvajes fallan su mejor jugada a veces)
+static bool foeLegend() { return bKind == BK_WILD && bFoe.dex >= 1 && bFoe.dex <= DEX_COUNT && DEX_TBL[bFoe.dex].rarity == R_LEGENDARIO; }
+static uint8_t foeSloppy() { return foeLegend() ? 0 : 35; }
 static bool autoHardFoe() {
-  return bKind == BK_CHAMP || bFoe.lvl > bMe.lvl + 2 || typeEff(bFoe.type, bMe.type) > 2 ||
+  return bKind == BK_CHAMP || foeLegend() || bFoe.lvl > bMe.lvl + 2 || typeEff(bFoe.type, bMe.type) > 2 ||
          bFoe.maxHp > bMe.maxHp + bMe.maxHp / 4;
 }
 // que haria un buen jugador: pocion si hace falta (mas pronto si el rival es fuerte),
@@ -2677,7 +2691,7 @@ static void swapTap(int16_t x, int16_t y) {
     }
     partySwitchTo((uint8_t)who[i]);
     if (mode == 2) {  // a mano: el rival aprovecha el turno
-      BAct foeAct = foeMoveRule(battleAi(bFoe, bMe, bRng, 35));
+      BAct foeAct = foeMoveRule(battleAi(bFoe, bMe, bRng, foeSloppy()));
       bqN = battleFoeOnly(bMe, bFoe, foeAct, bRng, bq, BATTLE_MAX_EVENTS);
       bqAisMe = true;
       if (bqN > 0) { bPhase = BP_PLAY; startEvent(0); return; }
@@ -2701,6 +2715,63 @@ static void drawAutoBanner() {
 // ko11.32: cuanto tarda cada fotograma del combate (por el USB, cada 10 s): "PERF bat n=.. avg=.. max=.. lentos=.."
 static uint32_t pfN = 0, pfSum = 0, pfMax = 0, pfSlow = 0, pfFxMax = 0, pfT0 = 0;
 extern uint32_t flushWaitUs;  // ko12.1 (TamaPoke.ino): espera al envio anterior
+// ko12.9.22: 전설 등장: antes de la presentacion normal, el legendario sale en grande (destello, rayos
+// dorados que giran, silueta -> color, nombre). ~3,8 s; tocar lo salta (tras 0,8 s)
+#define LEG_INTRO_MS 3800
+uint32_t bLegendT = 0;
+static bool legendIntroOn(uint32_t now) { return bLegendT && now - bLegendT < LEG_INTRO_MS; }
+static void legendIntroEnd() { bLegendT = 0; bPhaseT = millis(); }
+static void legTextOut(const char *s, int y, uint16_t col, uint8_t sz) {
+  for (int dx = -2; dx <= 2; dx += 2)
+    for (int dy = -2; dy <= 2; dy += 2)
+      if (dx || dy) { setSize(sz); gfx->setTextColor(C565(0x10, 0x08, 0x20)); setCur(centerX(s, sz) + dx, y + dy); printT(s); }
+  drawFit(s, y, 400, col, sz);
+}
+static void drawLegendIntro(uint32_t t, uint32_t now) {
+  const uint16_t NIGHT = C565(0x0c, 0x08, 0x26), GOLD = C565(0xff, 0xd8, 0x40), GOLD2 = C565(0xb0, 0x70, 0x10);
+  int sh = t < 700 ? (int)(6 * sinf(t * 0.12f)) : 0;  // temblor al principio
+  gfx->fillScreen(NIGHT);
+  const int cx = CX, cy = 280;
+  if (t >= 500) {  // rayos que giran
+    float a0 = now * 0.0006f;
+    for (int k = 0; k < 12; k++) {
+      float a = a0 + k * 0.5236f, w = 0.13f;
+      int x1 = cx + (int)(340 * cosf(a - w)), y1 = cy + (int)(340 * sinf(a - w));
+      int x2 = cx + (int)(340 * cosf(a + w)), y2 = cy + (int)(340 * sinf(a + w));
+      gfx->fillTriangle(cx, cy, x1, y1, x2, y2, (k & 1) ? lerp565(GOLD2, NIGHT, 8, 16) : lerp565(GOLD, NIGHT, 7, 16));
+    }
+    for (int r = 120; r > 0; r -= 20) gfx->fillCircle(cx, cy, r, lerp565(GOLD, NIGHT, 6 + r / 12, 16));
+  } else {  // grieta de luz que crece
+    int l = (int)(t * 0.5f);
+    gfx->fillRect(cx - l + sh, cy - 3, 2 * l, 6, GOLD);
+    gfx->fillRect(cx - 2 + sh, cy - l / 2, 4, l, GOLD);
+  }
+  // el legendario, grande: silueta y luego en color
+  if (t >= 500 && foePmd.loaded) {
+    uint8_t act = foePmd.has(PMD_POSE) && t > 1600 ? PMD_POSE : PMD_IDLE;
+    drawPmdActM(foePmd, act, cx + sh, 372, now, true, t < 1300, 8, 340);
+  }
+  // destellos
+  if (t >= 900)
+    for (int k = 0; k < 10; k++) {
+      float a = now / 500.0f + k * 0.628f;
+      int r = 150 + (int)(30 * sinf(now / 200.0f + k)), l = 3 + (int)((now / 90 + k) % 4);
+      int sx = cx + (int)(r * cosf(a)), sy = cy + (int)(r * 0.85f * sinf(a));
+      gfx->fillRect(sx - l, sy - 1, 2 * l + 1, 3, UI_WHITE);
+      gfx->fillRect(sx - 1, sy - l, 3, 2 * l + 1, UI_WHITE);
+    }
+  // destello blanco
+  if (t >= 450 && t < 950) {
+    uint8_t f = (uint8_t)(16 - (t - 450) * 16 / 500);
+    for (int y = 0; y < 466; y += 2) gfx->drawFastHLine(0, y, 466, lerp565(NIGHT, UI_WHITE, f, 16));
+  }
+  if (t >= 1300) {
+    legTextOut(XT(X_LEG_APPEAR), 58, GOLD, 3);
+    char b[64];
+    txFmt(b, sizeof(b), X_LEG_NAME_FMT, dexName(bFoe.dex));
+    legTextOut(b, 396, UI_WHITE, 2);
+  }
+}
 static void renderBattleViewImpl();
 void renderBattleView() {
   uint32_t t0 = micros();
@@ -2723,6 +2794,8 @@ void renderBattleView() {
 }
 static void renderBattleViewImpl() {
   uint32_t now = millis();
+  if (legendIntroOn(now)) { lastInteract = now; drawLegendIntro(now - bLegendT, now); uiFlush(); return; }  // ko12.9.22
+  if (bLegendT) legendIntroEnd();
   lastInteract = now;  // una batalla no deja que la pantalla se atenue
   // barras de vida que bajan poco a poco
   bvMeHp += (bvMeTgt - bvMeHp) * 0.25f;
@@ -2733,8 +2806,8 @@ static void renderBattleViewImpl() {
   updateShake(now);
   drawBattleBg();
   drawBattlers();
-  drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true, nameInkFor(bvFoeDex));  // ko9: rival con numeros
-  drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true, nameInkFor(bvMeDex));
+  drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true, nameInkFor(bvFoeDex), bvFoeDex >= 1 && bvFoeDex <= DEX_COUNT ? (int8_t)DEX_TBL[bvFoeDex].ptype : -1);  // ko9: rival con numeros
+  drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true, nameInkFor(bvMeDex), bvMeDex >= 1 && bvMeDex <= DEX_COUNT ? (int8_t)DEX_TBL[bvMeDex].ptype : -1);
   if (!bvFoeFainted) drawStatusBadge(206, 112, bFoe);  // ko11.31
   if (!bvMeFainted) drawStatusBadge(350, 150, bMe);
   drawPartyBalls();  // ko11.20
@@ -2987,6 +3060,11 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
   bPhase = BP_INTRO; bPotAsk = false;
   bPhaseT = millis();
   xScreen = XS_WILD;
+  bLegendT = 0;
+  if (DEX_TBL[bFoe.dex].rarity == R_LEGENDARIO) {  // ko12.9.22: 전설 등장
+    bLegendT = millis() ? millis() : 1;
+    vibPulse(260, 3, 140);
+  }
   sfxPlay(SFX_MEDAL);
   audioSetBattleMusic(false, true);
   audioCry(bFoe.dex);
@@ -3090,7 +3168,7 @@ void startWildIn(uint8_t region) {
   }
   bExpDex = bFoe.dex;  // ko11: la EXP no se infla por subirle el nivel
   bExpLvl = bFoe.lvl;
-  wildMatchPower(bFoe, bMe, bRng);  // ko10.11: de tu talla (90-105 % de tu fuerza)
+  wildMatchPower(bFoe, bMe, bRng, DEX_TBL[bFoe.dex].rarity == R_LEGENDARIO);  // ko10.11: de tu talla (ko12.9.22: legendario 125-140 %)
   applyOrb(bMe);  // ko11.16: DESPUES de igualar: el orbe si se nota contra el salvaje
   bool shiny = bRng.below(ev.kind == DEV_SHINY ? 32 : 64) == 0;  // ko11.7: fin de semana x2
   bvSetup(bMe, bFoe, nullptr, shiny);
@@ -3726,6 +3804,7 @@ void endBattleScreen() {
 }
 
 void wildTap(int16_t x, int16_t y) {
+  if (bLegendT) { if (millis() - bLegendT > 800) legendIntroEnd(); return; }  // ko12.9.22: saltar el 전설 등장
   if (autoLeft) {  // ko11.19: cualquier toque para el automatico
     autoLeft = 0;
     strncpy(bvL1, XT(X_AUTO_STOP), sizeof(bvL1) - 1); bvL2[0] = 0;
@@ -3813,7 +3892,7 @@ static void battleDoAction(int a) {
     strncpy(bvL1, XT(X_NO_BALL), sizeof(bvL1) - 1); bvL2[0] = 0; sfxPlay(SFX_DENY); return;
   }
   sfxPlay(SFX_TAP);
-  BAct foeAct = foeMoveRule(battleAi(bFoe, bMe, bRng, 35));  // el salvaje es algo torpe
+  BAct foeAct = foeMoveRule(battleAi(bFoe, bMe, bRng, foeSloppy()));  // el salvaje es algo torpe
   if (a == BA_POTION && autoLeft) autoPotions++;
   bqN = battleTurn(bMe, bFoe, (BAct)a, foeAct, bRng, bq, BATTLE_MAX_EVENTS, true);
   benchRest();  // ko12.5.1: los del banquillo descansan
@@ -3953,6 +4032,7 @@ static void petPPAfter(bool won) {
 }
 
 void finishBattle(bool won, bool fled, bool caught) {
+  bLegendT = 0;
   autoLeft = 0;  // ko11.19
   bMoveMenu = false;
   bPotAsk = false;  // ko12.9.20
@@ -4119,6 +4199,7 @@ bool stepEvents() {
 
 void updateWild() {
   uint32_t now = millis();
+  if (bLegendT) { if (legendIntroOn(now)) return; legendIntroEnd(); }  // ko12.9.22
   if (autoLeft && bPhase == BP_MENU && now - autoMenuT > AUTO_STEP_MS) {  // ko11.19
     battleDoAction(autoPick());
     return;
@@ -4137,8 +4218,9 @@ void updateWild() {
       autoMenuT = now;
       txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
       bvL2[0] = 0;
-      // ko11.20: sale otro del rival: como en PokeRogue, "¿cambiar?"
-      if (bKind != BK_WILD && !bLink && bTeamI > 0 && partyOtherAlive()) partyAskSwap(1);
+      // ko11.20: sale otro del rival: como en PokeRogue, "¿cambiar?". ko12.9.22: tambien con el primero
+      // (antes salia siempre el que crias y con mal tipo se perdia un turno al cambiar)
+      if (bKind != BK_WILD && !bLink && partyOtherAlive()) partyAskSwap(1);
     }
   } else if (bPhase == BP_PLAY) {
     if (stepEvents()) {
