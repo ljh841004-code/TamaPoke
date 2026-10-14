@@ -1173,6 +1173,16 @@ static void scenes(bool ko, const char *sfx) {
     wildTap(90, SW_Y + 10);
     tick(100); render(); shot("53e_party_helper_in");
     navCheck("equipo: sale el ayudante", pCur != 0 && bPhase == BP_MENU);
+    {  // ko12.9.26: con "원작" el cambio tenia el sprite del anterior (se comparaba con bvMeDex, ya cambiado)
+      uint8_t o = gBattleArt;
+      gBattleArt = 1;
+      prgLoadFor(pMon[0].dex, bFoe.dex, false);
+      bvMeDex = bMe.dex;  // como partySwitchTo: primero bvMeDex, luego los sprites
+      prgLoadFor(bMe.dex, bFoe.dex, false);
+      navCheck("equipo: 원작 그림도 바뀐 포켓몬으로", prgMeDex == bMe.dex && pMon[0].dex != bMe.dex);
+      gBattleArt = o;
+      prgLoadFor(bMe.dex, bFoe.dex, false);
+    }
     bFoe.hp = 0; nextTrainerMon(); tick(2300); updateWild(); render(); shot("53f_party_next_switch");
     // ko12.2: contra 2 vamos 2: caido el mio, no queda a quien cambiar (antes 3)
     navCheck("equipo: rival nuevo -> cambiar? (si queda alguien)", (bPhase == BP_SWAP && bSwapMode == 1) || !partyOtherAlive());

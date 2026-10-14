@@ -530,12 +530,19 @@ uint8_t battleArt() {
   }
   return gBattleArt;
 }
+static int16_t prgMeDex = 0;  // ko12.9.26: la especie que tiene prgMe (antes se comparaba con bvMeDex, que en el
+static bool prgMeShiny = false;  // cambio del equipo ya era el nuevo: seguia el sprite del anterior en "원작")
 static void prgLoadFor(int16_t meDex, int16_t foeDex, bool foeShiny) {
   prgFoeDex = foeDex;
   prgFoeShiny = foeShiny;
-  if (!battleArt()) { prgFoe.unload(); prgMe.unload(); return; }  // PMD: ni se leen (menos SD y RAM)
+  if (!battleArt()) { prgFoe.unload(); prgMe.unload(); prgMeDex = 0; return; }  // PMD: ni se leen (menos SD y RAM)
   prgFoe.load((uint8_t)foeDex, foeShiny, 'r');  // ~100 KB de la SD, una vez por combate
-  if (!prgMe.loaded || bvMeDex != meDex) prgMe.load((uint8_t)meDex, pet.shiny && meDex == pet.speciesId, 'r');
+  bool meShiny = pet.shiny && meDex == pet.speciesId;
+  if (!prgMe.loaded || prgMeDex != meDex || prgMeShiny != meShiny) {
+    prgMe.load((uint8_t)meDex, meShiny, 'r');
+    prgMeDex = meDex;
+    prgMeShiny = meShiny;
+  }
 }
 #define BART_X 163
 #define BART_Y 16
