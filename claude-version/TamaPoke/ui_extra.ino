@@ -3199,11 +3199,11 @@ void startWild() { startWildIn(petRegion()); }
 // grandes para no fallar el toque). Se pasa de pagina deslizando o con las flechas
 #define RG_PER_PAGE 8
 #define RG_X 78
-#define RG_Y 104
+#define RG_Y 100  // ko12.9.23: 104 -> 100, botones 52 -> 48 y hueco 10 -> 8: sitio para el boton del 구슬
 #define RG_W 150
-#define RG_H 52
+#define RG_H 48
 #define RG_GAPX 10
-#define RG_GAPY 10
+#define RG_GAPY 8
 #define RG_ARROW_Y 222
 #define RG_DOTS_Y 356
 #define RG_BACK_Y 372
@@ -3215,9 +3215,9 @@ uint8_t regionPage = 0;
 uint32_t regionMsgUntil = 0;
 // ko12.9.11: 부르는 구슬 (donde estaban los puntos de pagina; 2 toques para gastarlo)
 #define LURE_W 300
-#define LURE_H 26
+#define LURE_H 40  // ko12.9.23: 26 -> 40 (costaba acertar)
 #define LURE_X (CX - LURE_W / 2)
-#define LURE_Y (RG_DOTS_Y - 11)
+#define LURE_Y 324  // bajo la ultima fila (316) y sobre los botones de abajo (372)
 uint32_t lureArmUntil = 0;
 static bool lureShown() { return pet.lureN || pet.lureLeft; }
 // ko10.4: abierta si hay medallas suficientes; la region de mi Pokemon, siempre
@@ -3287,7 +3287,7 @@ void renderRegionPick() {
     if (on) {  // brillo: puntitos alrededor
       for (int k = 0; k < 4; k++) gfx->fillCircle(LURE_X + 14 + k * ((LURE_W - 28) / 3), LURE_Y - 3, 2, C565(0xd8, 0xb0, 0xff));
     }
-    drawFit(l, LURE_Y + (LURE_H - 16) / 2, LURE_W - 16, UI_WHITE, 1);
+    drawFit(l, LURE_Y + (LURE_H - 24) / 2, LURE_W - 20, UI_WHITE, 2);  // ko12.9.23: letra grande
   } else {
     for (int p = 0; p < 2; p++) {
       int x = CX - 13 + p * 26;
@@ -3325,7 +3325,7 @@ void regionTap(int16_t x, int16_t y) {
   }
   if (inRect(x, y, RG_ART_X, RG_BACK_Y, RG_ART_W, 44)) { battleArtToggle(); return; }  // ko11.16.1
   if (inRect(x, y, RG_CTR_X, RG_BACK_Y, RG_ART_W, 44)) { sfxPlay(SFX_TAP); xScreen = XS_CENTER; return; }  // ko11.31
-  if (lureShown() && !timeLeft(regionMsgUntil) && inRect(x, y, LURE_X, LURE_Y - 2, LURE_W, LURE_H + 4)) {  // ko12.9.11
+  if (lureShown() && !timeLeft(regionMsgUntil) && inRect(x, y, LURE_X - 20, LURE_Y - 8, LURE_W + 40, LURE_H + 14)) {  // ko12.9.11 (ko12.9.23: zona mas generosa)
     if (pet.lureLeft) { sfxPlay(SFX_DENY); showToast(XT(X_LURE_BUSY)); return; }
     if (!timeLeft(lureArmUntil)) { sfxPlay(SFX_TAP); lureArmUntil = millis() + 3000; return; }
     lureArmUntil = 0;
