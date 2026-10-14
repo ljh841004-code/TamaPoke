@@ -44,6 +44,7 @@ const char *netApName();
 // ko12.9.25: 설명서. El portal (y la WiFi de casa) sirven /manual.pdf de la SD (raiz). El movil se une al
 // WiFi del TamaPoke con el QR 1 y abre NET_MANUAL_URL con el QR 2 (sin internet, sin subir nada)
 #define NET_MANUAL_PATH "/manual.pdf"
+#define NET_MANUAL_PATH2 "/mons/manual.pdf"  // ko12.9.26: el instalador web (PUT) lo deja en /mons/
 #define NET_MANUAL_URL "http://192.168.4.1/manual.pdf"
 bool netManualOnSd();
 

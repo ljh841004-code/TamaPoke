@@ -545,10 +545,16 @@ static void pageFwDone() {
 }
 
 // ---------------------------------------------------------------- ko12.9.25: 설명서 (SD /manual.pdf)
+// ko12.9.26: en la raiz (copiado con el PC) o en /mons/ (enviado con el instalador web)
+static const char *manualPathLocked() {
+  if (SD_MMC.exists(NET_MANUAL_PATH)) return NET_MANUAL_PATH;
+  if (SD_MMC.exists(NET_MANUAL_PATH2)) return NET_MANUAL_PATH2;
+  return nullptr;
+}
 bool netManualOnSd() {
   if (!sdReady) return false;
   SdCardLock l(pdMS_TO_TICKS(500));
-  return l && SD_MMC.exists(NET_MANUAL_PATH);
+  return l && manualPathLocked();
 }
 
 // a trozos, soltando la SD entre trozo y trozo (la musica tambien lee de la SD)
@@ -557,13 +563,14 @@ static void pageManual() {
   File f;
   if (sdReady) {
     SdCardLock l;
-    if (l) f = SD_MMC.open(NET_MANUAL_PATH, FILE_READ);
+    const char *p = l ? manualPathLocked() : nullptr;
+    if (p) f = SD_MMC.open(p, FILE_READ);
   }
   if (!f) {
     gWeb->send(404, "text/html; charset=utf-8",
                F("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
                  "<p style='font-family:sans-serif;padding:30px'>SD카드에 manual.pdf가 없어요.<br>"
-                 "PC에서 SD카드 맨 위에 manual.pdf를 넣어 주세요.</p>"));
+                 "SD카드 맨 위나 mons 폴더에 manual.pdf를 넣어 주세요.</p>"));
     return;
   }
   size_t left = f.size();
