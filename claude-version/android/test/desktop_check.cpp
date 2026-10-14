@@ -4,10 +4,11 @@
 #include "../jni/host_core.inc"
 #include <time.h>
 
-static uint16_t gFrame[466 * 466];
+#define PXW (466 * HDK)
+static uint16_t gFrame[PXW * PXW];
 static int gFrames = 0;
 void hostPresent(const uint16_t *fb, int w, int h) {
-  if (w == 466 && h == 466) { memcpy(gFrame, fb, sizeof(gFrame)); gFrames++; }
+  if (w == PXW && h == PXW) { memcpy(gFrame, fb, sizeof(gFrame)); gFrames++; }
 }
 void hostSetBrightness(uint8_t) {}
 void hostDisplayOn(bool) {}
@@ -16,7 +17,7 @@ void hostPumpEvents() {}
 
 static void saveRaw(const char *name) {
   FILE *f = fopen(name, "wb");
-  if (f) { fwrite(gFrame, 2, 466 * 466, f); fclose(f); }
+  if (f) { fwrite(gFrame, 2, PXW * PXW, f); fclose(f); }
 }
 static void run(uint32_t ms) {
   uint32_t t0 = millis();
@@ -36,6 +37,20 @@ int main(int argc, char **argv) {
   static std::string root = gSdDir;
   gSdRoot = root.c_str();
   prefsLoadFile();
+  {  // fuente HD (en el movil va dentro del APK, assets/)
+    FILE *ff = fopen("assets/NotoSansKR-Medium-hd.otf", "rb");
+    std::vector<uint8_t> fd;
+    if (ff) { uint8_t b[65536]; size_t n; while ((n = fread(b, 1, sizeof(b), ff)) > 0) fd.insert(fd.end(), b, b + n); fclose(ff); }
+    hdSetFont(fd.data(), fd.size());
+    check("fuente HD", hdFontLoaded());
+  }
+  if (const char *hd = getenv("HD_PAK")) {  // hd.pak (dibujos grandes): se añade a mons/
+    std::vector<int> m{ open(hd, O_RDONLY) };
+    std::string e = importPak(m);
+    close(m[0]);
+    struct stat st;
+    check("hd.pak se añade", e.empty() && stat((gSdDir + "/mons/hd/f025.png").c_str(), &st) == 0);
+  }
   if (pak) {
     // en trozos (como se envia al movil): todos los argumentos, en orden
     std::vector<int> fds;
@@ -68,9 +83,16 @@ int main(int argc, char **argv) {
   check("arranca y pinta", gFrames > 0);
   if (pet.awaitingStarter()) { tap(233, 233); run(600); saveRaw("build/desk_01_starter.raw"); }
   for (int i = 0; i < 3 && pet.isEgg(); i++) tap(233, 233);
+  run(1500);
+  tap(143, 280);  // "배경을 골라 주세요": 야외
   run(3000);
   saveRaw("build/desk_02_main.raw");
   if (pak) check("sprite cargado desde la carpeta importada", pmd.loaded || mon.loaded);
+  if (getenv("HD_PAK")) {
+    struct stat st;
+    check("HD sigue tras mons.pak", stat((gSdDir + "/mons/hd/f025.png").c_str(), &st) == 0);
+    for (int k = 0; k < 4; k++) { run(700); char n[64]; snprintf(n, sizeof(n), "build/desk_02_main_%d.raw", k); saveRaw(n); }
+  }
   // ficha (deslizar de abajo arriba) y volver
   touchSample(true, 233, 420);
   for (int k = 1; k <= 6; k++) { run(40); touchSample(true, 233, 420 - k * 40); }
@@ -107,7 +129,7 @@ int main(int argc, char **argv) {
     drawBtn(312, 10, 138, 58, 0xD200, 0xFFFF, "나가기");
     gfx = keep;
     FILE *f = fopen("build/desk_bar.raw", "wb");
-    fwrite(bar->getFramebuffer(), 2, 466 * 80, f); fclose(f);
+    fwrite(bar->hdfb(), 2, PXW * 80 * HDK, f); fclose(f);
     check("barra pintada", bar->getFramebuffer()[40 * 466 + 80] != 0);
   }
   printf("%s (%d fallos)\n", fails ? "FALLOS" : "TODO OK", fails);

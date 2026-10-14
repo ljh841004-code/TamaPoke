@@ -30,10 +30,10 @@ R=$SKETCH/test/render
 sed -n '/Preferences en memoria/,$p' "$SKETCH/test/shim/shim.cpp" > "$B/prefs_impl.inc"
 
 echo "== nativo (arm64)"
-INC="-I $HERE/jni/shim -I $R/shim -I $SKETCH/test/shim -I $SKETCH -I $GFX -I $B -I $NDK/sources/android/native_app_glue"
-CXXF="-std=gnu++17 -O2 -fPIC -w -ffunction-sections -fdata-sections -DHOST_REAL_AUDIO $INC"
+INC="-I $HERE/jni -I $HERE/jni/shim -I $R/shim -I $SKETCH/test/shim -I $SKETCH -I $GFX -I $B -I $NDK/sources/android/native_app_glue"
+CXXF="-std=gnu++17 -O2 -fPIC -w -ffunction-sections -fdata-sections -DHOST_REAL_AUDIO -DHOST_HD $INC"
 rm -f "$B"/obj/*.o
-for f in "$HERE/jni/host.cpp" "$HERE/jni/audio_host.cpp" "$HERE/jni/host_stubs.cpp" "$SKETCH/pet.cpp" "$SKETCH/box.cpp" "$SKETCH/battle.cpp" "$SKETCH/i18n.cpp" \
+for f in "$HERE/jni/host.cpp" "$HERE/jni/host_hd.cpp" "$HERE/jni/audio_host.cpp" "$HERE/jni/host_stubs.cpp" "$SKETCH/pet.cpp" "$SKETCH/box.cpp" "$SKETCH/battle.cpp" "$SKETCH/i18n.cpp" \
          "$SKETCH/i18n_ext.cpp" "$SKETCH/story_ko.cpp" "$SKETCH/sdmon.cpp" "$SKETCH/fxanim.cpp" "$SKETCH/sdcheck.cpp" \
          "$SKETCH/pak_core.cpp" "$GFX/Arduino_GFX.cpp" "$GFX/Arduino_G.cpp" "$GFX/canvas/Arduino_Canvas.cpp"; do
   "$CXX" $CXXF -c "$f" -o "$B/obj/$(basename "$f").o" &
@@ -51,7 +51,7 @@ javac -source 8 -target 8 -Xlint:-options -classpath "$JAR" -d "$B/classes" "$HE
 echo "== apk"
 rm -rf "$B/res_c" && mkdir -p "$B/res_c"
 "$BT/aapt2" compile --dir "$HERE/res" -o "$B/res_c"
-"$BT/aapt2" link -o "$B/base.apk" --manifest "$HERE/AndroidManifest.xml" -I "$JAR" "$B"/res_c/*.flat
+"$BT/aapt2" link -o "$B/base.apk" --manifest "$HERE/AndroidManifest.xml" -I "$JAR" -A "$HERE/assets" "$B"/res_c/*.flat
 cp "$B/dex/classes.dex" "$B/apk/"
 (cd "$B/apk" && zip -q -r "$B/base.apk" classes.dex lib)
 "$BT/zipalign" -f -p 4 "$B/base.apk" "$B/aligned.apk"

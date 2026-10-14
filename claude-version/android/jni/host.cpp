@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <android/asset_manager.h>
 
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "TamaPoke", __VA_ARGS__)
 
@@ -28,13 +29,15 @@ static bool gHostScreenOn = true;
 static uint8_t gHostBright = 255;
 
 // ---------------------------------------------------------------- ventana
-// La ventana tiene 466 de ancho y el alto proporcional a la pantalla: el sistema la escala sola.
+// Modo HD: el juego sigue pensando en 466x466 (logico), pero el lienzo es 3x (1398x1398, host_hd_canvas.h)
+// y la ventana tiene 1398 de ancho. Abajo las medidas en logico salvo PX (pixeles de verdad).
+// La ventana tiene 466 (x3) de ancho y el alto proporcional a la pantalla: el sistema la escala sola.
 // Arriba el juego (466x466, NEGRO fuera del circulo solo si se elige "둥근 화면"; por defecto entero,
 // para que en el movil no se corte nada arriba ni abajo) y debajo una barra con [메뉴] [화면 끄기] [나가기]
-static const int LCD = 466;
+static const int LCD = 466, PX = LCD * HDK;
 static const int BAR_H = 80, BAR_GAP = 28;
-static std::vector<int16_t> gCircleX0;  // por fila: primera columna dentro del circulo
-static uint16_t gLast[LCD * LCD];
+static std::vector<int16_t> gCircleX0;  // por fila HD: primera columna dentro del circulo
+static uint16_t gLast[PX * PX];
 static bool gHaveLast = false;
 static int gBarY = -1;                    // fila de la ventana donde empieza la barra (-1 = no cabe)
 static TPCanvas *gBar = nullptr;
@@ -66,13 +69,13 @@ static void setupWindow() {
     gOffY = (gGeomH - LCD) / 2;
     gBarY = -1;
   }
-  ANativeWindow_setBuffersGeometry(gWin, LCD, gGeomH, WINDOW_FORMAT_RGB_565);
+  ANativeWindow_setBuffersGeometry(gWin, PX, gGeomH * HDK, WINDOW_FORMAT_RGB_565);
   if (gCircleX0.empty()) {
-    gCircleX0.resize(LCD);
-    for (int y = 0; y < LCD; y++) {
-      double dy = y + 0.5 - LCD / 2.0, r = LCD / 2.0;
+    gCircleX0.resize(PX);
+    for (int y = 0; y < PX; y++) {
+      double dy = y + 0.5 - PX / 2.0, r = PX / 2.0;
       double h = dy * dy < r * r ? sqrt(r * r - dy * dy) : 0;
-      gCircleX0[y] = (int16_t)(LCD / 2.0 - h + 0.5);
+      gCircleX0[y] = (int16_t)(PX / 2.0 - h + 0.5);
     }
   }
 }
@@ -106,18 +109,18 @@ static void blit(const uint16_t *fb) {
   ANativeWindow_Buffer buf;
   if (ANativeWindow_lock(gWin, &buf, nullptr) != 0) return;
   uint16_t *dst = (uint16_t *)buf.bits;
-  int h = buf.height < gGeomH ? buf.height : gGeomH;
-  int w = buf.width < LCD ? buf.width : LCD;
-  const uint16_t *bar = gBar ? gBar->getFramebuffer() : nullptr;
+  int h = buf.height < gGeomH * HDK ? buf.height : gGeomH * HDK;
+  int w = buf.width < PX ? buf.width : PX;
+  const uint16_t *bar = gBar ? gBar->hdfb() : nullptr;
   for (int y = 0; y < h; y++) {
     uint16_t *row = dst + (size_t)y * buf.stride;
     memset(row, 0, buf.width * 2);
-    int by = y - gBarY;
-    if (gBarY >= 0 && bar && by >= 0 && by < BAR_H) { memcpy(row, bar + (size_t)by * LCD, w * 2); continue; }
-    int gy = y - gOffY;
-    if (gy < 0 || gy >= LCD || !gHostScreenOn) continue;
-    int x0 = gRound ? gCircleX0[gy] : 0, x1 = LCD - x0;
-    const uint16_t *src = fb + (size_t)gy * LCD;
+    int by = y - gBarY * HDK;
+    if (gBarY >= 0 && bar && by >= 0 && by < BAR_H * HDK) { memcpy(row, bar + (size_t)by * PX, w * 2); continue; }
+    int gy = y - gOffY * HDK;
+    if (gy < 0 || gy >= PX || !gHostScreenOn) continue;
+    int x0 = gRound ? gCircleX0[gy] : 0, x1 = PX - x0;
+    const uint16_t *src = fb + (size_t)gy * PX;
     for (int x = x0; x < x1 && x < w; x++) row[x] = dim565(src[x], gHostBright);
   }
   ANativeWindow_unlockAndPost(gWin);
@@ -127,7 +130,7 @@ static void blit(const uint16_t *fb) {
 static bool gMenuOpen = false;
 void drawHostMenu();
 void hostPresent(const uint16_t *fb, int w, int h) {
-  if (w != LCD || h != LCD) return;
+  if (w != PX || h != PX) return;
   memcpy(gLast, fb, sizeof(gLast));
   gHaveLast = true;
   if (!gMenuOpen) blit(fb);
@@ -150,8 +153,8 @@ static void callJava(const char *name);
 static const int HM_Y[3] = { 150, 220, 290 };
 void drawHostMenu() {
   if (!gHaveLast) return;
-  uint16_t *fb = gfx->getFramebuffer();
-  static uint16_t save[LCD * LCD];
+  uint16_t *fb = gfx->hdfb();
+  static uint16_t save[PX * PX];
   memcpy(save, fb, sizeof(save));
   memcpy(fb, gLast, sizeof(gLast));
   gfx->fillRoundRect(63, 90, 340, 290, 20, 0x2124);
@@ -163,6 +166,7 @@ void drawHostMenu() {
   gHostScreenOn = true;  // con la pantalla "apagada" el menu se ve igual
   blit(fb);
   gHostScreenOn = on;
+  fb = gfx->hdfb();  // lo que se escribio en el proxy durante el menu, fuera
   memcpy(fb, save, sizeof(save));
 }
 static void hostMenuTap(int x, int y) {
@@ -331,6 +335,10 @@ void android_main(android_app *app) {
   prefsLoadFile();
   loadClockAdj();
   loadRound();
+  if (AAsset *a = AAssetManager_open(app->activity->assetManager, "NotoSansKR-Medium-hd.otf", AASSET_MODE_BUFFER)) {
+    hdSetFont((const uint8_t *)AAsset_getBuffer(a), (size_t)AAsset_getLength(a));  // se copia
+    AAsset_close(a);
+  }
 
   uint32_t lastSave = 0;
   bool asked = false;

@@ -66,6 +66,10 @@ Arduino_CO5300 *panel = new Arduino_CO5300(
 // Framebuffer completo en PSRAM: dibujamos todo y hacemos flush() (sin parpadeo).
 // fork KO (ko4): subclase solo para leer el color de texto (el hangul Noto se
 // pinta a mano en printT() y tiene que usar el mismo color que print()).
+#ifdef HOST_HD
+// app de Android en alta resolucion: el lienzo dibuja a 3x (android/jni/shim/host_hd_canvas.h)
+#include "host_hd_canvas.h"
+#else
 class TPCanvas : public Arduino_Canvas {
 public:
   using Arduino_Canvas::Arduino_Canvas;
@@ -74,6 +78,7 @@ public:
   uint16_t *fbuf() const { return _framebuffer; }
   void setFbuf(uint16_t *p) { _framebuffer = p; }
 };
+#endif
 TPCanvas *gfx = new TPCanvas(LCD_WIDTH, LCD_HEIGHT, panel);
 
 TouchDrvCST92xx touch;
@@ -2043,6 +2048,10 @@ static int uiRowInset(int yy, int h, int r) {
 void uiShadeSpan(uint16_t *p, int n, uint32_t k);
 // oscurece (a de 16) el area de un rectangulo redondeado: sombras y velos
 void uiShade(int x, int y, int w, int h, int r, uint8_t a) {
+#ifdef HOST_HD
+  gfx->shadeRR(x, y, w, h, r, a);
+  return;
+#endif
   uint16_t *fb = gfx->getFramebuffer();
   if (!fb || w <= 0 || h <= 0) return;
   if (r * 2 > h) r = h / 2;
@@ -3135,11 +3144,17 @@ static int fkoChar(uint32_t cp, int x, int base, bool draw, uint16_t col) {
     int idx;
     const FkoTier *H = fkoHangul(cp, &idx);
     if (!H) return T.px;  // fuera de KS X 1001: hueco del ancho de una silaba
+#ifdef HOST_HD
+    if (draw && hdGlyph(cp, x, base, H->px, H->px, col)) return H->px;
+#endif
     if (draw) fkoBlit(H->hg + (size_t)idx * ((H->px + 3) / 4) * H->px, H->px, H->px, x, base - H->base, col);
     return H->px;
   }
   if (cp >= 32 && cp <= 126) {
     const FkoGlyph &g = T.ascii[cp - 32];
+#ifdef HOST_HD
+    if (draw && hdGlyph(cp, x, base, T.px, g.adv, col)) return g.adv;
+#endif
     if (draw && g.w) fkoBlit(T.abits + g.off, g.w, g.h, x + g.xo, base + g.yo, col);
     return g.adv;
   }
@@ -5992,6 +6007,9 @@ void drawPetPMD() {
     gfx->fillEllipse((int)beh.x, PET_GROUND - 2, 60, 10, lerp565(soil, C565(0, 0, 0), 3, 16));
     gfx->fillEllipse((int)beh.x, PET_GROUND - 2, 44, 7, lerp565(soil, C565(0, 0, 0), 6, 16));
   }
+#ifdef HOST_HD
+  if (!hdPetDraw(pet.speciesId, pet.shiny, act, (int)beh.x, PET_GROUND, now - beh.t0, pmd.loaded))
+#endif
   drawPmdActM(pmd, act, (int)beh.x, PET_GROUND, (beh.mode == 3 && petFxT != 0xFFFFFFFFu) ? petFxT : now - beh.t0,
               loop || act == PMD_IDLE, false, PET_MAXS, PET_FITH);
   if (orbValid(pet.orb)) drawOrbSlot((int)beh.x + 60, PET_GROUND - 18, 12, pet.orb, now);  // ko11.16: su orbe, abajo a la derecha

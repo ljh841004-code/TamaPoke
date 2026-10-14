@@ -14,6 +14,14 @@
    - 폰의 뒤로 버튼도 [메뉴]와 같아요
    - 기본은 **네모 화면**(위아래가 잘리지 않음). 기기처럼 보고 싶으면 [메뉴] → [둥근 화면으로]
 
+## 고화질 (HD, 4판부터)
+- 화면 전체를 기기의 **3배 해상도**(1398×1398)로 그려요: 글자는 진짜 글꼴(Noto Sans KR), 도형·버튼·게이지는 매끈하게
+- **HD 포켓몬 그림**: `hd.pak.001 ~ .003`을 [메뉴] → [mons.pak 고르기]로 함께 고르면 `mons/hd/`에 **추가**돼요
+  - 기본 화면의 내 포켓몬이 큰 그림으로 나오고, 동작(숨쉬기·걷기·잠·먹기·아픔·기 모으기·공격·점프·구르기)에 맞춰 움직여요
+  - 샤이니는 샤이니 그림. hd.pak이 없으면 예전 도트 그림 그대로예요
+  - mons.pak을 다시 넣어도 HD 그림은 지워지지 않아요
+- 아직 도트 그대로인 곳: 전투·도감·보관함·훈련의 포켓몬, 아이콘 (다음 단계)
+
 ## 기기와 다른 점
 - 시간 = 폰 시계. 앱을 닫아 둔 동안은 기기를 꺼 둔 것처럼 계산해요 (최대 2주)
 - 저장 = 앱 안 (`nvs.bin`). 기기 세이브와는 따로예요
@@ -23,7 +31,9 @@
 ## 만들기 (PC)
 ```
 ANDROID_SDK=<sdk> android/build_apk.sh        # -> android/build/TamaPoke.apk
-android/test/run_desktop.sh <mons.pak>          # 같은 코드를 PC에서 점검 (pak 풀기, 실행, 저장, 소리 스레드)
+HD_PAK=<hd.pak> android/test/run_desktop.sh <mons.pak 조각...>   # 같은 코드를 PC에서 점검 (pak 풀기, 실행, 저장, 소리, HD 화면 PNG)
 ```
+HD 그림: PokeAPI HOME 그림을 받아 `mons/hd/fNNN.png`(일반)·`sNNN.png`(샤이니), 긴 변 440px로 줄여 `tools/make_pak.py`로 묶어요 (저장소에는 안 올려요).
+글꼴: `python3 android/tools_make_font.py <fontsource files> android/assets/NotoSansKR-Medium-hd.otf` (SIL OFL).
 SDK: platforms;android-34, build-tools;34.0.0, ndk;26.3.11579264 + JDK + arduino-cli.
 `debug.keystore`는 개인 테스트용 서명 키예요 (같은 키로 서명해야 덮어쓰기 설치가 돼요).

@@ -184,6 +184,8 @@ static std::string importPak(const std::vector<int> &fds) {
     return "";
   }
   gImportMerged = false;
+  // los dibujos HD (hd.pak) se quedan aunque se cambie el mons.pak
+  if (stat((fin + "/hd").c_str(), &st) == 0 && stat((tmp + "/hd").c_str(), &st) != 0) rename((fin + "/hd").c_str(), (tmp + "/hd").c_str());
   rmTree(fin);
   if (rename(tmp.c_str(), fin.c_str()) != 0) return "폴더를 바꿀 수 없어요";
   return "";
@@ -194,7 +196,7 @@ static void runImport(const std::vector<int> &fds) {
   std::string err = !fds.empty() ? importPak(fds) : "파일이 없어요";
   for (int f : fds) close(f);
   if (err.empty()) {
-    progressScreen(gImportMerged ? "추가 완료! (음악 등)" : "완료! 그림과 소리를 불러와요", "", 1, 1);
+    progressScreen(gImportMerged ? "추가 완료! (음악, HD 그림 등)" : "완료! 그림과 소리를 불러와요", "", 1, 1);
     sdDirty = true;
     monFor = -1;
     audioScanBgm();
