@@ -4869,7 +4869,19 @@ static void hintRegion(char *o, size_t n, uint8_t r) {
   int k = snprintf(o, n, "%s", XT((XId)(X_REG_0 + r)));
   if (!regionOpen(r) && k > 0 && k < (int)n) snprintf(o + k, n - k, XT(X_HINT_LOCK_FMT), regionBadgesNeeded(r));
 }
-static void drawDexHint(int16_t dx) {
+// ko12.9.23: ficha de un Pokemon ya descubierto: boton para ver donde sale (para volver a buscarlo)
+static bool dexHintView = false;
+#define DEXW_W 170
+#define DEXW_H 34
+#define DEXW_X (CX - DEXW_W / 2)
+#define DEXW_Y 380
+static bool dexHasHint(int16_t dx) {
+  WildHint h[6];
+  int16_t via = 0;
+  uint8_t lv = 0;
+  return wildHints(dx, h, 6, &via, &lv) > 0;
+}
+static void drawDexHint(int16_t dx, int y0 = 280) {  // ko12.9.23: y0 = titulo
   WildHint h[6];
   int16_t via = 0;
   uint8_t lv = 0;
@@ -4925,8 +4937,8 @@ static void drawDexHint(int16_t dx) {
       o[sizeof(lines[0]) - 1] = 0;
     }
   }
-  drawFit(XT(X_HINT_TITLE), 280, 300, C565(0x80, 0x48, 0xe8), 1);
-  for (int i = 0; i < nl; i++) drawFit(lines[i], 302 + i * 26, 330, UI_INK, 2);
+  drawFit(XT(X_HINT_TITLE), y0, 300, C565(0x80, 0x48, 0xe8), 1);
+  for (int i = 0; i < nl; i++) drawFit(lines[i], y0 + 22 + i * 26, 330, UI_INK, 2);
 }
 
 void renderDexDetail() {
@@ -4969,29 +4981,33 @@ void renderDexDetail() {
     static const XId RAR[4] = { X_RARITY_EVO, X_RARITY_COMMON, X_RARITY_RARE, X_RARITY_LEGEND };
     snprintf(l, sizeof(l), "%s  /  %s", typeName(d.ptype), XT(RAR[d.rarity < 4 ? d.rarity : 1]));
     drawFit(l, 208, 340, UI_INK, 2);
-    snprintf(l, sizeof(l), XT(X_BASE_FMT), d.bHp, d.bAtk, d.bDef, d.bSpe);
-    drawFit(l, 234, 360, UI_INK, 2);
-    if (d.evolvesTo) {
-      int16_t nx = d.evolvesTo;
-      snprintf(l, sizeof(l), XT(X_EVO_FMT), dexDiscovered(nx) ? dexName(nx) : "???", evoLevel(dx));
+    if (dexHintView) {  // ko12.9.23: donde sale (tambien ya descubierto: para ir a buscarlo)
+      drawDexHint(dx, 238);
     } else {
-      strncpy(l, XT(X_EVO_FINAL), sizeof(l) - 1);
-      l[sizeof(l) - 1] = 0;
-    }
-    drawFit(l, 260, 360, UI_INK, 2);
-    uint32_t fs = dexLog.firstSeen(dx);
-    if (fs) {
-      int32_t z = (int32_t)(fs / 86400) + 719468;  // civil_from_days
-      int32_t era = z / 146097, doe = z - era * 146097;
-      int32_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-      int32_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100), mp = (5 * doy + 2) / 153;
-      unsigned dd = doy - (153 * mp + 2) / 5 + 1, mm = mp < 10 ? mp + 3 : mp - 9;
-      snprintf(l, sizeof(l), XT(X_FIRST_FMT), mm, dd);
-      drawFit(l, 290, 340, UI_INK, 2);
-    }
-    snprintf(l, sizeof(l), XT(X_SEEN_FMT), dexLog.seenCount(dx), dexLog.caughtCount(dx));
-    drawFit(l, 316, 340, UI_INK, 2);
-    if (pet.isRegistered(dx)) drawFit(XT(X_RAISED), 342, 300, C565(0x2e, 0x7d, 0x32), 2);
+      snprintf(l, sizeof(l), XT(X_BASE_FMT), d.bHp, d.bAtk, d.bDef, d.bSpe);
+      drawFit(l, 234, 360, UI_INK, 2);
+      if (d.evolvesTo) {
+        int16_t nx = d.evolvesTo;
+        snprintf(l, sizeof(l), XT(X_EVO_FMT), dexDiscovered(nx) ? dexName(nx) : "???", evoLevel(dx));
+      } else {
+        strncpy(l, XT(X_EVO_FINAL), sizeof(l) - 1);
+        l[sizeof(l) - 1] = 0;
+      }
+      drawFit(l, 260, 360, UI_INK, 2);
+      uint32_t fs = dexLog.firstSeen(dx);
+      if (fs) {
+        int32_t z = (int32_t)(fs / 86400) + 719468;  // civil_from_days
+        int32_t era = z / 146097, doe = z - era * 146097;
+        int32_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+        int32_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100), mp = (5 * doy + 2) / 153;
+        unsigned dd = doy - (153 * mp + 2) / 5 + 1, mm = mp < 10 ? mp + 3 : mp - 9;
+        snprintf(l, sizeof(l), XT(X_FIRST_FMT), mm, dd);
+        drawFit(l, 290, 340, UI_INK, 2);
+      }
+      snprintf(l, sizeof(l), XT(X_SEEN_FMT), dexLog.seenCount(dx), dexLog.caughtCount(dx));
+      drawFit(l, 316, 340, UI_INK, 2);
+      if (pet.isRegistered(dx)) drawFit(XT(X_RAISED), 342, 300, C565(0x2e, 0x7d, 0x32), 2);
+    }  // !dexHintView
     if (dexLog.caughtCount(dx)) {  // ko11.31: capturado alguna vez: sus 4 movimientos fuertes (los aprendidos)
       uint8_t mv[4];
       dexTopMoves(dx, mv);
@@ -5036,8 +5052,15 @@ void renderDexDetail() {
       }
     }
   }
-  drawFit(T(S_DETAIL_BACK), 386, 260, UI_INK, 2);
-  drawFit(XT(X_DEX_EXIT), 412, 220, UI_INK, 1);  // ko5
+  if (disc && dexHasHint(dx)) {  // ko12.9.23: [출현 장소] / [정보 보기]
+    drawBtn(DEXW_X, DEXW_Y, DEXW_W, DEXW_H, dexHintView ? UI_WHITE : C565(0x80, 0x48, 0xe8),
+            dexHintView ? UI_INK : UI_WHITE, XT(dexHintView ? X_DEX_INFO_BTN : X_DEX_WHERE_BTN));
+    drawFit(T(S_DETAIL_BACK), 422, 240, UI_INK, 1);
+    drawFit(XT(X_DEX_EXIT), 440, 200, UI_INK, 1);
+  } else {
+    drawFit(T(S_DETAIL_BACK), 386, 260, UI_INK, 2);
+    drawFit(XT(X_DEX_EXIT), 412, 220, UI_INK, 1);  // ko5
+  }
   uiFlush();
 }
 
@@ -5191,6 +5214,13 @@ void galleryTap(int16_t x, int16_t y) {
         return;
       }
     }
+    if (dexDiscovered(galleryDetail) && dexHasHint(galleryDetail) &&
+        inRect(x, y, DEXW_X - 10, DEXW_Y - 8, DEXW_W + 20, DEXW_H + 14)) {  // ko12.9.23: datos <-> donde sale
+      dexHintView = !dexHintView;
+      lastTap = 0;  // no cuenta como primer toque del doble toque (salir)
+      sfxPlay(SFX_TAP);
+      return;
+    }
     // ko9.1: tocar al Pokemon repite su grito (solo si ya se conoce)
     if (y >= 100 && y < 230 && x >= 120 && x < 346 && dexDiscovered(galleryDetail)) {
       audioCry(galleryDetail);
@@ -5213,6 +5243,7 @@ void galleryTap(int16_t x, int16_t y) {
   int16_t dex = galDex(galleryPage, r * 4 + c);
   if (!dex) return;
   galleryDetail = dex;
+  dexHintView = false;  // ko12.9.23
   galleryPmd.unload();
   dexMvPend = 0;  // ko12.2.1
   galleryLoadWant = dex;  // ko11.31.3: primero se ve la ficha (con la miniatura); luego el sprite y el grito

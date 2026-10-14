@@ -199,6 +199,7 @@ static const char *const XS[2][X_COUNT] = {
     "Potions: %u", "HP %u/%u  (heals half)", "USE", "Use in auto battle",
     "Attack in %u", "%u F", "PERFECT!", "MISSED!", "IT HELD!", "IT CRUMBLED!",
     "A LEGENDARY POKEMON!", "{1} appeared!",
+    "Where to find", "Details",
   },
   // ---------------- KO ----------------
   {
@@ -392,6 +393,7 @@ static const char *const XS[2][X_COUNT] = {
     "물약 %u개", "체력 %u/%u  (절반 회복)", "사용하기", "자동 전투에서 사용",
     "공격까지 %u층", "%u층", "퍼펙트!", "떨어졌다!", "버텼다!", "무너졌다!",
     "전설의 포켓몬!", "{1}{이} 나타났다!",
+    "출현 장소", "정보 보기",
   },
 };
 

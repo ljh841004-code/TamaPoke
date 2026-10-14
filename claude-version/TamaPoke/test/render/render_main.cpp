@@ -1482,6 +1482,16 @@ static void scenes(bool ko, const char *sfx) {
     render(); shot("13c_dex_detail_thumb");
     galleryPmd.load(25, false);
   }
+  {  // ko12.9.23: ya descubierto: [출현 장소] ensena donde sale; dos toques seguidos en el boton no salen de la pokedex
+    tick(700);
+    onTap(CX, DEXW_Y + DEXW_H / 2);
+    navCheck("pokedex: [출현 장소] -> donde sale", dexHintView && galleryDetail == 25);
+    render(); shot("13h_dex_where");
+    tick(120);
+    onTap(CX, DEXW_Y + DEXW_H / 2);
+    navCheck("pokedex: [정보 보기] -> los datos (sin salir)", !dexHintView && galleryDetail == 25 && galleryOpen);
+    tick(700);
+  }
   {
     uint8_t mv[4];
     dexTopMoves(25, mv);
