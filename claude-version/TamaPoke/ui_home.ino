@@ -306,7 +306,10 @@ static void walkFlush() {
   if (got) walkReward(got);
 }
 void imuPoll(uint32_t now) {
-  if (!imuAddr || now - imuT < 35) return;
+  // ko12.9.23: cada 60 ms (antes 35) y, si falla 3 veces seguidas, 2 s sin tocar el bus: menos
+  // lecturas I2C que se crucen con el tactil (panic en i2c_master_isr_handler_default en ko12.9.21)
+  static uint8_t imuFails = 0;
+  if (!imuAddr || now - imuT < (imuFails >= 3 ? 2000u : 60u)) return;
   imuT = now;
   // la racha termino tranquila: se suma (si tuvo 4+ pasos)
   if (walkPend && now - stepLastT > 1500 && now - bigT > 1500) {
@@ -314,9 +317,10 @@ void imuPoll(uint32_t now) {
     stepRun = 0;
   }
   int32_t ax, ay, az;
-  if (!imuRead(ax, ay, az)) return;
+  if (!imuRead(ax, ay, az)) { if (imuFails < 3) imuFails++; return; }
+  imuFails = 0;
   float m = sqrtf((float)(ax * ax + ay * ay + az * az));
-  imuBase += ((int32_t)m - imuBase) / 16;  // ~0,5 s de media: la gravedad
+  imuBase += ((int32_t)m - imuBase) / 9;  // ~0,5 s de media: la gravedad (ko12.9.23: /9, se lee cada 60 ms)
   int32_t d = (int32_t)m - imuBase;
   if (d > 700 || d < -600) {  // golpe fuerte: no es andar (lo pendiente se tira)
     bigT = now;

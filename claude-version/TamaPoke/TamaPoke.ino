@@ -1388,7 +1388,9 @@ void handleSerial() {
 // ko12.9.10: en la placa real seguia pasando (corazon + grito al tocar "기분"): el dedo se lee
 // bastante mas alto. 50 px de margen sobre las barras (312); la caricia queda en el cuerpo
 // (el sprite va de 122 a 282: solo se pierden los pies)
-#define GAUGE_HIT_Y 262
+// ko12.9.23: tercera vez (sigue saliendo caricia): 230, el cuerpo y la cabeza siguen siendo caricia
+// (122-230); ademas cuenta donde SUELTA el dedo (ver touchSample)
+#define GAUGE_HIT_Y 230
 bool inPetZone(int16_t x, int16_t y) {
   return x > 110 && x < 356 && y > 95 && y < GAUGE_HIT_Y;
 }
@@ -1728,19 +1730,25 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
       // ko10.8: arrastres lentos (hasta 1,5 s) y algo torcidos tambien valen: manda
       // el eje dominante (antes < 0,8 s y la otra direccion < 70 px)
       int adx = abs(dx), ady = abs(dy);
+      // ko12.9.23: apoya en el bicho (punta del dedo) y suelta en las barras: toque en la barra
+      bool lowLift = (inPetZone(tX0, tY0) || tY0 >= GAUGE_HIT_Y) && tYl >= GAUGE_HIT_Y && tYl < 366 && tXl >= 70 &&
+                     tXl < 400 && dy > 0 && dy < 80 && adx < 40 && petHoldAllowed() && !choiceKind;
+      if (lowLift && dt >= 60 && dt < 1500) ady = adx = 0;
       if (adx > 80 && ady * 5 < adx * 4 && dt < 1500) onSwipe(dx > 0 ? 1 : -1);
       else if (ady > 80 && adx * 5 < ady * 4 && dt < 1500) onSwipeV(dy > 0 ? 1 : -1);
       // ko10.11: un toque de verdad dura algo; los roces de < 60 ms (rozar la
       // pantalla al pasar el dedo) ya no pulsan nada en los menus. Los juegos
       // rapidos no pasan por aqui (cuentan al apoyar)
-      else if (dt >= 60 && dt < 1500 && abs(dx) < 40 && abs(dy) < 40 && petHoldAllowed() && inPetZone(tX0, tY0) &&
-               !pet.sleeping) {
+      // ko12.9.23: el primer punto es la punta del dedo al apoyar (se lee mas arriba de donde queda). La
+      // caricia pide que el dedo tambien SUELTE en el bicho; si suelta en las barras, cuenta la barra
+      else if (dt >= 60 && dt < 1500 && adx < 40 && ady < 40 && petHoldAllowed() && inPetZone(tX0, tY0) &&
+               inPetZone(tXl, tYl) && !pet.sleeping) {
         petTapPendT = petHoldUpT ? petHoldUpT : 1;  // ko11.9.2: la caricia espera 400 ms (corte del tactil?)
         petTapX = tX0;
         petTapY = tY0;
-      } else if (dt >= 60 && dt < 1500 && abs(dx) < 40 && abs(dy) < 40) {
+      } else if (dt >= 60 && dt < 1500 && adx < 40 && ady < 40) {
         uint16_t sig0 = screenSig();
-        onTap(tX0, tY0);
+        onTap(lowLift ? tXl : tX0, lowLift ? tYl : tY0);
         // ko10.11: si el toque abrio/cerro una pantalla, 250 ms sin toques: un
         // segundo toque pegado no debe pulsar lo que haya debajo en la nueva
         if (screenSig() != sig0) navGuardUntil = touchNow() + 250;
@@ -1965,7 +1973,7 @@ void onTap(int16_t x, int16_t y) {
     }
   }
   // ko12.5: tocar una barra la sube (ko12.9.1: 25; la energia 15)
-  if (y >= GAUGE_HIT_Y && y < 366 && x >= 70 && x < 400) {  // ko12.9.10: 50 px de margen sobre las barras (312)
+  if (y >= GAUGE_HIT_Y && y < 366 && x >= 70 && x < 400) {  // ko12.9.23: 82 px de margen sobre las barras (312)
     uint8_t g = (uint8_t)((y >= 334 ? 2 : 0) + (x >= 236 ? 1 : 0));
     pet.gaugeTap(g);
     sfxPlay(SFX_TAP);

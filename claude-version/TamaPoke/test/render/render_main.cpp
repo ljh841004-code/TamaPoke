@@ -112,11 +112,24 @@ static void scenes(bool ko, const char *sfx) {
         navCheck("principal: justo encima de la barra = barra (+25)", pet.joy == j0 + GAUGE_TAP_GAIN_BIG);
         pet.joy = j0;
         pet.joy = j0;
-        onTap(300, 268);  // ko12.9.10: el dedo en "기분" se lee hasta ~45 px mas alto en la placa
-        navCheck("principal: 44 px encima de la barra = barra (+25)", pet.joy == j0 + GAUGE_TAP_GAIN_BIG);
+        onTap(300, 240);  // ko12.9.10/23: el dedo en "기분" se lee hasta ~45 px mas alto en la placa
+        navCheck("principal: 72 px encima de la barra = barra (+25)", pet.joy == j0 + GAUGE_TAP_GAIN_BIG);
         pet.joy = j0;
-        onTap(CX, 240);
+        onTap(CX, 200);
         navCheck("principal: el cuerpo sigue siendo caricia", pet.joy > j0 && pet.joy < j0 + GAUGE_TAP_GAIN_BIG);
+        {  // ko12.9.23: la punta del dedo apoya en el bicho y el dedo suelta en "기분": es la barra
+          pet.joy = j0; wasPressed = false; lastInteract = gMockMillis; tick(400);
+          touchSample(true, 300, 215);
+          for (int i = 0; i < 5; i++) { tick(20); touchSample(true, 300, 290); }
+          touchSample(false, 300, 290); tick(500); handleTouch();
+          navCheck("principal: apoyar en el bicho y soltar en la barra = barra (+25)", pet.joy == j0 + GAUGE_TAP_GAIN_BIG);
+          pet.joy = j0;
+          touchSample(true, CX, 190);
+          for (int i = 0; i < 5; i++) { tick(20); touchSample(true, CX, 200); }
+          touchSample(false, CX, 200); tick(500); handleTouch();
+          navCheck("principal: tocar el cuerpo (soltar en el cuerpo) sigue siendo caricia", pet.joy > j0 && pet.joy < j0 + GAUGE_TAP_GAIN_BIG);
+          pet.joy = j0;
+        }
       }
       {  // ko12.9.3: una lectura rota del RTC (2 h en el futuro) no adelanta el reloj
         extern uint32_t gMockGlitch;
