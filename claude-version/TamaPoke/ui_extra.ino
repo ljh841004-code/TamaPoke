@@ -1059,7 +1059,9 @@ void drawBattleBg() {
   } else {
     drawSky(hor, hh, night, wx, now, false);
     drawBiome(bio, hor, 262, now, night, wx);
-    if (fxNow && bbCache) { memcpy(bbCache, fb, (size_t)LCD_WIDTH * BB_ROWS * 2); bbValid = true; }
+    // se vuelve a pedir: en la app HD el lienzo de 466 es una copia que se pone al dia al pedirlo (con el
+    // puntero de antes se guardaba el fotograma anterior con los dos Pokemon: salian "fantasmas")
+    if (fxNow && bbCache) { fb = gfx->getFramebuffer(); memcpy(bbCache, fb, (size_t)LCD_WIDTH * BB_ROWS * 2); bbValid = true; }
   }
   if (!fxNow) bbValid = false;
   uint16_t soil = nightDim(BIOME_SOIL[bio < BIOME_N ? bio : 0], night);

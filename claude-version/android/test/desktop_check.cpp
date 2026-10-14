@@ -93,6 +93,18 @@ int main(int argc, char **argv) {
     check("HD sigue tras mons.pak", stat((gSdDir + "/mons/hd/f025.png").c_str(), &st) == 0);
     for (int k = 0; k < 4; k++) { run(700); char n[64]; snprintf(n, sizeof(n), "build/desk_02_main_%d.raw", k); saveRaw(n); }
   }
+  if (getenv("HD_PAK")) {  // HD: dibujo grande quieto (opcion del menu)
+    extern bool gHdArt;
+    gHdArt = true; run(800); saveRaw("build/desk_02_hdart.raw"); gHdArt = false;
+  }
+  {  // combate: sin "fantasmas" (cache del fondo durante el efecto de la SD)
+    startWild();
+    run(4000);
+    tap(330, 348);  // [자동]
+    for (int k = 0; k < 12; k++) { run(300); char n[64]; snprintf(n, sizeof(n), "build/desk_05_battle_%d.raw", k); saveRaw(n); }
+    for (int k = 0; k < 60 && xScreen != 0; k++) { tap(300, 395); run(300); }
+    run(1500);
+  }
   // ficha (deslizar de abajo arriba) y volver
   touchSample(true, 233, 420);
   for (int k = 1; k <= 6; k++) { run(40); touchSample(true, 233, 420 - k * 40); }

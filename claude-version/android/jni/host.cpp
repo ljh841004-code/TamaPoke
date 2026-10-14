@@ -44,13 +44,14 @@ static TPCanvas *gBar = nullptr;
 static bool gBarDirty = true, gBarOff = false;
 static bool gRound = false;               // "둥근 화면" (como la placa) / "네모 화면" (entero, por defecto)
 
+extern bool gHdArt;
 static void loadRound() {
   FILE *f = fopen((gFiles + "/round.txt").c_str(), "r");
-  if (f) { gRound = fgetc(f) == '1'; fclose(f); }
+  if (f) { gRound = fgetc(f) == '1'; gHdArt = fgetc(f) == '1'; fclose(f); }
 }
 static void saveRound() {
   FILE *f = fopen((gFiles + "/round.txt").c_str(), "w");
-  if (f) { fputc(gRound ? '1' : '0', f); fclose(f); }
+  if (f) { fputc(gRound ? '1' : '0', f); fputc(gHdArt ? '1' : '0', f); fclose(f); }
 }
 
 static void setupWindow() {
@@ -143,25 +144,27 @@ void hostDisplayOn(bool on) {  // [화면 끄기] (PWR): el juego apaga el panel
 }
 
 // ---------------------------------------------------------------- menu de la app ([메뉴] o tecla atras)
-// [mons.pak 고르기] [둥근 화면 / 네모 화면] [닫기]. Se dibuja con las mismas funciones del juego
+// [mons.pak 고르기] [둥근 화면 / 네모 화면] [HD 그림 켜기/끄기] [닫기]. Se dibuja con las mismas funciones del juego
 // sobre una copia del ultimo fotograma, y luego se devuelve el lienzo como estaba.
 static bool gPwrPending = false;
 static void callJava(const char *name);
 #define HM_X 93
 #define HM_W 280
 #define HM_H 56
-static const int HM_Y[3] = { 150, 220, 290 };
+#define HM_N 4
+static const int HM_Y[HM_N] = { 128, 192, 256, 320 };
 void drawHostMenu() {
   if (!gHaveLast) return;
   uint16_t *fb = gfx->hdfb();
   static uint16_t save[PX * PX];
   memcpy(save, fb, sizeof(save));
   memcpy(fb, gLast, sizeof(gLast));
-  gfx->fillRoundRect(63, 90, 340, 290, 20, 0x2124);
-  drawFit("TamaPoke (Android)", 104, 300, 0xFFFF, 2);
+  gfx->fillRoundRect(63, 70, 340, 330, 20, 0x2124);
+  drawFit("TamaPoke (Android)", 84, 300, 0xFFFF, 2);
   drawBtn(HM_X, HM_Y[0], HM_W, HM_H, 0x4C98, 0xFFFF, "mons.pak 고르기");
   drawBtn(HM_X, HM_Y[1], HM_W, HM_H, 0x6B4D, 0xFFFF, gRound ? "네모 화면으로" : "둥근 화면으로");
-  drawBtn(HM_X, HM_Y[2], HM_W, HM_H, 0xFFFF, 0x0000, "닫기");
+  drawBtn(HM_X, HM_Y[2], HM_W, HM_H, 0x6B4D, 0xFFFF, gHdArt ? "움직이는 도트로" : "HD 그림으로 (정지)");
+  drawBtn(HM_X, HM_Y[3], HM_W, HM_H, 0xFFFF, 0x0000, "닫기");
   bool on = gHostScreenOn;
   gHostScreenOn = true;  // con la pantalla "apagada" el menu se ve igual
   blit(fb);
@@ -171,12 +174,13 @@ void drawHostMenu() {
 }
 static void hostMenuTap(int x, int y) {
   int hit = -1;
-  for (int i = 0; i < 3; i++)
+  for (int i = 0; i < HM_N; i++)
     if (x >= HM_X && x < HM_X + HM_W && y >= HM_Y[i] && y < HM_Y[i] + HM_H) hit = i;
   if (hit < 0) return;
   gMenuOpen = false;
   if (hit == 0) callJava("pickPak");
   if (hit == 1) { gRound = !gRound; saveRound(); }
+  if (hit == 2) { gHdArt = !gHdArt; saveRound(); }
   if (gHaveLast) blit(gLast);
 }
 

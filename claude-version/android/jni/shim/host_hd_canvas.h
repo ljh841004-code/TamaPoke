@@ -19,6 +19,7 @@
 void hdSetFont(const uint8_t *d, size_t n);
 bool hdFontLoaded();
 bool hdGlyph(uint32_t cp, int x, int base, int px, int adv, uint16_t col);
+bool hdArtOn();  // [메뉴] "HD 그림" (정지 그림): por defecto no, el PMD animado
 bool hdPetDraw(int16_t dex, bool shiny, uint8_t act, int x, int ground, uint32_t t, bool hasPmd);
 
 class TPCanvas : public Print {
@@ -42,7 +43,7 @@ public:
 
   // ---- framebuffer "logico" (proxy) ----
   uint16_t *getFramebuffer() {
-    sync();
+    sync(true);
     uint16_t *fb = c->getFramebuffer();
     if (!fb || !proxy) return nullptr;
     int W = lw * HDK;
@@ -52,21 +53,25 @@ public:
       for (int x = 0; x < lw; x++) dst[x] = src[x * HDK];
     }
     memcpy(snap, proxy, (size_t)lw * lh * 2);
-    proxyOut = true;
+    proxyOut = proxyEver = true;
     return proxy;
   }
   uint16_t *fbuf() { return getFramebuffer(); }
   void setFbuf(uint16_t *) {}
-  void sync() {
-    if (!proxyOut) return;
+  // force: comparar aunque ya se hubiera sincronizado (alguien guardo el puntero del proxy y siguio escribiendo
+  // despues de dibujar otra cosa): se hace en flush y al volver a pedir el framebuffer
+  void sync(bool force = false) {
+    if (!proxyOut && !(force && proxyEver)) return;
     proxyOut = false;
     uint16_t *fb = c->getFramebuffer();
     int W = lw * HDK;
     for (int y = 0; y < lh; y++) {
-      const uint16_t *p = proxy + (size_t)y * lw, *s = snap + (size_t)y * lw;
+      const uint16_t *p = proxy + (size_t)y * lw;
+      uint16_t *s = snap + (size_t)y * lw;
       for (int x = 0; x < lw; x++) {
         if (p[x] == s[x]) continue;
         uint16_t v = p[x];
+        s[x] = v;
         uint16_t *d = fb + (size_t)y * HDK * W + x * HDK;
         for (int j = 0; j < HDK; j++, d += W)
           for (int i = 0; i < HDK; i++) d[i] = v;
@@ -104,7 +109,8 @@ public:
   static int16_t S(int v) { return (int16_t)(v * HDK); }
   static int16_t C(int v) { return (int16_t)(v * HDK + HDK / 2); }  // centro del pixel logico
   void fillScreen(uint16_t col) { sync(); proxyOut = false; c->fillScreen(col); }
-  void flush(bool force = false) { sync(); c->flush(force); }
+  void flush(bool force = false) { sync(true); c->flush(force); }
+  void fillRectHD(int X, int Y, int W, int H, uint16_t col) { sync(); c->fillRect(X, Y, W, H, col); }  // en pixeles HD
   void drawPixel(int16_t x, int16_t y, uint16_t col) { sync(); c->fillRect(S(x), S(y), HDK, HDK, col); }
   void fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t col) {
     if (w <= 0 || h <= 0) return;
@@ -185,5 +191,5 @@ public:
 
 private:
   uint16_t *proxy = nullptr, *snap = nullptr;
-  bool proxyOut = false;
+  bool proxyOut = false, proxyEver = false;
 };

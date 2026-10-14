@@ -4679,6 +4679,34 @@ static void smEpx2(const uint8_t *src, int w, int h, uint8_t *dst) {
 bool gBlitFlipX = false;
 void smoothBlitQ(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, int y0, int s4, bool sil) {
   if (w <= 0 || h <= 0 || s4 <= 0) return;
+#ifdef HOST_HD
+  // app HD: el liso se hace con una pasada EPX mas y a resolucion completa (bordes 3 veces mas finos)
+  if (gSmoothGfx && s4 >= 8 && w <= SM_MAX && h <= SM_MAX) {
+    static uint8_t *hA = nullptr, *hB = nullptr;
+    if (!hA) { hA = (uint8_t *)malloc(SM_MAX * SM_MAX * 16); hB = (uint8_t *)malloc(SM_MAX * SM_MAX * 64); }
+    int W = w * 2, H = h * 2, k = 2;
+    smEpx2(src, w, h, hB);
+    const uint8_t *img = hB;
+    smEpx2(hB, W, H, hA); img = hA; W *= 2; H *= 2; k = 4;
+    if (s4 >= 16) { smEpx2(hA, W, H, hB); img = hB; W *= 2; H *= 2; k = 8; }
+    int d = 4 * k, X0 = x0 * HDK, FW = w * s4 * HDK / 4;
+    for (int r = 0; r < H; r++) {
+      int ya = y0 * HDK + r * s4 * HDK / d, yb = y0 * HDK + (r + 1) * s4 * HDK / d;
+      if (yb <= ya) continue;
+      const uint8_t *row = img + r * W;
+      for (int c = 0; c < W;) {
+        uint8_t v = row[c];
+        if (v == 0xFF) { c++; continue; }
+        int c2 = c + 1;
+        while (c2 < W && row[c2] == v) c2++;
+        int xa = X0 + c * s4 * HDK / d, xb = X0 + c2 * s4 * HDK / d;
+        if (xb > xa) gfx->fillRectHD(gBlitFlipX ? X0 + FW - (xa - X0) - (xb - xa) : xa, ya, xb - xa, yb - ya, sil ? INK_K : pal[v]);
+        c = c2;
+      }
+    }
+    return;
+  }
+#endif
   const int fw = w * s4 / 4;  // ancho total en pantalla (para el espejo)
 #define SB_FILL(xa, ya, ww, hh, col) \
   gfx->fillRect(gBlitFlipX ? x0 + fw - ((xa) - x0) - (ww) : (xa), ya, ww, hh, col)
@@ -6008,7 +6036,7 @@ void drawPetPMD() {
     gfx->fillEllipse((int)beh.x, PET_GROUND - 2, 44, 7, lerp565(soil, C565(0, 0, 0), 6, 16));
   }
 #ifdef HOST_HD
-  if (!hdPetDraw(pet.speciesId, pet.shiny, act, (int)beh.x, PET_GROUND, now - beh.t0, pmd.loaded))
+  if (!hdArtOn() || !hdPetDraw(pet.speciesId, pet.shiny, act, (int)beh.x, PET_GROUND, now - beh.t0, pmd.loaded))
 #endif
   drawPmdActM(pmd, act, (int)beh.x, PET_GROUND, (beh.mode == 3 && petFxT != 0xFFFFFFFFu) ? petFxT : now - beh.t0,
               loop || act == PMD_IDLE, false, PET_MAXS, PET_FITH);

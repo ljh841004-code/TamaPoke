@@ -206,6 +206,9 @@ static void drawAffine(const HdImg &im, float dx, float dy, float ax, float ay, 
 enum { A_IDLE = 0, A_WALKL, A_WALKR, A_SLEEP, A_EAT, A_HURT, A_ATTACK, A_POSE, A_HOP, A_NOD, A_BREATH, A_SIT,
        A_ROTATE, A_CHARGE, A_SHOOT, A_LAYING };
 
+bool gHdArt = false;  // [메뉴] "HD 그림": la mascota con el dibujo grande (quieto) en vez del PMD animado
+bool hdArtOn() { return gHdArt; }
+
 bool hdPetDraw(int16_t dex, bool shiny, uint8_t act, int x, int ground, uint32_t t, bool) {
   if (!gfx || dex <= 0) return false;
   HdImg *im = petImg(dex, shiny);
