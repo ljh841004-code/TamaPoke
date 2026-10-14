@@ -200,6 +200,7 @@ static const char *const XS[2][X_COUNT] = {
     "Attack in %u", "%u F", "PERFECT!", "MISSED!", "IT HELD!", "IT CRUMBLED!",
     "A LEGENDARY POKEMON!", "{1} appeared!",
     "Where to find", "Details",
+    "Orb x%u", "Tap again!", "On: %u", "No Lure Orb (champion, expeditions, daily)",
   },
   // ---------------- KO ----------------
   {
@@ -394,6 +395,7 @@ static const char *const XS[2][X_COUNT] = {
     "공격까지 %u층", "%u층", "퍼펙트!", "떨어졌다!", "버텼다!", "무너졌다!",
     "전설의 포켓몬!", "{1}{이} 나타났다!",
     "출현 장소", "정보 보기",
+    "구슬 %u개", "한 번 더!", "효과 %u번", "구슬이 없어요 (챔피언, 탐험, 도전에서 얻어요)",
   },
 };
 
