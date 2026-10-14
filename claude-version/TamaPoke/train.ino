@@ -28,44 +28,42 @@ const char *trainMsg = nullptr;
 #define TRM_GAP 6
 #define TRM_N 5
 
-// ---------- defensa (ko12.9.21): "성벽 쌓기" ----------
-// Un bloque va y viene encima del muro; tocar lo deja caer. Lo que sobresale de la fila de abajo se
-// corta (el muro se estrecha); casi justo (+-STK_PERF px) = perfecto: no corta y ensancha un poco.
-// Cada STK_EVERY pisos el rival ataca el muro: si la fila de arriba es al menos tan ancha como lo que
-// pide (STK_NEED), aguanta (+3); si no, se cae un trozo (vida -1) y se repara. Fallar entero = vida -1.
-// Puntos: perfecto 2, normal 1. 3 vidas
+// ---------- defensa (ko12.9.23): "성벽 구멍 메우기" ----------
+// (antes "성벽 쌓기": dificil y no se entendia). En la fila de arriba del muro hay un hueco que brilla; un
+// ladrillo del mismo ancho va y viene por encima. Tocar lo deja caer: si cae sobre el hueco lo tapa (casi
+// justo = perfecto +2, si no +1) y sale otro hueco algo mas estrecho; si cae fuera se rompe y viene otro
+// ladrillo (sin perder vida). El rival carga su ataque: si el tiempo se acaba con el hueco abierto, el
+// golpe entra por el (vida -1) y el muro se repara. 3 vidas. Lineas de puntos marcan el hueco hacia arriba
+// y el ladrillo se ilumina cuando esta encima
 #define DEF_LIVES 3
-#define STK_G 420        // suelo del muro
-#define STK_RH 24        // alto de una fila
-#define STK_VIS 7        // filas que se ven (la camara sube)
-#define STK_W0 220       // ancho de la base (y maximo)
-#define STK_PERF 6       // +-px para "perfecto"
-#define STK_GROW 8       // un perfecto ensancha esto
-#define STK_EVERY 5      // ataque cada N pisos
-#define STK_XMIN (CX - 178)
-#define STK_XMAX (CX + 178)
-#define STK_FOE_X 92
-#define STK_FOE_G 300
-#define STK_REPAIR 120   // tras caer un trozo, el muro se repara a este ancho
-enum : uint8_t { STK_PLAY = 0, STK_ATK };
-struct StkRow { int16_t x, w; };
+#define HL_WALL_X (CX - 150)
+#define HL_WALL_W 300
+#define HL_WALL_Y 330    // arriba del muro (fila con el hueco)
+#define HL_RH 24         // alto de una fila (3 filas)
+#define HL_BY 200        // altura del ladrillo que se mueve
+#define HL_XMIN (CX - 172)
+#define HL_XMAX (CX + 172)
+#define HL_PERF 6        // +-px para "perfecto"
+#define HL_DROP_MS 300
+#define HL_ATK_MS 1200
+#define HL_FOE_X 92
+#define HL_FOE_G 156
+#define HL_PET_X (CX + 118)
+enum : uint8_t { HL_AIM = 0, HL_DROP, HL_ATK };
 bool defOpen = false;
 uint32_t defStart = 0, defOverUntil = 0;
 uint16_t defScore = 0, defMissN = 0;
 uint8_t defGain = 0;
 bool defNewHi = false;
 uint16_t defPerfectN = 0, defGoodN = 0, defCombo = 0;
-uint8_t defJudge = 0;   // 1 perfecto, 2 bien, 3 fuera (vida), 4 aguanto, 5 se cayo un trozo
+uint8_t defJudge = 0;   // 1 perfecto, 2 bien, 3 ladrillo fuera, 5 el ataque entro por el hueco
 uint32_t defJudgeT = 0;
-StkRow stk[STK_VIS];
-uint8_t stkN = 0, stkState = STK_PLAY, stkAtkN = 0;
-uint16_t stkFloors = 0;
-int16_t stkW = STK_W0;
-uint16_t stkSpeed = 150;      // px/s del bloque
-bool stkFromRight = false, stkAtkJudged = false;
-uint32_t stkMoveT0 = 0, stkStateT = 0;
-int16_t stkCutX = 0, stkCutW = 0, stkCutY = 0;  // el trozo cortado que cae
-uint32_t stkCutT = 0;
+int16_t hlX = 0, hlW = 96;           // el hueco
+int16_t hlDropX = 0;                 // donde cayo el ultimo ladrillo
+bool hlDropOk = false, hlFromRight = false;
+uint8_t hlState = HL_AIM;
+uint16_t hlFilled = 0, hlSpeed = 110;
+uint32_t hlMoveT0 = 0, hlStateT = 0, hlHoleT0 = 0;
 int16_t defFoeDex = 54;
 
 // ---------- velocidad: reflejos izquierda/derecha ----------
@@ -369,9 +367,8 @@ void renderTrainPause() {
 }
 static void trainShiftTime(uint32_t d) {
   if (defOpen) {
-    defStart += d; stkMoveT0 += d; stkStateT += d;
+    defStart += d; hlMoveT0 += d; hlStateT += d; hlHoleT0 += d;
     if (defJudgeT) defJudgeT += d;
-    if (stkCutT) stkCutT += d;
   }
   if (spdOpen) {
     spdUntil += d; spdShowAt += d;
@@ -421,31 +418,32 @@ static int16_t defPickFoe() {
   }
   return 54;
 }
-static uint16_t stkNeed() { return (uint16_t)(60 + (stkAtkN < 8 ? stkAtkN : 8) * 10); }  // 60..140 px
-static int stkTopY() { return STK_G - stkN * STK_RH; }
-static int stkBlockY() { int y = stkTopY() - 112; return y < 136 ? 136 : y > 214 ? 214 : y; }
-static uint16_t stkToAttack() { return (uint16_t)(STK_EVERY - stkFloors % STK_EVERY); }
-// donde esta el bloque que se mueve (va y viene entre STK_XMIN y STK_XMAX)
-static int16_t stkBlockX(uint32_t now) {
-  int L = STK_XMAX - STK_XMIN - stkW;
+static int16_t hlWidth() { int w = 96 - hlFilled * 3; return (int16_t)(w < 44 ? 44 : w); }
+static uint32_t hlLimit() { int t = 6500 - hlFilled * 150; return (uint32_t)(t < 3200 ? 3200 : t); }  // tiempo hasta el ataque
+static int16_t hlGoodTol() { return (int16_t)(hlW * 2 / 5); }
+// donde esta el ladrillo (va y viene entre HL_XMIN y HL_XMAX)
+static int16_t hlBrickX(uint32_t now) {
+  int L = HL_XMAX - HL_XMIN - hlW;
   if (L < 1) L = 1;
-  uint32_t pos = (uint32_t)((uint64_t)(now - stkMoveT0) * stkSpeed / 1000) + (stkFromRight ? L : 0);
+  uint32_t pos = (uint32_t)((uint64_t)(now - hlMoveT0) * hlSpeed / 1000) + (hlFromRight ? L : 0);
   pos %= (uint32_t)(2 * L);
-  return (int16_t)(STK_XMIN + (pos < (uint32_t)L ? pos : 2 * L - pos));
+  return (int16_t)(HL_XMIN + (pos < (uint32_t)L ? pos : 2 * L - pos));
 }
-static void stkNewBlock(uint32_t now) {
-  uint16_t v = 150 + stkFloors * 7;
-  stkSpeed = v > 380 ? 380 : v;
-  stkFromRight = !stkFromRight;
-  stkMoveT0 = now;
-  stkState = STK_PLAY;
+static void hlNewBrick(uint32_t now) {
+  uint16_t v = 110 + hlFilled * 8;
+  hlSpeed = v > 300 ? 300 : v;
+  hlFromRight = !hlFromRight;
+  hlMoveT0 = now;
+  hlState = HL_AIM;
 }
-static void stkPush(int16_t x, int16_t w) {
-  if (stkN >= STK_VIS) {  // la camara sube: se olvida la fila de abajo
-    memmove(stk, stk + 1, sizeof(StkRow) * (STK_VIS - 1));
-    stkN = STK_VIS - 1;
-  }
-  stk[stkN++] = { x, w };
+static void hlNewHole(uint32_t now) {
+  hlW = hlWidth();
+  int lo = HL_WALL_X + 16, hi = CX + 60 - hlW;  // a la derecha esta mi bicho
+  int16_t nx;
+  do nx = (int16_t)(lo + random(hi - lo + 1)); while (abs(nx - hlX) < 40 && hi - lo > 80);  // no en el mismo sitio
+  hlX = nx;
+  hlHoleT0 = now;
+  hlNewBrick(now);
 }
 static void defSetJudge(uint8_t j) { defJudge = j; defJudgeT = millis(); }
 
@@ -458,94 +456,73 @@ void startDefense() {
   defPerfectN = defGoodN = defCombo = 0;
   defNewHi = false;
   defJudge = 0; defJudgeT = 0;
-  stkN = 0; stkFloors = 0; stkAtkN = 0; stkCutT = 0;
-  stkPush(CX - STK_W0 / 2, STK_W0);  // la base
-  stkW = STK_W0;
-  stkFromRight = true;
+  hlFilled = 0; hlX = CX; hlFromRight = true;
   defFoeDex = defPickFoe();
   loadFoe(defFoeDex, false);
-  stkNewBlock(defStart);
+  hlNewHole(defStart + 1500);  // el primer ataque con algo de margen (la ayuda se ve al principio)
 }
 
 void defensePress(int16_t x, int16_t y) {
   (void)x; (void)y;  // en cualquier sitio
   uint32_t now = millis();
-  if (defOverUntil || stkState != STK_PLAY || defMissN >= DEF_LIVES) return;
-  int16_t bx = stkBlockX(now), w = stkW;
-  const StkRow top = stk[stkN - 1];
-  int by = stkBlockY();
-  if (abs(bx - top.x) <= STK_PERF) {  // perfecto: sin cortar, y un poco mas ancho
-    int16_t nw = top.w + STK_GROW > STK_W0 ? STK_W0 : top.w + STK_GROW;
-    int16_t nx = top.x - (nw - top.w) / 2;
-    stkPush(nx, nw);
+  if (defOverUntil || hlState != HL_AIM || defMissN >= DEF_LIVES) return;
+  int16_t bx = hlBrickX(now), off = (int16_t)abs(bx - hlX);
+  hlDropX = bx;
+  hlState = HL_DROP; hlStateT = now;
+  if (off <= HL_PERF) {
+    hlDropOk = true;
     defScore += 2; defPerfectN++; defCombo++;
     defSetJudge(1);
     sfxPlay(SFX_MEDAL);
-  } else {
-    int16_t ox = bx > top.x ? bx : top.x, oe = bx + w < top.x + top.w ? bx + w : top.x + top.w;
-    if (oe - ox <= 0) {  // fuera: cae entero
-      stkCutX = bx; stkCutW = w; stkCutY = by; stkCutT = now ? now : 1;
-      defMissN++; defCombo = 0;
-      defSetJudge(3);
-      sfxPlay(SFX_DENY);
-      vibPulse(120, 1, 0);
-      stkNewBlock(now);
-      return;
-    }
-    // lo que sobresale se corta y cae
-    stkCutX = bx < top.x ? bx : oe;
-    stkCutW = w - (oe - ox);
-    stkCutY = by; stkCutT = now ? now : 1;
-    stkPush(ox, oe - ox);
+  } else if (off <= hlGoodTol()) {
+    hlDropOk = true;
     defScore += 1; defGoodN++; defCombo = 0;
     defSetJudge(2);
     sfxPlay(SFX_PLAY);
+  } else {  // fuera: el ladrillo se rompe (sin perder vida; el tiempo sigue)
+    hlDropOk = false;
+    defCombo = 0;
+    defSetJudge(3);
+    sfxPlay(SFX_DENY);
   }
-  stkFloors++;
-  stkW = stk[stkN - 1].w;
-  if (stkFloors % STK_EVERY == 0) {  // el rival ataca el muro
-    stkState = STK_ATK; stkStateT = now; stkAtkJudged = false;
-  } else stkNewBlock(now);
 }
 
 void stepDefense() {
   uint32_t now = millis();
-  if (defOverUntil || stkState != STK_ATK) return;
-  uint32_t t = now - stkStateT;
-  if (!stkAtkJudged && t >= 650) {
-    stkAtkJudged = true;
-    StkRow &top = stk[stkN - 1];
-    if (top.w >= stkNeed()) {  // aguanta
-      defScore += 3;
-      defSetJudge(4);
-      sfxPlay(SFX_EVOLVE);
-    } else {  // se cae un trozo: vida -1 y se repara
+  if (defOverUntil) return;
+  if (hlState == HL_DROP) {
+    if (now - hlStateT < HL_DROP_MS) return;
+    if (hlDropOk) { hlFilled++; hlNewHole(now); }
+    else hlNewBrick(now);
+    return;
+  }
+  if (hlState == HL_AIM && (int32_t)(now - hlHoleT0) >= (int32_t)hlLimit()) {  // el rival ataca
+    hlState = HL_ATK; hlStateT = now;
+    return;
+  }
+  if (hlState == HL_ATK) {
+    uint32_t t = now - hlStateT;
+    if (defJudge != 5 && t >= 650) {  // el golpe entra por el hueco
       defMissN++; defCombo = 0;
       defSetJudge(5);
       sfxPlay(SFX_DENY);
       vibPulse(200, 2, 80);
-      int16_t c = top.x + top.w / 2, nw = STK_REPAIR;
-      int16_t nx = c - nw / 2;
-      if (nx < STK_XMIN) nx = STK_XMIN;
-      if (nx + nw > STK_XMAX) nx = STK_XMAX - nw;
-      top.x = nx; top.w = nw;
-      stkW = nw;
     }
-  }
-  if (t >= 1500) {
-    stkAtkN++;
-    defFoeDex = defPickFoe();
-    loadFoe(defFoeDex, false);
-    stkNewBlock(now);
+    if (t >= HL_ATK_MS) {
+      defFoeDex = defPickFoe();
+      loadFoe(defFoeDex, false);
+      hlNewHole(now);  // el muro se repara: otro hueco
+    }
   }
 }
 
-static void stkDrawRow(int x, int y, int w, uint16_t base, int i) {
+static void hlDrawRow(int x, int y, int w, uint16_t base, int i) {
+  if (w <= 0) return;
   uint16_t c = lerp565(base, (i & 1) ? UI_WHITE : UI_INK, (i & 1) ? 3 : 2, 16);
-  gfx->fillRect(x, y, w, STK_RH - 2, c);
+  gfx->fillRect(x, y, w, HL_RH - 2, c);
   if (w > 6) gfx->drawFastHLine(x + 2, y + 2, w - 4, lerp565(c, UI_WHITE, 9, 16));
-  gfx->drawRect(x, y, w, STK_RH - 2, UI_INK);
-  for (int bx = x + ((i & 1) ? 20 : 40); bx < x + w - 6; bx += 40) gfx->drawFastVLine(bx, y + 2, STK_RH - 6, lerp565(c, UI_INK, 5, 16));
+  gfx->drawRect(x, y, w, HL_RH - 2, UI_INK);
+  for (int bx = x + ((i & 1) ? 20 : 40); bx < x + w - 6; bx += 40) gfx->drawFastVLine(bx, y + 2, HL_RH - 6, lerp565(c, UI_INK, 5, 16));
 }
 static void stkTextC(const char *s, int cx, int y, uint16_t c, uint8_t sz) {
   setSize(sz);
@@ -569,7 +546,7 @@ void renderDefense() {
     drawTrainResult(s, g, 0x4C98, defNewHi && defScore > 0, pet.defHi, sub);
     return;
   }
-  if (defMissN >= DEF_LIVES && stkState == STK_PLAY && now - defJudgeT > 700) {
+  if (defMissN >= DEF_LIVES && hlState != HL_ATK && now - defJudgeT > 700) {
     defNewHi = defScore > pet.defHi;
     defGain = pet.trainDefense(defScore);
     sfxPlay(defNewHi ? SFX_MEDAL : SFX_PLAY);
@@ -583,75 +560,94 @@ void renderDefense() {
   const uint16_t GREEN = C565(0x1a, 0x86, 0x34), GOLD = C565(0xff, 0xe0, 0x40);
   uint16_t base = typeColor(DEX_TBL[pet.speciesId].ptype);
   uint32_t jt = defJudge ? now - defJudgeT : 9999;
-  bool atk = stkState == STK_ATK;
-  uint32_t at = atk ? now - stkStateT : 0;
-  bool broke = atk && stkAtkJudged && defJudge == 5;
-  // el muro
-  for (int i = 0; i < stkN; i++) {
-    int y = STK_G - (i + 1) * STK_RH, sh = 0;
-    if (atk && at > 500 && at < 1100 && i >= stkN - 2) sh = (int)(5 * sinf(at * 0.08f)) * (broke ? 2 : 1);
-    stkDrawRow(stk[i].x + sh, y, stk[i].w, base, (int)(stkFloors + i));
+  bool atk = hlState == HL_ATK, drop = hlState == HL_DROP;
+  uint32_t st = now - hlStateT;
+  bool hit = atk && defJudge == 5;
+  // el muro: 3 filas; la de arriba con el hueco
+  int sh = hit && st < 1000 ? (int)(5 * sinf(st * 0.08f)) : 0;
+  for (int r = 1; r < 3; r++) hlDrawRow(HL_WALL_X + sh, HL_WALL_Y + r * HL_RH, HL_WALL_W, base, r);
+  bool filled = drop && hlDropOk && st >= HL_DROP_MS - 60;
+  if (filled) hlDrawRow(HL_WALL_X + sh, HL_WALL_Y, HL_WALL_W, base, 0);
+  else {
+    hlDrawRow(HL_WALL_X + sh, HL_WALL_Y, hlX - HL_WALL_X, base, 0);
+    hlDrawRow(hlX + hlW + sh, HL_WALL_Y, HL_WALL_X + HL_WALL_W - hlX - hlW, base, 0);
+    // el hueco: oscuro con borde que late
+    uint16_t dark = C565(0x20, 0x18, 0x30);
+    gfx->fillRect(hlX + sh, HL_WALL_Y, hlW, HL_RH - 2, dark);
+    float p = 0.5f + 0.5f * sinf(now / 140.0f);
+    uint16_t glow = lerp565(GOLD, UI_WHITE, (int)(p * 8), 16);
+    gfx->drawRect(hlX - 1 + sh, HL_WALL_Y - 1, hlW + 2, HL_RH, glow);
+    gfx->drawRect(hlX - 2 + sh, HL_WALL_Y - 2, hlW + 4, HL_RH + 2, glow);
+    // guias de puntos desde el hueco hasta el ladrillo
+    if (!atk)
+      for (int y = HL_BY + HL_RH + 4; y < HL_WALL_Y - 4; y += 8) {
+        gfx->fillRect(hlX, y, 2, 4, glow);
+        gfx->fillRect(hlX + hlW - 2, y, 2, 4, glow);
+      }
   }
-  int topY = stkTopY();
-  const StkRow &top = stk[stkN - 1];
-  if (defJudge == 1 && jt < 400)  // perfecto: brillo
-    for (int k = 0; k < 3; k++) gfx->drawRect(top.x - 3 - k * 3, topY - 3 - k * 3, top.w + 6 + k * 6, STK_RH + 4 + k * 6, GOLD);
-  // lo que pide el proximo ataque: marcas a los lados de la fila de arriba (en los 2 ultimos pisos)
-  if (!atk && stkToAttack() <= 2) {
-    int need = stkNeed(), cx = top.x + top.w / 2;
-    uint16_t mc = top.w >= need ? GREEN : UI_BAR_BAD;
-    for (int k = 0; k < 3; k++) {
-      gfx->drawFastVLine(cx - need / 2 - k, topY - 10, 12, mc);
-      gfx->drawFastVLine(cx + need / 2 + k, topY - 10, 12, mc);
-    }
-    gfx->drawFastHLine(cx - need / 2, topY - 10, need, mc);
-  }
-  // mi bicho arriba del muro
+  // mi bicho, de pie sobre el muro (a la derecha)
   if (pmd.loaded) {
-    bool hurt = (defJudge == 5 || defJudge == 3) && jt < 500;
-    uint8_t act = hurt ? PMD_HURT : (defJudge == 4 && jt < 700) ? PMD_HOP : PMD_IDLE;
+    bool hurt = defJudge == 5 && jt < 600;
+    uint8_t act = hurt ? PMD_HURT : (defJudge == 1 && jt < 600) ? PMD_HOP : PMD_IDLE;
     if (!pmd.has(act)) act = PMD_IDLE;
-    drawPmdActM(pmd, act, top.x + top.w / 2 + (hurt ? (int)(5 * sinf(jt * 0.09f)) : 0), topY, now, true, false, 2, 64);
+    drawPmdActM(pmd, act, HL_PET_X + (hurt ? (int)(5 * sinf(jt * 0.09f)) : 0), HL_WALL_Y, now, true, false, 2, 64);
   }
-  // el trozo cortado cae
-  if (stkCutT && now - stkCutT < 700) {
-    uint32_t ct = now - stkCutT;
-    int y = stkCutY + (int)(ct * ct / 900), dx = stkCutX < top.x ? -(int)(ct / 12) : (int)(ct / 12);
-    if (stkCutW > 0) {
-      gfx->fillRect(stkCutX + dx, y, stkCutW, STK_RH - 2, lerp565(base, UI_WHITE, 5, 16));
-      gfx->drawRect(stkCutX + dx, y, stkCutW, STK_RH - 2, UI_INK);
-    }
-  }
-  // el bloque que se mueve
-  if (!atk && defMissN < DEF_LIVES) {
-    int bx = stkBlockX(now), by = stkBlockY();
+  // el ladrillo: moviendose, cayendo al hueco o rompiendose
+  if (drop) {
+    float f = (float)st / HL_DROP_MS;
+    if (f > 1) f = 1;
+    int y = HL_BY + (int)((HL_WALL_Y - HL_BY) * f * f);
     uint16_t c = lerp565(base, UI_WHITE, 5, 16);
-    gfx->fillRect(bx, by, stkW, STK_RH - 2, c);
-    gfx->drawRect(bx, by, stkW, STK_RH - 2, UI_INK);
-    gfx->fillTriangle(bx - 16, by + 11, bx - 6, by + 3, bx - 6, by + 19, ink);
-    gfx->fillTriangle(bx + stkW + 16, by + 11, bx + stkW + 6, by + 3, bx + stkW + 6, by + 19, ink);
+    if (hlDropOk) {
+      int x = hlDropX + (int)((hlX - hlDropX) * f);  // se encaja en el hueco
+      gfx->fillRect(x, y, hlW, HL_RH - 2, c);
+      gfx->drawRect(x, y, hlW, HL_RH - 2, UI_INK);
+    } else {  // se parte en dos y cae por delante del muro
+      int y2 = HL_BY + (int)(260 * f * f), dx = (int)(30 * f);
+      gfx->fillRect(hlDropX - dx, y2, hlW / 2 - 2, HL_RH - 2, c);
+      gfx->drawRect(hlDropX - dx, y2, hlW / 2 - 2, HL_RH - 2, UI_INK);
+      gfx->fillRect(hlDropX + hlW / 2 + dx, y2 + 6, hlW / 2 - 2, HL_RH - 2, c);
+      gfx->drawRect(hlDropX + hlW / 2 + dx, y2 + 6, hlW / 2 - 2, HL_RH - 2, UI_INK);
+    }
+  } else if (!atk && defMissN < DEF_LIVES) {
+    int bx = hlBrickX(now);
+    bool over = abs(bx - hlX) <= hlGoodTol();
+    uint16_t c = lerp565(base, UI_WHITE, over ? 8 : 5, 16);
+    gfx->fillRect(bx, HL_BY, hlW, HL_RH - 2, c);
+    gfx->drawRect(bx, HL_BY, hlW, HL_RH - 2, UI_INK);
+    if (over) {  // encima del hueco: se ilumina
+      gfx->drawRect(bx - 2, HL_BY - 2, hlW + 4, HL_RH + 2, GREEN);
+      gfx->drawRect(bx - 3, HL_BY - 3, hlW + 6, HL_RH + 4, GREEN);
+    }
+    gfx->fillTriangle(bx - 16, HL_BY + 11, bx - 6, HL_BY + 3, bx - 6, HL_BY + 19, ink);
+    gfx->fillTriangle(bx + hlW + 16, HL_BY + 11, bx + hlW + 6, HL_BY + 3, bx + hlW + 6, HL_BY + 19, ink);
   }
-  // el rival y su ataque
+  if (filled || (defJudge == 1 && jt < 400))  // tapado (perfecto: brillo dorado)
+    for (int k = 0; k < (defJudge == 1 ? 3 : 1); k++)
+      gfx->drawRect(hlX - 3 - k * 3, HL_WALL_Y - 3 - k * 3, hlW + 6 + k * 6, HL_RH + 4 + k * 6, defJudge == 1 ? GOLD : GREEN);
+  // el rival, arriba a la izquierda, y su ataque
   if (foePmd.loaded) {
-    uint8_t act = atk && at < 700 ? PMD_SHOOT : PMD_IDLE;
+    uint8_t act = atk && st < 700 ? PMD_SHOOT : PMD_IDLE;
     if (act == PMD_SHOOT && !foePmd.has(act)) act = PMD_ATTACK;
     if (!foePmd.has(act)) act = PMD_IDLE;
-    drawPmdActM(foePmd, act, STK_FOE_X, STK_FOE_G, now, true, false, 2, 64);
+    drawPmdActM(foePmd, act, HL_FOE_X, HL_FOE_G, now, true, false, 2, 64);
   }
   if (atk) {
-    drawMoveFx(DEX_TBL[defFoeDex].ptype, STK_FOE_X + 20, STK_FOE_G - 40, top.x + top.w / 2, topY + 10, at < 900 ? at : 900, true, 2,
+    drawMoveFx(DEX_TBL[defFoeDex].ptype, HL_FOE_X + 20, HL_FOE_G - 30, hlX + hlW / 2, HL_WALL_Y + 10, st < 900 ? st : 900, true, 2,
                moveTier(defFoeDex), 0);
-  } else {
-    char b[32];
-    snprintf(b, sizeof(b), XT(X_STK_NEXT_FMT), stkToAttack());
-    int w = textW(b, 1) + 24;
-    uiButton(STK_FOE_X - w / 2, STK_FOE_G + 12, w, 32, 16, stkToAttack() <= 2 ? C565(0xff, 0xe8, 0xe0) : UI_WHITE, UI_INK);
-    drawFitIn(b, STK_FOE_X - w / 2, STK_FOE_G + 18, w, UI_INK, 1);
+  } else {  // cuanto falta para el ataque
+    uint32_t lim = hlLimit(), el = now - hlHoleT0;
+    if ((int32_t)el < 0) el = 0;
+    uint32_t left = el >= lim ? 0 : lim - el;
+    int bw = 150, bx = CX - bw / 2 + 30, by = 128;
+    uint16_t col = left * 3 < lim ? UI_BAR_BAD : left * 3 < lim * 2 ? UI_BAR_WARN : UI_BAR_OK;
+    uiGauge(bx, by, bw, 12, (int)((uint64_t)left * 1000 / lim), col, UI_TRACK);
+    drawFitIn(XT(X_HL_TIME), bx, by - 22, bw, ink, 1);
   }
-  // pisos y vidas
+  // tapados y vidas
   {
-    char b[16];
-    snprintf(b, sizeof(b), XT(X_STK_FLOORS_FMT), stkFloors);
+    char b[24];
+    snprintf(b, sizeof(b), XT(X_HL_FILLED_FMT), hlFilled);
     stkTextC(b, CX, 26, ink, 3);
     for (int i = 0; i < DEF_LIVES; i++) {
       int hx = CX - 22 + i * 22, hy = 84;
@@ -661,17 +657,16 @@ void renderDefense() {
   }
   // juicio
   if (defJudge && jt < 900) {
-    XId id = defJudge == 1 ? X_STK_PERFECT : defJudge == 2 ? X_NICE : defJudge == 3 ? X_STK_MISS
-           : defJudge == 4 ? X_STK_HELD : X_STK_BROKE;
-    uint16_t c = defJudge == 1 || defJudge == 4 ? GREEN : defJudge == 2 ? C565(0xb8, 0x7a, 0x00) : UI_BAR_BAD;
-    if (defJudge != 2 || jt < 400) stkTextC(XT(id), CX, 104 - (int)(jt / 40), c, defJudge == 2 ? 2 : 3);
+    XId id = defJudge == 1 ? X_STK_PERFECT : defJudge == 2 ? X_HL_FILL : defJudge == 3 ? X_HL_MISS : X_HL_HIT;
+    uint16_t c = defJudge == 1 ? GREEN : defJudge == 2 ? C565(0xb8, 0x7a, 0x00) : UI_BAR_BAD;
+    stkTextC(XT(id), CX, 268 - (int)(jt / 40), c, defJudge == 1 ? 3 : 2);
   }
-  if (now - defStart < 3000 && !defJudge) {  // ayuda
+  if (now - defStart < 3500 && !defJudge) {  // ayuda
     const char *h = XT(X_TR_DEF_HINT);
     int w = textW(h, 1) + 26;
     if (w > 300) w = 300;
-    uiButton(CX - w / 2, 104, w, 30, 15, UI_WHITE, ink);
-    drawFit(h, 110, w - 10, UI_INK, 1);
+    uiButton(CX - w / 2, 252, w, 30, 15, UI_WHITE, ink);
+    drawFit(h, 258, w - 10, UI_INK, 1);
   }
   drawTrainQuit();  // ko12.9.14
   uiFlush();

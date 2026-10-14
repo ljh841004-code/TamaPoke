@@ -29,8 +29,8 @@ static const char *const XS[2][X_COUNT] = {
     "BOX %u/%u", "Empty", "Win or catch in battle", "Next partner comes from here",
     "RELEASE", "CLOSE", "CAUGHT", "WON", "{1} came out of the box!", "BALLS %u  POTIONS %u",
     "Release it?",
-    "TRAINING", "ATTACK: NUMBER TARGETS", "DEFENSE: BUILD THE WALL", "SPEED: FIND THE BALL",
-    "COPY ME! (JOY)", "Tap to drop it right on top!", "Hit 1, 2, 3... in order!",
+    "TRAINING", "ATTACK: NUMBER TARGETS", "DEFENSE: FILL THE HOLE", "SPEED: FIND THE BALL",
+    "COPY ME! (JOY)", "Tap when it is over the glowing hole!", "Hit 1, 2, 3... in order!",
     "SCORE %u", "DEF +%u", "SPD +%u", "NICE!", "MISSED",
     "SOUND", "MUSIC", "CRIES", "SYSTEM", "SOUND ON", "SOUND OFF", "DONE",
     "EVOLVED", "COMMON", "RARE", "LEGEND", "HP %u  AT %u  DF %u  SP %u", "EVOLVES: %s Lv%u",
@@ -201,6 +201,7 @@ static const char *const XS[2][X_COUNT] = {
     "A LEGENDARY POKEMON!", "{1} appeared!",
     "Where to find", "Details",
     "Orb x%u", "Tap again!", "On: %u", "No Lure Orb (champion, expeditions, daily)",
+    "Holes filled: %u", "Attack in", "Filled!", "Missed!", "Hit through the hole!",
   },
   // ---------------- KO ----------------
   {
@@ -225,8 +226,8 @@ static const char *const XS[2][X_COUNT] = {
     "보관함 %u/%u", "비어 있어요", "배틀에서 이기거나 잡으면 들어와요", "다음 육성 포켓몬은 여기서 나와요",
     "놓아주기", "닫기", "포획", "승리", "보관함에서 {1}{이} 나왔다!", "포켓볼 %u   물약 %u",
     "놓아줄까요?",
-    "훈련 선택", "공격: 번호 과녁", "방어: 성벽 쌓기", "속도: 몬스터볼 찾기",
-    "놀이: 따라 해 봐! (기분)", "블록이 딱 겹칠 때 톡!", "1부터 순서대로 맞혀요!",
+    "훈련 선택", "공격: 번호 과녁", "방어: 구멍 메우기", "속도: 몬스터볼 찾기",
+    "놀이: 따라 해 봐! (기분)", "빛나는 구멍 위에 올 때 톡!", "1부터 순서대로 맞혀요!",
     "방어 %u점", "방어 +%u", "속도 +%u", "좋아!", "놓쳤다",
     "소리/진동 설정", "배경음", "포켓몬 목소리", "시스템음", "소리 켜짐", "소리 꺼짐", "완료",
     "진화형", "흔함", "희귀", "전설", "HP %u  공 %u  방 %u  속 %u", "진화: %s (Lv.%u)",
@@ -396,6 +397,7 @@ static const char *const XS[2][X_COUNT] = {
     "전설의 포켓몬!", "{1}{이} 나타났다!",
     "출현 장소", "정보 보기",
     "구슬 %u개", "한 번 더!", "효과 %u번", "구슬이 없어요 (챔피언, 탐험, 도전에서 얻어요)",
+    "메운 구멍 %u", "공격까지", "메웠다!", "빗나갔다!", "구멍으로 맞았다!",
   },
 };
 

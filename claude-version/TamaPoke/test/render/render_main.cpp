@@ -649,56 +649,47 @@ static void scenes(bool ko, const char *sfx) {
     pet.speciesId = keepSp;
     pmd.load((uint8_t)keepSp, pet.shiny);
   }
-  // ko12.9.21: "성벽 쌓기": tocar cuando el bloque esta encima; perfecto = no corta; cada 5 pisos ataque
+  // ko12.9.23: "성벽 구멍 메우기": tocar con el ladrillo encima del hueco; fuera = se rompe (sin vida);
+  // si se acaba el tiempo con el hueco abierto, el ataque entra (vida -1)
   closeAll(); randomSeed(5); startDefense();
   tick(300); render(); shot("05_train_defense_hint");
   {
-    auto waitX = [](int16_t want, int tol) {  // espera a que el bloque pase por x = want (+-tol)
-      for (int i = 0; i < 4000; i++) { if (abs(stkBlockX(gMockMillis) - want) <= tol) return true; tick(1); }
+    auto waitX = [](int16_t want, int tol) {  // espera a que el ladrillo pase por x = want (+-tol)
+      for (int i = 0; i < 4000; i++) { if (abs(hlBrickX(gMockMillis) - want) <= tol) return true; tick(1); render(); }
       return false;
     };
-    navCheck("성벽: 처음엔 바닥 한 줄", stkN == 1 && stkFloors == 0 && stk[0].w == STK_W0);
-    // perfecto
-    waitX(stk[0].x, 2); defensePress(CX, 200);
-    navCheck("성벽: 딱 맞으면 퍼펙트 (+2, 안 잘림)", defJudge == 1 && defScore == 2 && stkFloors == 1 && stk[stkN - 1].w == STK_W0);
-    tick(120); render(); shot("05b_train_defense_perfect");
-    // un poco desplazado: se corta
-    int16_t tx = stk[stkN - 1].x;
-    waitX(tx + 30, 2); int16_t w0 = stk[stkN - 1].w; defensePress(CX, 200);
-    navCheck("성벽: 어긋나면 삐져나온 만큼 잘림 (+1)", defJudge == 2 && defScore == 3 && abs(stk[stkN - 1].w - (w0 - 30)) <= 3);
-    tick(150); render(); shot("05_train_defense");
-    // del todo fuera: vida -1
-    { stk[stkN - 1].x = CX - 30; stk[stkN - 1].w = 60; stkW = 60;  // estrecho: se puede fallar entero
-      int16_t L = stk[stkN - 1].x + stk[stkN - 1].w + 5;
-      bool ok = waitX(L > STK_XMAX - stkW ? STK_XMAX - stkW : L, 3);
-      uint16_t m0 = defMissN, f0 = stkFloors;
-      if (ok && stkBlockX(gMockMillis) > stk[stkN - 1].x + stk[stkN - 1].w) { defensePress(CX, 200);
-        navCheck("성벽: 완전히 빗나가면 목숨 -1", defMissN == m0 + 1 && stkFloors == f0 && defJudge == 3); }
-      else navCheck("성벽: 완전히 빗나가면 목숨 -1 (위치 못 맞춤)", false);
-      tick(200); render(); shot("05c_train_defense_miss"); }
-    // hasta el 5o piso: ataque
-    while (stkFloors < 4) { waitX(stk[stkN - 1].x, 2); defensePress(CX, 200); tick(50); }
-    render(); shot("05d_train_defense_warn");
-    waitX(stk[stkN - 1].x, 2); defensePress(CX, 200);
-    navCheck("성벽: 5층마다 상대 공격", stkState == STK_ATK && stkFloors == 5);
-    tick(500); render(); shot("05e_train_defense_attack");
-    uint16_t sc0 = defScore;
-    tick(300); render();
-    navCheck("성벽: 넓으면 버팀 (+3)", defJudge == 4 && defScore == sc0 + 3);
-    shot("05f_train_defense_held");
-    for (int i = 0; i < 60 && stkState == STK_ATK; i++) { tick(30); render(); }
-    navCheck("성벽: 공격 뒤 다음 블록", stkState == STK_PLAY && stkAtkN == 1);
-    // ataque con muro estrecho: se cae un trozo
-    stk[stkN - 1].w = 40; stkW = 40; stkFloors = 9;
-    waitX(stk[stkN - 1].x, 2); defensePress(CX, 200);
+    auto settle = []() { for (int i = 0; i < 30 && hlState == HL_DROP; i++) { tick(20); render(); } };
+    navCheck("구멍: 처음엔 구멍 하나, 시간 여유", hlFilled == 0 && hlW == 96 && hlState == HL_AIM);
+    waitX(hlX, 2); defensePress(CX, 200);
+    navCheck("구멍: 딱 맞으면 퍼펙트 (+2)", defJudge == 1 && defScore == 2 && hlState == HL_DROP);
+    tick(150); render(); shot("05b_train_defense_perfect");
+    settle();
+    navCheck("구멍: 메우면 다음 구멍 (조금 좁게)", hlFilled == 1 && hlW < 96 && hlState == HL_AIM);
+    waitX(hlX + hlGoodTol() - 3, 2); render(); shot("05_train_defense");
+    defensePress(CX, 200);
+    navCheck("구멍: 조금 어긋나도 메움 (+1)", defJudge == 2 && defScore == 3);
+    settle();
+    {  // fuera: se rompe, sin perder vida
+      int16_t far = hlX + hlW + 40 > HL_XMAX - hlW ? hlX - hlW - 40 : hlX + hlW + 40;
+      waitX(far, 3);
+      uint16_t m0 = defMissN, f0 = hlFilled;
+      defensePress(CX, 200);
+      navCheck("구멍: 빗나가면 벽돌만 깨짐 (목숨 그대로)", defJudge == 3 && defMissN == m0 && hlFilled == f0);
+      tick(150); render(); shot("05c_train_defense_miss");
+      settle();
+    }
+    // sin tocar: se acaba el tiempo y el ataque entra por el hueco
     uint16_t m1 = defMissN;
-    tick(800); render();
-    navCheck("성벽: 좁으면 무너짐 (목숨 -1, 보수)", defJudge == 5 && defMissN == m1 + 1 && stk[stkN - 1].w == STK_REPAIR);
+    for (int i = 0; i < 600 && hlState != HL_ATK; i++) { tick(20); render(); }
+    navCheck("구멍: 시간이 다 되면 상대 공격", hlState == HL_ATK);
+    tick(300); render(); shot("05e_train_defense_attack");
+    tick(450); render();
+    navCheck("구멍: 구멍으로 맞으면 목숨 -1", defJudge == 5 && defMissN == m1 + 1);
     shot("05g_train_defense_broke");
-    for (int i = 0; i < 60 && stkState == STK_ATK; i++) { tick(30); render(); }
-    // muchas filas: la camara sube
-    for (int k = 0; k < 9; k++) { waitX(stk[stkN - 1].x, 2); defensePress(CX, 200); for (int i = 0; i < 60 && stkState == STK_ATK; i++) { tick(30); render(); } }
-    navCheck("성벽: 높아지면 화면이 따라 올라감", stkN == STK_VIS && stkFloors >= 18);
+    for (int i = 0; i < 80 && hlState == HL_ATK; i++) { tick(20); render(); }
+    navCheck("구멍: 공격 뒤 새 구멍", hlState == HL_AIM);
+    for (int k = 0; k < 12; k++) { waitX(hlX, 2); defensePress(CX, 200); settle(); }
+    navCheck("구멍: 많이 메우면 구멍이 좁아짐 (최소 44)", hlFilled >= 14 && hlW >= 44 && hlW < 60);
     render(); shot("05h_train_defense_tall");
     defMissN = 0;
   }
@@ -706,14 +697,14 @@ static void scenes(bool ko, const char *sfx) {
   {  // ko12.9.15: [X] arriba a la izquierda: para el juego y pregunta; [계속하기] sigue sin perder nada
     closeAll(); startDefense(); tick(1200); render();
     navCheck("훈련 X: 다른 곳 탭은 X가 아님", !trainQuitPress(CX, 300));
-    uint32_t sp0 = stkMoveT0; uint16_t miss0 = defMissN;
+    uint32_t sp0 = hlMoveT0; uint16_t miss0 = defMissN;
     navCheck("훈련 X: 누르면 멈추고 물어봄", trainQuitPress(TQ_X, TQ_Y0) && trainPaused() && defOpen);
     render(); shot("05d_train_quit_ask");
     tick(5000); render(); render();
     navCheck("훈련 X: 멈춘 동안 시간이 안 감", defMissN == miss0 && trainPaused());
     navCheck("훈련 X: 빈 곳 탭은 아무 일 없음", trainQuitPress(CX, 180) && trainPaused());
     trainQuitPress(TP_RX + 20, TP_BY + 20);
-    navCheck("훈련 X: 계속하기 = 이어서", !trainPaused() && defOpen && stkMoveT0 >= sp0 + 5000);
+    navCheck("훈련 X: 계속하기 = 이어서", !trainPaused() && defOpen && hlMoveT0 >= sp0 + 5000);
     render();
     trainQuitPress(TQ_X, TQ_Y0);
     trainQuitPress(TP_QX + 20, TP_BY + 20);

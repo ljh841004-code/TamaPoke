@@ -186,7 +186,9 @@ enum XId : uint16_t {  // ko10.6: pasaron de 255
   X_STK_NEXT_FMT, X_STK_FLOORS_FMT, X_STK_PERFECT, X_STK_MISS, X_STK_HELD, X_STK_BROKE,  // ko12.9.21: 성벽 쌓기
   X_LEG_APPEAR, X_LEG_NAME_FMT,  // ko12.9.22: 전설 등장
   X_DEX_WHERE_BTN, X_DEX_INFO_BTN,
-  X_LURE_BTN_FMT, X_LURE_BTN_ARM, X_LURE_BTN_ON_FMT, X_LURE_NONE,  // ko12.9.23: boton del 구슬 abajo (en lugar de [뒤로])
+  X_LURE_BTN_FMT, X_LURE_BTN_ARM, X_LURE_BTN_ON_FMT, X_LURE_NONE,
+  X_HL_FILLED_FMT, X_HL_TIME, X_HL_FILL, X_HL_MISS, X_HL_HIT,  // ko12.9.23: 성벽 구멍 메우기
+  // ko12.9.23: boton del 구슬 abajo (en lugar de [뒤로])
   // ko12.9.23: ficha de la pokedex: donde sale / volver a los datos
   X_COUNT
 };
