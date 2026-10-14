@@ -12,7 +12,7 @@ g++ -std=gnu++17 -O1 -g -w -fsanitize=address,undefined -DHOST_REAL_AUDIO -I jni
   test/desktop_check.cpp test/audio_desktop.cpp jni/host_stubs.cpp "$SK/pet.cpp" "$SK/box.cpp" "$SK/battle.cpp" "$SK/i18n.cpp" "$SK/i18n_ext.cpp" \
   "$SK/story_ko.cpp" "$SK/sdmon.cpp" "$SK/fxanim.cpp" "$SK/sdcheck.cpp" "$SK/pak_core.cpp" \
   "$GFX/Arduino_GFX.cpp" "$GFX/Arduino_G.cpp" "$GFX/canvas/Arduino_Canvas.cpp" build/desk_fonts.o -lpthread
-./build/desktop_check "${1:-}"
+./build/desktop_check "$@"
 python3 - <<'PY'
 import glob, os
 from PIL import Image

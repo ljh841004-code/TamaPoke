@@ -37,17 +37,19 @@ int main(int argc, char **argv) {
   gSdRoot = root.c_str();
   prefsLoadFile();
   if (pak) {
-    int fd = open(pak, O_RDONLY);
-    check("mons.pak abierto", fd >= 0);
+    // en trozos (como se envia al movil): todos los argumentos, en orden
+    std::vector<int> fds;
+    for (int i = 1; i < argc; i++) fds.push_back(open(argv[i], O_RDONLY));
+    check("mons.pak abierto", fds[0] >= 0);
     time_t t = time(nullptr);
-    std::string err = importPak(fd);
-    close(fd);
+    std::string err = importPak(fds);
+    for (int f : fds) close(f);
     printf("  importar: %s (%ld s)\n", err.empty() ? "bien" : err.c_str(), (long)(time(nullptr) - t));
     check("importar mons.pak", err.empty() && haveMons());
     // un .pak roto: mensaje y sin tocar lo que habia
     FILE *bad = fopen("build/bad.pak", "wb"); fputs("no soy un pak", bad); fclose(bad);
     int bfd = open("build/bad.pak", O_RDONLY);
-    std::string e2 = importPak(bfd);
+    std::string e2 = importPak(std::vector<int>{ bfd });
     close(bfd);
     check("pak roto -> mensaje", !e2.empty() && haveMons());
   }

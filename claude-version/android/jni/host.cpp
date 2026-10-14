@@ -6,6 +6,7 @@
 #include <android/log.h>
 #include <android/native_window.h>
 #include <jni.h>
+#include <mutex>
 #include <atomic>
 #include <string>
 #include <vector>
@@ -135,10 +136,15 @@ static void callJava(const char *name) {
   env->DeleteLocalRef(cls);
 }
 
-static std::atomic<int> gPakFd{-1};
-extern "C" JNIEXPORT void JNICALL Java_com_tamapoke_ko_MainActivity_nativePakFd(JNIEnv *, jclass, jint fd) {
-  int old = gPakFd.exchange(fd);
-  if (old >= 0) close(old);
+static std::mutex gPakM;
+static std::vector<int> gPakFds;  // los elegidos (en orden de nombre), a importar en el hilo del juego
+extern "C" JNIEXPORT void JNICALL Java_com_tamapoke_ko_MainActivity_nativePakFds(JNIEnv *env, jclass, jintArray arr) {
+  jsize n = env->GetArrayLength(arr);
+  std::vector<int> v(n);
+  env->GetIntArrayRegion(arr, 0, n, (jint *)v.data());
+  std::lock_guard<std::mutex> g(gPakM);
+  for (int f : gPakFds) close(f);
+  gPakFds = v;
 }
 extern "C" JNIEXPORT void JNICALL Java_com_tamapoke_ko_MainActivity_nativeBattery(JNIEnv *, jclass, jint pct, jboolean chg) {
   gHostBatPct = pct;
@@ -276,8 +282,9 @@ void android_main(android_app *app) {
       gStarted = true;
       lastSave = millis();
     }
-    int fd = gPakFd.exchange(-1);
-    if (fd >= 0) { gImporting = true; runImport(fd); gImporting = false; gDown = false; }
+    std::vector<int> fds;
+    { std::lock_guard<std::mutex> g(gPakM); fds.swap(gPakFds); }
+    if (!fds.empty()) { gImporting = true; runImport(fds); gImporting = false; gDown = false; }
     if (!asked && !haveMons()) {  // primera vez: elegir mons.pak (sin el, el juego va igual con "?")
       asked = true;
       callJava("pickPak");

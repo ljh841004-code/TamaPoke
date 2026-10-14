@@ -17,7 +17,7 @@ import android.widget.Toast;
 // elegir mons.pak con el selector de archivos del sistema, la bateria, y pantalla completa.
 public class MainActivity extends NativeActivity {
   static { System.loadLibrary("tamapoke"); }
-  static native void nativePakFd(int fd);
+  static native void nativePakFds(int[] fds);
   static native void nativeBattery(int pct, boolean charging);
 
   private static final int PICK_PAK = 1;
@@ -71,9 +71,10 @@ public class MainActivity extends NativeActivity {
       Intent it = new Intent(Intent.ACTION_OPEN_DOCUMENT);
       it.addCategory(Intent.CATEGORY_OPENABLE);
       it.setType("*/*");
+      it.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);  // mons.pak entero o todos sus trozos juntos
       try {
         startActivityForResult(it, PICK_PAK);
-        Toast.makeText(this, "mons.pak 파일을 골라 주세요", Toast.LENGTH_LONG).show();
+        Toast.makeText(this, "mons.pak 을 골라 주세요 (조각이면 모두 길게 눌러 함께 선택)", Toast.LENGTH_LONG).show();
       } catch (Exception e) {
         Toast.makeText(this, "파일 고르기를 열 수 없어요", Toast.LENGTH_LONG).show();
       }
@@ -82,13 +83,45 @@ public class MainActivity extends NativeActivity {
 
   @Override protected void onActivityResult(int req, int res, Intent data) {
     super.onActivityResult(req, res, data);
-    if (req != PICK_PAK || res != RESULT_OK || data == null || data.getData() == null) return;
-    Uri u = data.getData();
+    if (req != PICK_PAK || res != RESULT_OK || data == null) return;
+    java.util.ArrayList<Uri> uris = new java.util.ArrayList<Uri>();
+    if (data.getClipData() != null) {
+      for (int i = 0; i < data.getClipData().getItemCount(); i++) uris.add(data.getClipData().getItemAt(i).getUri());
+    } else if (data.getData() != null) {
+      uris.add(data.getData());
+    }
+    // trozos por nombre: mons.pak.001, mons.pak.002 ...
+    final java.util.HashMap<Uri, String> names = new java.util.HashMap<Uri, String>();
+    for (Uri u : uris) names.put(u, nameOf(u));
+    java.util.Collections.sort(uris, new ByName(names));
+    int[] fds = new int[uris.size()];
     try {
-      ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(u, "r");
-      if (pfd != null) nativePakFd(pfd.detachFd());
+      for (int i = 0; i < uris.size(); i++) {
+        ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uris.get(i), "r");
+        fds[i] = pfd.detachFd();
+      }
+      nativePakFds(fds);
     } catch (Exception e) {
       Toast.makeText(this, "파일을 열 수 없어요", Toast.LENGTH_LONG).show();
     }
+  }
+
+  static class ByName implements java.util.Comparator<Uri> {
+    final java.util.HashMap<Uri, String> n;
+    ByName(java.util.HashMap<Uri, String> n) { this.n = n; }
+    @Override public int compare(Uri a, Uri b) { return n.get(a).compareTo(n.get(b)); }
+  }
+
+  String nameOf(Uri u) {
+    String name = u.getLastPathSegment();
+    android.database.Cursor c = null;
+    try {
+      c = getContentResolver().query(u, new String[] { android.provider.OpenableColumns.DISPLAY_NAME }, null, null, null);
+      if (c != null && c.moveToFirst()) name = c.getString(0);
+    } catch (Exception e) {
+    } finally {
+      if (c != null) c.close();
+    }
+    return name == null ? "" : name;
   }
 }

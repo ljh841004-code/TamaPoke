@@ -85,32 +85,52 @@ static bool rmTree(const std::string &p) {
   return rmdir(p.c_str()) == 0;
 }
 
-static bool preadAll(int fd, uint8_t *b, size_t n, off_t at) {
-  while (n) {
-    ssize_t r = pread(fd, b, n, at);
-    if (r <= 0) return false;
-    b += r; n -= r; at += r;
+// mons.pak entero o en trozos (mons.pak.001, .002 ... elegidos juntos): se leen como un solo fichero
+struct PakSrc {
+  std::vector<int> fd;
+  std::vector<uint64_t> start, size;
+  uint64_t total = 0;
+  bool add(int f) {
+    struct stat st;
+    if (fstat(f, &st) != 0) return false;
+    fd.push_back(f); start.push_back(total); size.push_back((uint64_t)st.st_size);
+    total += (uint64_t)st.st_size;
+    return true;
   }
-  return true;
-}
+  bool read(uint8_t *b, size_t n, uint64_t at) const {
+    while (n) {
+      size_t i = 0;
+      while (i < fd.size() && at >= start[i] + size[i]) i++;
+      if (i >= fd.size()) return false;
+      uint64_t off = at - start[i];
+      size_t k = (size_t)std::min<uint64_t>(n, size[i] - off);
+      ssize_t r = pread(fd[i], b, k, (off_t)off);
+      if (r <= 0) return false;
+      b += r; n -= r; at += r;
+    }
+    return true;
+  }
+};
 
 // devuelve "" si fue bien, o el motivo
-static std::string importPak(int fd) {
-  struct stat st;
-  if (fstat(fd, &st) != 0) return "파일을 읽을 수 없어요";
-  uint32_t fsize = (uint32_t)st.st_size;
+static std::string importPak(const std::vector<int> &fds) {
+  PakSrc src;
+  for (int f : fds)
+    if (!src.add(f)) return "파일을 읽을 수 없어요";
+  if (src.total > 0xFFFFFFFFull) return "파일이 너무 커요";
+  uint32_t fsize = (uint32_t)src.total;
   uint8_t h[PAK_HDR];
-  if (!preadAll(fd, h, PAK_HDR, 0)) return "파일이 너무 작아요";
+  if (!src.read(h, PAK_HDR, 0)) return "파일이 너무 작아요";
   PakHdr hdr;
-  if (!pakParseHeader(h, hdr)) return "mons.pak 파일이 아니에요";
+  if (!pakParseHeader(h, hdr)) return fds.size() > 1 ? "조각을 모두 골랐는지 확인해 주세요" : "mons.pak 파일이 아니에요 (조각이면 모두 함께 골라요)";
   uint8_t key[16];
   pakDeriveKey(PAK_DEFAULT_PASS, key);
   PakAes aes;
   aes.setKey(key);
   if (!pakKeyOk(aes, hdr)) return "다른 암호로 만든 mons.pak이에요";
-  if ((uint64_t)hdr.indexOff + hdr.indexSize > fsize) return "mons.pak이 깨졌어요";
+  if ((uint64_t)hdr.indexOff + hdr.indexSize > fsize) return "조각이 모자라거나 파일이 깨졌어요";
   std::vector<uint8_t> tbl(hdr.indexSize);
-  if (!preadAll(fd, tbl.data(), tbl.size(), hdr.indexOff)) return "목록을 읽을 수 없어요";
+  if (!src.read(tbl.data(), tbl.size(), hdr.indexOff)) return "목록을 읽을 수 없어요";
   pakCrypt(aes, hdr.salt, hdr.indexOff, tbl.data(), tbl.size());
   PakIndex idx;
   if (!idx.parse(tbl.data(), hdr.indexSize, hdr.count, fsize)) return "mons.pak 목록이 깨졌어요";
@@ -133,7 +153,7 @@ static std::string importPak(int fd) {
     uint32_t left = e.size, at = e.off;
     while (left) {
       uint32_t n = left < buf.size() ? left : (uint32_t)buf.size();
-      if (!preadAll(fd, buf.data(), n, at)) { fclose(out); return "읽다가 멈췄어요"; }
+      if (!src.read(buf.data(), n, at)) { fclose(out); return "읽다가 멈췄어요"; }
       pakCrypt(aes, hdr.salt, at, buf.data(), n);
       if (fwrite(buf.data(), 1, n, out) != n) { fclose(out); return "저장 공간이 부족해요"; }
       left -= n; at += n; done += n;
@@ -152,10 +172,10 @@ static std::string importPak(int fd) {
   return "";
 }
 
-static void runImport(int fd) {
+static void runImport(const std::vector<int> &fds) {
   progressScreen("mons.pak 푸는 중...", "", 0, 1);
-  std::string err = importPak(fd);
-  close(fd);
+  std::string err = !fds.empty() ? importPak(fds) : "파일이 없어요";
+  for (int f : fds) close(f);
   if (err.empty()) {
     progressScreen("완료! 그림과 소리를 불러와요", "", 1, 1);
     sdDirty = true;
