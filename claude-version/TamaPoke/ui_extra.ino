@@ -167,10 +167,60 @@ void screenBase() {
 
 void openNet() { retMark(); clockOpen = false; xScreen = XS_NET; }
 
+// ko12.9.25: [설명서] (ajustes): el portal con dos QR: 1 = unirse al WiFi, 2 = abrir /manual.pdf
+static bool gManual = false;
+static uint8_t gManualStep = 0;
+static bool gManualHas = false;
+void openManual() {
+  retMark();
+  clockOpen = false;
+  xScreen = XS_NET;
+  gManual = true;
+  gManualStep = 0;
+  gManualHas = netManualOnSd();
+  if (gManualHas && !linkActive()) netStartPortal();
+}
+
 void closeNet() {
+  gManual = false;
   netStopLanFw();  // ko12.9.4
   if (netPortalOn()) netStopPortal();
   goBack();  // ko11.17: a la hora (desde donde se abre)
+}
+
+#define MAN_NAV_Y 352
+static void drawQrText(const char *txt, int cx, int cy, int box);
+static void renderManual() {
+  if (!netPortalOn()) {  // sin manual.pdf en la SD (o el tongsin ocupa la radio)
+    drawFit(XT(X_MAN_BTN), 40, 320, UI_INK, 3);
+    drawFit(XT(gManualHas ? X_ST_BUSY : X_MAN_NOFILE), 180, 360, UI_BAR_BAD, 2);
+    if (!gManualHas) drawFit(XT(X_MAN_NOFILE2), 218, 360, UI_INK, 2);
+    drawBtn(158, 408, 150, 34, UI_TRACK, UI_INK, T(S_BACK));
+    uiFlush();
+    return;
+  }
+  bool two = gManualStep == 1;
+  drawFit(XT(two ? X_MAN_T2 : X_MAN_T1), 26, 300, UI_INK, 2);
+  drawFit(XT(two ? X_MAN_H2 : X_MAN_H1), 56, 330, UI_INK, 1);
+  if (two) {
+    drawQrText(NET_MANUAL_URL, CX, 178, 196);
+    drawFit("192.168.4.1/manual.pdf", 290, 330, UI_BAR_BAD, 2);
+    drawFit(XT(X_MAN_TIP), 322, 330, UI_INK, 1);
+    drawBtn(78, MAN_NAV_Y, 150, 40, UI_WHITE, UI_INK, XT(X_MAN_PREV));
+  } else {
+    drawWifiQr(CX, 178, 196);
+    portalRow(284, XT(X_QR_WIFI), netApName(), UI_BAR_BAD);
+    drawBtn(238, MAN_NAV_Y, 150, 40, UI_BAR_OK, UI_WHITE, XT(X_MAN_NEXT));
+  }
+  drawBtn(158, 408, 150, 34, UI_TRACK, UI_INK, T(S_BACK));
+  uiFlush();
+}
+
+static void manualTap(int16_t x, int16_t y) {
+  if (y >= 400) { closeNet(); sfxPlay(SFX_TAP); return; }
+  if (!netPortalOn() || y < MAN_NAV_Y - 8 || y > MAN_NAV_Y + 48) return;
+  if (gManualStep == 0 && x >= CX) { gManualStep = 1; sfxPlay(SFX_TAP); }
+  else if (gManualStep == 1 && x < CX) { gManualStep = 0; sfxPlay(SFX_TAP); }
 }
 
 // la hora local llega del NTP: al RTC y al juego
@@ -195,6 +245,7 @@ void applyNetTime(uint32_t e) {
 #define QR_MAX 41                   // hasta la version 6 (sobra: el texto es de ~40 bytes)
 static uint8_t gQrSize = 0;
 static uint8_t gQrBits[QR_MAX][(QR_MAX + 7) / 8];
+static char gQrTxt[48] = "";  // ko12.9.25: lo que lleva el QR guardado (WiFi o la direccion del 설명서)
 
 static void qrKeep(esp_qrcode_handle_t q) {
   int n = esp_qrcode_get_size(q);
@@ -206,17 +257,23 @@ static void qrKeep(esp_qrcode_handle_t q) {
       if (esp_qrcode_get_module(q, x, y)) gQrBits[y][x >> 3] |= 1 << (x & 7);
 }
 
-static void makeWifiQr() {
-  if (gQrSize) return;
-  char txt[80];
-  snprintf(txt, sizeof(txt), "WIFI:T:WPA;S:%s;P:%s;;", netApName(), NET_AP_PASS_UI);
+static void makeQr(const char *txt) {
+  if (gQrSize && !strcmp(gQrTxt, txt)) return;
+  gQrSize = 0;
   esp_qrcode_config_t cfg = { qrKeep, 6, ESP_QRCODE_ECC_MED };
   esp_qrcode_generate(&cfg, txt);
+  snprintf(gQrTxt, sizeof(gQrTxt), "%s", txt);
 }
 
 // cuadro blanco de lado ~box centrado en (cx, cy), con margen de 3 modulos
 void drawWifiQr(int cx, int cy, int box) {
-  makeWifiQr();
+  char txt[48];
+  snprintf(txt, sizeof(txt), "WIFI:T:WPA;S:%s;P:%s;;", netApName(), NET_AP_PASS_UI);
+  drawQrText(txt, cx, cy, box);
+}
+
+static void drawQrText(const char *txt, int cx, int cy, int box) {
+  makeQr(txt);
   if (!gQrSize) return;
   int cells = gQrSize + 6;
   int m = box / cells;             // pixeles por modulo (entero: bordes nitidos)
@@ -282,6 +339,7 @@ void renderNet() {
   screenBase();
   gfx->setTextColor(UI_INK);
   if (wifiFwRebooting()) { renderWifiFwDone(); return; }  // ko12.9.2: firmware por WiFi recibido
+  if (gManual) { renderManual(); return; }  // ko12.9.25
   if (netLanState() != LAN_OFF) { renderLanFw(); return; }
   if (netPortalOn()) {
     // ko8: QR grande (la camara del movil se une al WiFi sin teclear) y los
@@ -376,6 +434,7 @@ void renderNet() {
 }
 
 void netTap(int16_t x, int16_t y) {
+  if (gManual) { manualTap(x, y); return; }  // ko12.9.25
   if (netLanState() != LAN_OFF) {  // ko12.9.4
     NetLan st = netLanState();
     if (y >= 400) { netStopLanFw(); sfxPlay(SFX_TAP); }

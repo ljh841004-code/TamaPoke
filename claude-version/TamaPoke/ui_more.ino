@@ -2629,7 +2629,8 @@ void partyPickTap(int16_t x, int16_t y) {
 #define SET_PER 6
 #define SET_NAV_Y 286
 #define SET_ID_END 11   // [엔딩 다시 보기] (solo tras el final)
-static const uint8_t SET_ORDER_ALL[] = { 0, 1, 2, 3, 6, 10, 8, 9, 4, 5, SET_ID_END, 7 };
+#define SET_ID_MAN 12   // ko12.9.25: [설명서] (QR -> manual.pdf de la SD)
+static const uint8_t SET_ORDER_ALL[] = { 0, 1, 2, 3, 6, 10, 8, 9, 4, 5, SET_ID_MAN, SET_ID_END, 7 };
 static uint8_t gSetPage = 0;
 static uint8_t setItems(uint8_t *out) {
   uint8_t n = 0;
@@ -2666,7 +2667,7 @@ void renderSettings() {
   drawFit(XT(X_SET_TITLE), 36, 300, UI_INK, 3);
   char lang[24];
   snprintf(lang, sizeof(lang), XT(X_SET_LANG_FMT), LANG_CODES[gLang]);
-  struct { const char *t; uint16_t bg, fg; } b[SET_ID_END + 1] = {
+  struct { const char *t; uint16_t bg, fg; } b[SET_ID_MAN + 1] = {
     { XT(X_SET_TIME), UI_WHITE, UI_INK },
     { XT(X_SET_SOUND), (uint16_t)(audioEnabled() ? UI_BAR_OK : UI_WHITE), (uint16_t)(audioEnabled() ? UI_WHITE : UI_INK) },
     { XT(X_SET_SCREEN), UI_WHITE, UI_INK },
@@ -2679,6 +2680,7 @@ void renderSettings() {
     { XT(X_WALK_BTN), C565(0x8a, 0x5a, 0x3a), UI_WHITE },
     { XT(X_BDAY_BTN), C565(0xf0, 0x60, 0x80), UI_WHITE },  // ko12.6
     { XT(X_END_BTN), C565(0xf0, 0xc0, 0x30), UI_INK },     // ko12.7
+    { XT(X_MAN_BTN), C565(0x2f, 0x6f, 0xd0), UI_WHITE },   // ko12.9.25
   };
   uint8_t ids[16];
   uint8_t n = setItems(ids), pages = setPages();
@@ -2751,6 +2753,7 @@ void settingsTap(int16_t x, int16_t y) {
     case 9: openWalk(); break;
     case 10: openBday(); break;  // ko12.6
     case SET_ID_END: openEnding((pet.endSeen & 2) ? 2 : 1, true); break;  // ko12.7
+    case SET_ID_MAN: openManual(); break;  // ko12.9.25
   }
 }
 

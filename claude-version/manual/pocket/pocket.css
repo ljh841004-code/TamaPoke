@@ -60,3 +60,5 @@ th { color: var(--c); font-weight: 700; white-space: nowrap; }
 .back::before { top: 70mm; bottom: 0; }
 .toc td { padding: .35mm .5mm; } .toc td:last-child { text-align: right; color: var(--sub); }
 .toc .dot { display: inline-block; width: 2.2mm; height: 2.2mm; border-radius: .6mm; vertical-align: -.3mm; margin-right: 1mm; }
+.warn { background: #ffe3e0; border: .3mm solid #d8392b; border-radius: 1.6mm; padding: 1mm 1.6mm; margin-top: 1.4mm; font-size: 6.1pt; }
+.warn b { color: #c0281b; }

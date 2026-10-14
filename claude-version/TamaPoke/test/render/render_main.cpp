@@ -1606,6 +1606,24 @@ static void scenes(bool ko, const char *sfx) {
   audioSetBgmMask(0x02); render(); shot("16c_bgm_pick_one"); audioSetBgmMask(0xFF);
   closeAll(); openNet(); render(); shot("18_net");
   { gMockPortal = true; render(); shot("18b_portal_qr"); gMockPortal = false; }
+  // ko12.9.25: 설정 2쪽 [설명서] -> QR 1 (WiFi) -> [다음 >] QR 2 (manual.pdf) -> [< 이전] -> [뒤로] = 설정
+  { extern bool gMockManual;
+    closeAll(); openSettings(); gSetPage = 1; render(); shot("18k_settings_manual_btn");
+    setTapId(SET_ID_MAN);
+    navCheck("설명서: 설정에서 열림", gManual && xScreen == XS_NET && gManualStep == 0);
+    gMockPortal = true; render(); shot("18k_manual_wifi");
+    netTap(310, MAN_NAV_Y + 20);
+    navCheck("설명서: [다음] = QR 2", gManualStep == 1);
+    render(); shot("18l_manual_open");
+    netTap(150, MAN_NAV_Y + 20);
+    navCheck("설명서: [이전] = QR 1", gManualStep == 0);
+    netTap(CX, 420);
+    navCheck("설명서: [뒤로] = 설정", !gManual && xScreen == XS_SET);
+    gMockPortal = false;
+    gMockManual = false; openManual(); render(); shot("18m_manual_nofile");
+    netTap(CX, 420);
+    navCheck("설명서: 파일 없음 [뒤로]", !gManual && xScreen == XS_SET);
+    gMockManual = true; closeAll(); openNet(); }
   // ko12.9.4: [집 와이파이로 업데이트]: buscar -> direccion grande -> fallo -> [다시 하기] -> [뒤로]
   { extern NetLan gMockLan;
     netTap(NET_LAN_X + NET_LAN_W / 2, NET_LAN_Y + 20);

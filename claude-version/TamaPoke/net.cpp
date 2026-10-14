@@ -14,6 +14,9 @@
 #include <time.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include <SD_MMC.h>
+#include "sdmon.h"    // ko12.9.25: sdReady (설명서 manual.pdf)
+#include "sd_lock.h"
 
 #define NET_CONNECT_MS 12000UL   // ko8: por red (hay varias que probar)
 #define NET_NTP_MS 12000UL
@@ -352,7 +355,9 @@ static void pageRoot() {
   h += F("<p><small>켤 때와 하루 한 번, 주변에서 신호가 가장 센 저장된 WiFi로 시간을 맞춰요."
          " 저장된 WiFi가 없으면 비밀번호 없는 WiFi를 써요.</small></p>"
          "<p><small>2.4GHz WiFi만 됩니다. 5GHz는 안 돼요.</small></p>"
-         "<h2>펌웨어 업데이트</h2><p><a href=/fw>update.bin 올리기 (192.168.4.1/fw)</a></p></div>");
+         "<h2>펌웨어 업데이트</h2><p><a href=/fw>update.bin 올리기 (192.168.4.1/fw)</a></p>");
+  if (netManualOnSd()) h += F("<h2>설명서</h2><p><a href=/manual.pdf>손바닥 가이드 열기 (manual.pdf)</a></p>");
+  h += F("</div>");
   // la busqueda aun no acabo: recargar sola en 3 s para que aparezca la lista
   if (scanning) h += F("<script>setTimeout(function(){location.reload()},3000)</script>");
   h += F("</body></html>");
@@ -539,6 +544,48 @@ static void pageFwDone() {
   if (gFwHooks.done) gFwHooks.done(ok);
 }
 
+// ---------------------------------------------------------------- ko12.9.25: 설명서 (SD /manual.pdf)
+bool netManualOnSd() {
+  if (!sdReady) return false;
+  SdCardLock l(pdMS_TO_TICKS(500));
+  return l && SD_MMC.exists(NET_MANUAL_PATH);
+}
+
+// a trozos, soltando la SD entre trozo y trozo (la musica tambien lee de la SD)
+static void pageManual() {
+  gPortalT0 = millis();
+  File f;
+  if (sdReady) {
+    SdCardLock l;
+    if (l) f = SD_MMC.open(NET_MANUAL_PATH, FILE_READ);
+  }
+  if (!f) {
+    gWeb->send(404, "text/html; charset=utf-8",
+               F("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
+                 "<p style='font-family:sans-serif;padding:30px'>SD카드에 manual.pdf가 없어요.<br>"
+                 "PC에서 SD카드 맨 위에 manual.pdf를 넣어 주세요.</p>"));
+    return;
+  }
+  size_t left = f.size();
+  gWeb->setContentLength(left);
+  gWeb->sendHeader("Content-Disposition", "inline; filename=\"TamaPoke_manual.pdf\"");
+  gWeb->send(200, "application/pdf", "");
+  WiFiClient c = gWeb->client();
+  static uint8_t buf[4096];
+  while (left && c.connected()) {
+    size_t n;
+    {
+      SdCardLock l;
+      n = l ? f.read(buf, left < sizeof(buf) ? left : sizeof(buf)) : 0;
+    }
+    if (!n || c.write(buf, n) != n) break;
+    left -= n;
+    gPortalT0 = millis();
+  }
+  SdCardLock l;
+  f.close();
+}
+
 void netStartPortal() {
   if (gPortal || linkActive()) return;
   netStopLanFw();
@@ -560,6 +607,8 @@ void netStartPortal() {
   gWeb->on("/del", HTTP_GET, pageDel);
   gWeb->on("/fw", HTTP_GET, pageFw);                      // ko12.9.2
   gWeb->on("/fw", HTTP_POST, pageFwDone, pageFwUpload);
+  gWeb->on("/manual.pdf", HTTP_GET, pageManual);          // ko12.9.25
+  gWeb->on("/manual", HTTP_GET, pageManual);
   gWeb->onNotFound(pageRedirect);
   gWeb->begin();
   gPortal = true;
@@ -647,6 +696,7 @@ static void lanServe(uint32_t now) {
   gWeb->on("/", HTTP_GET, pageLanRoot);
   gWeb->on("/fw", HTTP_GET, pageFw);
   gWeb->on("/fw", HTTP_POST, pageFwDone, pageFwUpload);
+  gWeb->on("/manual.pdf", HTTP_GET, pageManual);  // ko12.9.25
   gWeb->onNotFound(pageLanRoot);
   gWeb->begin();
   strncpy(gLanIp, WiFi.localIP().toString().c_str(), sizeof(gLanIp) - 1);

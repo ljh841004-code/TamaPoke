@@ -64,6 +64,8 @@ void netSetFwHooks(const NetFwHooks &) {}  // ko12.9.2
 void netStopPortal() {}
 bool gMockPortal = false;
 bool netPortalOn() { return gMockPortal; }
+bool gMockManual = true;  // ko12.9.25: manual.pdf en la SD
+bool netManualOnSd() { return gMockManual; }
 // ko12.9.4: /fw en la WiFi de casa (las pruebas cambian el estado)
 NetLan gMockLan = LAN_OFF;
 void netStartLanFw() { gMockLan = LAN_SCAN; }

@@ -1,0 +1,18 @@
+/* 인쇄소용: 사방 도련 3mm (작업 80 x 111mm, 재단 74 x 105mm). pocket.css 뒤에 덮어써요 */
+@page { size: 80mm 111mm; margin: 0; }
+.pg { width: 80mm; height: 111mm; }
+.hd { height: 12.5mm; }
+.hd .t { top: 4.9mm; } .hd .ch { top: 5.6mm; }
+.odd .hd .t { left: 15mm; } .odd .hd .ch { right: 6.5mm; }
+.even .hd .t { left: 6.5mm; } .even .hd .ch { right: 15mm; }
+.hole { top: 5.25mm; } .odd .hole { left: 6.5mm; } .even .hole { right: 6.5mm; }
+.in { top: 14mm; left: 7mm; right: 7mm; bottom: 8.5mm; }
+.ft { bottom: 4.6mm; } .odd .ft { right: 7mm; } .even .ft { left: 7mm; }
+.cover::before { top: 0; height: 37mm; }
+.cover .big { top: 12mm; }
+.cover .shot { top: 32mm; }
+.cover .tags { top: 76mm; left: 8mm; right: 8mm; }
+.cover .ver { bottom: 7mm; }
+.cover .holemark { top: 6.5mm; left: 6.5mm; } .cover .holetxt { top: 7.6mm; left: 12.6mm; }
+.back::before { top: 73mm; }
+.back .in { top: 11mm !important; }

@@ -41,6 +41,11 @@ void netStartPortal();           // punto de acceso + web de configuracion
 void netStopPortal();
 bool netPortalOn();
 const char *netApName();
+// ko12.9.25: 설명서. El portal (y la WiFi de casa) sirven /manual.pdf de la SD (raiz). El movil se une al
+// WiFi del TamaPoke con el QR 1 y abre NET_MANUAL_URL con el QR 2 (sin internet, sin subir nada)
+#define NET_MANUAL_PATH "/manual.pdf"
+#define NET_MANUAL_URL "http://192.168.4.1/manual.pdf"
+bool netManualOnSd();
 
 // llamar en cada loop(). Devuelve la hora LOCAL (epoch) en el instante en que
 // termina una sincronizacion con exito; 0 el resto del tiempo.

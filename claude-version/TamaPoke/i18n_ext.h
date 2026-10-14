@@ -189,6 +189,7 @@ enum XId : uint16_t {  // ko10.6: pasaron de 255
   X_LURE_BTN_FMT, X_LURE_BTN_ARM, X_LURE_BTN_ON_FMT, X_LURE_NONE,
   X_HL_FILLED_FMT, X_HL_TIME, X_HL_FILL, X_HL_MISS, X_HL_HIT,  // ko12.9.23: 성벽 구멍 메우기
   X_RWX_OFF, X_RWX_ON, X_RWX_FMT, X_RWX_CLEAR, X_RWX_CLOUD, X_RWX_RAIN, X_RWX_SNOW,  // ko12.9.24: 실제 날씨
+  X_MAN_BTN, X_MAN_T1, X_MAN_H1, X_MAN_T2, X_MAN_H2, X_MAN_TIP, X_MAN_NEXT, X_MAN_PREV, X_MAN_NOFILE, X_MAN_NOFILE2,  // ko12.9.25: 설명서 (SD manual.pdf)
   // ko12.9.23: boton del 구슬 abajo (en lugar de [뒤로])
   // ko12.9.23: ficha de la pokedex: donde sale / volver a los datos
   X_COUNT
