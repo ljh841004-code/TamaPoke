@@ -14,6 +14,7 @@
 enum NetState : uint8_t {
   NET_IDLE = 0, NET_CONNECTING, NET_NTP, NET_OK, NET_FAIL_WIFI, NET_FAIL_NTP, NET_PORTAL,
   NET_SCAN,  // ko8: buscando WiFi (guardadas + abiertas)
+  NET_WX,    // ko12.9.24: hora ya puesta; pidiendo el tiempo real antes de apagar la radio
 };
 
 void netBegin();
@@ -46,6 +47,14 @@ const char *netApName();
 uint32_t netPoll(uint32_t nowMs);
 
 bool netSerialCommand(const String &line);
+
+// ko12.9.24: tiempo real de donde estas. Al sincronizar la hora (con "실제 날씨" encendido: cada 2 h) se
+// pide la ubicacion aproximada por la IP (ip-api.com, una vez al dia) y el tiempo actual (open-meteo.com,
+// sin clave). Clase: 0 despejado, 1 nublado, 2 lluvia, 3 nieve; -1 = no se sabe o tiene mas de 3 h
+enum : int8_t { RWX_NONE = -1, RWX_CLEAR = 0, RWX_CLOUD, RWX_RAIN, RWX_SNOW };
+int8_t netRealWx(uint32_t localNow);
+bool netWxOn();
+void netSetWxOn(bool on);
 
 // ko12.9.2: actualizar el firmware por WiFi (portal: 192.168.4.1/fw). Lo pone el .ino:
 //   canStart(): bateria suficiente y la musica parada (false = no empezar)

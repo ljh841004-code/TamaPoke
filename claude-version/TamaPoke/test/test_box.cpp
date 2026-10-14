@@ -1254,3 +1254,28 @@ TEST(box, mascota_movimientos_y_oferta) {
   q.begin();
   for (int i = 0; i < 4; i++) CHECK_EQ(q.mv[i], p.mv[i]);
 }
+
+// ko12.9.24: tiempo real (open-meteo, WMO) -> clase, y como cambia el tiempo de la escena
+TEST(weather, tiempo_real_manda_sobre_el_inventado) {
+  CHECK_EQ((int)wxClassOfWmo(0), 0);
+  CHECK_EQ((int)wxClassOfWmo(3), 1);
+  CHECK_EQ((int)wxClassOfWmo(45), 1);
+  CHECK_EQ((int)wxClassOfWmo(61), 2);
+  CHECK_EQ((int)wxClassOfWmo(81), 2);
+  CHECK_EQ((int)wxClassOfWmo(95), 2);
+  CHECK_EQ((int)wxClassOfWmo(73), 3);
+  CHECK_EQ((int)wxClassOfWmo(-1), -1);
+  uint32_t e = 1790000000UL;  // un dia de septiembre-octubre
+  int wetFake = 0;
+  for (uint32_t k = 0; k < 400; k++) {
+    uint32_t t = e + k * WX_BLOCK_S;
+    CHECK_EQ((int)weatherWithReal(t, -1), (int)weatherAt(t));  // sin dato: como antes
+    CHECK_EQ((int)weatherWithReal(t, 2), (int)WX_RAIN);        // llueve de verdad
+    CHECK_EQ((int)weatherWithReal(t, 3), (int)WX_SNOW);
+    uint8_t d = weatherWithReal(t, 0);                         // seco de verdad: nada de lluvia inventada
+    CHECK(d != WX_RAIN && d != WX_SNOW);
+    if (weatherAt(t) == WX_RAIN || weatherAt(t) == WX_SNOW) wetFake++;
+  }
+  CHECK(wetFake > 0);  // habia lluvia inventada que el dato real quito
+  CHECK_EQ((int)weatherWithReal(0, 2), (int)WX_CLEAR);  // sin reloj, despejado
+}

@@ -212,8 +212,7 @@ void renderTrainMenu() {
   else renderBattlePage();
   if (timeLeft(trainMsgUntil) && trainMsg) drawFit(trainMsg, 350, 320, UI_BAR_BAD, 2);
   drawTrainMenuDots();
-  drawFit(T(S_BACK), 396, 220, UI_INK, 2);
-  drawNav(NAV_L, UI_INK);  // ko11.17: en la 1a pagina = volver (principal o ficha)
+  drawNav(NAV_L, UI_INK);  // ko11.17 (ko12.9.24: sin "탭: 뒤로", lo hacen las flechas): en la 1a pagina = volver (principal o ficha)
   if (trainMenuPage == 0) drawNav(NAV_R, UI_INK);
   drawNav(NAV_DOWN, UI_INK);
   uiFlush();
@@ -677,6 +676,17 @@ void renderDefense() {
 // 1, 2, 3... lo antes posible. Orden equivocado o sin tiempo = ronda fallada.
 // Puntos por la media de cada balon (100 - ms/10, minimo 10)
 
+// ko12.9.24: avisos ("앗! 다시", "좋아!"...) debajo de la ultima fila de dianas (centro 308 + 32), con
+// fondo blanco: antes iban en y 330, encima de las dianas de abajo
+static void spdNote(const char *s, uint16_t c, uint8_t sz) {
+  setSize(sz);
+  int w = textW(s, sz) + 24;
+  if (w > 340) w = 340;
+  int h = sz >= 3 ? 40 : 30, y = 348;
+  uiButton(CX - w / 2, y, w, h, h / 2, UI_WHITE, c);
+  drawFit(s, y + (h - (sz >= 3 ? 32 : 22)) / 2, w - 10, c, sz);
+}
+
 // ko11.16: 3 balones las rondas 1-3, 4 las 4-7 y 5 desde la 8 (antes 5 / 10)
 static uint8_t spdCount() { return spdRound < 3 ? 3 : spdRound < 7 ? 4 : 5; }
 
@@ -935,11 +945,11 @@ void renderSpeed() {
   if (spdPhase == SP_SHOW && spdWrong && now - spdWrongT < 700) {  // ko12.9.5: "앗! 다시 (실수 1/2)"
     char ob[40];
     snprintf(ob, sizeof(ob), XT(X_TGT_OOPS_FMT), (unsigned)spdWrong);
-    drawFit(ob, 330, 320, UI_BAR_BAD, 2);
+    spdNote(ob, UI_BAR_BAD, 2);
   }
   if (spdPhase == SP_FEED) {
     const char *fb = XT(spdGood ? X_NICE : spdFail == 1 ? X_SPD_WRONG : X_MISS);
-    drawFit(fb, 330, 320, spdGood ? C565(0x1a, 0x86, 0x34) : UI_BAR_BAD, 3);
+    spdNote(fb, spdGood ? C565(0x1a, 0x86, 0x34) : UI_BAR_BAD, 3);
   } else if (spdRound == 0 && spdPhase == SP_WAIT) {
     drawFit(XT(X_TR_SPE_HINT), 200, 320, ink, 2);
   }

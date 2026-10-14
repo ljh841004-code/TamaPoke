@@ -2404,7 +2404,7 @@ void drawClouds(uint32_t now, uint16_t col) {
 uint16_t gSkyTop = 0, gSkyBot = 0;  // fork KO (ko4): el reloj grande se tine con el cielo
 
 // ko10.1: tiempo de ahora (lluvia a ratos, nieve solo en invierno, sol de verano)
-uint8_t sceneWeather() { return weatherAt(pet.lastSeenEpoch); }
+uint8_t sceneWeather() { return weatherWithReal(pet.lastSeenEpoch, netRealWx(pet.lastSeenEpoch)); }  // ko12.9.24: tiempo real
 
 static uint16_t nightDim(uint16_t c, bool night) {
   return night ? lerp565(c, C565(0x16, 0x1c, 0x30), 9, 16) : c;
@@ -4447,10 +4447,7 @@ void renderCard() {
     if (i == cardPage) gfx->fillCircle(x, 374, 5, UI_INK);
     else gfx->drawCircle(x, 374, 4, UI_INK);
   }
-  gfx->setTextColor(UI_INK);
-  setSize(2);
-  setCur(centerX(T(S_BACK), 2), 398);
-  printT(T(S_BACK));
+  // ko12.9.24: sin "탭: 뒤로": las flechas ya lo hacen (< pagina anterior / volver, v cerrar)
   drawNav(NAV_L, UI_INK);  // ko10.8 (ko11.17: en la 1a pagina = volver)
   if (cardPage < CARD_PAGES - 1) drawNav(NAV_R, UI_INK);
   drawNav(NAV_DOWN, UI_INK);
@@ -4973,7 +4970,8 @@ void renderDexDetail() {
     // pone el sprite (antes 2x y mas arriba: al llegar el sprite se notaba el salto)
     const uint8_t *t = thumbs.get(dx);
     if (t) {
-      int s = t[1] * 4 > 150 ? 3 : 4, x0 = CX - GAL_CELL / 2, y0 = 0, bx0, by0, bx1, by1;
+      // ko12.9.24: thumbs2.bin (recortadas, hasta 48 px): con x3 los grandes tapaban el titulo. Como mucho 110 px
+      int s = t[1] * 4 <= 110 ? 4 : t[1] * 3 <= 110 ? 3 : 2, x0 = CX - GAL_CELL / 2, y0 = 0, bx0, by0, bx1, by1;
       thumbBox(t, x0, y0, s, &bx0, &by0, &bx1, &by1);
       drawThumb(t, x0 + CX - (bx0 + bx1) / 2, y0 + DEX_FEET_Y - by1, s, !disc);
     }

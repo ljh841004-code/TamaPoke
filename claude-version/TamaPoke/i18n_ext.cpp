@@ -202,6 +202,7 @@ static const char *const XS[2][X_COUNT] = {
     "Where to find", "Details",
     "Orb x%u", "Tap again!", "On: %u", "No Lure Orb (champion, expeditions, daily)",
     "Holes filled: %u", "Attack in", "Filled!", "Missed!", "Hit through the hole!",
+    "Real wx off", "Real weather", "Now: %s", "clear", "cloudy", "rain", "snow",
   },
   // ---------------- KO ----------------
   {
@@ -398,6 +399,7 @@ static const char *const XS[2][X_COUNT] = {
     "출현 장소", "정보 보기",
     "구슬 %u개", "한 번 더!", "효과 %u번", "구슬이 없어요 (챔피언, 탐험, 도전에서 얻어요)",
     "메운 구멍 %u", "공격까지", "메웠다!", "빗나갔다!", "구멍으로 맞았다!",
+    "실제 날씨 끔", "실제 날씨", "날씨: %s", "맑음", "흐림", "비", "눈",
   },
 };
 

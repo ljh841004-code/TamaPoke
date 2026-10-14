@@ -1221,9 +1221,9 @@ static void scenes(bool ko, const char *sfx) {
       navCheck("liga: y no pasa de la mitad", pMon[j].hp == h);
     }
     {
-      int16_t xs[PARTY_MAX]; int16_t ws[PARTY_MAX]; int8_t who[PARTY_MAX];
-      swapLayout(xs, ws, who);
-      wildTap(xs[0] + 5, SW_Y + 10);
+      int16_t xs[PARTY_MAX + 1], ws[PARTY_MAX + 1], ys[PARTY_MAX + 1]; int8_t who[PARTY_MAX + 1];
+      swapLayout(xs, ws, who, ys);
+      wildTap(xs[0] + 5, ys[0] + 10);
       tick(100); updateWild();
       navCheck("liga: el veneno no pasa al siguiente", pCur != 0 && bMe.st == ST_NONE && pMon[0].st == ST_PSN);
     }
@@ -1545,7 +1545,7 @@ static void scenes(bool ko, const char *sfx) {
     navCheck("region: [포켓몬센터] abre el centro", xScreen == XS_CENTER);
     pet.pp[0] = 0; pet.pp[1] = 3;
     render(); shot("50_center");
-    onTap(110 + 20, CTR_BTN_Y + 20);
+    onTap(CTR_HEAL_X + 20, CTR_BTN_Y + 20);
     navCheck("centro: [회복하기] empieza a curar", centerUntil != 0);
     navCheck("centro: mientras cura no se lucha", !battleAllowed(false));
     tick(9000); render(); shot("50b_center_healing");

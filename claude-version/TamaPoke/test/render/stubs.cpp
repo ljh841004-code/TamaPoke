@@ -74,6 +74,11 @@ uint32_t netLanLeftS(uint32_t) { return gMockLan == LAN_ON ? 540 : 0; }
 uint8_t netSavedCount() { return 3; }
 void netForgetSaved(uint8_t) {}
 bool netOpenAllowed() { return true; }
+int8_t gMockRealWx = -1;  // ko12.9.24
+int8_t netRealWx(uint32_t) { return gMockRealWx; }
+bool gMockWxOn = true;
+bool netWxOn() { return gMockWxOn; }
+void netSetWxOn(bool on) { gMockWxOn = on; }
 void netSetOpenAllowed(bool) {}
 
 // ---- QR: en el PC lo codifica segno (python) para comprobar el dibujo; en la

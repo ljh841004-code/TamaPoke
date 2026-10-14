@@ -727,7 +727,7 @@ void boxTap(int16_t x, int16_t y) {
 #define ORB_ROWS 3
 #define ORB_PER_PAGE (ORB_COLS * ORB_ROWS)
 #define ORB_CELL_W 78
-#define ORB_CELL_H 94
+#define ORB_CELL_H 90  // ko12.9.24: 94 -> 90: el % de la 3a fila ya no queda bajo [구슬 합성]
 #define ORB_GRID_Y 130   // centro de la primera fila
 #define ORB_R 19
 
@@ -1530,7 +1530,6 @@ void renderUpdate() {
   } else {
     drawFit(XT(updState == UPD_FULLIMG ? X_UPD_FULLIMG : X_UPD_NOFILE), 170, 360, UI_BAR_BAD, 2);
     drawFit(XT(X_UPD_HINT), 206, 380, UI_INK, 1);
-    drawBtn(133, 330, 200, 48, UI_TRACK, UI_INK, T(S_BACK));
   }
   if (updResult == 0 && sdReady) drawBtn(113, UPD_PAK_Y, 240, 40, C565(0x6a, 0x4c, 0xf0), UI_WHITE, XT(X_PAK_BTN));  // ko12.8
   if (updResult == 0) drawNav(NAV_L, UI_INK);  // ko11.17: volver a la red
@@ -1554,7 +1553,7 @@ void updateTap(int16_t x, int16_t y) {
     if ((y >= 250 && y < 302 && x >= 238 && x < 378) || navHit(NAV_L, x, y)) { xScreen = XS_SET; return; }
     return;
   }
-  if (y >= 320 || y < 72 || navHit(NAV_L, x, y)) xScreen = XS_SET;  // ko11.26: [<] = a ajustes
+  if ((updResult < 0 && y >= 320) || y < 72 || navHit(NAV_L, x, y)) xScreen = XS_SET;  // ko11.26: [<] = a ajustes (ko12.9.24: [뒤로] solo tras un fallo)
 }
 
 // ======================================================================
@@ -1736,7 +1735,7 @@ void renderCandyBag() {
     bool isMine = f == mine;
     uiButton(BAG_ROW_X, y, BAG_ROW_W, BAG_ROW_H, 12, isMine ? C565(0xf0, 0x7a, 0xa8) : UI_WHITE, UI_INK);
     const uint8_t *th = thumbs.get(f);
-    if (th) drawThumbC(th, BAG_ROW_X + 8 + GAL_CELL / 2, y - 14 + GAL_CELL / 2, 1, false);  // ko12.9.8: centrado
+    if (th) drawThumbFit(th, BAG_ROW_X + 28, y + BAG_ROW_H / 2, 40, BAG_ROW_H - 2, 4, false);  // ko12.9.24: cabe antes del nombre (x 124)
     snprintf(b, sizeof(b), XT(X_BAG_ROW_FMT), dexName(f), pet.candy[f]);
     gfx->setTextColor(isMine ? UI_WHITE : UI_INK);
     setSize(2);

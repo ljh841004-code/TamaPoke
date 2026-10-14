@@ -5,17 +5,23 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Update.h>
+#include "weather.h"  // ko12.9.24: wxClassOfWmo
 #include "sdupdate.h"  // ko12.9.2: UpdStream (misma clasificacion que la SD)
 #include <DNSServer.h>
 #include <Preferences.h>
 #include <esp_sntp.h>
 #include <esp_mac.h>
 #include <time.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 
 #define NET_CONNECT_MS 12000UL   // ko8: por red (hay varias que probar)
 #define NET_NTP_MS 12000UL
 #define NET_SCAN_MS 9000UL
 #define NET_AUTO_EVERY_MS (24UL * 3600UL * 1000UL)
+#define NET_WX_EVERY_MS (2UL * 3600UL * 1000UL)    // ko12.9.24: con el tiempo real, cada 2 h
+#define NET_WX_MS 15000UL                         // tope para pedir el tiempo
+#define NET_WX_VALID_S (3UL * 3600UL)             // el tiempo real vale 3 h
 #define NET_BOOT_DELAY_MS 6000UL
 #define NET_PORTAL_MS (10UL * 60UL * 1000UL)  // el portal se cierra solo a los 10 min
 #define NET_AP_PASS "tamapoke"
@@ -35,6 +41,16 @@ static bool gAnyConnected = false;
 static int16_t gTz = 540;
 static bool gAuto = true;
 static uint32_t gLastSync = 0;
+// ko12.9.24: tiempo real
+static bool gWxOn = true;
+static volatile int8_t gWxCls = -1;      // ultima clase recibida
+static uint32_t gWxAt = 0;               // hora local en que se recibio
+static float gLat = 0, gLon = 0;
+static uint32_t gLocAt = 0;              // hora local de la ultima ubicacion
+static volatile bool gWxTaskDone = true;
+static volatile int8_t gWxTaskCls = -1;
+static volatile bool gWxTaskLoc = false;
+static bool gWxRadioLate = false;      // la tarea tardo: apagar la radio cuando acabe
 
 static NetState gState = NET_IDLE;
 static uint32_t gT0 = 0;            // inicio de la fase actual
@@ -77,6 +93,10 @@ static void loadCfg() {
   gTz = p.getShort("tz", 540);
   gAuto = p.getBool("auto", true);
   gLastSync = p.getUInt("lsync", 0);
+  gWxOn = p.getBool("wxon", true);  // ko12.9.24
+  gLat = p.getFloat("lat", 0);
+  gLon = p.getFloat("lon", 0);
+  gLocAt = p.getUInt("locat", 0);
   p.end();
   if (gTz < -720 || gTz > 840) gTz = 540;
 }
@@ -103,6 +123,10 @@ static void saveCfg() {
   p.putShort("tz", gTz);
   p.putBool("auto", gAuto);
   p.putUInt("lsync", gLastSync);
+  p.putBool("wxon", gWxOn);  // ko12.9.24
+  p.putFloat("lat", gLat);
+  p.putFloat("lon", gLon);
+  p.putUInt("locat", gLocAt);
   p.end();
 }
 
@@ -134,7 +158,7 @@ uint32_t netLastSync() { return gLastSync; }
 bool netPortalOn() { return gPortal; }
 const char *netApName() { return gApName; }
 NetState netState() { return gState; }
-bool netBusy() { return gPortal || lanRadio() || gState == NET_SCAN || gState == NET_CONNECTING || gState == NET_NTP; }
+bool netBusy() { return gPortal || lanRadio() || gState == NET_SCAN || gState == NET_CONNECTING || gState == NET_NTP || gState == NET_WX; }
 
 static void radioOff() {
   WiFi.disconnect(true, false);
@@ -670,6 +694,76 @@ static void lanPoll(uint32_t now) {
   }
 }
 
+// ---------------------------------------------------------------- ko12.9.24: tiempo real
+
+int8_t netRealWx(uint32_t localNow) {
+  if (!gWxOn || !gWxAt || gWxCls < 0 || localNow < gWxAt || localNow - gWxAt > NET_WX_VALID_S) return RWX_NONE;
+  return gWxCls;
+}
+bool netWxOn() { return gWxOn; }
+void netSetWxOn(bool on) { gWxOn = on; saveCfg(); }
+
+static String httpGet(const char *url, uint32_t toMs) {
+  HTTPClient h;
+  String body;
+  bool tls = !strncmp(url, "https", 5);
+  WiFiClientSecure sc;
+  WiFiClient pc;
+  if (tls) sc.setInsecure();  // solo se lee el tiempo: nada que proteger
+  if (!(tls ? h.begin(sc, url) : h.begin(pc, url))) return body;
+  h.setTimeout(toMs);
+  h.setConnectTimeout(toMs);
+  int code = h.GET();
+  if (code == 200) body = h.getString();
+  h.end();
+  return body;
+}
+static bool jsonNum(const String &s, const char *key, int from, float *out) {
+  int k = s.indexOf(key, from);
+  if (k < 0) return false;
+  k = s.indexOf(':', k);
+  if (k < 0) return false;
+  *out = s.substring(k + 1).toFloat();
+  return true;
+}
+static void wxTask(void *) {
+  // ubicacion por la IP (una vez al dia; si falla se usa la de antes)
+  if (gWxTaskLoc) {
+    String j = httpGet("http://ip-api.com/json/?fields=status,lat,lon", 6000);
+    float la, lo;
+    if (j.indexOf("success") >= 0 && jsonNum(j, "\"lat\"", 0, &la) && jsonNum(j, "\"lon\"", 0, &lo)) {
+      gLat = la; gLon = lo;
+    } else gWxTaskLoc = false;
+  }
+  int8_t cls = RWX_NONE;
+  if (gLat != 0 || gLon != 0) {
+    char url[160];
+    // primero sin TLS (mas rapido y menos memoria); si no contesta, por https
+    snprintf(url, sizeof(url), "http://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f&current=weather_code",
+             gLat, gLon);
+    String j = httpGet(url, 6000);
+    if (j.indexOf("\"current\"") < 0) {
+      snprintf(url, sizeof(url), "https://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f&current=weather_code",
+               gLat, gLon);
+      j = httpGet(url, 7000);
+    }
+    int cur = j.indexOf("\"current\":");
+    float c;
+    if (cur >= 0 && jsonNum(j, "\"weather_code\"", cur, &c)) cls = wxClassOfWmo((int)c);
+  }
+  gWxTaskCls = cls;
+  gWxTaskDone = true;
+  vTaskDelete(nullptr);
+}
+static void wxStart(uint32_t local, uint32_t now) {
+  gWxTaskDone = false;
+  gWxTaskCls = RWX_NONE;
+  gWxTaskLoc = !gLocAt || local < gLocAt || local - gLocAt > 86400UL || (gLat == 0 && gLon == 0);
+  if (xTaskCreatePinnedToCore(wxTask, "wx", 12288, nullptr, 1, nullptr, 0) != pdPASS) gWxTaskDone = true;
+  gState = NET_WX;
+  gT0 = now;
+}
+
 // ---------------------------------------------------------------- sondeo
 
 uint32_t netLanLeftS(uint32_t now) {
@@ -694,7 +788,7 @@ uint32_t netPoll(uint32_t now) {
   if (gAuto && netCanSync() && !linkActive() &&
       (gState == NET_IDLE || gState == NET_OK || gState == NET_FAIL_WIFI || gState == NET_FAIL_NTP)) {
     bool due = !gBootTried ? (now > NET_BOOT_DELAY_MS)
-                           : (since(now, gLastAutoTry) > (int32_t)NET_AUTO_EVERY_MS);
+                           : (since(now, gLastAutoTry) > (int32_t)(gWxOn ? NET_WX_EVERY_MS : NET_AUTO_EVERY_MS));
     if (due) {
       gBootTried = true;
       gLastAutoTry = now;
@@ -721,7 +815,8 @@ uint32_t netPoll(uint32_t now) {
     if (gSntpDone && utc > 1700000000) {
       uint32_t local = (uint32_t)((int64_t)utc + (int64_t)gTz * 60);
       esp_sntp_stop();
-      radioOff();
+      if (gWxOn) wxStart(local, now);  // ko12.9.24: el tiempo real (la radio se apaga al terminar)
+      else radioOff();
       gLastSync = local;
       // una guardada que funciona pasa a ser la mas reciente (se prueba primero)
       const NetCand &c = gCand[gCandI];
@@ -732,7 +827,7 @@ uint32_t netPoll(uint32_t now) {
         netRememberFront(gSaved, gSavedPass, gNSaved, ss, pp);
       }
       saveCfg();
-      gState = NET_OK;
+      if (gState != NET_WX) gState = NET_OK;
       Serial.printf("NET hora ok: utc=%lu local=%lu\n", (unsigned long)utc, (unsigned long)local);
       return local;
     }
@@ -742,6 +837,23 @@ uint32_t netPoll(uint32_t now) {
       esp_sntp_stop();
       nextCand(now);
     }
+  }
+  else if (gState == NET_WX) {  // ko12.9.24
+    if (gWxTaskDone || since(now, gT0) > (int32_t)NET_WX_MS) {
+      if (gWxTaskDone) {
+        if (gWxTaskLoc) gLocAt = gLastSync;
+        if (gWxTaskCls >= 0) { gWxCls = gWxTaskCls; gWxAt = gLastSync; }
+        Serial.printf("NET tiempo real: clase %d (%.2f, %.2f)\n", (int)gWxTaskCls, gLat, gLon);
+        saveCfg();
+        radioOff();
+      } else gWxRadioLate = true;  // la tarea termina sola por sus topes HTTP; entonces se apaga
+      gState = NET_OK;
+    }
+  }
+  if (gWxRadioLate && gWxTaskDone && gState != NET_SCAN && gState != NET_CONNECTING && gState != NET_NTP) {
+    gWxRadioLate = false;
+    if (gWxTaskCls >= 0) { gWxCls = gWxTaskCls; gWxAt = gLastSync; }
+    radioOff();
   }
   return 0;
 }

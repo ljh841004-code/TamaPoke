@@ -91,3 +91,25 @@ static inline uint8_t weatherAt(uint32_t epoch) {
   if (drift && season == SEASON_AUTUMN) return WX_LEAVES;
   return WX_CLEAR;
 }
+
+// ko12.9.24: codigo de tiempo WMO (open-meteo) -> 0 despejado, 1 nublado/niebla, 2 lluvia, 3 nieve (-1 nada)
+static inline int8_t wxClassOfWmo(int c) {
+  if (c < 0) return -1;
+  if ((c >= 71 && c <= 77) || c == 85 || c == 86) return 3;
+  if ((c >= 51 && c <= 67) || (c >= 80 && c <= 82) || (c >= 95 && c <= 99)) return 2;
+  if (c <= 1) return 0;
+  return 1;  // 2, 3 nubes; 45, 48 niebla
+}
+
+// ko12.9.24: con el tiempo real (net.h: RWX_*; -1 = no se sabe) llueve / nieva cuando de verdad
+// llueve / nieva, y si de verdad no, no hay lluvia inventada. Petalos, hojas y sol de verano siguen
+// saliendo de la fecha; con nubes de verdad no hay sol radiante
+static inline uint8_t weatherWithReal(uint32_t epoch, int8_t real) {
+  uint8_t w = weatherAt(epoch);
+  if (real < 0 || !epoch) return w;
+  if (real == 2) return WX_RAIN;
+  if (real == 3) return WX_SNOW;
+  if (w == WX_RAIN || w == WX_SNOW) w = (real == 0 && wxSeason(wxMonth(epoch)) == SEASON_SUMMER) ? WX_SUNNY : WX_CLEAR;
+  if (real == 1 && w == WX_SUNNY) w = WX_CLEAR;
+  return w;
+}

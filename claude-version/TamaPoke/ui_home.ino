@@ -645,7 +645,12 @@ bool sickTap(int16_t x, int16_t y) {
     sickDlg = false;
     return true;
   }
-  if (pet.sick && !pet.sleeping && !pet.isEgg() && inPetZone(x, y)) { sickDlg = true; sfxPlay(SFX_TAP); return true; }
+  if (pet.sick && !pet.sleeping && !pet.isEgg() && inPetZone(x, y)) {
+    sickDlg = true;
+    toastUntil = 0;  // ko12.9.24: el aviso de la dosis anterior caia encima del texto del dialogo
+    sfxPlay(SFX_TAP);
+    return true;
+  }
   return false;
 }
 

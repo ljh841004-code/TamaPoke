@@ -354,12 +354,20 @@ void renderNet() {
   drawBtn(NET_BTN_X, NET_SYNC_Y, NET_BTN_W, NET_BTN_H, (canSync && !busy) ? UI_BAR_OK : UI_TRACK,
           UI_WHITE, XT(X_SYNC_NOW));
   drawBtn(NET_BTN_X, NET_SETUP_Y, NET_BTN_W, NET_BTN_H, 0x4C98, UI_WHITE, XT(X_SETUP_WIFI));
-  // ko8: la fila se parte en dos: sincronizacion automatica | WiFi abiertas
-  int hw = (NET_BTN_W - 8) / 2;
+  // ko8: la fila se parte: sincronizacion automatica | WiFi abiertas | (ko12.9.24) tiempo real
+  int hw = (NET_BTN_W - 12) / 3;
   drawBtn(NET_BTN_X, NET_AUTO_Y, hw, NET_BTN_H, netAuto() ? UI_WHITE : UI_TRACK, UI_INK,
           XT(netAuto() ? X_AUTO_S_ON : X_AUTO_S_OFF));
-  drawBtn(NET_BTN_X + hw + 8, NET_AUTO_Y, hw, NET_BTN_H, netOpenAllowed() ? UI_WHITE : UI_TRACK, UI_INK,
+  drawBtn(NET_BTN_X + hw + 6, NET_AUTO_Y, hw, NET_BTN_H, netOpenAllowed() ? UI_WHITE : UI_TRACK, UI_INK,
           XT(netOpenAllowed() ? X_OPEN_ON : X_OPEN_OFF));
+  {
+    char wl[32];
+    int8_t rw = netRealWx(clockEpoch());
+    if (!netWxOn()) snprintf(wl, sizeof(wl), "%s", XT(X_RWX_OFF));
+    else if (rw < 0) snprintf(wl, sizeof(wl), "%s", XT(X_RWX_ON));
+    else snprintf(wl, sizeof(wl), XT(X_RWX_FMT), XT((XId)(X_RWX_CLEAR + rw)));
+    drawBtn(NET_BTN_X + 2 * (hw + 6), NET_AUTO_Y, hw, NET_BTN_H, netWxOn() ? C565(0xd8, 0xec, 0xff) : UI_TRACK, UI_INK, wl);
+  }
   drawBtn(NET_LAN_X, NET_LAN_Y, NET_LAN_W, NET_LAN_H, (netConfigured() && !linkActive()) ? 0x8A5C : UI_TRACK,
           UI_WHITE, XT(X_LAN_BTN));  // ko12.9.4
   // ko11.26: [SD update] y [copia] pasaron al menu de ajustes
@@ -404,8 +412,10 @@ void netTap(int16_t x, int16_t y) {
     netStartPortal();
     sfxPlay(SFX_TAP);
   } else if (y >= NET_AUTO_Y) {
-    if (x < NET_BTN_X + NET_BTN_W / 2) netSetAuto(!netAuto());
-    else netSetOpenAllowed(!netOpenAllowed());
+    int third = (NET_BTN_W - 12) / 3 + 6;  // ko12.9.24: tres botones
+    if (x < NET_BTN_X + third) netSetAuto(!netAuto());
+    else if (x < NET_BTN_X + 2 * third) netSetOpenAllowed(!netOpenAllowed());
+    else netSetWxOn(!netWxOn());
     sfxPlay(SFX_TAP);
   }
 }
@@ -2657,15 +2667,37 @@ static void partySwitchTo(uint8_t j) {
   audioCry(bMe.dex);
 }
 // botones del cambio: [ayudante][ayudante][quedarse/cancelar]; who = indice o -1
-static int swapLayout(int16_t *xs, int16_t *ws, int8_t *who) {
+// ko12.9.24: con 4 o mas para elegir (equipo de 6), dos filas de botones grandes (antes una fila de botones
+// de ~40 px). El titulo sube (SW2_PANEL_Y) para que la 2a fila quepa en el circulo
+#define SW2_PANEL_Y 250
+#define SW2_Y 298
+static bool swapTwoRows() {
+  int m = 0;
+  for (uint8_t j = 0; j < pN; j++) if (j != pCur && pMon[j].hp > 0) m++;
+  return m + (bSwapMode != 0 ? 1 : 0) > 3;
+}
+static int swapLayout(int16_t *xs, int16_t *ws, int8_t *who, int16_t *ys = nullptr) {
   int m = 0;
   for (uint8_t j = 0; j < pN; j++) if (j != pCur && pMon[j].hp > 0) who[m++] = (int8_t)j;
   bool extra = bSwapMode != 0;
-  int total = 320, gap = m >= 4 ? 4 : 6, ew = extra ? (m >= 4 ? 60 : 80) : 0;  // ko12.2: hasta 5 + quedarse
+  int items = m + (extra ? 1 : 0);
+  if (items > 3) {  // dos filas, el [그대로] / [취소] al final
+    if (extra) who[m] = -1;
+    int perRow = (items + 1) / 2, gap = 6;
+    for (int i = 0; i < items; i++) {
+      int r = i / perRow, c = i % perRow, n = r ? items - perRow : perRow;
+      int bw = (320 - gap * (n - 1)) / n;
+      xs[i] = (int16_t)(73 + c * (bw + gap));
+      ws[i] = (int16_t)bw;
+      if (ys) ys[i] = (int16_t)(SW2_Y + r * (SW_H + 6));
+    }
+    return items;
+  }
+  int total = 320, gap = 6, ew = extra ? 80 : 0;
   int bw = (total - ew - gap * (m - 1 + (extra ? 1 : 0))) / (m ? m : 1);
   int x = 73;
-  for (int i = 0; i < m; i++) { xs[i] = (int16_t)x; ws[i] = (int16_t)bw; x += bw + gap; }
-  if (extra) { xs[m] = (int16_t)x; ws[m] = (int16_t)ew; who[m] = -1; m++; }
+  for (int i = 0; i < m; i++) { xs[i] = (int16_t)x; ws[i] = (int16_t)bw; if (ys) ys[i] = SW_Y; x += bw + gap; }
+  if (extra) { xs[m] = (int16_t)x; ws[m] = (int16_t)ew; who[m] = -1; if (ys) ys[m] = SW_Y; m++; }
   return m;
 }
 static void drawMiniBall(int cx, int cy, bool alive, bool cur) {
@@ -2699,62 +2731,63 @@ static void drawPartyBalls() {
     }
 }
 static void drawSwapPanel() {
-  uiButton(40, 266, 386, 56, 12, UI_WHITE, UI_INK);
+  bool two = swapTwoRows();
+  int py = two ? SW2_PANEL_Y : 266;
+  uiButton(40, py, 386, two ? 42 : 56, 12, UI_WHITE, UI_INK);
   char t[64];
   if (bSwapMode == 1) txFmt(t, sizeof(t), X_PT_NEXT_FMT, dexName(bFoe.dex));
   else strncpy(t, XT(bSwapMode == 2 ? X_PT_MANUAL : X_PT_WHO), sizeof(t) - 1), t[sizeof(t) - 1] = 0;
-  drawFit(t, 285, 370, UI_INK, 2);
-  int16_t xs[PARTY_MAX + 1], ws[PARTY_MAX + 1];
+  drawFit(t, py + (two ? 9 : 19), 370, UI_INK, 2);
+  int16_t xs[PARTY_MAX + 1], ws[PARTY_MAX + 1], ys[PARTY_MAX + 1];
   int8_t who[PARTY_MAX + 1];
-  int m = swapLayout(xs, ws, who);
+  int m = swapLayout(xs, ws, who, ys);
   for (int i = 0; i < m; i++) {
     if (who[i] < 0) {
-      drawBtn(xs[i], SW_Y, ws[i], SW_H, UI_TRACK, UI_INK, XT(bSwapMode == 2 ? X_BAK_CANCEL : X_PT_KEEP));
+      drawBtn(xs[i], ys[i], ws[i], SW_H, UI_TRACK, UI_INK, XT(bSwapMode == 2 ? X_BAK_CANCEL : X_PT_KEEP));
       continue;
     }
     const Battler &b = pMon[who[i]];
     int8_t tm = typeMatch(b.type, bFoe.type);
     uint16_t bg = tm > 0 ? C565(0xd6, 0xf5, 0xcc) : tm < 0 ? C565(0xff, 0xdc, 0xdc) : UI_WHITE;
     if (ws[i] < 90) {  // ko12.2: 4 o 5 para elegir (equipo de 6): solo dibujo, nivel y vida
-      uiButton(xs[i], SW_Y, ws[i], SW_H, 8, bg, UI_INK);
-      drawThumbAt(b.dex, xs[i] + ws[i] / 2, SW_Y + 17, 1, false);
+      uiButton(xs[i], ys[i], ws[i], SW_H, 8, bg, UI_INK);
+      drawThumbAt(b.dex, xs[i] + ws[i] / 2, ys[i] + 17, 1, false);
       char lv[8];
       snprintf(lv, sizeof(lv), "%u", b.lvl);
       gfx->setTextColor(tm > 0 ? C565(0x1a, 0x8a, 0x3a) : tm < 0 ? UI_BAR_BAD : UI_INK);
       setSize(1);
-      setCur(xs[i] + 4, SW_Y + 2);
+      setCur(xs[i] + 4, ys[i] + 2);
       printT(lv);
       int bw2 = ws[i] - 10;
-      gfx->fillRect(xs[i] + 5, SW_Y + SW_H - 7, bw2, 4, UI_TRACK);
-      gfx->fillRect(xs[i] + 5, SW_Y + SW_H - 7, (int)((uint32_t)bw2 * b.hp / b.maxHp), 4,
+      gfx->fillRect(xs[i] + 5, ys[i] + SW_H - 7, bw2, 4, UI_TRACK);
+      gfx->fillRect(xs[i] + 5, ys[i] + SW_H - 7, (int)((uint32_t)bw2 * b.hp / b.maxHp), 4,
                     b.hp * 4 < b.maxHp ? UI_BAR_BAD : UI_BAR_OK);
       continue;
     }
-    uiButton(xs[i], SW_Y, ws[i], SW_H, 10, bg, UI_INK);
-    drawThumbAt(b.dex, xs[i] + 22, SW_Y + SW_H / 2, 1, false);
+    uiButton(xs[i], ys[i], ws[i], SW_H, 10, bg, UI_INK);
+    drawThumbAt(b.dex, xs[i] + 22, ys[i] + SW_H / 2, 1, false);
     gfx->setTextColor(UI_INK);
     setSize(1);
-    setCur(xs[i] + 42, SW_Y + 4);
+    setCur(xs[i] + 42, ys[i] + 4);
     printT(dexName(b.dex));
     char l[32];
     snprintf(l, sizeof(l), "Lv%u %s", b.lvl, tm > 0 ? XT(X_PT_GOOD) : tm < 0 ? XT(X_PT_BAD) : "");
     gfx->setTextColor(tm > 0 ? C565(0x1a, 0x8a, 0x3a) : tm < 0 ? UI_BAR_BAD : UI_INK);
-    setCur(xs[i] + 42, SW_Y + 22);
+    setCur(xs[i] + 42, ys[i] + 22);
     printT(l);
     int bw = ws[i] - 50;
-    gfx->fillRect(xs[i] + 42, SW_Y + SW_H - 7, bw, 4, UI_TRACK);
-    gfx->fillRect(xs[i] + 42, SW_Y + SW_H - 7, (int)((uint32_t)bw * b.hp / b.maxHp), 4,
+    gfx->fillRect(xs[i] + 42, ys[i] + SW_H - 7, bw, 4, UI_TRACK);
+    gfx->fillRect(xs[i] + 42, ys[i] + SW_H - 7, (int)((uint32_t)bw * b.hp / b.maxHp), 4,
                   b.hp * 4 < b.maxHp ? UI_BAR_BAD : UI_BAR_OK);
   }
 }
 // toque en BP_SWAP
 static void swapTap(int16_t x, int16_t y) {
-  if (y < SW_Y || y >= SW_Y + SW_H) return;
-  int16_t xs[PARTY_MAX + 1], ws[PARTY_MAX + 1];
+  int16_t xs[PARTY_MAX + 1], ws[PARTY_MAX + 1], ys[PARTY_MAX + 1];
   int8_t who[PARTY_MAX + 1];
-  int m = swapLayout(xs, ws, who);
+  int m = swapLayout(xs, ws, who, ys);
   for (int i = 0; i < m; i++) {
-    if (x < xs[i] || x >= xs[i] + ws[i]) continue;
+    if (x < xs[i] || x >= xs[i] + ws[i] || y < ys[i] - 3 || y >= ys[i] + SW_H + 3) continue;
     sfxPlay(SFX_TAP);
     uint8_t mode = bSwapMode;
     if (bLink) {  // ko12.9.16: tongsin: la eleccion se manda; el cambio se hace al resolver el turno
@@ -3442,6 +3475,8 @@ void regionTap(int16_t x, int16_t y) {
 // ======================================================================
 #define CTR_MS 30000UL
 #define CTR_BTN_Y 372
+#define CTR_HEAL_W 200  // ko12.9.24: [회복하기] solo y centrado (el [뒤로] de al lado ya no esta)
+#define CTR_HEAL_X (CX - CTR_HEAL_W / 2)
 static uint32_t centerMsgUntil = 0;
 static const char *centerMsg = nullptr;
 
@@ -3507,17 +3542,17 @@ void renderCenter() {
       printT(l);
     }
     bool full = pet.ppFull();
-    drawBtn(110, CTR_BTN_Y, 120, 44, full ? UI_TRACK : C565(0xf0, 0x60, 0x80), full ? 0x8410 : UI_WHITE, XT(X_CENTER_HEAL));
-    drawBtn(238, CTR_BTN_Y, 120, 44, UI_TRACK, UI_INK, T(S_BACK));
+    drawBtn(CTR_HEAL_X, CTR_BTN_Y, CTR_HEAL_W, 44, full ? UI_TRACK : C565(0xf0, 0x60, 0x80), full ? 0x8410 : UI_WHITE, XT(X_CENTER_HEAL));
   }
+  if (!centerUntil) drawNav(NAV_L, UI_INK);  // ko12.9.24: volver con la flecha (antes [탭: 뒤로])
   if (timeLeft(centerMsgUntil) && centerMsg) drawFit(centerMsg, 92, 320, UI_BAR_OK, 2);
   uiFlush();
 }
 
 void centerTap(int16_t x, int16_t y) {
   if (centerUntil) return;  // curando: hay que esperar (o salir deslizando)
-  if (inRect(x, y, 238, CTR_BTN_Y, 120, 44)) { sfxPlay(SFX_TAP); xScreen = XS_REGION; return; }
-  if (inRect(x, y, 110, CTR_BTN_Y, 120, 44)) {
+  if (navHit(NAV_L, x, y)) { sfxPlay(SFX_TAP); xScreen = XS_REGION; return; }  // ko12.9.24
+  if (inRect(x, y, CTR_HEAL_X, CTR_BTN_Y, CTR_HEAL_W, 44)) {
     if (pet.isEgg() || pet.ppFull()) {
       sfxPlay(SFX_DENY);
       centerMsg = XT(X_CENTER_FULL);
@@ -3543,7 +3578,6 @@ static const uint16_t BADGE_COL[GYM_COUNT] = {
 #define GY_W 350
 #define GY_H 50
 #define GY_GAP 8
-#define GY_BACK_Y 378
 uint8_t gymPage = 0;
 uint32_t gymMsgUntil = 0;
 const char *gymMsg = nullptr;
@@ -3695,7 +3729,6 @@ void partyStart(bool solo) {
 void partyCancel() { xScreen = ppFrom; sfxPlay(SFX_TAP); }
 
 void gymTap(int16_t x, int16_t y) {
-  if (inRect(x, y, CX - 80, GY_BACK_Y, 160, 40)) { sfxPlay(SFX_TAP); goBack(); return; }  // ko11.17
   // ko10.11: flechas de pagina y la pagina de la liga (ko11.17: en la 1a, [<] = volver)
   if (navHit(NAV_L, x, y)) { if (gymPage > 0) gymSwipe(1); else { sfxPlay(SFX_TAP); goBack(); } return; }
   if (navHit(NAV_R, x, y)) { if (gymPage < GY_PAGES - 1) gymSwipe(-1); return; }
@@ -3743,8 +3776,7 @@ static void gymDots() {
   }
 }
 
-static void gymFooter() {
-  drawBtn(CX - 80, GY_BACK_Y, 160, 40, UI_TRACK, UI_INK, T(S_BACK));
+static void gymFooter() {  // ko12.9.24: sin [탭: 뒤로] (la flecha < vuelve en la 1a pagina)
   drawNav(NAV_L, UI_INK);  // ko11.17: pagina anterior, o volver en la 1a
   if (gymPage < GY_PAGES - 1) drawNav(NAV_R, UI_INK);
   uiFlush();
@@ -3860,14 +3892,13 @@ void renderDaily() {
     drawFit(c, 272, 300, 0x8410, 1);
     drawBtn(CX - 90, 300, 180, 50, UI_BAR_BAD, UI_WHITE, XT(X_GYM_GO));
   }
-  if (gymMsg && timeLeft(gymMsgUntil)) drawFit(gymMsg, 356, 300, UI_BAR_BAD, 1);
-  drawBtn(CX - 80, GY_BACK_Y, 160, 40, UI_TRACK, UI_INK, T(S_BACK));
-  drawNav(NAV_L, UI_INK);  // ko11.17: volver
+  if (gymMsg && timeLeft(gymMsgUntil)) drawFit(gymMsg, 380, 300, UI_BAR_BAD, 1);
+  drawNav(NAV_L, UI_INK);  // ko11.17: volver (ko12.9.24: sin [탭: 뒤로])
   uiFlush();
 }
 
 void dailyTap(int16_t x, int16_t y) {
-  if (inRect(x, y, CX - 80, GY_BACK_Y, 160, 40) || navHit(NAV_L, x, y)) { sfxPlay(SFX_TAP); goBack(); return; }  // ko11.17
+  if (navHit(NAV_L, x, y)) { sfxPlay(SFX_TAP); goBack(); return; }  // ko11.17
   uint32_t day = todayNum();
   if (!day || !inRect(x, y, CX - 90, 300, 180, 50)) return;
   if (!pet.canBattle() || pet.tooTiredToBattle()) {

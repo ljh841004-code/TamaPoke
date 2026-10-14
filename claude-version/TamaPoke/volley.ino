@@ -204,28 +204,29 @@ void renderVolley() {
   crumb(0x0106);
   vbDrawScore(ink);
 
+  // ko12.9.24: los avisos van por debajo de la [X] (82, 130-170): antes la tapaban o quedaban debajo
   if (intro) {  // presentacion: VS
-    uiPanel(63, 150, 340, 96, 16, UI_WHITE, UI_INK);
+    uiPanel(63, 188, 340, 96, 16, UI_WHITE, UI_INK);
     char vs[64];
     snprintf(vs, sizeof(vs), "%s  VS  %s", dexName(pet.speciesId), dexName(vbFoeDex));
-    drawFit(vs, 160, 320, UI_INK, 2);
-    drawFit(XT(X_VB_FIRST), 190, 320, C565(0xc8, 0x3c, 0x78), 2);
-    drawFit(XT(X_VB_QUIT), 222, 320, 0x8410, 1);
+    drawFit(vs, 198, 320, UI_INK, 2);
+    drawFit(XT(X_VB_FIRST), 228, 320, C565(0xc8, 0x3c, 0x78), 2);
+    drawFit(XT(X_VB_QUIT), 260, 320, 0x8410, 1);
   } else if (vb.state == VB_SERVE && vb.score[0] + vb.score[1] == 0) {  // la ayuda, en el primer saque
-    gfx->fillRoundRect(58, 128, 350, 58, 12, UI_WHITE);
-    drawFit(XT(X_VB_HINT1), 134, 340, UI_INK, 1);
-    drawFit(XT(X_VB_HINT2), 158, 340, UI_INK, 1);
+    gfx->fillRoundRect(58, 188, 350, 58, 12, UI_WHITE);
+    drawFit(XT(X_VB_HINT1), 194, 340, UI_INK, 1);
+    drawFit(XT(X_VB_HINT2), 218, 340, UI_INK, 1);
   } else if (vb.state == VB_POINT) {
     bool mine = vb.lastScorer == 0;
-    drawFit(XT(mine ? X_VB_POINT : X_VB_LOSTPT), 150, 300, mine ? UI_BAR_OK : UI_BAR_BAD, 3);
+    drawFit(XT(mine ? X_VB_POINT : X_VB_LOSTPT), 190, 300, mine ? UI_BAR_OK : UI_BAR_BAD, 3);
   } else if (vb.state == VB_PLAY && vb.b.spiked && vb.t - vb.p[vb.b.spikeSide].spikeT < 600) {
     if (vb.b.power) {  // ko11.9.4: "불꽃세례 강스파이크!"
       int16_t d = vb.b.spikeSide ? vbFoeDex : pet.speciesId;
       char l[64];
       snprintf(l, sizeof(l), XT(X_VB_POWER_FMT), moveName(BA_TYPE, DEX_TBL[d].ptype, moveTier(d)));
-      drawFit(l, 124, 320, DEX_TBL[d].accent, 3);
+      drawFit(l, 190, 320, DEX_TBL[d].accent, 3);
     } else {
-      drawFit(XT(X_VB_SPIKE), 124, 300, C565(0xe8, 0x50, 0x20), 3);
+      drawFit(XT(X_VB_SPIKE), 190, 300, C565(0xe8, 0x50, 0x20), 3);
     }
   }
 
