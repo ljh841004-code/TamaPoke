@@ -29,11 +29,26 @@ static uint8_t gHostBright = 255;
 
 // ---------------------------------------------------------------- ventana
 // La ventana tiene 466 de ancho y el alto proporcional a la pantalla: el sistema la escala sola.
-// El circulo del juego va un poco por encima del centro; fuera del circulo, negro (como la placa)
-static std::vector<int16_t> gCircleX0;  // por fila: primera columna dentro del circulo
+// Arriba el juego (466x466, NEGRO fuera del circulo solo si se elige "둥근 화면"; por defecto entero,
+// para que en el movil no se corte nada arriba ni abajo) y debajo una barra con [메뉴] [화면 끄기] [나가기]
 static const int LCD = 466;
+static const int BAR_H = 80, BAR_GAP = 28;
+static std::vector<int16_t> gCircleX0;  // por fila: primera columna dentro del circulo
 static uint16_t gLast[LCD * LCD];
 static bool gHaveLast = false;
+static int gBarY = -1;                    // fila de la ventana donde empieza la barra (-1 = no cabe)
+static TPCanvas *gBar = nullptr;
+static bool gBarDirty = true, gBarOff = false;
+static bool gRound = false;               // "둥근 화면" (como la placa) / "네모 화면" (entero, por defecto)
+
+static void loadRound() {
+  FILE *f = fopen((gFiles + "/round.txt").c_str(), "r");
+  if (f) { gRound = fgetc(f) == '1'; fclose(f); }
+}
+static void saveRound() {
+  FILE *f = fopen((gFiles + "/round.txt").c_str(), "w");
+  if (f) { fputc(gRound ? '1' : '0', f); fclose(f); }
+}
 
 static void setupWindow() {
   if (!gWin) return;
@@ -43,7 +58,14 @@ static void setupWindow() {
   if (gWinW <= 0 || gWinH <= 0) return;
   gGeomH = (int)((int64_t)LCD * gWinH / gWinW);
   if (gGeomH < LCD) gGeomH = LCD;
-  gOffY = (gGeomH - LCD) * 2 / 5;
+  int block = LCD + BAR_GAP + BAR_H;
+  if (gGeomH >= block + 20) {
+    gOffY = (gGeomH - block) * 2 / 5;
+    gBarY = gOffY + LCD + BAR_GAP;
+  } else {
+    gOffY = (gGeomH - LCD) / 2;
+    gBarY = -1;
+  }
   ANativeWindow_setBuffersGeometry(gWin, LCD, gGeomH, WINDOW_FORMAT_RGB_565);
   if (gCircleX0.empty()) {
     gCircleX0.resize(LCD);
@@ -61,19 +83,42 @@ static inline uint16_t dim565(uint16_t c, uint8_t b) {
   return (uint16_t)(r << 11 | g << 5 | bl);
 }
 
+// barra de abajo: se pinta con las funciones del juego en un lienzo aparte (gfx se cambia un momento)
+#define BAR_BX0 16
+#define BAR_BW 138
+#define BAR_BDX 148
+static void drawBar() {
+  if (!gBar) { gBar = new TPCanvas(LCD, BAR_H, panel); gBar->begin(); }
+  TPCanvas *keep = gfx;
+  gfx = gBar;
+  gfx->fillScreen(0x0000);
+  drawBtn(BAR_BX0, 10, BAR_BW, 58, 0x4C98, 0xFFFF, "메뉴");
+  drawBtn(BAR_BX0 + BAR_BDX, 10, BAR_BW, 58, 0x6B4D, 0xFFFF, screenOff ? "화면 켜기" : "화면 끄기");
+  drawBtn(BAR_BX0 + 2 * BAR_BDX, 10, BAR_BW, 58, C565(0xd8, 0x40, 0x30), 0xFFFF, "나가기");
+  gfx = keep;
+  gBarOff = screenOff;
+  gBarDirty = false;
+}
+
 static void blit(const uint16_t *fb) {
   if (!gWin || !gGeomH) return;
+  if (gBarY >= 0 && (gBarDirty || gBarOff != screenOff)) drawBar();
   ANativeWindow_Buffer buf;
   if (ANativeWindow_lock(gWin, &buf, nullptr) != 0) return;
   uint16_t *dst = (uint16_t *)buf.bits;
   int h = buf.height < gGeomH ? buf.height : gGeomH;
+  int w = buf.width < LCD ? buf.width : LCD;
+  const uint16_t *bar = gBar ? gBar->getFramebuffer() : nullptr;
   for (int y = 0; y < h; y++) {
     uint16_t *row = dst + (size_t)y * buf.stride;
+    memset(row, 0, buf.width * 2);
+    int by = y - gBarY;
+    if (gBarY >= 0 && bar && by >= 0 && by < BAR_H) { memcpy(row, bar + (size_t)by * LCD, w * 2); continue; }
     int gy = y - gOffY;
-    if (gy < 0 || gy >= LCD || !gHostScreenOn) { memset(row, 0, buf.width * 2); continue; }
-    int x0 = gCircleX0[gy], x1 = LCD - x0;
+    if (gy < 0 || gy >= LCD || !gHostScreenOn) continue;
+    int x0 = gRound ? gCircleX0[gy] : 0, x1 = LCD - x0;
     const uint16_t *src = fb + (size_t)gy * LCD;
-    for (int x = 0; x < buf.width; x++) row[x] = (x < x0 || x >= x1) ? 0 : dim565(src[x], gHostBright);
+    for (int x = x0; x < x1 && x < w; x++) row[x] = dim565(src[x], gHostBright);
   }
   ANativeWindow_unlockAndPost(gWin);
 }
@@ -88,10 +133,14 @@ void hostPresent(const uint16_t *fb, int w, int h) {
   if (!gMenuOpen) blit(fb);
 }
 void hostSetBrightness(uint8_t b) { gHostBright = b < 40 ? 40 : b; }
-void hostDisplayOn(bool on) { (void)on; }
+void hostDisplayOn(bool on) {  // [화면 끄기] (PWR): el juego apaga el panel -> cuadro negro
+  if (gHostScreenOn == on) return;
+  gHostScreenOn = on;
+  if (gHaveLast) blit(gLast);
+}
 
-// ---------------------------------------------------------------- menu de la app (tecla atras)
-// [mons.pak 고르기] [화면 끄기/켜기 = PWR] [닫기]. Se dibuja con las mismas funciones del juego
+// ---------------------------------------------------------------- menu de la app ([메뉴] o tecla atras)
+// [mons.pak 고르기] [둥근 화면 / 네모 화면] [닫기]. Se dibuja con las mismas funciones del juego
 // sobre una copia del ultimo fotograma, y luego se devuelve el lienzo como estaba.
 static bool gPwrPending = false;
 static void callJava(const char *name);
@@ -108,9 +157,12 @@ void drawHostMenu() {
   gfx->fillRoundRect(63, 90, 340, 290, 20, 0x2124);
   drawFit("TamaPoke (Android)", 104, 300, 0xFFFF, 2);
   drawBtn(HM_X, HM_Y[0], HM_W, HM_H, 0x4C98, 0xFFFF, "mons.pak 고르기");
-  drawBtn(HM_X, HM_Y[1], HM_W, HM_H, 0x6B4D, 0xFFFF, screenOff ? "화면 켜기 (PWR)" : "화면 끄기 (PWR)");
+  drawBtn(HM_X, HM_Y[1], HM_W, HM_H, 0x6B4D, 0xFFFF, gRound ? "네모 화면으로" : "둥근 화면으로");
   drawBtn(HM_X, HM_Y[2], HM_W, HM_H, 0xFFFF, 0x0000, "닫기");
+  bool on = gHostScreenOn;
+  gHostScreenOn = true;  // con la pantalla "apagada" el menu se ve igual
   blit(fb);
+  gHostScreenOn = on;
   memcpy(fb, save, sizeof(save));
 }
 static void hostMenuTap(int x, int y) {
@@ -120,11 +172,20 @@ static void hostMenuTap(int x, int y) {
   if (hit < 0) return;
   gMenuOpen = false;
   if (hit == 0) callJava("pickPak");
-  if (hit == 1) gPwrPending = true;
+  if (hit == 1) { gRound = !gRound; saveRound(); }
+  if (gHaveLast) blit(gLast);
 }
 
-// pwrPoll() de host_stubs devuelve 0; el boton del menu hace una pulsacion corta
+// pwrPoll() de host_stubs devuelve 0; [화면 끄기] hace una pulsacion corta
 uint8_t hostPwrTake() { bool p = gPwrPending; gPwrPending = false; return p ? 1 : 0; }
+static bool gExit = false;
+static void barTap(int x) {
+  int i = (x - BAR_BX0) / BAR_BDX;
+  if (x < BAR_BX0 || i > 2 || x - BAR_BX0 - i * BAR_BDX > BAR_BW) return;
+  if (i == 0) { gMenuOpen = !gMenuOpen; if (!gMenuOpen && gHaveLast) blit(gLast); }
+  if (i == 1) gPwrPending = true;
+  if (i == 2) gExit = true;  // guardar y cerrar (lo hace el bucle)
+}
 
 // ---------------------------------------------------------------- Java
 static void callJava(const char *name) {
@@ -167,7 +228,7 @@ static void toGame(float px, float py, int16_t &x, int16_t &y) {
 static int32_t onInput(android_app *, AInputEvent *ev) {
   if (AInputEvent_getType(ev) == AINPUT_EVENT_TYPE_KEY) {
     if (AKeyEvent_getKeyCode(ev) == AKEYCODE_BACK) {
-      if (AKeyEvent_getAction(ev) == AKEY_EVENT_ACTION_UP) gMenuOpen = !gMenuOpen;
+      if (AKeyEvent_getAction(ev) == AKEY_EVENT_ACTION_UP) { gMenuOpen = !gMenuOpen; if (!gMenuOpen && gHaveLast) blit(gLast); }
       return 1;  // atras no cierra la app: abre el menu
     }
     return 0;
@@ -177,6 +238,12 @@ static int32_t onInput(android_app *, AInputEvent *ev) {
   int32_t act = AMotionEvent_getAction(ev) & AMOTION_EVENT_ACTION_MASK;
   int16_t x, y;
   toGame(AMotionEvent_getX(ev, 0), AMotionEvent_getY(ev, 0), x, y);
+  // la barra de abajo (solo si el dedo no esta ya jugando)
+  float wy = AMotionEvent_getY(ev, 0) * gGeomH / (gWinH ? gWinH : 1);
+  if (!gDown && gBarY >= 0 && wy >= gBarY - 6) {
+    if (act == AMOTION_EVENT_ACTION_UP) barTap((int)(AMotionEvent_getX(ev, 0) * LCD / (gWinW ? gWinW : 1)));
+    return 1;
+  }
   if (gMenuOpen) {
     if (act == AMOTION_EVENT_ACTION_UP) hostMenuTap(x, y);
     return 1;
@@ -263,6 +330,7 @@ void android_main(android_app *app) {
   gSdRoot = sdRoot.c_str();
   prefsLoadFile();
   loadClockAdj();
+  loadRound();
 
   uint32_t lastSave = 0;
   bool asked = false;
@@ -296,6 +364,11 @@ void android_main(android_app *app) {
     uint32_t t0 = millis();
     loop();
     if (gMenuOpen) drawHostMenu();
+    if (gExit) {  // [나가기]: guardar y cerrar la app (al volver, el tiempo de fuera cuenta como apagado)
+      gExit = false;
+      saveAll();
+      ANativeActivity_finish(app->activity);
+    }
     if (millis() - lastSave > 5000) { lastSave = millis(); prefsSaveFile(false); }
     uint32_t spent = millis() - t0;
     if (spent < 16) usleep((16 - spent) * 1000);  // ~60 fps como mucho

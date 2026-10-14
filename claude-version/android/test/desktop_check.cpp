@@ -87,6 +87,20 @@ int main(int argc, char **argv) {
   extern std::atomic<uint64_t> gDeskAudioBytes;
   printf("  audio: %llu bytes mezclados\n", (unsigned long long)gDeskAudioBytes.load());
   check("el hilo del audio mezcla", gDeskAudioBytes.load() > 100000);
+  {  // la barra de abajo de la app: otro lienzo con las mismas funciones (gfx cambiado un momento)
+    TPCanvas *bar = new TPCanvas(466, 80, panel);
+    bar->begin();
+    TPCanvas *keep = gfx;
+    gfx = bar;
+    gfx->fillScreen(0);
+    drawBtn(16, 10, 138, 58, 0x4C98, 0xFFFF, "메뉴");
+    drawBtn(164, 10, 138, 58, 0x6B4D, 0xFFFF, "화면 끄기");
+    drawBtn(312, 10, 138, 58, 0xD200, 0xFFFF, "나가기");
+    gfx = keep;
+    FILE *f = fopen("build/desk_bar.raw", "wb");
+    fwrite(bar->getFramebuffer(), 2, 466 * 80, f); fclose(f);
+    check("barra pintada", bar->getFramebuffer()[40 * 466 + 80] != 0);
+  }
   printf("%s (%d fallos)\n", fails ? "FALLOS" : "TODO OK", fails);
   return fails ? 1 : 0;
 }
