@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko12.9.21)
+# TamaPoke KO (v1.17-ko12.9.22)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko12.9.22: orbRollPct (u^3,5, 20%+ ~12%), ORB_WILD 6 / GYM 35 / 탐험 7:15:25 / 합성 -4..+3, 대성공 3. 전설 = bLegendT 3.8초 연출 (drawLegendIntro, 탭 0.8초 뒤 건너뜀), wildMatchPower(legend) 125-140% +8레벨, foeSloppy 0. 팀전 BP_INTRO 끝에 partyAskSwap(1) 첫 상대부터. drawHpBox 속성 배지. 화면 끔: panel->displayOff + setCpuFrequencyMhz(80) + loop delay 40, dimStage 2 = 400ms 그리기 + delay 15. 배구: gBlitFlipX + PMD_IDLE_DL/ATTACK_DL 마주보기, 상대 속도+10:스파이크+15:받기+5
 - ✅ ko12.9.21: 방어 = 성벽 쌓기 (stk[STK_VIS 7] 카메라, STK_W0 220, STK_PERF 6px 퍼펙트 + STK_GROW 8, 겹친 만큼만 남김, 완전 빗나감 = 목숨 -1, STK_EVERY 5층마다 공격: 맨 위 폭 >= stkNeed() 60+10n (최대 140) 이면 +3, 아니면 목숨 -1 + STK_REPAIR 120, 속도 150+7×층 최대 380 px/s). font_ko 다시 생성(겹:쌓:텼). 화면 동작 검사
 - ✅ ko12.9.20: 물약 = bPotAsk 확인창 (drawPotAsk/potAskTap, POT_* 영역, 바깥:닫기 = 취소, 가득 = 못 씀), wildTap/lkTap에서 BA_POTION은 창만 열기. Pet.potAuto (NVS potau, 기본 true): autoPick/lkAutoPick이 false면 물약 안 씀. WILD_POTION_PCT 45, releaseGift 볼 30 / 물약 35. 화면 동작 검사 9개
 - ✅ ko12.9.19: renderDefense DQ_FLY에 타입 구슬(typeColor + drawTypeGlyph, 꼬리 3개, 포물선) 추가: drawMoveFx가 hit=false일 때 안 그리는 타입(바위:노말:격투:강철) 보완. 화면 검사 05t_def_type_00~15
