@@ -391,21 +391,39 @@ static void stepSimon(uint32_t now) {
   }
 }
 
-static int smPadAt(int16_t x, int16_t y) {
+// ko12.9.23: "lo toque bien y dice que no": un toque en la raya entre dos botones (el tactil lee el dedo
+// algo mas arriba) caia en el vecino. Si cae a menos de SM_EDGE_DEG del boton que tocaba, cuenta como ese
+#define SM_EDGE_DEG 14
+static int smPadAt(int16_t x, int16_t y, int want = -1) {
   int dx = x - CX, dy = y - CX, d2 = dx * dx + dy * dy;
   if (d2 < (SM_RIN - 16) * (SM_RIN - 16) || d2 > 240 * 240) return -1;
   float a = atan2f((float)dy, (float)dx) * 57.2958f;  // -180..180, 0 = derecha, 90 = abajo
-  if (a >= -135 && a < -45) return 0;
-  if (a >= -45 && a < 45) return 1;
-  if (a >= 45 && a < 135) return 2;
-  return 3;
+  int p;
+  if (a >= -135 && a < -45) p = 0;
+  else if (a >= -45 && a < 45) p = 1;
+  else if (a >= 45 && a < 135) p = 2;
+  else p = 3;
+  if (want >= 0 && want < 4 && p != want) {
+    float d = a - (float)(SM_ANG[want] > 180 ? SM_ANG[want] - 360 : SM_ANG[want]);  // centro del que tocaba
+    while (d > 180) d -= 360;
+    while (d < -180) d += 360;
+    if (d < 0) d = -d;
+    if (d <= 45 + SM_EDGE_DEG) p = want;
+  }
+  return p;
 }
 
 void simonPress(int16_t x, int16_t y) {
-  if (smOverUntil || smPhase != SM_INPUT) return;
-  int p = smPadAt(x, y);
-  if (p < 0) return;
+  if (smOverUntil) return;
   uint32_t now = millis();
+  // ko12.9.23: tocar en cuanto se enciende el ultimo (sin esperar a que se apague) se perdia, y el toque
+  // siguiente se comparaba con el primero de la secuencia: "fallo". Ahora ya cuenta como respuesta
+  if (smPhase == SM_SHOW && smIdx + 1 >= smLen && now - smT0 >= 150) { smPhase = SM_INPUT; smIdx = 0; smT0 = now; }
+  if (smPhase != SM_INPUT) return;
+  int p = smPadAt(x, y, smIdx < smLen ? smSeq[smIdx] : -1);
+  if (p < 0) return;
+  // ko12.9.23: un rebote del tactil (el mismo boton otra vez en < 150 ms) no es un toque nuevo
+  if (smTapPad == (uint8_t)p && now - smTapT < 150) return;
   smTapPad = (uint8_t)p;
   smTapT = now;
   smT0 = now;

@@ -572,6 +572,24 @@ static void scenes(bool ko, const char *sfx) {
     navCheck("simon: 2 fallos = fin", simonOverProbe());
     for (int k = 0; k < 60; k++) { tick(100); render(); }
     navCheck("simon: vuelve al menu", !simonOpen && trainMenuOpen);
+    {  // ko12.9.23: "toque bien y dice que no": toque al encenderse el ultimo, rebote del tactil, raya entre botones
+      closeAll(); simonOpen = false; startSimon(); tick(2250); render();
+      for (int k = 0; k < 400 && !(smPhase == SM_SHOW && smIdx + 1 >= smLen); k++) { tick(20); render(); }
+      tick(200);
+      uint8_t f = smSeq[0];
+      uint16_t sc = simonScoreProbe();
+      simonPress(PX[f], PY[f]);
+      navCheck("simon: tocar al encenderse el ultimo ya cuenta", simonScoreProbe() == sc + 1 && smPhase == SM_INPUT);
+      uint8_t idx = smIdx;
+      tick(50); simonPress(PX[f], PY[f]);
+      navCheck("simon: rebote (mismo boton < 150 ms) no cuenta", smIdx == idx && smPhase == SM_INPUT);
+      tick(300);
+      uint8_t w = smSeq[smIdx];
+      float a = ((SM_ANG[w] > 180 ? SM_ANG[w] - 360 : SM_ANG[w]) + 52) / 57.2958f;  // 52 grados: ya en el vecino
+      simonPress((int16_t)(CX + 170 * cosf(a)), (int16_t)(CX + 170 * sinf(a)));
+      navCheck("simon: en la raya, cuenta el que tocaba", smTapOk && smLives == 2);
+      simonOpen = false;
+    }
     closeAll();
   }
   // entrenamiento
