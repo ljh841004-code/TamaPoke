@@ -10,7 +10,7 @@ SemaphoreHandle_t sdMutex = nullptr;
 
 bool sdReady = false;
 bool sdDirty = false;
-SdThumbs thumbs;
+SdThumbs thumbs = { "/mons/thumbs.bin", "/mons/thumbs2.bin" };  // ko12.9.23: thumbs2.bin primero
 SdThumbs portraits = { "/mons/story.bin" };  // ko11.21
 
 // ---- ko11.32: rutas que no estan (hash FNV-1a; 0 = libre)
@@ -159,7 +159,9 @@ bool SdThumbs::load() {
   if (!sdReady) return false;
   SdCardLock lock;
   if (!lock) return false;
-  File f = monsOpen(path);  // ko12.8
+  File f;
+  if (alt) f = sdOpenKnown(alt);  // ko12.9.23: suelto en la SD (un mons.pak viejo no lo tapa)
+  if (!f) f = monsOpen(path);  // ko12.8
   if (!f) {
     Serial.println("sin thumbs.bin (galeria sin miniaturas)");
     return false;

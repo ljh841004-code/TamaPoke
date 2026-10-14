@@ -53,6 +53,7 @@ struct PmdMon {
 // miniaturas de la galeria (thumbs.bin entero en PSRAM)
 struct SdThumbs {
   const char *path = "/mons/thumbs.bin";  // ko11.21: el mismo formato sirve para los retratos (story.bin)
+  const char *alt = nullptr;  // ko12.9.23: se prueba antes (thumbs2.bin: recortadas, hasta 48 px)
   bool loaded = false;
   uint8_t *data = nullptr;
   uint16_t count = 0;

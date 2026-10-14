@@ -538,6 +538,8 @@ void Pet::flushSave() {
   prefs.putUChar("rtb", rtBits);
   prefs.putUShort("rts", rtStreak);
   prefs.putUShort("rtx", rtBest);
+  prefs.putUInt("cud", cuDay);  // ko12.9.23
+  prefs.putBytes("cuu", cuUsed, sizeof(cuUsed));
   prefs.putUChar("bond", bond);
   if (lastSeenEpoch) prefs.putUInt("seen", lastSeenEpoch);
 }
@@ -1170,9 +1172,17 @@ uint16_t Pet::dupCandy(bool shinyMon, uint16_t lvl) {
   return 3 + (shinyMon ? 2 : 0) + (lvl >= 30 ? 1 : 0);
 }
 
+// ko12.9.23: el dia va por la fecha local (no 24 h desde el primer uso); sin hora, por la edad
+uint32_t Pet::candyDayKey() const { return lastSeenEpoch ? lastSeenEpoch / 86400 : 0x80000000u | (ageMinutes / 1440); }
+uint16_t Pet::candyCost(uint8_t use) const {
+  if (use >= CU_COUNT) return 0xFFFF;
+  uint8_t n = cuDay == candyDayKey() ? cuUsed[use] : 0;
+  return (uint16_t)CANDY_COST[use] * (n + 1);
+}
+
 bool Pet::candyCanUse(uint8_t use) const {
   if (use >= CU_COUNT || isEgg() || ceremony != CER_NONE) return false;
-  if (candyOf(speciesId) < CANDY_COST[use]) return false;
+  if (candyOf(speciesId) < candyCost(use)) return false;
   switch (use) {
     case CU_EXP:   return level() < LEVEL_MAX;
     case CU_GAUGE: return joy < 100 || energy < 100 || fullness < 100;
@@ -1185,7 +1195,10 @@ bool Pet::candyCanUse(uint8_t use) const {
 
 bool Pet::candyUse(uint8_t use) {
   if (!candyCanUse(use)) return false;
-  candy[DEX_FAM[speciesId]] -= CANDY_COST[use];
+  candy[DEX_FAM[speciesId]] -= candyCost(use);
+  uint32_t day = candyDayKey();
+  if (cuDay != day) { cuDay = day; memset(cuUsed, 0, sizeof(cuUsed)); }
+  if (cuUsed[use] < CANDY_DAY_MAX) cuUsed[use]++;
   switch (use) {
     case CU_EXP: {  // media subida de nivel
       uint16_t L = level();
@@ -1523,6 +1536,8 @@ void Pet::save() {
   prefs.putUChar("rtb", rtBits);
   prefs.putUShort("rts", rtStreak);
   prefs.putUShort("rtx", rtBest);
+  prefs.putUInt("cud", cuDay);  // ko12.9.23
+  prefs.putBytes("cuu", cuUsed, sizeof(cuUsed));
   prefs.putUChar("room", roomOn);
   prefs.putUChar("bgask", bgAsked);
   prefs.putBytes("deco", deco, sizeof(deco));
@@ -1711,6 +1726,9 @@ void Pet::load(bool *migrated) {
   rtBits = prefs.getUChar("rtb", 0);
   rtStreak = prefs.getUShort("rts", 0);
   rtBest = prefs.getUShort("rtx", 0);
+  cuDay = prefs.getUInt("cud", 0);  // ko12.9.23
+  memset(cuUsed, 0, sizeof(cuUsed));
+  prefs.getBytes("cuu", cuUsed, sizeof(cuUsed));
   roomOn = prefs.getUChar("room", 0);
   bgAsked = prefs.getUChar("bgask", 0);
   memset(deco, 0, sizeof(deco));

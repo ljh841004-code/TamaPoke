@@ -4413,7 +4413,7 @@ void renderCardCandy() {
     drawFitIn(XT(charm ? X_CU_SHINY_ON : LBL[i]), x + 4, y + 14, w - 8, fg, 2);
     if (!charm) {
       char c[24];
-      snprintf(c, sizeof(c), XT(X_CANDY_COST_FMT), (unsigned)CANDY_COST[i]);
+      snprintf(c, sizeof(c), XT(X_CANDY_COST_FMT), (unsigned)pet.candyCost((uint8_t)i));
       drawFitIn(c, x, y + 46, w, ok ? C565(0xff, 0xe8, 0xf0) : 0x8410, 1);
     }
   }
@@ -4738,6 +4738,38 @@ void drawThumbC(const uint8_t *b, int cx, int cy, int s, bool sil) {
   int ox = cx - (x0 + x1 + 1) * s / 2, oy = cy - (y0 + y1 + 1) * s / 2;
   // drawThumb pone el marco en x + (GAL_CELL - w*s)/2: se le pasa la esquina que deja el origen en (ox, oy)
   drawThumb(b, ox - (GAL_CELL - w * s) / 2, oy - (GAL_CELL - h * s) / 2, s, sil);
+}
+
+// ko12.9.23: la miniatura lo mas grande que quepa en maxW x maxH (en cuartos de pixel, hasta x maxS4/4),
+// centrada en (cx, cy). Con thumbs2.bin (ya recortadas al bicho) todas salen de un tamano parecido
+void drawThumbFit(const uint8_t *b, int cx, int cy, int maxW, int maxH, int maxS4, bool sil) {
+  uint8_t w = b[0], h = b[1], n = b[2];
+  if (!w || !h) return;
+  const uint8_t *d = b + 3 + n * 2;
+  int x0 = w, x1 = -1, y0 = h, y1 = -1;  // lo visible (thumbs.bin viejo trae marco vacio)
+  for (int yy = 0; yy < h; yy++)
+    for (int xx = 0; xx < w; xx++)
+      if (d[yy * w + xx] != 0xFF) {
+        if (xx < x0) x0 = xx;
+        if (xx > x1) x1 = xx;
+        if (yy < y0) y0 = yy;
+        if (yy > y1) y1 = yy;
+      }
+  if (x1 < 0) { x0 = y0 = 0; x1 = w - 1; y1 = h - 1; }
+  int vw = x1 - x0 + 1, vh = y1 - y0 + 1;
+  int s4 = maxW * 4 / vw;
+  if (maxH * 4 / vh < s4) s4 = maxH * 4 / vh;
+  if (s4 > maxS4) s4 = maxS4;
+  if (s4 < 1) s4 = 1;
+  static uint16_t tp[256];
+  for (int i = 0; i < n; i++) tp[i] = (uint16_t)(b[3 + i * 2] | (b[4 + i * 2] << 8));
+  int ox = cx - (x0 + x1 + 1) * s4 / 8, oy = cy - (y0 + y1 + 1) * s4 / 8;
+  smoothBlitQ(d, w, h, tp, ox, oy, s4, sil);
+}
+void drawThumbFitAt(int16_t dex, int cx, int cy, int maxW, int maxH, int maxS4, bool sil) {
+  const uint8_t *b = thumbs.get(dex);
+  if (b) drawThumbFit(b, cx, cy, maxW, maxH, maxS4, sil);
+  else gfx->fillCircle(cx, cy, maxH / 3, sil ? INK_K : DEX_TBL[dex].accent);
 }
 
 // ko12.1.1: caja de lo visible (sin el fondo 0xFF) de una miniatura dibujada en (x, y): [bx0,bx1) x [by0,by1)
@@ -5073,10 +5105,10 @@ void renderGallery() {
         uint8_t rar = DEX_TBL[dex].rarity;
         int ccx = x + GAL_CELL / 2, ccy = y + GAL_CELL / 2;  // ko12.9.8: todos centrados en su casilla
         if ((rar == R_RARO || rar == R_LEGENDARIO) && dexDiscovered(dex)) dexRareGlow(ccx, ccy, rar == R_LEGENDARIO);  // ko12.9.6
-        drawThumbC(t, ccx, ccy, 2, !dexDiscovered(dex));
+        drawThumbFit(t, ccx, ccy, 62, 62, 12, !dexDiscovered(dex));  // ko12.9.23: lo mas grande que quepa
         if (dexLog.caughtCount(dex)) {  // ko11.31: capturado alguna vez: circulo
-          gfx->drawCircle(ccx, ccy, 28, C565(0xe0, 0x40, 0x38));
-          gfx->drawCircle(ccx, ccy, 27, C565(0xe0, 0x40, 0x38));
+          gfx->drawCircle(ccx, ccy, 36, C565(0xe0, 0x40, 0x38));
+          gfx->drawCircle(ccx, ccy, 35, C565(0xe0, 0x40, 0x38));
         }
         if (pet.isShinyRegistered(dex)) {
           gfx->setTextColor(UI_BAR_WARN);

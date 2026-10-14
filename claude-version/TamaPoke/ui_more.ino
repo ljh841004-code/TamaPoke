@@ -420,7 +420,7 @@ void renderBoxDetail() {
     int ph = (int)((t / 12) % 60);
     gfx->drawCircle(CX, 136, 48 + ph / 2, uiLerp(gold, UI_BG_DAY, 8 + ph / 8, 16));
   }
-  drawThumbAt(m.dex, CX, 136, 3, false);
+  drawThumbFitAt(m.dex, CX, 136, 130, 120, 16, false);  // ko12.9.23: grande
   if (perfect) {
     uint32_t t = millis();
     for (int k = 0; k < 6; k++) {
@@ -536,7 +536,7 @@ void renderBox() {
     bool perfect = m.flags & BOXF_PERFECT;  // ko11.21
     if (perfect) rowBg = C565(0xff, 0xf2, 0xc4);
     uiButton(73, y, 320, BOX_ROW_H, 10, rowBg, UI_INK);
-    drawThumbAt(m.dex, 104, y + BOX_ROW_H / 2, 1, false);
+    drawThumbFitAt(m.dex, 104, y + BOX_ROW_H / 2, 56, BOX_ROW_H - 4, 8, false);  // ko12.9.23: llena la fila
     if (same > 1) {
       char xn[8];
       snprintf(xn, sizeof(xn), XT(X_DUP_COUNT_FMT), same);

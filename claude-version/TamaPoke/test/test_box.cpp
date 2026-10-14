@@ -967,6 +967,34 @@ TEST(candy, por_familia_y_se_guardan) {
   CHECK_EQ(Pet::dupCandy(true, 35), (uint16_t)6);
 }
 
+// ko12.9.23: cada uso del dia cuesta la base otra vez; con la fecha nueva vuelve a la base (y se guarda)
+TEST(candy, el_coste_sube_con_cada_uso_del_dia) {
+  Pet p;
+  freshPet(p, 7);
+  p.setClock(1790000000UL);  // un dia cualquiera (hora local)
+  p.addCandy(7, 200);
+  CHECK_EQ(p.candyCost(CU_GAUGE), (uint16_t)1);
+  uint16_t c0 = p.candyOf(7);
+  p.joy = 0;
+  CHECK(p.candyUse(CU_GAUGE)); CHECK_EQ(p.candyOf(7), (uint16_t)(c0 - 1));
+  CHECK_EQ(p.candyCost(CU_GAUGE), (uint16_t)2);
+  CHECK(p.candyUse(CU_GAUGE)); CHECK_EQ(p.candyOf(7), (uint16_t)(c0 - 3));
+  CHECK_EQ(p.candyCost(CU_GAUGE), (uint16_t)3);
+  CHECK_EQ(p.candyCost(CU_EXP), (uint16_t)CANDY_COST[CU_EXP]);  // cada opcion cuenta aparte
+  CHECK(p.candyUse(CU_EXP));
+  CHECK_EQ(p.candyCost(CU_EXP), (uint16_t)(CANDY_COST[CU_EXP] * 2));
+  p.saveNow();
+  Pet q;
+  q.begin();
+  q.setClock(1790000000UL);
+  CHECK_EQ(q.candyCost(CU_GAUGE), (uint16_t)3);  // sobrevive al reinicio
+  // dia siguiente por la fecha (no 24 h): a la base
+  uint32_t mid = (1790000000UL / 86400 + 1) * 86400;
+  q.setClock(mid + 60);
+  CHECK_EQ(q.candyCost(CU_GAUGE), (uint16_t)1);
+  CHECK_EQ(q.candyCost(CU_EXP), (uint16_t)CANDY_COST[CU_EXP]);
+}
+
 TEST(candy, usos_gastan_y_aplican) {
   Pet p;
   freshPet(p, 7);

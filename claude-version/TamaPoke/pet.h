@@ -99,6 +99,8 @@ struct __attribute__((packed)) TradePet {
 // ko10.4: usos de los caramelos (de la familia del Pokemon que crias)
 enum : uint8_t { CU_EXP = 0, CU_GAUGE, CU_GENES, CU_SHINY, CU_EVO, CU_COUNT };
 static const uint8_t CANDY_COST[CU_COUNT] = { 3, 1, 5, 10, 5 };
+// ko12.9.23: cada uso del mismo dia cuesta la base otra vez (3, 6, 9...); el dia (fecha local) nuevo vuelve a la base
+#define CANDY_DAY_MAX 20  // tope del contador (el coste no sigue subiendo mas alla)
 // ko11.16: orbes de tipo. uint16: bit15 valido, bit14 defensa (si no, ataque),
 // bits 8-11 tipo (PT_*), bits 0-7 porcentaje. 0 = nada
 #define ORB_BAG_MAX 32        // uno por tipo y clase como mucho (16 x 2)
@@ -351,6 +353,10 @@ public:
   static uint16_t dupCandy(bool shiny, uint16_t lvl);  // por cambiar un repetido
   bool candyCanUse(uint8_t use) const;          // CU_*: hay caramelos y tiene efecto
   bool candyUse(uint8_t use);                   // gasta y aplica (false si no se puede)
+  uint16_t candyCost(uint8_t use) const;        // ko12.9.23: base x (usos de hoy + 1)
+  uint32_t cuDay = 0;                           // dia de los contadores (epoch local / 86400)
+  uint8_t cuUsed[CU_COUNT] = {};                // usos de hoy de cada opcion
+  uint32_t candyDayKey() const;
   bool playResult(uint8_t score);  // true = record (animo + energia); si no, un poco de energia
   uint8_t trainStrength(uint16_t hits, uint16_t bags);  // saco (entrena FUE); ko10.7: record = sacos rotos
   uint8_t trainDefense(uint16_t blocked);  // fork KO: pokeballs que caen (entrena DEF)
