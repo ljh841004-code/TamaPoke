@@ -536,7 +536,7 @@ void renderBox() {
     bool perfect = m.flags & BOXF_PERFECT;  // ko11.21
     if (perfect) rowBg = C565(0xff, 0xf2, 0xc4);
     uiButton(73, y, 320, BOX_ROW_H, 10, rowBg, UI_INK);
-    drawThumbFitAt(m.dex, 104, y + BOX_ROW_H / 2, 56, BOX_ROW_H - 4, 8, false);  // ko12.9.23: llena la fila
+    drawThumbFitAt(m.dex, 104, y + BOX_ROW_H / 2, 60, BOX_ROW_H + 8, 8, false);  // ko12.9.23: x2 si cabe (puede pisar 4 px el borde)
     if (same > 1) {
       char xn[8];
       snprintf(xn, sizeof(xn), XT(X_DUP_COUNT_FMT), same);

@@ -4760,6 +4760,11 @@ void drawThumbFit(const uint8_t *b, int cx, int cy, int maxW, int maxH, int maxS
   int s4 = maxW * 4 / vw;
   if (maxH * 4 / vh < s4) s4 = maxH * 4 / vh;
   if (s4 > maxS4) s4 = maxS4;
+  // ko12.9.23: solo x1, x2 o x4 (x2 y x4 pasan por el suavizado EPX): con x1,5 o x2,75 los pixeles salian
+  // de distinto ancho y la cara se deformaba (Pikachu "poco mono"). Por debajo de x1 (los grandes) se encoge
+  if (s4 >= 16) s4 = 16;
+  else if (s4 >= 8) s4 = 8;
+  else if (s4 >= 4) s4 = 4;
   if (s4 < 1) s4 = 1;
   static uint16_t tp[256];
   for (int i = 0; i < n; i++) tp[i] = (uint16_t)(b[3 + i * 2] | (b[4 + i * 2] << 8));
@@ -5128,7 +5133,7 @@ void renderGallery() {
         uint8_t rar = DEX_TBL[dex].rarity;
         int ccx = x + GAL_CELL / 2, ccy = y + GAL_CELL / 2;  // ko12.9.8: todos centrados en su casilla
         if ((rar == R_RARO || rar == R_LEGENDARIO) && dexDiscovered(dex)) dexRareGlow(ccx, ccy, rar == R_LEGENDARIO);  // ko12.9.6
-        drawThumbFit(t, ccx, ccy, 62, 62, 12, !dexDiscovered(dex));  // ko12.9.23: lo mas grande que quepa
+        drawThumbFit(t, ccx, ccy, 66, 66, 8, !dexDiscovered(dex));  // ko12.9.23: lo mas grande que quepa (x1 / x2)
         if (dexLog.caughtCount(dex)) {  // ko11.31: capturado alguna vez: circulo
           gfx->drawCircle(ccx, ccy, 36, C565(0xe0, 0x40, 0x38));
           gfx->drawCircle(ccx, ccy, 35, C565(0xe0, 0x40, 0x38));
