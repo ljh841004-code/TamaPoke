@@ -2902,6 +2902,16 @@ extern uint32_t flushWaitUs;  // ko12.1 (TamaPoke.ino): espera al envio anterior
 uint32_t bLegendT = 0;
 static bool legendIntroOn(uint32_t now) { return bLegendT && now - bLegendT < LEG_INTRO_MS; }
 static void legendIntroEnd() { bLegendT = 0; bPhaseT = millis(); }
+// ko12.9.27: en TODOS los combates (salvaje, el siguiente del entrenador...) y no solo al empezar uno de entrenador:
+// el 칠색조 salvaje salia sin presentacion
+void vibPulse(uint16_t ms, uint8_t n, uint16_t gap);
+static void legendIntroStart() {
+  bLegendT = 0;
+  if (bFoe.dex >= 1 && bFoe.dex <= DEX_COUNT && DEX_TBL[bFoe.dex].rarity == R_LEGENDARIO) {  // ko12.9.22: 전설 등장
+    bLegendT = millis() ? millis() : 1;
+    vibPulse(260, 3, 140);
+  }
+}
 static void legTextOut(const char *s, int y, uint16_t col, uint8_t sz) {
   for (int dx = -2; dx <= 2; dx += 2)
     for (int dy = -2; dy <= 2; dy += 2)
@@ -3241,11 +3251,7 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
   bPhase = BP_INTRO; bPotAsk = false;
   bPhaseT = millis();
   xScreen = XS_WILD;
-  bLegendT = 0;
-  if (DEX_TBL[bFoe.dex].rarity == R_LEGENDARIO) {  // ko12.9.22: 전설 등장
-    bLegendT = millis() ? millis() : 1;
-    vibPulse(260, 3, 140);
-  }
+  legendIntroStart();
   sfxPlay(SFX_MEDAL);
   audioSetBattleMusic(false, true);
   audioCry(bFoe.dex);
@@ -3282,6 +3288,7 @@ static bool nextTrainerMon() {
   if (healed) snprintf(bvL2, sizeof(bvL2), XT(X_DAILY_HEAL_FMT), (unsigned)healed);
   bPhase = BP_INTRO; bPotAsk = false;
   bPhaseT = millis();
+  legendIntroStart();  // ko12.9.27: el siguiente del entrenador tambien
   audioCry(bFoe.dex);
   return true;
 }
@@ -3368,6 +3375,7 @@ void startWildIn(uint8_t region) {
   bPhase = BP_INTRO; bPotAsk = false;
   bPhaseT = millis();
   xScreen = XS_WILD;
+  legendIntroStart();  // ko12.9.27: antes solo en combates de entrenador
   sfxPlay(bGroup == WG_RARE ? SFX_EVOLVE : SFX_MEDAL);
   audioSetBattleMusic(false, true);  // batalla nueva: la cancion empieza de cero
   audioCry(bFoe.dex);
