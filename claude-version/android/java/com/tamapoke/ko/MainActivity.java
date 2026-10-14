@@ -91,9 +91,18 @@ public class MainActivity extends NativeActivity {
       uris.add(data.getData());
     }
     // trozos por nombre: mons.pak.001, mons.pak.002 ...
-    final java.util.HashMap<Uri, String> names = new java.util.HashMap<Uri, String>();
-    for (Uri u : uris) names.put(u, nameOf(u));
-    java.util.Collections.sort(uris, new ByName(names));
+    // (orden a mano: el d8 de build-tools 34 falla con clases genericas como un Comparator<Uri>)
+    int n = uris.size();
+    Uri[] us = new Uri[n];
+    String[] ns = new String[n];
+    for (int i = 0; i < n; i++) { us[i] = uris.get(i); ns[i] = nameOf(us[i]); }
+    for (int i = 1; i < n; i++)
+      for (int j = i; j > 0 && ns[j - 1].compareTo(ns[j]) > 0; j--) {
+        String t = ns[j]; ns[j] = ns[j - 1]; ns[j - 1] = t;
+        Uri v = us[j]; us[j] = us[j - 1]; us[j - 1] = v;
+      }
+    uris.clear();
+    for (int i = 0; i < n; i++) uris.add(us[i]);
     int[] fds = new int[uris.size()];
     try {
       for (int i = 0; i < uris.size(); i++) {
@@ -104,12 +113,6 @@ public class MainActivity extends NativeActivity {
     } catch (Exception e) {
       Toast.makeText(this, "파일을 열 수 없어요", Toast.LENGTH_LONG).show();
     }
-  }
-
-  static class ByName implements java.util.Comparator<Uri> {
-    final java.util.HashMap<Uri, String> n;
-    ByName(java.util.HashMap<Uri, String> n) { this.n = n; }
-    @Override public int compare(Uri a, Uri b) { return n.get(a).compareTo(n.get(b)); }
   }
 
   String nameOf(Uri u) {

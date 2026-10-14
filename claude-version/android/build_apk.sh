@@ -40,7 +40,7 @@ for f in "$HERE/jni/host.cpp" "$HERE/jni/audio_host.cpp" "$HERE/jni/host_stubs.c
 done
 "$CC" -O2 -fPIC -w -c "$R/build/fonts.c" -o "$B/obj/fonts.o" &
 "$CC" -O2 -fPIC -w -c "$NDK/sources/android/native_app_glue/android_native_app_glue.c" -o "$B/obj/glue.o" &
-wait
+for j in $(jobs -p); do wait "$j"; done
 "$CXX" -shared -o "$B/apk/lib/arm64-v8a/libtamapoke.so" "$B"/obj/*.o -static-libstdc++ -landroid -llog -laaudio -lm \
   -Wl,--gc-sections -Wl,-u,ANativeActivity_onCreate -Wl,--build-id=sha1 -s
 
