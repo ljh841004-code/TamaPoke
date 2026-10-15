@@ -931,25 +931,18 @@ void Pet::trainBonus(bool scored, bool record) {
   }
 }
 
-// ---- ko11.31: movimientos
-uint8_t Pet::moveMain() const {
-  uint8_t ty = DEX_TBL[speciesId].ptype;
-  for (uint8_t i = 0; i < 4; i++) {
-    uint8_t t;
-    if (moveDecode(mv[i], &t, nullptr, nullptr) && t == ty) return mv[i];
-  }
-  return moveIdTyped(ty, moveTier(speciesId), 0);
-}
-uint8_t Pet::moveVar() const {
-  uint8_t v = 0;
-  moveDecode(moveMain(), nullptr, nullptr, &v);
-  return v;
-}
+// ---- ko11.31: movimientos. ko12.10: los originales de Cristal
+uint8_t Pet::moveMain() const { return movesMainOf(speciesId, mv); }
+uint8_t Pet::moveVar() const { return (uint8_t)(moveMain() % 3); }  // solo para variar el dibujo
 void Pet::movesNew() {
+  memset(mvKnown, 0, sizeof(mvKnown));  // ko12.10: otro Pokemon: lo que sabe empieza de nuevo
+  moveFbLv = 0;
   movesDefault(speciesId, level(), mv);
   ppRefill();
-  moveLv = (uint8_t)(level() / 5 * 5);
+  for (uint8_t i = 0; i < 4; i++) moveKnowAdd(mv[i]);
+  moveLv = (uint8_t)(level() > 255 ? 255 : level());
   moveOffer = 0;
+  memset(moveQ, 0, sizeof(moveQ));
 }
 void Pet::ppRefill() {
   for (uint8_t i = 0; i < 4; i++) pp[i] = mv[i] ? movePP(mv[i]) : 0;
@@ -959,18 +952,37 @@ bool Pet::ppFull() const {
   return true;
 }
 uint8_t Pet::moveRandomNew() const {
-  uint8_t pool[200];
+  uint8_t pool[MOVE_N];
   uint8_t n = movePool(speciesId, pool, sizeof(pool)), k = 0;
-  for (uint8_t i = 0; i < n; i++) if (!movesHas(mv, pool[i])) pool[k++] = pool[i];
+  for (uint8_t i = 0; i < n; i++) if (!movesHas(mv, pool[i]) && !moveKnown(pool[i])) pool[k++] = pool[i];
   return k ? pool[random(k)] : 0;
+}
+void Pet::moveQueuePop() {
+  while (!moveOffer && moveQ[0]) {
+    uint8_t id = moveQ[0];
+    memmove(moveQ, moveQ + 1, sizeof(moveQ) - 1);
+    moveQ[sizeof(moveQ) - 1] = 0;
+    if (!movesHas(mv, id)) moveOfferNew(id);
+  }
 }
 void Pet::moveOfferNew(uint8_t id) {
   if (!id || movesHas(mv, id)) return;
+  if (moveOffer) {  // ko12.10: ya hay una esperando: a la cola
+    if (moveOffer == id) return;
+    for (uint8_t i = 0; i < sizeof(moveQ); i++) {
+      if (moveQ[i] == id) return;
+      if (!moveQ[i]) { moveQ[i] = id; pendingSave = true; return; }
+    }
+    moveKnowAdd(id);  // cola llena: lo sabe igual (se puede poner luego en la ficha)
+    pendingSave = true;
+    return;
+  }
   for (uint8_t i = 0; i < 4; i++)
     if (!mv[i]) {
       mv[i] = id;
       pp[i] = movePP(id);
       moveLearned = id;
+      moveKnowAdd(id);
       pendingSave = true;
       return;
     }
@@ -982,9 +994,94 @@ void Pet::moveAccept(uint8_t slot) {
     mv[slot] = moveOffer;
     pp[slot] = movePP(moveOffer);
     moveLearned = moveOffer;
+    moveKnowAdd(moveOffer);
   }
   moveOffer = 0;
   pendingSave = true;
+  moveQueuePop();
+}
+// ko12.10: a cada nivel, lo que aprende su especie en Cristal. Desde Lv75, si lleva 10 niveles sin nada
+// nuevo de su lista, le ofrecen uno de los que puede aprender (MT / tutor / preevolucion) que aun no sabe
+void Pet::moveLevelUp(uint16_t from, uint16_t to) {
+  if (isEgg()) return;
+  for (uint16_t L = from + 1; L <= to; L++) {
+    for (uint8_t k = 0; k < 4; k++) {
+      uint8_t id = moveAtLevel(speciesId, L, k);
+      if (!id) break;
+      if (!movesHas(mv, id)) moveOfferNew(id);
+    }
+    if (L >= MOVE_FALLBACK_LV) {
+      uint8_t lv[64], ids[64];
+      uint8_t n = moveLearnset(speciesId, lv, ids, sizeof(lv));
+      uint16_t last = 0;
+      for (uint8_t i = 0; i < n; i++) if (lv[i] <= L && lv[i] > last) last = lv[i];
+      if (moveFbLv > last) last = moveFbLv;
+      if (L - last >= MOVE_FALLBACK_GAP) {
+        // el mas fuerte de su tipo que aun no sabe; si no hay, cualquiera que no sepa
+        uint8_t pool[MOVE_N], best = 0;
+        uint8_t np = movePool(speciesId, pool, sizeof(pool));
+        uint8_t ty = DEX_TBL[speciesId].ptype, t2 = dexType2(speciesId);
+        for (uint8_t i = 0; i < np; i++) {
+          uint8_t id = pool[i];
+          if (moveKnown(id) || movesHas(mv, id)) continue;
+          const MoveDef &m = moveDef(id);
+          int sc = (m.type == ty || m.type == t2 ? 300 : 0) + m.pow + (moveIsStatus(id) ? 40 : 0);
+          if (!best || sc > ((moveDef(best).type == ty || moveDef(best).type == t2 ? 300 : 0) + moveDef(best).pow +
+                             (moveIsStatus(best) ? 40 : 0)))
+            best = id;
+        }
+        moveFbLv = (uint8_t)(L > 255 ? 255 : L);
+        if (best) moveOfferNew(best);
+      }
+    }
+  }
+  moveLv = (uint8_t)(to > 255 ? 255 : to);
+  pendingSave = true;
+}
+bool Pet::moveEquip(uint8_t slot, uint8_t id) {
+  if (slot >= 4 || !moveValid(id) || !moveKnown(id)) return false;
+  for (uint8_t i = 0; i < 4; i++)
+    if (mv[i] == id) {  // ya lo tiene: se cambian de sitio
+      uint8_t t = mv[slot], q = pp[slot];
+      mv[slot] = mv[i]; pp[slot] = pp[i];
+      mv[i] = t; pp[i] = q;
+      pendingSave = true;
+      return true;
+    }
+  if (mv[slot]) moveKnowAdd(mv[slot]);
+  mv[slot] = id;
+  pp[slot] = movePP(id);  // como en el centro: con los PP llenos al cambiarlo
+  pendingSave = true;
+  return true;
+}
+bool Pet::moveCanRemind(uint8_t id) const {
+  if (isEgg() || !id || moveKnown(id)) return false;
+  uint8_t lv[64], ids[64];
+  uint8_t n = moveLearnset(speciesId, lv, ids, sizeof(lv));
+  for (uint8_t i = 0; i < n; i++) if (ids[i] == id && lv[i] <= level()) return true;
+  return false;
+}
+bool Pet::moveRemind(uint8_t id) {
+  if (!moveCanRemind(id) || candyOf(speciesId) < MOVE_REMIND_CANDY) return false;
+  candy[DEX_FAM[speciesId]] -= MOVE_REMIND_CANDY;
+  moveKnowAdd(id);
+  pendingSave = true;
+  return true;
+}
+bool Pet::tmTeach(uint8_t tm) {
+  if (isEgg() || tm >= TM_COUNT || !tmBag[tm]) return false;
+  uint8_t id = tmMove(tm);
+  if (!tmCompatible(speciesId, tm) || moveKnown(id)) return false;
+  if (tm < TM_HM_FIRST) tmBag[tm]--;  // las MO no se gastan
+  moveKnowAdd(id);
+  moveOfferNew(id);
+  pendingSave = true;
+  return true;
+}
+uint8_t Pet::tmCount() const {
+  uint16_t n = 0;
+  for (uint8_t i = 0; i < TM_COUNT; i++) n += tmBag[i] ? 1 : 0;
+  return (uint8_t)n;
 }
 
 uint16_t Pet::addExp(uint32_t x) {
@@ -994,13 +1091,9 @@ uint16_t Pet::addExp(uint32_t x) {
   exp = (exp >= top || x >= top - exp) ? top : exp + x;
   uint16_t up = level() - before;
   if (up) {
-    // ko11.31: cada 5 niveles le ofrecen uno que aun no sabe (de los que puede aprender)
+    // ko12.10: lo que aprende a esos niveles (como en Cristal)
     uint16_t L = level();
-    if (L / 5 > moveLv / 5 && !moveOffer) {
-      moveLv = (uint8_t)(L / 5 * 5);
-      uint8_t id = moveRandomNew();
-      if (id) moveOfferNew(id);
-    }
+    if (L > moveLv) moveLevelUp(moveLv, L);
     if (!sleeping) sfxPlay(SFX_LEVEL);
     checkMedals();
     pendingSave = true;
@@ -1040,13 +1133,11 @@ void Pet::evolve() {
     life.evoDex[k] = speciesId;
     life.evoT[k] = lastSeenEpoch;
   }
-  // ko11.31: con la forma nueva, uno de los 3 ataques de su tipo de la nueva fase
-  {
-    uint8_t ty = DEX_TBL[speciesId].ptype, tr = moveTier(speciesId), v0 = (uint8_t)random(3);
-    for (uint8_t k = 0; k < 3; k++) {
-      uint8_t id = moveIdTyped(ty, tr, (uint8_t)((v0 + k) % 3));
-      if (!movesHas(mv, id)) { moveOfferNew(id); break; }
-    }
+  // ko12.10: con la forma nueva, lo que esa especie aprende a su nivel (como en Cristal)
+  for (uint8_t k = 0; k < 4; k++) {
+    uint8_t id = moveAtLevel(speciesId, level(), k);
+    if (!id) break;
+    if (!movesHas(mv, id)) moveOfferNew(id);
   }
   // ko11.16: si cambia de tipo, el orbe ya no le sirve: 3 caramelos (o, a veces, 1 raro)
   orbEvoNote = 0;
@@ -1507,10 +1598,14 @@ void Pet::save() {
     uint8_t b[8];
     memcpy(b, mv, 4);
     memcpy(b + 4, pp, 4);
-    prefs.putBytes("mv4", b, 8);
+    prefs.putBytes("mv5", b, 8);  // ko12.10: ids originales
   }
   prefs.putUChar("mvl", moveLv);
   prefs.putUChar("mvo2", moveOffer);
+  prefs.putBytes("mvkn", mvKnown, sizeof(mvKnown));
+  prefs.putBytes("mvq", moveQ, sizeof(moveQ));
+  prefs.putUChar("mvfb", moveFbLv);
+  prefs.putBytes("tmb", tmBag, sizeof(tmBag));
   prefs.putUChar("orbn", orbN);
   if (orbN) prefs.putBytes("orbs", orbBag, orbN * sizeof(uint16_t));
   else prefs.remove("orbs");
@@ -1660,33 +1755,59 @@ void Pet::load(bool *migrated) {
     eggTarget = (oldT >= 0 && oldT < 9) ? OLD2DEX[oldT] : 4;
   }
   // ko11.31: partidas de antes: sigue con el ataque de siempre (0) y sin oferta hasta el proximo multiplo de 5
-  moveLv = prefs.isKey("mvl") ? prefs.getUChar("mvl", 0) : (uint8_t)(level() / 5 * 5);
-  {  // ko11.31: los 4 movimientos. Guardado de antes: los de su especie, con su ataque de tipo de siempre
+  moveLv = prefs.isKey("mvl") ? prefs.getUChar("mvl", 0) : (uint8_t)(level() > 255 ? 255 : level());
+  memset(mvKnown, 0, sizeof(mvKnown));
+  prefs.getBytes("mvkn", mvKnown, sizeof(mvKnown));
+  memset(moveQ, 0, sizeof(moveQ));
+  prefs.getBytes("mvq", moveQ, sizeof(moveQ));
+  moveFbLv = prefs.getUChar("mvfb", 0);
+  memset(tmBag, 0, sizeof(tmBag));
+  prefs.getBytes("tmb", tmBag, sizeof(tmBag));
+  {  // ko12.10: los 4 movimientos (ids originales, "mv5"). Guardado de antes ("mv4", ids ko11.31): al original mas parecido
     uint8_t b[8] = { 0 };
-    if (!isEgg() && prefs.getBytes("mv4", b, 8) == 8) {
-      memcpy(mv, b, 4);
-      memcpy(pp, b + 4, 4);
+    bool fresh = false, old = false;
+    if (!isEgg() && prefs.getBytes("mv5", b, 8) == 8) fresh = true;
+    else if (!isEgg() && prefs.getBytes("mv4", b, 8) == 8) old = true;
+    if (fresh || old) {
       for (uint8_t i = 0; i < 4; i++) {
-        if (!moveValid(mv[i])) mv[i] = 0;
-        if (mv[i] && pp[i] > movePP(mv[i])) pp[i] = movePP(mv[i]);
-        if (!mv[i]) pp[i] = 0;
+        uint8_t id = b[i], p0 = b[4 + i];
+        if (old) {
+          uint8_t nid = moveMigrate(speciesId, id);
+          uint8_t full = movePP(nid);
+          // los PP en la misma proporcion que tenia (sobre los maximos de antes, ~x2 de la tabla)
+          p0 = nid ? (uint8_t)(p0 >= 10 ? full : (uint32_t)full * p0 / 10) : 0;
+          if (nid && movesHas(mv, nid)) nid = 0;
+          id = nid;
+        }
+        mv[i] = moveValid(id) ? id : 0;
+        pp[i] = mv[i] ? (p0 > movePP(mv[i]) ? movePP(mv[i]) : p0) : 0;
       }
-    } else {
-      uint8_t k = prefs.getUChar("mvk", 0);
+      if (old) {  // huecos: los de su lista a su nivel; y lo que sabia lo sabe
+        uint8_t def[4];
+        movesDefault(speciesId, level(), def);
+        for (uint8_t k = 0; k < 4; k++)
+          if (def[k] && !movesHas(mv, def[k]))
+            for (uint8_t i = 0; i < 4; i++) if (!mv[i]) { mv[i] = def[k]; pp[i] = movePP(def[k]); break; }
+        moveLv = (uint8_t)(level() > 255 ? 255 : level());
+        uint8_t lv[64], ids[64];
+        uint8_t n = moveLearnset(speciesId, lv, ids, sizeof(lv));
+        for (uint8_t i = 0; i < n; i++) if (lv[i] <= level()) moveKnowAdd(ids[i]);
+        prefs.remove("mv4");
+        prefs.remove("mvk");
+        prefs.remove("mvo");
+        pendingSave = true;
+      }
+      for (uint8_t i = 0; i < 4; i++) moveKnowAdd(mv[i]);
+    } else if (!isEgg()) {
       uint8_t keepLv = moveLv;
-      if (!isEgg()) {
-        movesNew();
-        uint8_t mine = moveIdTyped(DEX_TBL[speciesId].ptype, moveTier(speciesId), k > 2 ? 0 : k);
-        if (!movesHas(mv, mine)) { mv[0] = mine; pp[0] = movePP(mine); }
-        else for (uint8_t i = 1; i < 4; i++) if (mv[i] == mine) { mv[i] = mv[0]; uint8_t q = pp[i]; pp[i] = pp[0]; pp[0] = q; mv[0] = mine; }
-      }
+      movesNew();
       moveLv = keepLv;
-      prefs.remove("mvk");
-      prefs.remove("mvo");
     }
     if (!isEgg() && !moveCount(mv)) movesNew();
-    moveOffer = prefs.getUChar("mvo2", 0);
+    moveOffer = fresh ? prefs.getUChar("mvo2", 0) : (uint8_t)0;
     if (!moveValid(moveOffer) || movesHas(mv, moveOffer)) moveOffer = 0;
+    for (uint8_t i = 0; i < sizeof(moveQ); i++) if (!moveValid(moveQ[i])) moveQ[i] = 0;
+    if (!fresh) memset(moveQ, 0, sizeof(moveQ));
   }
   eggTaps = prefs.getUChar("crack", 0);
   careMistakes = prefs.getUChar("mist", 0);

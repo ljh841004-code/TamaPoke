@@ -5,9 +5,30 @@
 //   - 상태 카드 "기술" 쪽: 장착 4칸 + 배운 기술 목록(분류 탭, 쪽 넘기기)
 //   - 도감 "기술표": 레벨업 / 기술머신
 //   - 기술머신 가방
-// 데이터: moves2_data.h (tools/gen_moves2.py, PokeAPI 크리스탈)
+// 데이터: moves_data.h (tools/gen_moves.py, PokeAPI 크리스탈) -> battle.h 의 함수로
 // ======================================================================
-#include "moves2_data.h"
+// 2세대: 물리 / 특수는 속성으로 정해져요 (불꽃·물·풀·전기·얼음·에스퍼·드래곤·악 = 특수)
+enum : uint8_t { MV2_PHYS = 0, MV2_SPEC, MV2_STAT };
+struct Mv2Def { uint8_t type, cls, pow, acc, pp; };
+struct Mv2Tbl {
+  Mv2Def operator[](uint8_t id) const {
+    const MoveDef &m = moveDef(id);
+    Mv2Def d = { m.type, (uint8_t)(moveIsStatus(id) ? MV2_STAT : moveIsSpecial(id) ? MV2_SPEC : MV2_PHYS), m.pow,
+                 m.acc, movePP(id) };
+    return d;
+  }
+};
+struct Mv2Name { const char *operator[](uint8_t id) const { return moveNameId(id); } };
+struct Mv2Desc { const char *operator[](uint8_t id) const { return moveDescId(id); } };
+struct TmMoveT { uint8_t operator[](uint8_t tm) const { return tmMove(tm); } };
+struct TmNameT { const char *operator[](uint8_t tm) const { return tmLabel(tm, gLang == LANG_KO); } };
+static const Mv2Tbl MV2 = {};
+static const Mv2Name MV2_KO = {};
+static const Mv2Desc MV2_DESC = {};
+static const TmMoveT TM_MOVE = {};
+static const TmNameT TM_NAME = {};
+#define MV2_N MOVE_N
+#define TM_N TM_COUNT
 
 enum : uint8_t { MVK2_0 = 0, MVK2_SUPER, MVK2_WEAK, MVK2_NONE, MVK2_REST };
 
@@ -245,13 +266,8 @@ void renderMovesCardV2(const uint8_t eq[4], const uint8_t eqpp[4], const uint8_t
 }
 
 // ---------------------------------------------------------------- 도감 "기술표"
-uint8_t mv2Learnset(int16_t dex, uint8_t lv[], uint8_t mv[], uint8_t max) {
-  if (dex < 1 || dex > 251) return 0;
-  uint8_t n = 0;
-  for (uint16_t i = MV2_LS_OFF[dex - 1]; i < MV2_LS_OFF[dex] && n < max; i++, n++) { lv[n] = MV2_LS[i][0]; mv[n] = MV2_LS[i][1]; }
-  return n;
-}
-bool mv2TmCan(int16_t dex, uint8_t tm) { return dex >= 1 && dex <= 251 && tm < TM_N && (TM_BITS[dex][tm / 8] >> (tm % 8)) & 1; }
+uint8_t mv2Learnset(int16_t dex, uint8_t lv[], uint8_t mv[], uint8_t max) { return moveLearnset(dex, lv, mv, max); }
+bool mv2TmCan(int16_t dex, uint8_t tm) { return tmCompatible(dex, tm); }
 
 #define DL_ROWS 6
 void renderDexMovesV2(int16_t dex, uint8_t tab, uint8_t page, const uint8_t *known, uint8_t nk, uint8_t petLv) {

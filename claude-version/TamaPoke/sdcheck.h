@@ -6,12 +6,12 @@
 #include <stdint.h>
 
 #define SDC_DEX 251
-#define SDC_FX_N 171   // ataques 1..171 (fTTSV.bin los de tipo, mNNN.bin el resto)
+#define SDC_FX_N 251   // ko12.10: los 251 movimientos originales (fx/wNNN.bin)
 #define SDC_MUSIC_N 14
 enum : uint8_t { SDC_SPR = 0, SDC_SPRS, SDC_BAT, SDC_BATS, SDC_CRY, SDC_FX, SDC_THUMB, SDC_STORY, SDC_MUSIC, SDC_CATS };
 
 struct SdInv {
-  uint8_t bits[SDC_CATS][32] = {};  // un bit por fichero esperado (dex 1..251 -> bit 0..250; fx id 1..171)
+  uint8_t bits[SDC_CATS][32] = {};  // un bit por fichero esperado (dex 1..251 -> bit 0..250; fx id 1..251)
   void add(const char *rel);
   uint16_t have(uint8_t cat) const;
   static uint16_t need(uint8_t cat);

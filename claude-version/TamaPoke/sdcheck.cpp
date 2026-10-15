@@ -38,13 +38,8 @@ void SdInv::add(const char *rel) {
     if (!strcmp(rel, SDC_MUSIC_FILES[i])) { setBit(bits[SDC_MUSIC], i); return; }
   // efectos: en mons/fx/ o sueltos en mons/ (el instalador web)
   const char *f = strncmp(rel, "fx/", 3) ? rel : rel + 3;
-  if (strlen(f) == 9 && !strcmp(f + 5, ".bin") && f[0] == 'f' && f[1] >= '0' && f[1] <= '9' && f[2] >= '0' &&
-      f[2] <= '9' && f[3] >= '0' && f[3] <= '2' && f[4] >= '0' && f[4] <= '2') {
-    unsigned t = (unsigned)(f[1] - '0') * 10 + (unsigned)(f[2] - '0');
-    if (t < 16) setBit(bits[SDC_FX], t * 9 + (unsigned)(f[3] - '0') * 3 + (unsigned)(f[4] - '0'));  // id - 1
-  } else if ((d = num3(f, "m", ".bin")) && d >= 145 && d <= SDC_FX_N) {
-    setBit(bits[SDC_FX], d - 1);
-  }
+  // ko12.10: un fichero por movimiento original: wNNN.bin (id 1..251; los fTTSV/mNNN de antes ya no cuentan)
+  if ((d = num3(f, "w", ".bin")) && d >= 1 && d <= SDC_FX_N) setBit(bits[SDC_FX], d - 1);
 }
 
 uint16_t SdInv::need(uint8_t cat) {
@@ -78,8 +73,7 @@ bool SdInv::firstMissing(uint8_t cat, char *out, size_t n) const {
       case SDC_STORY: snprintf(out, n, "story.bin"); break;
       case SDC_MUSIC: snprintf(out, n, "%s", SDC_MUSIC_FILES[i]); break;
       case SDC_FX:
-        if (d <= 144) snprintf(out, n, "fx/f%02u%u%u.bin", i / 9, (i % 9) / 3, i % 3);
-        else snprintf(out, n, "fx/m%03u.bin", d);
+        snprintf(out, n, "fx/w%03u.bin", d);
         break;
     }
     return true;

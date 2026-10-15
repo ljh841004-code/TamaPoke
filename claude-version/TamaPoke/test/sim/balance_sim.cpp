@@ -92,3 +92,4 @@ int main(int argc, char **argv) {
   }
   return 0;
 }
+const char *typeName(uint8_t) { return "?"; }  // ko12.10: dexTypesStr (aqui no se escribe)

@@ -68,6 +68,8 @@ Battler makeBattler(int16_t dex, uint16_t lvl, uint16_t atk, uint16_t def, uint1
   b.guard = false;
   movesDefault(dex, b.lvl, b.mv);  // ko11.31: los suyos (el que crias los cambia despues)
   movesFillPP(b);
+  // ko12.10: poder oculto de la especie (el que crias: de sus genes, en la UI). Nunca normal
+  b.hpType = (uint8_t)(1 + ((uint32_t)dex * 2654435761u >> 24) % (PT_BATTLE_N - 1));
   return b;
 }
 
@@ -563,9 +565,11 @@ void dailyTeam(uint32_t day, uint16_t petLvl, Battler out[DAILY_TEAM]) {
 }
 
 // ---- ko10.4: el tiempo afecta a las batallas (salvajes, gimnasios, reto del dia)
-static uint8_t sBattleWx = WX_CLEAR;
-void battleSetWeather(uint8_t wx) { sBattleWx = wx; }
-uint8_t battleWeather() { return sBattleWx; }
+// ---- ko10.4: tiempo de la batalla. ko12.10: danza lluvia / dia soleado / tormenta arena lo cambian 5 turnos
+static uint8_t sBattleWx = WX_CLEAR;   // el de verdad (reloj / internet)
+static uint8_t sWxOv = WX_CLEAR, sWxT = 0;  // el de los movimientos y los turnos que le quedan
+void battleSetWeather(uint8_t wx) { sBattleWx = wx; sWxT = 0; }
+uint8_t battleWeather() { return sWxT ? sWxOv : sBattleWx; }
 
 // multiplicador del tiempo en medios: 3 = x1,5, 1 = x0,5, 2 = normal
 uint8_t weatherMul(uint8_t wx, uint8_t moveType) {
@@ -575,48 +579,57 @@ uint8_t weatherMul(uint8_t wx, uint8_t moveType) {
   return 2;
 }
 
-// ---- ko11.31: movimientos
-static const MoveDef STRUGGLE_DEF = { PT_NORMAL, 50, 100, 1, 0, MF_RECOIL, 0, 0, 0, 0, 0, 0, 0, 25 };
-
-const MoveDef &moveDef(uint8_t id) {
-  if (id == MOVE_STRUGGLE) return STRUGGLE_DEF;
-  return MOVE_TBL[id < MOVE_N ? id : 0];
+// ---- ko11.31: movimientos. ko12.10: los 251 originales (moves_data.h)
+const MoveDef &moveDef(uint8_t id) { return MOVE_TBL[id < MOVE_N ? id : 0]; }
+static_assert(sizeof(MOVE_TBL) / sizeof(MOVE_TBL[0]) == MOVE_N, "moves_data.h");
+static_assert(TM_N == TM_COUNT && TM_HM0 == TM_HM_FIRST, "moves_data.h: MT/MO");
+const char *moveNameKo(uint8_t id) { return MOVE_KO[id < MOVE_N ? id : 0]; }
+const char *moveNameEn(uint8_t id) { return MOVE_EN[id < MOVE_N ? id : 0]; }
+const char *moveDescKo(uint8_t id) { return MOVE_DESC_KO[id < MOVE_N ? id : 0]; }
+const char *moveDescEn(uint8_t id) { return MOVE_DESC_EN[id < MOVE_N ? id : 0]; }
+uint8_t tmMove(uint8_t tm) { return tm < TM_N ? TM_MOVE[tm] : 0; }
+bool tmCompatible(int16_t dex, uint8_t tm) {
+  return dex >= 1 && dex <= DEX_COUNT && tm < TM_N && ((TM_BITS[dex][tm / 8] >> (tm % 8)) & 1);
 }
-uint8_t moveIdTyped(uint8_t type, uint8_t tier, uint8_t var) {
-  if (type >= PT_COUNT || tier > 2 || var > 2) return 0;
-  return (uint8_t)(1 + type * 9 + tier * 3 + var);
+const char *tmLabel(uint8_t tm, bool ko) { return tm < TM_N ? (ko ? TM_NAME[tm] : TM_NAME_EN[tm]) : ""; }
+int8_t tmOfMove(uint8_t id) {
+  for (uint8_t i = 0; i < TM_N; i++) if (TM_MOVE[i] == id) return (int8_t)i;
+  return -1;
 }
-bool moveValid(uint8_t id) { return id >= 1 && id < MOVE_N; }
-bool moveIsTyped(uint8_t id) { return id >= 1 && id <= 144; }
-bool moveIsStatus(uint8_t id) { return id && id != MOVE_STRUGGLE && (moveDef(id).flags & MF_STATUS); }
+bool moveValid(uint8_t id) { return id >= 1 && id < MOVE_N && id != MOVE_STRUGGLE; }
+bool moveIsStatus(uint8_t id) { return id && id < MOVE_N && (moveDef(id).flags & MF_STATUS); }
 uint8_t moveType(uint8_t id) { return moveDef(id).type; }
 // ko12.6: PP x2 (aqui casi siempre lucha uno solo contra varios)
-uint8_t movePP(uint8_t id) { return id == MOVE_STRUGGLE ? 1 : (uint8_t)(moveDef(id).pp * PP_MULT); }
-bool moveDecode(uint8_t id, uint8_t *type, uint8_t *tier, uint8_t *var) {
-  if (!moveIsTyped(id)) return false;
-  uint8_t k = (uint8_t)(id - 1);
-  if (type) *type = k / 9;
-  if (tier) *tier = (k % 9) / 3;
-  if (var) *var = k % 3;
-  return true;
+uint8_t movePP(uint8_t id) {
+  if (id == MOVE_STRUGGLE) return 1;
+  uint16_t p = (uint16_t)moveDef(id).pp * PP_MULT;
+  return (uint8_t)(p > 99 ? 99 : p);
 }
 
 bool moveCanLearn(int16_t dex, uint8_t id) {
-  if (dex < 1 || dex > DEX_COUNT || id == 0 || id >= MOVE_N) return false;
-  if (id == MOVE_TACKLE) return true;
-  uint8_t t, s;
-  if (moveDecode(id, &t, &s, nullptr)) {
-    if (s > moveTier(dex)) return false;  // los fuertes, cuando llegue a esa fase
-    if (t == DEX_TBL[dex].ptype) return true;
-  }
+  if (dex < 1 || dex > DEX_COUNT || !moveValid(id)) return false;
   return (MOVE_LEARN[dex][id / 8] >> (id % 8)) & 1;
 }
-
 uint8_t movePool(int16_t dex, uint8_t *out, uint8_t max) {
   uint8_t n = 0;
   for (uint16_t id = 1; id < MOVE_N && n < max; id++)
     if (moveCanLearn(dex, (uint8_t)id)) out[n++] = (uint8_t)id;
   return n;
+}
+uint8_t moveLearnset(int16_t dex, uint8_t *lv, uint8_t *mv, uint8_t max) {
+  if (dex < 1 || dex > DEX_COUNT) return 0;
+  uint8_t n = 0;
+  for (uint16_t i = MOVE_LS_OFF[dex - 1]; i < MOVE_LS_OFF[dex] && n < max; i++, n++) {
+    if (lv) lv[n] = MOVE_LS[i][0];
+    if (mv) mv[n] = MOVE_LS[i][1];
+  }
+  return n;
+}
+uint8_t moveAtLevel(int16_t dex, uint16_t lvl, uint8_t k) {
+  if (dex < 1 || dex > DEX_COUNT) return 0;
+  for (uint16_t i = MOVE_LS_OFF[dex - 1]; i < MOVE_LS_OFF[dex]; i++)
+    if (MOVE_LS[i][0] == lvl && !k--) return MOVE_LS[i][1];
+  return 0;
 }
 
 uint8_t moveCount(const uint8_t mv[4]) {
@@ -632,87 +645,98 @@ void movesFillPP(Battler &b) {
   for (uint8_t i = 0; i < 4; i++) b.pp[i] = b.mv[i] ? movePP(b.mv[i]) : 0;
 }
 
-bool moveIsSpecial(uint8_t id) {
-  return id < MOVE_N && id != MOVE_STRUGGLE && ((MOVE_SPECIAL[id / 8] >> (id % 8)) & 1);
+// ko12.10: 2a generacion: especial o fisico segun el TIPO (fuego, agua, planta, electrico, hielo,
+// psiquico, dragon y siniestro: especiales)
+static bool typeIsSpecial(uint8_t t) {
+  return t == PT_FIRE || t == PT_WATER || t == PT_GRASS || t == PT_ELECTRIC || t == PT_ICE ||
+         t == PT_PSYCHIC || t == PT_DRAGON || t == PT_DARK;
 }
+bool moveIsSpecial(uint8_t id) { return id && id < MOVE_N && !moveIsStatus(id) && typeIsSpecial(moveDef(id).type); }
 
-// ko12.8: hay en mv otro del mismo tipo (y clase) que lo deja sin sentido (pega mas o igual,
-// acierta mas o igual, sin pegas propias; y este no tiene nada extra: estado, retroceso, critico...)
+// ko12.8: hay en mv otro del mismo tipo (y clase) que lo deja sin sentido
 bool moveDominated(const uint8_t mv[4], uint8_t id) {
   if (!id || moveIsStatus(id)) return false;
   const MoveDef &c = moveDef(id);
-  if (c.flags || c.ail || c.stD || c.flinch || c.prio) return false;
+  if (c.flags & ~MF_NOMISS) return false;
+  if (c.ail || c.stD || c.flinch || c.prio || c.fx || c.hits || !c.pow) return false;
   for (uint8_t i = 0; i < 4; i++) {
     uint8_t o = mv[i];
     if (!o || o == id || moveIsStatus(o)) continue;
     const MoveDef &e = moveDef(o);
-    if (e.type != c.type || moveIsSpecial(o) != moveIsSpecial(id)) continue;
-    if (e.flags & (MF_RECOIL | MF_RECHARGE | MF_SELFCNF | MF_FIX | MF_FIXLVL)) continue;
+    if (e.type != c.type || !e.pow) continue;
+    if (e.flags & (MF_RECOIL | MF_RECHARGE)) continue;
+    if (e.fx) continue;
     if (e.stSelf && e.stD < 0) continue;
     if (e.pow >= c.pow && e.acc >= c.acc) return true;
   }
   return false;
 }
 
+// ko12.10: lo de antes -> el original. Si esa especie no lo puede aprender: uno que si pueda, del mismo
+// tipo y potencia parecida (si es de estado, uno de estado); si no hay, 0
+uint8_t moveMigrate(int16_t dex, uint8_t oldId) {
+  if (oldId == 255) return 0;  // forcejeo de antes
+  if (oldId >= MOVE_OLD_N) return 0;
+  uint8_t id = MOVE_OLD2NEW[oldId];
+  if (!id || moveCanLearn(dex, id)) return id;
+  const MoveDef &w = moveDef(id);
+  bool st = moveIsStatus(id);
+  uint8_t best = 0;
+  int bs = 1 << 30;
+  for (uint16_t k = 1; k < MOVE_N; k++) {
+    if (!moveCanLearn(dex, (uint8_t)k) || moveIsStatus((uint8_t)k) != st) continue;
+    const MoveDef &m = moveDef((uint8_t)k);
+    int sc = (m.type == w.type ? 0 : 1000) + (int)(m.pow > w.pow ? m.pow - w.pow : w.pow - m.pow);
+    if (st) sc = (m.type == w.type ? 0 : 1000) + (m.ail == w.ail ? 0 : 100) + (m.stD == w.stD ? 0 : 50);
+    if (sc < bs) { bs = sc; best = (uint8_t)k; }
+  }
+  return bs < 1000 ? best : 0;  // de otro tipo no: mejor que lo rellene su lista
+}
+
+// como en los juegos: los 4 ultimos que aprende subiendo de nivel hasta ese nivel (sin repetir)
 void movesDefault(int16_t dex, uint16_t lvl, uint8_t out[4]) {
   memset(out, 0, 4);
   if (dex < 1 || dex > DEX_COUNT) return;
-  uint8_t type = DEX_TBL[dex].ptype, tier = moveTier(dex);
-  uint32_t h = (uint32_t)dex * 2246822519u ^ (uint32_t)(lvl / 5) * 3266489917u;
-  h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
   uint8_t n = 0;
-  auto add = [&](uint8_t id) { if (id && n < 4 && !movesHas(out, id)) out[n++] = id; };
-  add(moveIdTyped(type, tier, moveVarFor(dex, lvl)));  // el de su tipo y fase (como antes)
-  // de otro tipo, de los que aprende SUBIENDO DE NIVEL en los juegos (las MT solo
-  // las aprende el que crias): uno de los 3 mas fuertes de su fase o menor
-  auto lvLearn = [&](uint8_t id) { return (MOVE_LEARN_LV[dex][id / 8] >> (id % 8)) & 1; };
-  uint8_t cov[3] = { 0, 0, 0 };
-  for (uint8_t id = 1; id <= 144; id++) {
-    uint8_t t, s;
-    moveDecode(id, &t, &s, nullptr);
-    if (t == type || s > tier || !lvLearn(id) || !moveDef(id).pow) continue;
-    for (uint8_t k = 0; k < 3; k++)
-      if (!cov[k] || moveDef(id).pow > moveDef(cov[k]).pow) {
-        for (uint8_t q = 2; q > k; q--) cov[q] = cov[q - 1];
-        cov[k] = id;
-        break;
-      }
+  for (int i = (int)MOVE_LS_OFF[dex] - 1; i >= (int)MOVE_LS_OFF[dex - 1] && n < 4; i--) {
+    uint8_t lv = MOVE_LS[i][0], id = MOVE_LS[i][1];
+    if (lv > lvl || movesHas(out, id)) continue;
+    out[n++] = id;
   }
-  uint8_t nc = cov[2] ? 3 : cov[1] ? 2 : cov[0] ? 1 : 0;
-  uint8_t c1 = nc ? cov[(h >> 4) % nc] : 0;
-  add(c1);
-  // uno de estado (si aprende alguno), 2 de cada 3
-  uint8_t sts[MOVE_N - MOVE_STATUS0];
-  uint8_t ns = 0;
-  for (uint16_t id = MOVE_STATUS0; id < MOVE_N; id++)
-    if (lvLearn((uint8_t)id)) sts[ns++] = (uint8_t)id;
-  if (ns && (h >> 9) % 3) add(sts[(h >> 11) % ns]);
-  // ko12.8: otro de otro tipo (mejor si es de un tipo distinto al primero) antes que repetir el suyo
-  for (uint8_t k = 0; k < nc; k++)
-    if (cov[k] != c1 && moveDef(cov[k]).type != moveDef(c1).type) { add(cov[k]); break; }
-  // el resto: los de su tipo (su fase y las anteriores) y placaje. ko12.8: sin los que no
-  // sirven de nada al lado de otro suyo (mismo tipo, mas flojo y sin efecto extra)
-  for (int s = tier; s >= 0 && n < 4; s--)
-    for (uint8_t v = 0; v < 3 && n < 4; v++) {
-      uint8_t id = moveIdTyped(type, (uint8_t)s, (uint8_t)((v + h) % 3));
-      if (movesHas(out, id) || moveDominated(out, id)) continue;
-      // y si es este el que deja sin sentido a uno que ya tenia, lo cambia por el
-      const uint8_t one[4] = { id, 0, 0, 0 };
-      bool swapped = false;
-      for (uint8_t i = 0; i < n && !swapped; i++)
-        if (moveDominated(one, out[i])) { out[i] = id; swapped = true; }
-      if (!swapped) add(id);
-    }
-  add(MOVE_TACKLE);
+  // orden de aprendizaje (el mas antiguo primero, como en la pantalla del juego)
+  for (uint8_t i = 0; i < n / 2; i++) { uint8_t t = out[i]; out[i] = out[n - 1 - i]; out[n - 1 - i] = t; }
+  if (!n) out[0] = MOVE_TACKLE;
 }
 
-uint8_t movesMain(const Battler &b) {
-  for (uint8_t i = 0; i < 4; i++) {
-    uint8_t t;
-    if (moveDecode(b.mv[i], &t, nullptr, nullptr) && t == b.type) return b.mv[i];
-  }
-  return moveIdTyped(b.type, moveTier(b.dex), 0);
+bool moveFxInfo(uint8_t id, uint8_t *type, uint8_t *tier, uint8_t *var) {
+  if (!id || id >= MOVE_N || moveIsStatus(id)) return false;
+  const MoveDef &m = moveDef(id);
+  uint8_t p = m.pow ? m.pow : 70;
+  if (type) *type = m.type < PT_COUNT ? m.type : (uint8_t)0xFF;
+  if (tier) *tier = p >= 100 ? 2 : p >= 65 ? 1 : 0;
+  if (var) *var = (uint8_t)(id % 3);
+  return true;
 }
+uint8_t moveTypeFor(const Battler &at, uint8_t id) {
+  if (moveDef(id).fx == MX_HIDDENPOWER) return at.hpType;
+  return moveDef(id).type;
+}
+
+uint8_t movesMainOf(int16_t dex, const uint8_t mv[4]) {
+  uint8_t ty = (dex >= 1 && dex <= DEX_COUNT) ? DEX_TBL[dex].ptype : 0, t2 = dexType2(dex);
+  uint8_t best = 0, bestAny = 0;
+  for (uint8_t i = 0; i < 4; i++) {
+    uint8_t id = mv[i];
+    if (!id || moveIsStatus(id)) continue;
+    uint8_t t = moveDef(id).type, p = moveDef(id).pow ? moveDef(id).pow : 60;
+    if ((t == ty || t == t2) && (!best || p > moveDef(best).pow)) best = id;
+    if (!bestAny || p > moveDef(bestAny).pow) bestAny = id;
+  }
+  if (best) return best;
+  if (bestAny) return bestAny;
+  return mv[0] ? mv[0] : (uint8_t)MOVE_TACKLE;
+}
+uint8_t movesMain(const Battler &b) { return movesMainOf(b.dex, b.mv); }
 
 int8_t battleSlot(const Battler &b, BAct a) {
   if (a >= BA_M0 && a <= BA_M3) return b.mv[a - BA_M0] ? (int8_t)(a - BA_M0) : -1;
@@ -723,13 +747,11 @@ int8_t battleSlot(const Battler &b, BAct a) {
 
 bool battleHasPP(const Battler &b) {
   if (!moveCount(b.mv)) return true;  // sin lista (combatientes viejos): placaje / su tipo
-  for (uint8_t i = 0; i < 4; i++) if (b.mv[i] && b.pp[i]) return true;
+  for (uint8_t i = 0; i < 4; i++) if (b.mv[i] && b.pp[i] && !(b.disT && b.mv[i] == b.disMv)) return true;
   return false;
 }
 
-// ko11.23.3: en la historia no hay tipo volador (un tipo por Pokemon; Pidgey es normal). Para que,
-// como en el original, la familia Pidgey pueda con la hierba: SOLO el mio (gStoryFlyAt = &bMe),
-// su ataque de tipo hace x2 a los de hierba. El Pidgeot del rival no lo tiene
+// ko11.23.3: en la historia la familia Pidgey (solo la mia) x2 contra hierba (ko12.10: ya vuela de verdad)
 const Battler *gStoryFlyAt = nullptr;
 static bool storyFly(const Battler &at, const Battler &df, uint8_t mtype) {
   return gStoryFlyAt == &at && mtype == at.type && at.dex >= 16 && at.dex <= 18 && df.type == PT_GRASS;
@@ -737,54 +759,144 @@ static bool storyFly(const Battler &at, const Battler &df, uint8_t mtype) {
 
 static uint32_t stgMul(uint32_t v, int8_t s) { return s >= 0 ? v * (2 + s) / 2 : v * 2 / (2 - s); }
 static uint32_t effSpe(const Battler &b) {
-  uint32_t v = stgMul(b.spe, b.stg[2]);
+  uint32_t v = stgMul(b.spe, b.stg[STG_SPE]);
   return b.st == ST_PAR ? v / 2 : v;
 }
 
-uint8_t moveEffAgainst(uint8_t id, const Battler &df) {
-  if (id == MOVE_STRUGGLE) return 2;
-  return effCat(typeEffQ(moveDef(id).type, df.type, df.type2));  // ko12.10: dos tipos
+// eficacia en cuartos de un tipo contra el defensor (profecia: el fantasma recibe normal y lucha)
+static uint8_t effQ(uint8_t t, const Battler &df) {
+  uint8_t t1 = df.type, t2 = df.type2;
+  if (df.foresight && (t == PT_NORMAL || t == PT_FIGHT)) {
+    if (t1 == PT_GHOST) t1 = t2 != 0xFF ? t2 : (uint8_t)PT_NORMAL;
+    if (t2 == PT_GHOST) t2 = 0xFF;
+  }
+  return typeEffQ(t, t1, t2);
 }
 
-// ko12.8: ataque / defensa especial. No se guardan: salen del ataque / defensa que ya tiene
-// (con su entrenamiento, genes, orbes y ajustes) en la proporcion de su especie, a su nivel:
-// v * (base especial + L) / (base fisica + L). Asi Alakazam (atq 50, at.esp 135) pega fuerte
-// con lo psiquico y nada de lo de antes (orbes, historia, enlace) tiene que cambiar
+uint8_t moveEffAgainst(uint8_t id, const Battler &df) {
+  if (id == MOVE_STRUGGLE || !id) return 2;
+  return effCat(effQ(moveDef(id).type, df));
+}
+
+// ko12.8: ataque / defensa especial (de su ataque / defensa en la proporcion de su especie, a su nivel)
 uint32_t spStat(const Battler &b, uint32_t v, bool defense) {
-  if (b.dex < 1 || b.dex > DEX_COUNT) return v;
+  int16_t d = b.xform ? b.xform : b.dex;
+  if (d < 1 || d > DEX_COUNT) return v;
   uint32_t L = lvlCap(b.lvl);
-  uint32_t phys = defense ? DEX_TBL[b.dex].bDef : DEX_TBL[b.dex].bAtk;
-  uint32_t sp = defense ? DEX_SPD[b.dex] : DEX_SPA[b.dex];
+  uint32_t phys = defense ? DEX_TBL[d].bDef : DEX_TBL[d].bAtk;
+  uint32_t sp = defense ? DEX_SPD[d] : DEX_SPA[d];
   uint32_t r = v * (sp + L) / (phys + L);
   return r ? r : 1;
 }
 
-// dano base de un movimiento (sin aleatorio ni critico), para la IA y el calculo
-static uint32_t rawDamageId(const Battler &at, const Battler &df, uint8_t mid, uint8_t *effOut) {
+static bool sFleeOk = false;    // ko12.10: rugido / remolino / teletransporte acaban la batalla (solo salvajes)
+void battleSetFleeMoves(bool ok) { sFleeOk = ok; }
+static uint8_t sMagLv = 4;      // magnitud que salio (4..10)
+static uint8_t sPresent = 40;   // presente: 40 / 80 / 120
+static bool sPursuitX2 = false; // persecucion contra el que se va
+static uint8_t sHitK = 1;       // triple patada: golpe numero k
+
+// potencia de ese movimiento ahora (los de potencia variable)
+static uint16_t movePower(const Battler &at, const Battler &df, uint8_t id) {
+  const MoveDef &m = moveDef(id);
+  switch (m.fx) {
+    case MX_FLAIL: {
+      uint32_t r = at.maxHp ? (uint32_t)at.hp * 48 / at.maxHp : 48;
+      return r <= 1 ? 200 : r <= 4 ? 150 : r <= 9 ? 100 : r <= 16 ? 80 : r <= 32 ? 40 : 20;
+    }
+    case MX_RETURN: { uint16_t p = (uint16_t)(at.bond * 2 / 5); return p ? p : 1; }
+    case MX_FRUSTRATION: { uint16_t p = (uint16_t)((255 - at.bond) * 2 / 5); return p ? p : 1; }
+    case MX_HIDDENPOWER: return 70;
+    case MX_MAGNITUDE: {
+      static const uint8_t P[11] = { 0, 0, 0, 0, 10, 30, 50, 70, 90, 110, 150 };
+      uint16_t p = P[sMagLv <= 10 ? sMagLv : 7];
+      return df.invul == 2 ? p * 2 : p;
+    }
+    case MX_PRESENT: return sPresent;
+    case MX_ROLLOUT: {
+      uint16_t p = (uint16_t)(m.pow << (at.rollT < 5 ? at.rollT : 4));
+      return at.curled ? p * 2 : p;
+    }
+    case MX_FURYCUTTER: return (uint16_t)(m.pow << (at.furyN < 2 ? at.furyN : 2));  // 40, 80, 160
+    case MX_TRIPLEKICK: return (uint16_t)(m.pow * sHitK);
+    case MX_TWISTER: return df.invul == 1 ? m.pow * 2 : m.pow;
+    case MX_QUAKE: return df.invul == 2 ? m.pow * 2 : m.pow;
+    case MX_STOMP: return df.minimized ? m.pow * 2 : m.pow;
+    case MX_PURSUIT: return sPursuitX2 ? m.pow * 2 : m.pow;
+    case MX_SOLAR: { uint8_t w = battleWeather(); return (w == WX_RAIN || w == WX_SAND) ? m.pow / 2 : m.pow; }
+    default: return m.pow;
+  }
+}
+uint16_t movePowerShown(const Battler &at, uint8_t id) {
+  Battler df;
+  if (moveIsStatus(id)) return 0;
+  if (moveDef(id).fx == MX_MAGNITUDE || moveDef(id).fx == MX_PRESENT) return 0;
+  return movePower(at, df, id);
+}
+
+// dano base (sin aleatorio). crit: como en 2a gen, x2 y sin contar los cambios que le van mal ni las pantallas
+static uint32_t rawDamage(const Battler &at, const Battler &df, uint8_t mid, uint8_t *effOut, bool crit,
+                          uint32_t psyRoll = 0) {
   const MoveDef &m = moveDef(mid);
-  uint8_t mtype = m.type;
-  uint8_t q = mid == MOVE_STRUGGLE ? 4 : typeEffQ(mtype, df.type, df.type2);  // ko12.10: en cuartos (dos tipos)
-  if (storyFly(at, df, mtype)) q = 8;  // ko11.23.3
+  uint8_t mtype = moveTypeFor(at, mid);
+  uint8_t q = mid == MOVE_STRUGGLE || m.fx == MX_BIDE || m.fx == MX_FUTURESIGHT ? 4 : effQ(mtype, df);
+  if (m.fx == MX_FUTURESIGHT) q = 4;  // 2a gen: premonicion no tiene tipo
+  if (storyFly(at, df, mtype) && q < 8) q = 8;  // ko11.23.3
   uint8_t eff = effCat(q);
   if (effOut) *effOut = eff;
   if (m.flags & MF_STATUS) return 0;
-  if (m.flags & MF_FIXLVL) return eff ? lvlCap(at.lvl) : 0;
-  if (m.flags & MF_FIX) return eff ? m.pow : 0;
   uint32_t L = lvlCap(at.lvl);
-  bool sp = moveIsSpecial(mid);  // ko12.8: especial -> at. esp. contra def. esp. (la quemadura no lo baja)
-  uint32_t atk = stgMul(sp ? spStat(at, at.atk, false) : at.atk, at.stg[0]);
+  switch (m.fx) {  // dano fijo (cuenta la inmunidad, no la eficacia)
+    case MX_SONICBOOM: return eff ? 20 : 0;
+    case MX_DRAGONRAGE: return eff ? 40 : 0;
+    case MX_LEVEL: return eff ? L : 0;
+    case MX_PSYWAVE: return eff ? (psyRoll ? psyRoll : L) : 0;
+    case MX_SUPERFANG: return eff ? (df.hp / 2 ? df.hp / 2 : 1) : 0;
+    case MX_OHKO: return eff ? df.hp : 0;
+    default: break;
+  }
+  uint32_t pw = movePower(at, df, mid);
+  if (!pw) return 0;
+  bool sp = typeIsSpecial(mtype);  // ko12.8 / 2a gen: segun el tipo
+  int8_t sa = at.stg[sp ? STG_SPA : STG_ATK], sd = df.stg[sp ? STG_SPD : STG_DEF];
+  if (crit) { if (sa < 0) sa = 0; if (sd > 0) sd = 0; }
+  uint32_t atk = stgMul(sp ? spStat(at, at.atk, false) : at.atk, sa);
   if (at.st == ST_BRN && !sp) atk /= 2;
-  uint32_t def = stgMul(sp ? spStat(df, df.def, true) : df.def, df.stg[1]);
-  uint32_t d = ((2 * L / 5 + 2) * m.pow * atk / (def ? def : 1)) / 50 + 2;
-  if (battlerHasType(at, mtype) && mid != MOVE_STRUGGLE) d = d * 3 / 2;  // STAB (cualquiera de sus dos tipos)
-  d = d * weatherMul(sBattleWx, mtype) / 2;  // ko10.4: lluvia / sol / nieve
+  uint32_t def = stgMul(sp ? spStat(df, df.def, true) : df.def, sd);
+  if (!crit && ((sp && df.lscrT) || (!sp && df.reflT))) def *= 2;
+  if (m.fx == MX_SELFKO) def = def / 2 ? def / 2 : 1;  // 2a gen: autodestruccion / explosion
+  uint32_t d = ((2 * L / 5 + 2) * pw * atk / (def ? def : 1)) / 50 + 2;
+  if (crit) d *= 2;
+  if (battlerHasType(at, mtype) && mid != MOVE_STRUGGLE && m.fx != MX_BEATUP) d = d * 3 / 2;  // STAB
+  d = d * weatherMul(battleWeather(), mtype) / 2;  // lluvia / sol / nieve
   return d * q / 4;
 }
 
 bool battleResting(const Battler &b, uint8_t id) { return id && b.restT && b.restMv == id; }
 
-// accion -> movimiento que se usa (y su casilla, -1 = fuera de la lista: sin PP)
-static uint8_t actMove(const Battler &b, BAct a, int8_t *slot) {
+uint8_t battleLockedMove(const Battler &b) {
+  if (b.chargeMv) return b.chargeMv;
+  if (b.rampT) return b.rampMv;
+  if (b.rollT) return 205;  // rodar
+  if (b.bideT) return 117;  // venganza
+  return 0;
+}
+bool battleLocked(const Battler &b) { return battleLockedMove(b) != 0; }
+bool battleCanEscape(const Battler &b) { return !b.trapT && !b.meanLook; }
+
+static bool usable(const Battler &b, uint8_t i) {
+  return b.mv[i] && b.pp[i] && !battleResting(b, b.mv[i]) && !(b.disT && b.mv[i] == b.disMv);
+}
+
+// accion -> movimiento que se usa (y su casilla, -1 = sin gastar PP). cont = sigue con uno que ya empezo
+static uint8_t actMove(const Battler &b, BAct a, int8_t *slot, bool *cont = nullptr) {
+  if (cont) *cont = false;
+  uint8_t lk = battleLockedMove(b);
+  if (lk) { *slot = -1; if (cont) *cont = true; return lk; }
+  // otra vez: repite ese (si le quedan PP)
+  if (b.encT && (a == BA_TACKLE || a == BA_TYPE || (a >= BA_M0 && a <= BA_M3)))
+    for (uint8_t i = 0; i < 4; i++)
+      if (b.mv[i] == b.encMv && b.pp[i]) { *slot = (int8_t)i; return b.encMv; }
   // BA_TACKLE / BA_TYPE (codigo y tests de antes): ese movimiento, sin gastar PP
   if (a == BA_TACKLE || a == BA_TYPE) {
     *slot = -1;
@@ -794,10 +906,10 @@ static uint8_t actMove(const Battler &b, BAct a, int8_t *slot) {
   int8_t k = battleSlot(b, a);
   *slot = k;
   if (k >= 0) {
-    if (b.pp[k] && !battleResting(b, b.mv[k])) return b.mv[k];
-    if (!battleHasPP(b)) return MOVE_STRUGGLE;
-    for (uint8_t i = 0; i < 4; i++)  // sin PP en ese (o descansando): el primero que tenga
-      if (b.mv[i] && b.pp[i] && !battleResting(b, b.mv[i])) { *slot = (int8_t)i; return b.mv[i]; }
+    if (usable(b, (uint8_t)k)) return b.mv[k];
+    if (!battleHasPP(b)) { *slot = -1; return MOVE_STRUGGLE; }
+    for (uint8_t i = 0; i < 4; i++)  // sin PP / anulado / descansando: el primero que se pueda
+      if (usable(b, i)) { *slot = (int8_t)i; return b.mv[i]; }
     *slot = -1;  // solo le queda el que descansa: placaje sin gastar PP
     return MOVE_TACKLE;
   }
@@ -805,42 +917,150 @@ static uint8_t actMove(const Battler &b, BAct a, int8_t *slot) {
   return a == BA_TACKLE ? (uint8_t)MOVE_TACKLE : movesMain(b);
 }
 
-static uint32_t aiDamage(const Battler &self, const Battler &foe, uint8_t id) {
-  const MoveDef &m = moveDef(id);
-  uint32_t raw = rawDamageId(self, foe, id, nullptr);
-  uint32_t d = raw * m.acc;
-  if (raw >= foe.hp) return d * 2;  // lo deja fuera de combate: sin pegas que valgan
-  if (m.flags & MF_RECHARGE) d = d * 85 / 100;   // ko12.8: el turno siguiente no lo puede repetir
-  if (m.flags & MF_SELFCNF) d = d * 80 / 100;    // acaba confuso
-  if (m.stSelf && m.stD < 0 && m.stCh >= 100) d = d * 85 / 100;  // se baja algo a si mismo
-  return d;
-}
-
 static bool statusImmune(uint8_t st, const Battler &df) {
   switch (st) {
     case ST_PSN: return battlerHasType(df, PT_POISON) || battlerHasType(df, PT_STEEL);
     case ST_BRN: return battlerHasType(df, PT_FIRE);
-    case ST_PAR: return battlerHasType(df, PT_ELECTRIC);
+    case ST_PAR: return false;  // 2a gen: los electricos si se paralizan (onda trueno no les hace nada a los de tierra)
     case ST_FRZ: return battlerHasType(df, PT_ICE);
     default: return false;
   }
 }
-// los polvos no hacen nada a los de planta; onda trueno, nada a los de tierra
+// onda trueno no hace nada a los de tierra (es electrica); drenadoras, a los de planta
 static bool statusMoveBlocked(uint8_t id, const Battler &df) {
-  if ((id == 158 || id == 162 || id == 164 || id == 167) && battlerHasType(df, PT_GRASS)) return true;
-  if (id == 161 && typeEffQ(PT_ELECTRIC, df.type, df.type2) == 0) return true;
+  const MoveDef &m = moveDef(id);
+  if (m.ail && m.type == PT_ELECTRIC && effQ(PT_ELECTRIC, df) == 0) return true;
+  if (m.fx == MX_LEECHSEED && battlerHasType(df, PT_GRASS)) return true;
   return false;
 }
 static bool canAfflict(uint8_t st, const Battler &df) {
-  if (st == ST_CNF) return df.cnf == 0;
-  return df.st == ST_NONE && !statusImmune(st, df);
+  if (st == ST_CNF) return df.cnf == 0 && !df.safeT;
+  return df.st == ST_NONE && !statusImmune(st, df) && !df.safeT;
+}
+
+// ---- IA
+static int stgSum(const Battler &b) {
+  int s = 0;
+  for (uint8_t i = 0; i < STG_N; i++) s += b.stg[i];
+  return s;
+}
+static uint32_t aiDamage(const Battler &self, const Battler &foe, uint8_t id) {
+  const MoveDef &m = moveDef(id);
+  uint32_t raw;
+  if (m.fx == MX_MAGNITUDE || m.fx == MX_PRESENT) {
+    Battler t = self;
+    sMagLv = 7; sPresent = 60;
+    raw = rawDamage(t, foe, id, nullptr, false);
+  } else {
+    raw = rawDamage(self, foe, id, nullptr, false);
+  }
+  if (m.hits) raw = raw * ((m.hits >> 4) + (m.hits & 15)) / 2;
+  if (m.fx == MX_TRIPLEKICK) raw = raw * 6;  // 10 + 20 + 30
+  uint32_t acc = m.acc ? m.acc : 100;
+  if (m.fx == MX_THUNDER && battleWeather() == WX_RAIN) acc = 100;
+  uint32_t d = raw * acc;
+  switch (m.fx) {
+    case MX_OHKO: return foe.lvl > self.lvl ? 0 : (uint32_t)foe.hp * 30;
+    case MX_DREAMEATER: if (foe.st != ST_SLP) return 0; break;
+    case MX_SNORE: if (self.st != ST_SLP) return 0; break;
+    case MX_COUNTER: case MX_MIRRORCOAT: return (uint32_t)foe.atk * 25;  // a ciegas: algo
+    case MX_BIDE: return raw ? raw : (uint32_t)self.maxHp / 4 * 40;
+    case MX_FUTURESIGHT: if (foe.futT) return 0; d = d * 70 / 100; break;
+    case MX_SELFKO: if (self.hp * 100u > self.maxHp * 30u && raw < foe.hp) return d / 5; break;
+    case MX_CHARGE: d = d * 55 / 100; break;
+    case MX_SOLAR: if (battleWeather() != WX_SUNNY) d = d * 60 / 100; break;
+    case MX_FLY: case MX_DIG: d = d * 75 / 100; break;
+    case MX_FALSESWIPE: if (raw >= foe.hp) return 1; break;
+    case MX_CRASH: d = d * 90 / 100; break;
+    default: break;
+  }
+  if (raw >= foe.hp) return d * 2;  // lo deja fuera de combate: sin pegas que valgan
+  if (m.flags & MF_RECHARGE) d = d * 85 / 100;   // ko12.8: el turno siguiente no lo puede repetir
+  if (m.fx == MX_RAMPAGE) d = d * 85 / 100;      // acaba confuso
+  if (m.flags & MF_RECOIL) d = d * 90 / 100;
+  if (m.stSelf && m.stD < 0 && m.stCh >= 100) d = d * 85 / 100;  // se baja algo a si mismo
+  if (m.ail && m.ailCh && canAfflict(m.ail, foe)) d = d * (100 + m.ailCh / 2) / 100;  // y puede dejarle un estado
+  return d;
+}
+
+// puntos de un movimiento de estado (0 = no sirve ahora). base = el mejor golpe que tiene
+static uint32_t aiStatus(const Battler &self, const Battler &foe, uint8_t id, uint32_t base) {
+  const MoveDef &m = moveDef(id);
+  bool low = self.hp * 100u < self.maxHp * 50u, foeLow = foe.hp * 100u < foe.maxHp * 35u;
+  uint32_t acc = m.acc ? m.acc : 100;
+  auto P = [&](uint32_t w) { return base * w / 100 * acc / 100; };
+  if (foe.subHp && !(m.flags & MF_SELF)) return 0;
+  switch (m.fx) {
+    case MX_HEAL: case MX_HEALWX: return low ? P(60 + (100 - self.hp * 100u / self.maxHp)) : 0;
+    case MX_REST: return (self.hp * 100u < self.maxHp * 40u && self.st != ST_SLP) ? P(85) : 0;
+    case MX_TOXIC: return canAfflict(ST_PSN, foe) && !foeLow ? P(75) : 0;
+    case MX_LEECHSEED: return !foe.seeded && !battlerHasType(foe, PT_GRASS) && !foeLow ? P(55) : 0;
+    case MX_PROTECT: case MX_ENDURE: return (!self.protN && (foe.chargeMv || foe.rampT || low)) ? P(30) : 0;
+    case MX_REFLECT: return !self.reflT && foe.atk >= foe.def ? P(35) : 0;
+    case MX_LIGHTSCREEN: return !self.lscrT ? P(30) : 0;
+    case MX_MIST: return !self.mistT ? P(15) : 0;
+    case MX_SAFEGUARD: return !self.safeT && !self.st ? P(20) : 0;
+    case MX_SUBSTITUTE: return !self.subHp && self.hp * 100u > self.maxHp * 55u ? P(40) : 0;
+    case MX_RAINDANCE: return battleWeather() != WX_RAIN && battlerHasType(self, PT_WATER) ? P(45) : 0;
+    case MX_SUNNYDAY: return battleWeather() != WX_SUNNY && (battlerHasType(self, PT_FIRE) || movesHas(self.mv, 76)) ? P(45) : 0;
+    case MX_SANDSTORM: return battleWeather() != WX_SAND && (battlerHasType(self, PT_ROCK) || battlerHasType(self, PT_GROUND) || battlerHasType(self, PT_STEEL)) ? P(35) : 0;
+    case MX_SPIKES: return !foe.spikes ? P(15) : 0;
+    case MX_CURSE:
+      if (battlerHasType(self, PT_GHOST)) return !foe.cursed && self.hp * 100u > self.maxHp * 60u ? P(45) : 0;
+      return self.stg[STG_ATK] < 2 && !low ? P(45) : 0;
+    case MX_BELLYDRUM: return self.stg[STG_ATK] < 2 && self.hp * 100u > self.maxHp * 70u ? P(70) : 0;
+    case MX_PERISH: return low && !foe.perish ? P(25) : 0;
+    case MX_MEANLOOK: return !foe.meanLook ? P(5) : 0;
+    case MX_DISABLE: return foe.lastMv && !foe.disT ? P(30) : 0;
+    case MX_ENCORE: return foe.lastMv && !foe.encT && moveIsStatus(foe.lastMv) ? P(45) : 0;
+    case MX_SPITE: return foe.lastMv ? P(15) : 0;
+    case MX_LOCKON: {
+      for (uint8_t i = 0; i < 4; i++) if (self.mv[i] && moveDef(self.mv[i]).acc && moveDef(self.mv[i]).acc < 80 && !moveIsStatus(self.mv[i])) return !self.lockon ? P(40) : 0;
+      return 0;
+    }
+    case MX_FOCUS: return !self.focus ? P(25) : 0;
+    case MX_HAZE: return stgSum(foe) - stgSum(self) >= 2 ? P(60) : 0;
+    case MX_PSYCHUP: return stgSum(foe) - stgSum(self) >= 2 ? P(50) : 0;
+    case MX_TRANSFORM: return !self.xform && !foe.xform ? base * 2 + 100 : 0;
+    case MX_CONVERSION: case MX_CONVERSION2: return P(15);
+    case MX_ATTRACT: return !foe.attract && !foeLow ? P(30) : 0;
+    case MX_SWAGGER: return canAfflict(ST_CNF, foe) && !foeLow ? P(35) : 0;
+    case MX_PAINSPLIT: return (self.hp * 100u / self.maxHp + 25 < foe.hp * 100u / foe.maxHp) ? P(60) : 0;
+    case MX_HEALBELL: return self.st ? P(55) : 0;
+    case MX_METRONOME: return base ? base / 2 : 50;
+    case MX_MIRRORMOVE: return foe.lastMv && !moveIsStatus(foe.lastMv) ? P(50) : 0;
+    case MX_SLEEPTALK: return self.st == ST_SLP ? base * 9 / 10 + 50 : 0;
+    case MX_NIGHTMARE: return foe.st == ST_SLP && !foe.nightmare ? P(55) : 0;
+    case MX_DESTINYBOND: return self.hp * 100u < self.maxHp * 25u ? P(50) : 0;
+    case MX_FORESIGHT: return battlerHasType(foe, PT_GHOST) && !foe.foresight ? P(40) : 0;
+    case MX_MIMIC: return foe.lastMv && !movesHas(self.mv, foe.lastMv) ? P(30) : 0;
+    case MX_TELEPORT: case MX_ROAR: return 1;  // salvaje sin otra cosa (Abra): se va
+    case MX_SPLASH: case MX_BATONPASS: return 0;
+    default: break;
+  }
+  if (foeLow && !m.stSelf) return 0;  // ya casi lo tiene: a pegar
+  if (m.ail) {
+    if (!canAfflict(m.ail, foe) || statusMoveBlocked(id, foe)) return 0;
+    uint8_t w = m.ail == ST_SLP ? 90 : m.ail == ST_PAR ? 70 : m.ail == ST_CNF ? 50 : 60;
+    return P(w);
+  }
+  if (m.stD > 0 && m.stSelf) {
+    if (self.stg[m.st] >= 2 || self.hp * 100u < self.maxHp * 60u) return 0;
+    return P(m.st == STG_EVA ? 40 : m.st == STG_ACC ? 20 : 50);
+  }
+  if (m.stD < 0) {
+    if (foe.stg[m.st] <= -2 || foe.mistT) return 0;
+    return P(35);
+  }
+  return 0;
 }
 
 BAct battleAi(const Battler &self, const Battler &foe, BRng &rng, uint8_t whim) {
+  if (battleLocked(self)) return BA_M0;  // sigue con el mismo (el motor lo elige)
   if (self.hp * 100u < self.maxHp * 30u && rng.below(100) < 25) return BA_GUARD;
   if (!moveCount(self.mv)) {  // combatiente sin lista: como antes (placaje o su tipo)
-    uint32_t tackle = rawDamageId(self, foe, MOVE_TACKLE, nullptr) * MOVE_TACKLE_ACC;
-    uint32_t typed = rawDamageId(self, foe, movesMain(self), nullptr) * MOVE_TYPE_ACC;
+    uint32_t tackle = rawDamage(self, foe, MOVE_TACKLE, nullptr, false) * 95;
+    uint32_t typed = rawDamage(self, foe, movesMain(self), nullptr, false) * 88;
     BAct best = (typed >= tackle) ? BA_TYPE : BA_TACKLE;
     if (rng.below(100) < whim) best = (best == BA_TYPE) ? BA_TACKLE : BA_TYPE;
     if (best == BA_TYPE && typed == 0 && tackle > 0) best = BA_TACKLE;
@@ -848,31 +1068,16 @@ BAct battleAi(const Battler &self, const Battler &foe, BRng &rng, uint8_t whim) 
     return best;
   }
   if (!battleHasPP(self)) return BA_M0;  // forcejeo
+  if (self.encT) for (uint8_t i = 0; i < 4; i++) if (self.mv[i] == self.encMv && self.pp[i]) return (BAct)(BA_M0 + i);
   uint32_t sc[4] = { 0, 0, 0, 0 }, best = 0;
   for (uint8_t i = 0; i < 4; i++) {
-    if (!self.mv[i] || !self.pp[i] || moveIsStatus(self.mv[i]) || battleResting(self, self.mv[i])) continue;
+    if (!usable(self, i) || moveIsStatus(self.mv[i])) continue;
     sc[i] = aiDamage(self, foe, self.mv[i]);
     if (sc[i] > best) best = sc[i];
   }
   uint32_t base = best ? best : 100;
-  bool foeLow = foe.hp * 100u < foe.maxHp * 35u;
-  for (uint8_t i = 0; i < 4; i++) {
-    uint8_t id = self.mv[i];
-    if (!id || !self.pp[i] || !moveIsStatus(id)) continue;
-    const MoveDef &m = moveDef(id);
-    if (foeLow) continue;  // ya casi lo tiene: a pegar
-    if (m.ail) {
-      if (!canAfflict(m.ail, foe) || statusMoveBlocked(id, foe)) continue;
-      uint8_t w = m.ail == ST_SLP ? 90 : m.ail == ST_PAR ? 70 : m.ail == ST_CNF ? 50 : 60;
-      sc[i] = base * w / 100 * m.acc / 100;
-    } else if (m.stD > 0 && m.stSelf) {
-      if (self.stg[m.st] >= 2 || self.hp * 100u < self.maxHp * 60u) continue;
-      sc[i] = base * 50 / 100;
-    } else if (m.stD < 0) {
-      if (foe.stg[m.st] <= -2) continue;
-      sc[i] = base * 35 / 100 * m.acc / 100;
-    }
-  }
+  for (uint8_t i = 0; i < 4; i++)
+    if (usable(self, i) && moveIsStatus(self.mv[i])) sc[i] = aiStatus(self, foe, self.mv[i], base);
   uint8_t pick = 0xFF;
   if (rng.below(100) < whim) {  // capricho: cualquiera que sirva
     uint8_t ok[4], k = 0;
@@ -881,10 +1086,11 @@ BAct battleAi(const Battler &self, const Battler &foe, BRng &rng, uint8_t whim) 
   }
   if (pick == 0xFF)
     for (uint8_t i = 0; i < 4; i++)
-      if (self.mv[i] && self.pp[i] && !battleResting(self, self.mv[i]) && (pick == 0xFF || sc[i] > sc[pick])) pick = i;
+      if (usable(self, i) && (pick == 0xFF || sc[i] > sc[pick])) pick = i;
   return (BAct)(BA_M0 + (pick == 0xFF ? 0 : pick));
 }
 
+// ---- eventos
 static void push(BEvent *ev, int maxEv, int &n, uint8_t side, uint8_t kind, uint8_t move,
                  uint8_t eff, bool crit, uint16_t dmg, const Battler &a, const Battler &b,
                  uint8_t mid = 0, int8_t val = 0) {
@@ -894,150 +1100,685 @@ static void push(BEvent *ev, int maxEv, int &n, uint8_t side, uint8_t kind, uint
   e.side = side; e.kind = kind; e.move = move; e.eff = eff; e.crit = crit;
   e.dmg = dmg; e.hpA = a.hp; e.hpB = b.hp; e.mid = mid; e.val = val;
 }
+// contexto de un turno (para no pasar 8 cosas a cada funcion)
+struct TurnCtx {
+  Battler *s[2];
+  BRng *rng;
+  BEvent *ev;
+  int maxEv, n;
+  bool canRun, ended;
+  void msg(uint8_t side, uint8_t code, uint8_t mid = 0, uint8_t num = 0, uint16_t dmg = 0) {
+    push(ev, maxEv, n, side, EV_MSG, BA_M0, num, false, dmg, *s[0], *s[1], mid, (int8_t)code);
+  }
+  void ev2(uint8_t side, uint8_t kind, uint8_t mid = 0, int8_t val = 0, uint16_t dmg = 0, uint8_t eff = 2, bool crit = false) {
+    push(ev, maxEv, n, side, kind, BA_M0, eff, crit, dmg, *s[0], *s[1], mid, val);
+  }
+  // quita vida (tope: la que tenga); true si lo debilita
+  bool hurt(uint8_t side, uint16_t d) {
+    Battler &b = *s[side];
+    if (d > b.hp) d = b.hp;
+    b.hp -= d;
+    return b.hp == 0;
+  }
+  uint16_t heal(uint8_t side, uint32_t h) {
+    Battler &b = *s[side];
+    if (h < 1) h = 1;
+    if (b.hp + h > b.maxHp) h = b.maxHp - b.hp;
+    b.hp += (uint16_t)h;
+    return (uint16_t)h;
+  }
+  void faint(uint8_t side, uint8_t mid = 0) { ev2(side, EV_FAINT, mid); }
+};
 
-// estado o cambio de caracteristica sobre "who" (lado ws)
-static void afflict(Battler &who, uint8_t ws, uint8_t st, BRng &rng, BEvent *ev, int maxEv, int &n,
-                    Battler &a, Battler &b, uint8_t mid) {
-  if (st == ST_CNF) who.cnf = (uint8_t)(2 + rng.below(4));
+static void afflictC(TurnCtx &c, uint8_t ws, uint8_t st, uint8_t mid, bool toxic = false) {
+  Battler &who = *c.s[ws];
+  if (st == ST_CNF) who.cnf = (uint8_t)(2 + c.rng->below(4));
   else {
     who.st = st;
-    if (st == ST_SLP) who.stT = (uint8_t)(1 + rng.below(3));
+    who.tox = (st == ST_PSN && toxic) ? 1 : 0;
+    if (st == ST_SLP) who.stT = (uint8_t)(1 + c.rng->below(3));
+    if (st == ST_SLP) who.rampT = who.rollT = who.bideT = 0;
   }
-  push(ev, maxEv, n, ws, EV_STATUS, BA_M0, 2, false, 0, a, b, mid, (int8_t)st);
+  c.ev2(ws, EV_STATUS, mid, (int8_t)(toxic ? (uint8_t)ST_TOX : st));
 }
-static void statChange(Battler &who, uint8_t ws, uint8_t idx, int8_t d, BEvent *ev, int maxEv, int &n,
-                       Battler &a, Battler &b, uint8_t mid, bool quiet) {
-  if (idx > 2) return;
+static void statChangeC(TurnCtx &c, uint8_t ws, uint8_t idx, int8_t d, uint8_t mid, bool quiet, bool byFoe) {
+  if (idx >= STG_N || !d) return;
+  Battler &who = *c.s[ws];
+  if (byFoe && d < 0 && who.mistT) { if (!quiet) c.msg(ws, MSG_MISTED, mid); return; }
   int v = who.stg[idx] + d;
   if (v > 6) v = 6;
   if (v < -6) v = -6;
   int8_t real = (int8_t)(v - who.stg[idx]);
   who.stg[idx] = (int8_t)v;
-  if (real || !quiet) push(ev, maxEv, n, ws, EV_STAT, BA_M0, idx, false, 0, a, b, mid, real);
+  if (real || !quiet) c.ev2(ws, EV_STAT, mid, real, 0, idx);
 }
 
-// ¿puede moverse este turno? (sueno, congelado, retroceso, paralisis, confusion)
-static bool canAct(Battler &me, uint8_t s, BRng &rng, BEvent *ev, int maxEv, int &n, Battler &a, Battler &b) {
+// ¿puede moverse este turno? (sueno, congelado, retroceso, paralisis, confusion, enamorado, anulado)
+static bool canActC(TurnCtx &c, uint8_t s, uint8_t mid) {
+  Battler &me = *c.s[s];
+  const MoveDef &m = moveDef(mid);
   if (me.st == ST_SLP) {
     if (me.stT) me.stT--;
-    if (me.stT) { push(ev, maxEv, n, s, EV_CANT, BA_M0, 2, false, 0, a, b, 0, ST_SLP); return false; }
+    if (me.stT) {
+      if (m.fx == MX_SNORE || m.fx == MX_SLEEPTALK) return true;  // dormido, pero esos si
+      c.ev2(s, EV_CANT, 0, ST_SLP);
+      return false;
+    }
     me.st = ST_NONE;
-    push(ev, maxEv, n, s, EV_CURE, BA_M0, 2, false, 0, a, b, 0, ST_SLP);
+    me.nightmare = false;
+    c.ev2(s, EV_CURE, 0, ST_SLP);
   } else if (me.st == ST_FRZ) {
-    if (rng.below(100) >= 20) { push(ev, maxEv, n, s, EV_CANT, BA_M0, 2, false, 0, a, b, 0, ST_FRZ); return false; }
-    me.st = ST_NONE;
-    push(ev, maxEv, n, s, EV_CURE, BA_M0, 2, false, 0, a, b, 0, ST_FRZ);
-  }
-  if (me.flinch) { push(ev, maxEv, n, s, EV_CANT, BA_M0, 2, false, 0, a, b, 0, ST_FLINCH); return false; }
-  if (me.st == ST_PAR && rng.below(100) < 25) {
-    push(ev, maxEv, n, s, EV_CANT, BA_M0, 2, false, 0, a, b, 0, ST_PAR);
-    return false;
-  }
-  if (me.cnf) {
-    me.cnf--;
-    if (!me.cnf) push(ev, maxEv, n, s, EV_CURE, BA_M0, 2, false, 0, a, b, 0, ST_CNF);
-    else if (rng.below(100) < 33) {
-      uint32_t L = lvlCap(me.lvl);
-      uint32_t d = ((2 * L / 5 + 2) * 40 * me.atk / (me.def ? me.def : 1)) / 50 + 2;
-      if (d > me.hp) d = me.hp;
-      me.hp -= (uint16_t)d;
-      push(ev, maxEv, n, s, EV_CONFHIT, BA_M0, 2, false, (uint16_t)d, a, b);
-      if (!me.hp) push(ev, maxEv, n, s, EV_FAINT, BA_M0, 2, false, 0, a, b);
+    if ((m.flags & MF_THAW) || c.rng->below(100) < 20) {
+      me.st = ST_NONE;
+      c.ev2(s, EV_CURE, 0, ST_FRZ);
+    } else {
+      c.ev2(s, EV_CANT, 0, ST_FRZ);
       return false;
     }
   }
+  if (me.flinch) { c.ev2(s, EV_CANT, 0, ST_FLINCH); return false; }
+  if (me.cnf) {
+    me.cnf--;
+    if (!me.cnf) c.ev2(s, EV_CURE, 0, ST_CNF);
+    else if (c.rng->below(100) < 33) {
+      uint32_t L = lvlCap(me.lvl);
+      uint32_t d = ((2 * L / 5 + 2) * 40 * stgMul(me.atk, me.stg[STG_ATK]) / (me.def ? stgMul(me.def, me.stg[STG_DEF]) : 1)) / 50 + 2;
+      bool down = c.hurt(s, (uint16_t)(d > 65535 ? 65535 : d));
+      c.ev2(s, EV_CONFHIT, 0, 0, (uint16_t)d);
+      if (down) c.faint(s);
+      return false;
+    }
+  }
+  if (me.attract && c.rng->below(100) < 50) { c.ev2(s, EV_CANT, 0, ST_LOVE); return false; }
+  if (me.st == ST_PAR && c.rng->below(100) < 25) { c.ev2(s, EV_CANT, 0, ST_PAR); return false; }
+  if (me.disT && mid == me.disMv) { c.ev2(s, EV_CANT, mid, ST_DISABLED); return false; }
   return true;
 }
 
-// un movimiento de "at" (lado side) a "df"; devuelve true si alguno se debilito
-static bool doMove(Battler &at, Battler &df, BAct act, uint8_t side, bool first, BRng &rng,
-                   BEvent *ev, int maxEv, int &n, Battler &a, Battler &b, bool *landed = nullptr) {
-  if (landed) *landed = false;
-  if (!canAct(at, side, rng, ev, maxEv, n, a, b)) return at.hp == 0;
-  int8_t slot;
-  uint8_t mid = actMove(at, act, &slot);
-  if (slot >= 0 && at.pp[slot] && mid != MOVE_STRUGGLE) at.pp[slot]--;
+// lo que se acaba al dejar de hacer ese movimiento seguido
+static void breakLocks(Battler &b) {
+  b.chargeMv = 0; b.invul = 0; b.rampT = 0; b.rollT = 0; b.bideT = 0;
+}
+
+// movimiento elegido al azar por metronomo (ni el mismo, ni los que llaman a otros)
+static uint8_t metronomePick(BRng &rng) {
+  for (int k = 0; k < 64; k++) {
+    uint8_t id = (uint8_t)(1 + rng.below(MOVE_N - 1));
+    uint8_t fx = moveDef(id).fx;
+    if (id == MOVE_STRUGGLE || fx == MX_METRONOME || fx == MX_SLEEPTALK || fx == MX_MIRRORMOVE ||
+        fx == MX_MIMIC || fx == MX_TRANSFORM || fx == MX_PROTECT || fx == MX_ENDURE || fx == MX_DESTINYBOND ||
+        fx == MX_COUNTER || fx == MX_MIRRORCOAT || fx == MX_THIEF) continue;
+    return id;
+  }
+  return MOVE_TACKLE;
+}
+
+static void selfKo(TurnCtx &c, uint8_t side, uint8_t mid) {
+  Battler &at = *c.s[side];
+  if (!at.hp) return;
+  at.hp = 0;
+  c.faint(side, mid);
+}
+
+// los de estado (y sus efectos especiales). Devuelve true si alguien se debilito
+static bool doStatus(TurnCtx &c, uint8_t side, uint8_t mid) {
+  Battler &at = *c.s[side], &df = *c.s[side ^ 1];
+  uint8_t fs = side ^ 1;
   const MoveDef &m = moveDef(mid);
-  uint8_t mv = (act == BA_TACKLE || act == BA_TYPE) ? (uint8_t)act : (uint8_t)BA_M0;
-  if (moveIsStatus(mid)) {
-    push(ev, maxEv, n, side, EV_USE, mv, 2, false, 0, a, b, mid);
-    if (rng.below(100) >= m.acc) { push(ev, maxEv, n, side, EV_MISS, mv, 2, false, 0, a, b, mid); return false; }
-    if (m.ail) {
-      if (df.guard || statusMoveBlocked(mid, df) || !canAfflict(m.ail, df)) {
-        push(ev, maxEv, n, side ^ 1, EV_NOEFFECT, mv, 2, false, 0, a, b, mid);
+  bool foeTgt = !(m.flags & MF_SELF);
+  c.ev2(side, EV_USE, mid);
+  if (foeTgt) {
+    if (df.protect) { c.msg(fs, MSG_PROTECTED, mid); return false; }
+    if (df.invul && m.acc) { c.ev2(side, EV_MISS, mid); return false; }
+    if (m.acc) {
+      uint32_t acc = m.acc;
+      static const uint16_t AS[13] = { 33, 36, 43, 50, 60, 75, 100, 133, 166, 200, 233, 266, 300 };
+      int s = at.stg[STG_ACC] - (df.foresight && df.stg[STG_EVA] > 0 ? 0 : df.stg[STG_EVA]);
+      if (s < -6) s = -6;
+      if (s > 6) s = 6;
+      acc = acc * AS[s + 6] / 100;
+      if (at.lockon) { at.lockon = false; acc = 100; }
+      if (c.rng->below(100) >= acc) { c.ev2(side, EV_MISS, mid); return false; }
+    }
+    if (df.subHp && m.fx != MX_PERISH) { c.msg(side, MSG_FAIL, mid); return false; }
+  }
+  auto fail = [&]() { c.msg(side, MSG_FAIL, mid); return false; };
+  switch (m.fx) {
+    case MX_NONE:
+    case MX_TOXIC: {
+      if (m.ail) {
+        if (df.guard || statusMoveBlocked(mid, df) || !canAfflict(m.ail, df)) {
+          if (df.safeT) c.msg(fs, MSG_SAFEGUARDED, mid);
+          else c.ev2(fs, EV_NOEFFECT, mid);
+          return false;
+        }
+        afflictC(c, fs, m.ail, mid, m.fx == MX_TOXIC);
         return false;
       }
-      afflict(df, side ^ 1, m.ail, rng, ev, maxEv, n, a, b, mid);
-    } else if (m.stD) {
-      if (m.stSelf) statChange(at, side, m.st, m.stD, ev, maxEv, n, a, b, mid, false);
-      else if (df.guard) push(ev, maxEv, n, side ^ 1, EV_NOEFFECT, mv, 2, false, 0, a, b, mid);
-      else statChange(df, side ^ 1, m.st, m.stD, ev, maxEv, n, a, b, mid, false);
+      if (!m.stD && !m.stD2) return fail();
+      uint8_t who = m.stSelf ? side : fs;
+      if (!m.stSelf && df.guard) { c.ev2(fs, EV_NOEFFECT, mid); return false; }
+      statChangeC(c, who, m.st, m.stD, mid, false, !m.stSelf);
+      if (m.stD2) statChangeC(c, who, m.st2, m.stD2, mid, false, !m.stSelf);
+      if (mid == 107) at.minimized = true;   // chiquitolina: pisoton le hace el doble
+      if (mid == 111) at.curled = true;      // rizo defensa: rodar el doble
+      return false;
     }
+    case MX_HEAL: case MX_HEALWX: {
+      if (at.hp >= at.maxHp) return fail();
+      uint32_t h = at.maxHp / 2;
+      if (m.fx == MX_HEALWX) {
+        uint8_t w = battleWeather();
+        h = w == WX_SUNNY ? at.maxHp : (w == WX_RAIN || w == WX_SAND || w == WX_SNOW) ? at.maxHp / 4 : at.maxHp / 2;
+      }
+      uint16_t got = c.heal(side, h);
+      c.ev2(side, EV_HEAL, mid, 0, got);
+      return false;
+    }
+    case MX_REST: {
+      if (at.hp >= at.maxHp || at.st == ST_SLP) return fail();
+      at.hp = at.maxHp;
+      at.st = ST_SLP; at.stT = 3; at.tox = 0; at.nightmare = false;
+      c.msg(side, MSG_REST, mid);
+      return false;
+    }
+    case MX_LEECHSEED:
+      if (df.seeded || statusMoveBlocked(mid, df)) return fail();
+      df.seeded = true;
+      c.msg(fs, MSG_SEEDED, mid);
+      return false;
+    case MX_DISABLE: {
+      if (!df.lastMv || df.disT || !movesHas(df.mv, df.lastMv)) return fail();
+      df.disMv = df.lastMv;
+      df.disT = (uint8_t)(2 + c.rng->below(6));
+      c.msg(fs, MSG_DISABLE, df.disMv);
+      return false;
+    }
+    case MX_MIST: if (at.mistT) return fail(); at.mistT = 5; c.msg(side, MSG_MIST, mid); return false;
+    case MX_LIGHTSCREEN: if (at.lscrT) return fail(); at.lscrT = 5; c.msg(side, MSG_LSCREEN, mid); return false;
+    case MX_REFLECT: if (at.reflT) return fail(); at.reflT = 5; c.msg(side, MSG_REFLECT, mid); return false;
+    case MX_SAFEGUARD: if (at.safeT) return fail(); at.safeT = 5; c.msg(side, MSG_SAFEGUARD, mid); return false;
+    case MX_HAZE:
+      memset(at.stg, 0, sizeof(at.stg));
+      memset(df.stg, 0, sizeof(df.stg));
+      c.msg(side, MSG_HAZE, mid);
+      return false;
+    case MX_FOCUS: if (at.focus) return fail(); at.focus = true; c.msg(side, MSG_FOCUS, mid); return false;
+    case MX_TRANSFORM: {
+      if (at.xform || df.xform) return fail();
+      at.oType = at.type; at.oType2 = at.type2; at.oAtk = at.atk; at.oDef = at.def; at.oSpe = at.spe;
+      memcpy(at.oMv, at.mv, 4); memcpy(at.oPp, at.pp, 4);
+      at.xform = df.dex;
+      at.type = df.type; at.type2 = df.type2;
+      at.atk = df.atk; at.def = df.def; at.spe = df.spe;
+      memcpy(at.stg, df.stg, sizeof(at.stg));
+      for (uint8_t i = 0; i < 4; i++) { at.mv[i] = df.mv[i]; at.pp[i] = df.mv[i] ? 5 : 0; }
+      c.msg(side, MSG_TRANSFORM, mid);
+      return false;
+    }
+    case MX_SPLASH: c.msg(side, MSG_SPLASH, mid); return false;
+    case MX_CONVERSION: {
+      uint8_t opts[4], k = 0;
+      for (uint8_t i = 0; i < 4; i++) {
+        if (!at.mv[i] || at.mv[i] == mid) continue;
+        uint8_t t = moveDef(at.mv[i]).type;
+        if (!battlerHasType(at, t)) opts[k++] = t;
+      }
+      if (!k) return fail();
+      at.type = opts[c.rng->below(k)];
+      at.type2 = 0xFF;
+      c.msg(side, MSG_CONVERSION, mid, at.type);
+      return false;
+    }
+    case MX_CONVERSION2: {
+      if (!df.lastMv) return fail();
+      uint8_t lt = moveTypeFor(df, df.lastMv), opts[PT_BATTLE_N], k = 0;
+      for (uint8_t t = 0; t < PT_BATTLE_N; t++) if (typeEff(lt, t) < 2 && !battlerHasType(at, t)) opts[k++] = t;
+      if (!k) return fail();
+      at.type = opts[c.rng->below(k)];
+      at.type2 = 0xFF;
+      c.msg(side, MSG_CONVERSION, mid, at.type);
+      return false;
+    }
+    case MX_SUBSTITUTE: {
+      uint16_t q = at.maxHp / 4;
+      if (at.subHp || at.hp <= q || !q) return fail();
+      at.hp -= q;
+      at.subHp = (uint16_t)(q + 1);
+      c.msg(side, MSG_SUB, mid, 0, q);
+      return false;
+    }
+    case MX_MIMIC: {
+      uint8_t lm = df.lastMv;
+      if (!lm || lm == MOVE_STRUGGLE || movesHas(at.mv, lm) || moveDef(lm).fx == MX_MIMIC ||
+          moveDef(lm).fx == MX_METRONOME || moveDef(lm).fx == MX_TRANSFORM) return fail();
+      for (uint8_t i = 0; i < 4; i++)
+        if (at.mv[i] == mid) {
+          at.mv[i] = lm;
+          at.pp[i] = mid == 166 ? movePP(lm) : 5;
+          if (mid == 166) { at.sketched = lm; c.msg(side, MSG_SKETCH, lm); }
+          else c.msg(side, MSG_MIMIC, lm);
+          return false;
+        }
+      return fail();
+    }
+    case MX_MEANLOOK: if (df.meanLook) return fail(); df.meanLook = true; c.msg(fs, MSG_MEANLOOK, mid); return false;
+    case MX_LOCKON: at.lockon = true; c.msg(side, MSG_LOCKON, mid); return false;
+    case MX_NIGHTMARE:
+      if (df.st != ST_SLP || df.nightmare) return fail();
+      df.nightmare = true;
+      c.msg(fs, MSG_NIGHTMARE, mid);
+      return false;
+    case MX_CURSE: {
+      if (battlerHasType(at, PT_GHOST)) {
+        if (df.cursed) return fail();
+        df.cursed = true;
+        uint16_t q = at.maxHp / 2 ? at.maxHp / 2 : 1;
+        bool down = c.hurt(side, q);
+        c.msg(fs, MSG_CURSE, mid, 0, q);
+        if (down) { c.faint(side, mid); return true; }
+        return false;
+      }
+      statChangeC(c, side, STG_SPE, -1, mid, true, false);
+      statChangeC(c, side, STG_ATK, 1, mid, false, false);
+      statChangeC(c, side, STG_DEF, 1, mid, false, false);
+      return false;
+    }
+    case MX_SPITE: {
+      for (uint8_t i = 0; i < 4; i++)
+        if (df.lastMv && df.mv[i] == df.lastMv && df.pp[i]) {
+          uint8_t k = (uint8_t)(2 + c.rng->below(4));
+          if (k > df.pp[i]) k = df.pp[i];
+          df.pp[i] -= k;
+          c.msg(fs, MSG_SPITE, df.lastMv, k);
+          return false;
+        }
+      return fail();
+    }
+    case MX_PROTECT: case MX_ENDURE: {
+      uint32_t den = 1u << (at.protN < 5 ? at.protN : 5);  // 2a gen: cada vez seguida, la mitad
+      if (c.rng->below(den) != 0) { at.protN = 0; return fail(); }
+      at.protN++;
+      if (m.fx == MX_PROTECT) { at.protect = true; c.msg(side, MSG_PROTECT, mid); }
+      else { at.endure = true; c.msg(side, MSG_ENDURE, mid); }
+      return false;
+    }
+    case MX_BELLYDRUM: {
+      uint16_t q = at.maxHp / 2;
+      if (at.hp <= q || at.stg[STG_ATK] >= 6) return fail();
+      at.hp -= q;
+      at.stg[STG_ATK] = 6;
+      c.msg(side, MSG_BELLYDRUM, mid, 0, q);
+      return false;
+    }
+    case MX_SPIKES: if (df.spikes) return fail(); df.spikes = 1; c.msg(fs, MSG_SPIKES, mid); return false;
+    case MX_FORESIGHT: df.foresight = true; c.msg(fs, MSG_FORESIGHT, mid); return false;
+    case MX_DESTINYBOND: at.dbond = true; c.msg(side, MSG_DBOND, mid); return false;
+    case MX_PERISH: {
+      bool any = false;
+      if (!at.perish) { at.perish = 5; any = true; }  // fin de turno: 3, 2, 1, 0 (se debilita)
+      if (!df.perish) { df.perish = 5; any = true; }
+      if (!any) return fail();
+      c.msg(side, MSG_PERISH_SING, mid, 3);
+      return false;
+    }
+    case MX_SANDSTORM: case MX_RAINDANCE: case MX_SUNNYDAY: {
+      uint8_t w = m.fx == MX_SANDSTORM ? WX_SAND : m.fx == MX_RAINDANCE ? WX_RAIN : WX_SUNNY;
+      if (battleWeather() == w) return fail();
+      sWxOv = w; sWxT = 5;
+      c.msg(side, w == WX_SAND ? MSG_WX_SAND : w == WX_RAIN ? MSG_WX_RAIN : MSG_WX_SUN, mid);
+      return false;
+    }
+    case MX_SWAGGER: {
+      statChangeC(c, fs, STG_ATK, 2, mid, false, false);
+      if (canAfflict(ST_CNF, df)) afflictC(c, fs, ST_CNF, mid);
+      else if (df.safeT) c.msg(fs, MSG_SAFEGUARDED, mid);
+      return false;
+    }
+    case MX_ATTRACT: if (df.attract) return fail(); df.attract = true; c.msg(fs, MSG_LOVE, mid); return false;
+    case MX_HEALBELL: {
+      if (!at.st) return fail();
+      at.st = ST_NONE; at.tox = 0; at.nightmare = false;
+      c.msg(side, MSG_HEALBELL, mid);
+      return false;
+    }
+    case MX_PAINSPLIT: {
+      uint16_t avg = (uint16_t)(((uint32_t)at.hp + df.hp) / 2);
+      at.hp = avg < at.maxHp ? avg : at.maxHp;
+      df.hp = avg < df.maxHp ? avg : df.maxHp;
+      if (!df.hp) df.hp = 1;
+      c.msg(side, MSG_PAINSPLIT, mid);
+      return false;
+    }
+    case MX_ENCORE: {
+      uint8_t lm = df.lastMv;
+      if (!lm || df.encT || !movesHas(df.mv, lm) || lm == MOVE_STRUGGLE || moveDef(lm).fx == MX_ENCORE ||
+          moveDef(lm).fx == MX_MIRRORMOVE) return fail();
+      df.encMv = lm;
+      df.encT = (uint8_t)(2 + c.rng->below(5));
+      c.msg(fs, MSG_ENCORE, lm);
+      return false;
+    }
+    case MX_PSYCHUP: memcpy(at.stg, df.stg, sizeof(at.stg)); c.msg(side, MSG_PSYCHUP, mid); return false;
+    case MX_ROAR: case MX_TELEPORT: {
+      // salvaje: el rival sale volando (rugido / remolino) o se va el que lo usa (teletransporte). Entrenadores: falla
+      if (!sFleeOk) return fail();
+      c.ev2(m.fx == MX_ROAR ? fs : side, EV_RUN_OK, mid, m.fx == MX_ROAR ? 1 : 2);
+      c.ended = true;
+      return true;
+    }
+    case MX_BATONPASS: return fail();  // aqui no hay a quien pasar el relevo en medio del turno
+    default: return fail();
+  }
+}
+
+// un movimiento de "at" (lado side) a "df"; devuelve true si alguno se debilito (o se acabo la batalla)
+static bool doMoveC(TurnCtx &c, uint8_t side, BAct act, bool first, bool *landed) {
+  Battler &at = *c.s[side], &df = *c.s[side ^ 1];
+  uint8_t fs = side ^ 1;
+  if (landed) *landed = false;
+  int8_t slot;
+  bool cont;
+  uint8_t mid = actMove(at, act, &slot, &cont);
+  at.dbond = false;  // mismodestino dura hasta que vuelve a moverse
+  if (!canActC(c, side, mid)) {
+    breakLocks(at);
+    at.furyN = 0;
+    at.rage = false;
+    return at.hp == 0;
+  }
+  if (slot >= 0 && at.pp[slot] && mid != MOVE_STRUGGLE && !cont) at.pp[slot]--;
+  if (at.encT && mid != at.encMv) at.encT = 0;
+  // los que llaman a otro
+  uint8_t sel = mid;
+  if (moveDef(mid).fx == MX_METRONOME || moveDef(mid).fx == MX_MIRRORMOVE || moveDef(mid).fx == MX_SLEEPTALK) {
+    uint8_t called = 0;
+    uint8_t fx = moveDef(mid).fx;
+    if (fx == MX_METRONOME) called = metronomePick(*c.rng);
+    else if (fx == MX_MIRRORMOVE) called = (df.lastMv && moveDef(df.lastMv).fx != MX_MIRRORMOVE) ? df.lastMv : 0;
+    else if (at.st == ST_SLP) {
+      uint8_t ok[4], k = 0;
+      for (uint8_t i = 0; i < 4; i++) {
+        uint8_t o = at.mv[i], ofx = moveDef(o).fx;
+        if (o && o != mid && ofx != MX_CHARGE && ofx != MX_SOLAR && ofx != MX_FLY && ofx != MX_DIG && ofx != MX_BIDE &&
+            ofx != MX_METRONOME && ofx != MX_MIRRORMOVE) ok[k++] = o;
+      }
+      if (k) called = ok[c.rng->below(k)];
+    }
+    if (!called) {
+      c.ev2(side, EV_USE, mid);
+      c.msg(side, MSG_FAIL, mid);
+      at.lastMv = sel;
+      return false;
+    }
+    c.ev2(side, EV_USE, mid);
+    c.msg(side, fx == MX_METRONOME ? MSG_METRONOME : fx == MX_MIRRORMOVE ? MSG_MIRRORMOVE : MSG_SLEEPTALK, called);
+    mid = called;
+  }
+  const MoveDef &m = moveDef(mid);
+  if (m.fx != MX_PROTECT && m.fx != MX_ENDURE) at.protN = 0;
+  if (m.fx != MX_FURYCUTTER) at.furyN = 0;
+  at.rage = m.fx == MX_RAGE;
+  at.lastMv = sel;
+
+  if (m.flags & MF_STATUS) {
+    bool r = doStatus(c, side, mid);
+    if (at.hp == 0 && !r) return true;
+    return r;
+  }
+
+  // ---- cargas (2 turnos): el primero solo carga (rayo solar con sol: al momento)
+  if ((m.fx == MX_CHARGE || m.fx == MX_SOLAR || m.fx == MX_FLY || m.fx == MX_DIG) && at.chargeMv != mid) {
+    if (!(m.fx == MX_SOLAR && battleWeather() == WX_SUNNY)) {
+      at.chargeMv = mid;
+      if (m.fx == MX_FLY) { at.invul = 1; c.msg(side, MSG_FLY, mid); }
+      else if (m.fx == MX_DIG) { at.invul = 2; c.msg(side, MSG_DIG, mid); }
+      else c.msg(side, MSG_CHARGE, mid);
+      if (mid == 130) statChangeC(c, side, STG_DEF, 1, mid, true, false);  // cabezazo: sube la defensa al cargar
+      return false;
+    }
+  }
+  bool charged = at.chargeMv == mid;
+  if (charged) { at.chargeMv = 0; at.invul = 0; }
+
+  // ---- venganza: aguanta 2 turnos y devuelve el doble
+  if (m.fx == MX_BIDE) {
+    if (!at.bideT) {
+      at.bideT = 2; at.bideDmg = 0;
+      c.ev2(side, EV_USE, mid);
+      c.msg(side, MSG_BIDE, mid);
+      return false;
+    }
+    if (--at.bideT) { c.msg(side, MSG_BIDE, mid); return false; }
+    c.msg(side, MSG_BIDE_GO, mid);
+    if (!at.bideDmg) { c.msg(side, MSG_FAIL, mid); return false; }
+  }
+
+  // ---- premonicion: el golpe llega dentro de 2 turnos
+  if (m.fx == MX_FUTURESIGHT) {
+    if (df.futT) { c.ev2(side, EV_USE, mid); c.msg(side, MSG_FAIL, mid); return false; }
+    uint32_t d = rawDamage(at, df, mid, nullptr, false);
+    d = d * (85 + c.rng->below(16)) / 100;
+    df.futT = 3;
+    df.futDmg = (uint16_t)(d < 1 ? 1 : d > 65535 ? 65535 : d);
+    c.ev2(side, EV_USE, mid);
+    c.msg(side, MSG_FUTURE, mid);
     return false;
   }
-  uint8_t acc = m.acc;
-  if (rng.below(100) >= acc) {
-    push(ev, maxEv, n, side, EV_MISS, mv, 2, false, 0, a, b, mid);
+
+  // ---- se protegio (proteccion / detectar)
+  if (df.protect) {
+    c.msg(fs, MSG_PROTECTED, mid);
+    if (m.fx == MX_CRASH) {
+      uint16_t q = at.maxHp / 8 ? at.maxHp / 8 : 1;
+      bool down = c.hurt(side, q);
+      c.msg(side, MSG_CRASH, mid, 0, q);
+      if (down) { c.faint(side, mid); return true; }
+    }
+    if (m.fx == MX_SELFKO) { selfKo(c, side, mid); return true; }
+    at.rollT = 0;
     return false;
   }
-  uint8_t eff;
-  uint32_t d = rawDamageId(at, df, mid, &eff);
-  bool crit = false;
-  bool fixed = (m.flags & (MF_FIX | MF_FIXLVL)) != 0;
-  if (eff) {
-    if (!fixed) {
-      crit = rng.below((m.flags & MF_HICRIT) ? 8 : 16) == 0;
-      if (crit) d = d * 3 / 2;
-      d = d * (85 + rng.below(16)) / 100;
-    }
-    if (df.guard) d /= 2;
-    if (d < 1) d = 1;
-  } else {
-    d = 0;
+
+  // ---- condiciones
+  if (m.fx == MX_DREAMEATER && df.st != ST_SLP) { c.ev2(side, EV_USE, mid); c.ev2(fs, EV_NOEFFECT, mid); return false; }
+  if (m.fx == MX_SNORE && at.st != ST_SLP) { c.ev2(side, EV_USE, mid); c.msg(side, MSG_FAIL, mid); return false; }
+  uint16_t fixedD = 0;
+  if (m.fx == MX_COUNTER || m.fx == MX_MIRRORCOAT) {
+    uint16_t got = m.fx == MX_COUNTER ? at.lastDmgP : at.lastDmgS;
+    if (!got) { c.ev2(side, EV_USE, mid); c.msg(side, MSG_FAIL, mid); return false; }
+    fixedD = (uint16_t)(got * 2u > 65535 ? 65535 : got * 2u);
   }
-  if (d > df.hp) d = df.hp;
-  df.hp -= (uint16_t)d;
-  if (landed) *landed = d > 0;
-  // ko12.8: tras un golpe como hiperrayo, ese movimiento descansa un turno (si lo tumbo, no)
-  bool rest = (m.flags & MF_RECHARGE) && df.hp;
-  if (rest) { at.restMv = mid; at.restT = 2; }
-  push(ev, maxEv, n, side, EV_HIT, mv, eff, crit, (uint16_t)d, a, b, mid,
-       (int8_t)((df.guard && d ? HIT_GUARDED : 0) | (rest ? HIT_REST : 0)));
+  if (m.fx == MX_BIDE) fixedD = (uint16_t)(at.bideDmg * 2u > 65535 ? 65535 : at.bideDmg * 2u);
+  if (m.fx == MX_OHKO && df.lvl > at.lvl) { c.ev2(side, EV_USE, mid); c.msg(side, MSG_FAIL, mid); return false; }
+
+  // ---- acierta?
+  bool hit = true;
+  if (df.invul == 1 && !(m.fx == MX_TWISTER || m.fx == MX_THUNDER || mid == 18)) hit = false;
+  else if (df.invul == 2 && !(m.fx == MX_QUAKE || m.fx == MX_MAGNITUDE || mid == 90)) hit = false;
+  else if (at.lockon) { at.lockon = false; }
+  else if (!(m.flags & MF_NOMISS) && m.acc && m.fx != MX_BIDE) {
+    uint32_t acc = m.acc;
+    if (m.fx == MX_THUNDER) { uint8_t w = battleWeather(); if (w == WX_RAIN) acc = 255; else if (w == WX_SUNNY) acc = 50; }
+    if (m.fx == MX_OHKO) acc = 30 + (uint32_t)(at.lvl - df.lvl) * 2;
+    else if (acc < 255) {
+      static const uint16_t AS[13] = { 33, 36, 43, 50, 60, 75, 100, 133, 166, 200, 233, 266, 300 };
+      int s = at.stg[STG_ACC] - (df.foresight && df.stg[STG_EVA] > 0 ? 0 : df.stg[STG_EVA]);
+      if (s < -6) s = -6;
+      if (s > 6) s = 6;
+      acc = acc * AS[s + 6] / 100;
+    }
+    hit = c.rng->below(100) < acc;
+  }
+  if (!hit) {
+    c.ev2(side, EV_MISS, mid);
+    if (m.fx == MX_CRASH) {  // patada salto: se estrella
+      uint16_t q = at.maxHp / 8 ? at.maxHp / 8 : 1;
+      bool down = c.hurt(side, q);
+      c.msg(side, MSG_CRASH, mid, 0, q);
+      if (down) { c.faint(side, mid); return true; }
+    }
+    if (m.fx == MX_SELFKO) { selfKo(c, side, mid); return true; }
+    at.rollT = 0;
+    at.furyN = 0;
+    if (at.rampT && !--at.rampT) { c.msg(side, MSG_RAMPAGE_END, mid); if (canAfflict(ST_CNF, at)) afflictC(c, side, ST_CNF, mid); }
+    return false;
+  }
+
+  // ---- tiradas antes del golpe
+  if (m.fx == MX_MAGNITUDE) {
+    uint32_t r = c.rng->below(100);
+    sMagLv = r < 5 ? 4 : r < 15 ? 5 : r < 35 ? 6 : r < 65 ? 7 : r < 85 ? 8 : r < 95 ? 9 : 10;
+    c.msg(side, MSG_MAGNITUDE, mid, sMagLv);
+  }
+  if (m.fx == MX_PRESENT) {
+    uint32_t r = c.rng->below(100);
+    if (r < 20) {  // le cura un cuarto
+      uint16_t h = df.hp < df.maxHp ? c.heal(fs, df.maxHp / 4) : 0;
+      c.ev2(side, EV_USE, mid);
+      c.msg(fs, MSG_PRESENT_HEAL, mid, 0, h);
+      return false;
+    }
+    sPresent = r < 60 ? 40 : r < 90 ? 80 : 120;
+  }
+  uint32_t psy = 0;
+  if (m.fx == MX_PSYWAVE) { uint32_t L = lvlCap(at.lvl); psy = 1 + c.rng->below(L * 3 / 2 ? L * 3 / 2 : 1); }
+
+  // ---- golpes
+  uint8_t nh = 1;
+  if (m.fx == MX_TRIPLEKICK) nh = 3;
+  else if (m.hits) {
+    uint8_t lo = m.hits & 15, hi = m.hits >> 4;
+    if (lo == hi) nh = lo;
+    else {  // 2-5: 3/8 dos, 3/8 tres, 1/8 cuatro, 1/8 cinco (como en los juegos)
+      uint32_t r = c.rng->below(8);
+      nh = r < 3 ? 2 : r < 6 ? 3 : r < 7 ? 4 : 5;
+      if (hi < 5 && nh > hi) nh = hi;
+    }
+  }
+  uint8_t crRate = (uint8_t)(((m.flags & MF_HICRIT) ? 2 : 0) + (at.focus ? 1 : 0));
+  static const uint8_t CR[4] = { 17, 32, 64, 85 };  // de 256 (2a gen)
+  bool sp = typeIsSpecial(moveTypeFor(at, mid));
+  uint32_t total = 0;
+  uint8_t eff = 2, done = 0;
+  bool anyCrit = false, subHit = false;
+  for (uint8_t h = 0; h < nh; h++) {
+    sHitK = (uint8_t)(h + 1);
+    if (m.fx == MX_TRIPLEKICK && h && c.rng->below(100) >= m.acc) break;  // cada patada puede fallar
+    bool crit = false;
+    uint32_t d;
+    bool fixed = fixedD || m.fx == MX_SONICBOOM || m.fx == MX_DRAGONRAGE || m.fx == MX_LEVEL ||
+                 m.fx == MX_PSYWAVE || m.fx == MX_SUPERFANG || m.fx == MX_OHKO;
+    if (fixedD) {
+      d = fixedD;
+      rawDamage(at, df, mid, &eff, false);
+      if (m.fx == MX_BIDE) eff = 2;
+      if (!eff) d = 0;
+    } else {
+      crit = !fixed && c.rng->below(256) < CR[crRate < 3 ? crRate : 3];
+      d = rawDamage(at, df, mid, &eff, crit, psy);
+      if (eff && !fixed) d = d * (85 + c.rng->below(16)) / 100;
+    }
+    if (eff) {
+      if (df.guard) d /= 2;
+      if (d < 1) d = 1;
+    } else d = 0;
+    if (!eff) { if (!h) { c.ev2(side, EV_HIT, mid, 0, 0, 0, false); } break; }
+    if (d > 65535) d = 65535;
+    // sustituto: se lleva el golpe
+    if (df.subHp && m.fx != MX_FUTURESIGHT) {
+      uint16_t sd = (uint16_t)(d > df.subHp ? df.subHp : d);
+      df.subHp -= sd;
+      subHit = true;
+      c.msg(fs, MSG_SUBHIT, mid, 0, sd);
+      if (!df.subHp) c.msg(fs, MSG_SUBBREAK, mid);
+      total += sd;
+      done++;
+      anyCrit |= crit;
+      if (!df.subHp) break;
+      continue;
+    }
+    bool endured = false;
+    if (d >= df.hp && (df.endure || m.fx == MX_FALSESWIPE)) { d = df.hp > 1 ? df.hp - 1 : 0; endured = df.endure; }
+    if (d > df.hp) d = df.hp;
+    df.hp -= (uint16_t)d;
+    if (sp) df.lastDmgS = (uint16_t)(df.lastDmgS + d); else df.lastDmgP = (uint16_t)(df.lastDmgP + d);
+    if (df.bideT) df.bideDmg = (uint16_t)(df.bideDmg + d > 65535 ? 65535 : df.bideDmg + d);
+    total += d;
+    done++;
+    anyCrit |= crit;
+    bool rest = (m.flags & MF_RECHARGE) && df.hp;
+    if (rest) { at.restMv = mid; at.restT = 2; }
+    c.ev2(side, EV_HIT, mid, (int8_t)((df.guard && d ? HIT_GUARDED : 0) | (rest ? HIT_REST : 0)), (uint16_t)d, eff, crit);
+    if (m.fx == MX_OHKO) c.msg(fs, MSG_OHKO, mid);
+    if (endured) c.msg(fs, MSG_ENDURED, mid);
+    if (df.rage && df.hp && d) { statChangeC(c, fs, STG_ATK, 1, 99, true, false); c.msg(fs, MSG_RAGE, 99); }
+    if (!df.hp) break;
+  }
+  if (nh > 1 && done) c.msg(fs, MSG_HITS, mid, done);
+  if (landed) *landed = total > 0 && !subHit;
+  if (!eff && !total) {
+    // inmune: lo que encadena se corta
+    at.rollT = 0; at.furyN = 0;
+    if (m.fx == MX_SELFKO) { selfKo(c, side, mid); return true; }
+    return false;
+  }
   // drenaje / retroceso
-  if (d && (m.flags & MF_DRAIN) && at.hp < at.maxHp) {
-    uint32_t h = d * m.drain / 100;
-    if (h < 1) h = 1;
-    if (at.hp + h > at.maxHp) h = at.maxHp - at.hp;
-    at.hp += (uint16_t)h;
-    push(ev, maxEv, n, side, EV_DRAIN, mv, 2, false, (uint16_t)h, a, b, mid);
+  if (total && (m.flags & MF_DRAIN) && at.hp < at.maxHp) {
+    uint16_t h = c.heal(side, total * m.drain / 100);
+    c.ev2(side, EV_DRAIN, mid, 0, h);
   }
-  if (d && (m.flags & MF_RECOIL)) {
-    uint32_t r = mid == MOVE_STRUGGLE ? at.maxHp / 4 : d * m.drain / 100;
+  if (total && (m.flags & MF_RECOIL)) {
+    uint32_t r = total * m.drain / 100;
     if (r < 1) r = 1;
-    if (r > at.hp) r = at.hp;
-    at.hp -= (uint16_t)r;
-    push(ev, maxEv, n, side, EV_RECOIL, mv, 2, false, (uint16_t)r, a, b, mid);
+    c.hurt(side, (uint16_t)(r > 65535 ? 65535 : r));
+    c.ev2(side, EV_RECOIL, mid, 0, (uint16_t)r);
   }
+  if (m.fx == MX_SELFKO) selfKo(c, side, mid);
+  // cadenas
+  if (m.fx == MX_ROLLOUT) { at.rollT++; if (at.rollT >= 5) at.rollT = 0; }
+  if (m.fx == MX_FURYCUTTER && at.furyN < 4) at.furyN++;
   if (df.hp == 0) {
-    push(ev, maxEv, n, side ^ 1, EV_FAINT, mv, 2, false, 0, a, b, mid);
-    if (at.hp == 0) push(ev, maxEv, n, side, EV_FAINT, mv, 2, false, 0, a, b, mid);
+    c.faint(fs, mid);
+    if (df.dbond && at.hp) { at.hp = 0; c.msg(fs, MSG_DBOND_HIT, 194); }
+    if (at.hp == 0 && m.fx != MX_SELFKO) c.faint(side, mid);
     return true;
   }
   if (at.hp == 0) {
-    push(ev, maxEv, n, side, EV_FAINT, mv, 2, false, 0, a, b, mid);
+    if (m.fx != MX_SELFKO) c.faint(side, mid);
     return true;
   }
-  // efectos secundarios (solo si el golpe entro)
-  if (d) {
-    if (m.ail && m.ailCh && rng.below(100) < m.ailCh && !df.guard && canAfflict(m.ail, df))
-      afflict(df, side ^ 1, m.ail, rng, ev, maxEv, n, a, b, mid);
-    if (m.stD && m.stCh && rng.below(100) < m.stCh) {
-      if (m.stSelf) statChange(at, side, m.st, m.stD, ev, maxEv, n, a, b, mid, true);
-      else statChange(df, side ^ 1, m.st, m.stD, ev, maxEv, n, a, b, mid, true);
+  if (m.fx == MX_RAMPAGE) {
+    if (!at.rampT) { at.rampMv = mid; at.rampT = (uint8_t)(1 + c.rng->below(2)); }  // 2-3 turnos en total
+    else if (!--at.rampT) {
+      c.msg(side, MSG_RAMPAGE_END, mid);
+      if (canAfflict(ST_CNF, at)) afflictC(c, side, ST_CNF, mid);
     }
-    if (first && m.flinch && rng.below(100) < m.flinch) df.flinch = true;
   }
-  if ((m.flags & MF_SELFCNF) && !at.cnf && at.hp) afflict(at, side, ST_CNF, rng, ev, maxEv, n, a, b, mid);
+  // efectos secundarios (solo si el golpe entro y no fue al sustituto)
+  if (total && !subHit) {
+    uint8_t ail = m.ail, ch = m.ailCh;
+    if (m.fx == MX_TRIATTACK) { static const uint8_t T[3] = { ST_BRN, ST_FRZ, ST_PAR }; ail = T[c.rng->below(3)]; }
+    if (ail && ch && c.rng->below(100) < ch && !df.guard && canAfflict(ail, df)) afflictC(c, fs, ail, mid);
+    if (df.st == ST_FRZ && moveTypeFor(at, mid) == PT_FIRE && ail != ST_FRZ) { df.st = ST_NONE; c.ev2(fs, EV_CURE, 0, ST_FRZ); }
+    if (m.stD && m.stCh && c.rng->below(100) < m.stCh) {
+      if (m.stSelf) statChangeC(c, side, m.st, m.stD, mid, true, false);
+      else statChangeC(c, fs, m.st, m.stD, mid, true, true);
+    }
+    if (m.fx == MX_ALLUP && c.rng->below(100) < m.stCh)
+      for (uint8_t k = 0; k < 5; k++) statChangeC(c, side, k, 1, mid, true, false);
+    if (first && m.flinch && c.rng->below(100) < m.flinch) df.flinch = true;
+    if (m.fx == MX_TRAP && !df.trapT) {
+      df.trapT = (uint8_t)(2 + c.rng->below(4));
+      df.trapMv = mid;
+      c.msg(fs, MSG_TRAPPED, mid);
+    }
+    if (m.fx == MX_PAYDAY) c.msg(side, MSG_PAYDAY, mid);
+  }
+  if (m.fx == MX_RAPIDSPIN && (at.trapT || at.seeded || at.spikes)) {
+    at.trapT = 0; at.seeded = false; at.spikes = 0;
+    c.msg(side, MSG_RAPIDSPIN, mid);
+  }
   return false;
 }
 
@@ -1059,7 +1800,7 @@ uint8_t catchChance(const Battler &foe) {
 // sin fallo ni critico (sigue contando el tipo: un fantasma no lo nota)
 uint16_t counterDamage(const Battler &at, const Battler &df, BRng &rng, uint8_t *effOut) {
   uint8_t eff;
-  uint32_t d = rawDamageId(at, df, MOVE_TACKLE, &eff);
+  uint32_t d = rawDamage(at, df, MOVE_TACKLE, &eff, false);
   if (effOut) *effOut = eff;
   if (!eff) return 0;
   d = d * (85 + rng.below(16)) / 100 / 2;
@@ -1070,32 +1811,133 @@ uint16_t counterDamage(const Battler &at, const Battler &df, BRng &rng, uint8_t 
 static bool wildOnly(BAct a) { return a == BA_RUN || a == BA_POTION || a == BA_BALL; }
 static bool isAttack(BAct a) { return a == BA_TACKLE || a == BA_TYPE || (a >= BA_M0 && a <= BA_M3); }
 
-// fin del turno: veneno y quemadura
-static void endOfTurn(Battler &a, Battler &b, BRng &rng, BEvent *ev, int maxEv, int &n) {
-  Battler *side[2] = { &a, &b };
-  for (uint8_t s = 0; s < 2; s++) {
-    Battler &me = *side[s];
+// fin del turno (orden de 2a gen): premonicion, tiempo, atrapado, veneno/quemadura, drenadoras,
+// pesadilla, maldicion, canto mortal y lo que se acaba con los turnos
+static void endOfTurnC(TurnCtx &c) {
+  Battler &a = *c.s[0], &b = *c.s[1];
+  auto alive = [&]() { return a.hp && b.hp; };
+  for (uint8_t s = 0; s < 2 && alive(); s++) {
+    Battler &me = *c.s[s];
+    if (me.futT && !--me.futT) {
+      uint16_t d = me.futDmg;
+      if (me.subHp) { me.subHp = 0; c.msg(s, MSG_FUTURE_HIT, 248, 0, 0); c.msg(s, MSG_SUBBREAK, 248); }
+      else {
+        bool down = c.hurt(s, d);
+        c.msg(s, MSG_FUTURE_HIT, 248, 0, d);
+        if (down) { c.faint(s, 248); return; }
+      }
+    }
+  }
+  // tiempo de los movimientos: arena hace dano; y se acaba
+  if (alive() && battleWeather() == WX_SAND) {
+    for (uint8_t s = 0; s < 2 && alive(); s++) {
+      Battler &me = *c.s[s];
+      if (battlerHasType(me, PT_ROCK) || battlerHasType(me, PT_GROUND) || battlerHasType(me, PT_STEEL) || me.invul == 2) continue;
+      uint16_t d = me.maxHp / 8 ? me.maxHp / 8 : 1;
+      bool down = c.hurt(s, d);
+      c.msg(s, MSG_SANDDMG, 201, 0, d);
+      if (down) { c.faint(s); return; }
+    }
+  }
+  if (sWxT && !--sWxT) c.msg(0, MSG_WX_END, 0, battleWeather());
+  for (uint8_t s = 0; s < 2 && alive(); s++) {
+    Battler &me = *c.s[s];
+    Battler &op = *c.s[s ^ 1];
     me.flinch = false;
-    if (!me.hp || !a.hp || !b.hp) continue;
+    if (me.trapT) {
+      if (!--me.trapT) c.msg(s, MSG_TRAPEND, me.trapMv);
+      else {
+        uint16_t d = me.maxHp / 16 ? me.maxHp / 16 : 1;
+        bool down = c.hurt(s, d);
+        c.msg(s, MSG_TRAPDMG, me.trapMv, 0, d);
+        if (down) { c.faint(s); return; }
+      }
+    }
     // ko11.31: el veneno, la quemadura y la paralisis pueden pasarse solos (1 de cada 6 turnos)
-    if ((me.st == ST_PSN || me.st == ST_BRN || me.st == ST_PAR) && rng.below(100) < STATUS_CURE_PCT) {
+    if ((me.st == ST_PSN || me.st == ST_BRN || me.st == ST_PAR) && !me.tox && c.rng->below(100) < STATUS_CURE_PCT) {
       uint8_t was = me.st;
       me.st = ST_NONE;
-      push(ev, maxEv, n, s, EV_CURE, BA_M0, 2, false, 0, a, b, 0, (int8_t)was);
-      continue;
+      c.ev2(s, EV_CURE, 0, (int8_t)was);
+    } else if (me.st == ST_PSN || me.st == ST_BRN) {
+      uint32_t d = me.maxHp / (me.st == ST_PSN ? 8 : 16);
+      if (me.tox) { d = (uint32_t)me.maxHp * me.tox / 16; if (me.tox < 15) me.tox++; }
+      if (d < 1) d = 1;
+      bool down = c.hurt(s, (uint16_t)d);
+      c.ev2(s, EV_STDMG, 0, (int8_t)(me.tox ? (uint8_t)ST_TOX : me.st), (uint16_t)d);
+      if (down) { c.faint(s); return; }
     }
-    if (me.st != ST_PSN && me.st != ST_BRN) continue;
-    uint32_t d = me.maxHp / (me.st == ST_PSN ? 8 : 16);
-    if (d < 1) d = 1;
-    if (d > me.hp) d = me.hp;
-    me.hp -= (uint16_t)d;
-    push(ev, maxEv, n, s, EV_STDMG, BA_M0, 2, false, (uint16_t)d, a, b, 0, (int8_t)me.st);
-    if (!me.hp) push(ev, maxEv, n, s, EV_FAINT, BA_M0, 2, false, 0, a, b);
+    if (me.seeded && op.hp) {
+      uint16_t d = me.maxHp / 8 ? me.maxHp / 8 : 1;
+      if (d > me.hp) d = me.hp;
+      bool down = c.hurt(s, d);
+      if (op.hp < op.maxHp) c.heal(s ^ 1, d);
+      c.msg(s, MSG_SEEDDMG, 73, 0, d);
+      if (down) { c.faint(s); return; }
+    }
+    if (me.nightmare) {
+      if (me.st != ST_SLP) me.nightmare = false;
+      else {
+        uint16_t d = me.maxHp / 4 ? me.maxHp / 4 : 1;
+        bool down = c.hurt(s, d);
+        c.msg(s, MSG_NIGHTMAREDMG, 171, 0, d);
+        if (down) { c.faint(s); return; }
+      }
+    }
+    if (me.cursed) {
+      uint16_t d = me.maxHp / 4 ? me.maxHp / 4 : 1;
+      bool down = c.hurt(s, d);
+      c.msg(s, MSG_CURSEDMG, 174, 0, d);
+      if (down) { c.faint(s); return; }
+    }
+  }
+  // canto mortal: los dos a la vez
+  for (uint8_t s = 0; s < 2; s++) {
+    Battler &me = *c.s[s];
+    if (!me.perish || !me.hp) continue;
+    me.perish--;
+    c.msg(s, MSG_PERISH, 195, (uint8_t)(me.perish - 1));
+  }
+  for (uint8_t s = 0; s < 2; s++) {
+    Battler &me = *c.s[s];
+    if (me.perish == 1 && me.hp) { me.perish = 0; me.hp = 0; c.faint(s, 195); }
+  }
+  // lo que dura unos turnos
+  for (uint8_t s = 0; s < 2; s++) {
+    Battler &me = *c.s[s];
+    if (me.reflT && !--me.reflT) c.msg(s, MSG_SCREEN_END, 115, 1);
+    if (me.lscrT && !--me.lscrT) c.msg(s, MSG_SCREEN_END, 113, 0);
+    if (me.mistT && !--me.mistT) c.msg(s, MSG_SCREEN_END, 54, 2);
+    if (me.safeT && !--me.safeT) c.msg(s, MSG_SCREEN_END, 219, 3);
+    if (me.encT && !--me.encT) c.msg(s, MSG_ENCORE_END, me.encMv);
+    if (me.disT && !--me.disT) c.msg(s, MSG_DISABLE_END, me.disMv);
   }
 }
 
 static void restTick(Battler &b) {
   if (b.restT && !--b.restT) b.restMv = 0;
+}
+static void turnEnd(Battler &a, Battler &b) {
+  a.flinch = b.flinch = false;
+  a.guard = b.guard = false;
+  a.protect = b.protect = false;
+  a.endure = b.endure = false;
+  restTick(a); restTick(b);
+}
+// al empezar el turno: las puas al que acaba de entrar
+static void turnStart(TurnCtx &c) {
+  for (uint8_t s = 0; s < 2; s++) {
+    Battler &me = *c.s[s];
+    me.lastDmgP = me.lastDmgS = 0;
+    if (me.spkPend) {
+      me.spkPend = false;
+      if (me.spikes && me.hp && !battlerHasType(me, PT_FLYING)) {
+        uint16_t d = me.maxHp / 8 ? me.maxHp / 8 : 1;
+        bool down = c.hurt(s, d);
+        c.msg(s, MSG_SPIKEDMG, 191, 0, d);
+        if (down) c.faint(s);
+      }
+    }
+  }
 }
 
 int runChance(uint32_t speMe, uint32_t speFoe) {
@@ -1107,7 +1949,6 @@ int runChance(uint32_t speMe, uint32_t speFoe) {
 
 int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
                BEvent *ev, int maxEv, bool canRun) {
-  int n = 0;
   if (actA >= BA_COUNT) actA = BA_TACKLE;
   if (actB >= BA_COUNT) actB = BA_TACKLE;
   if (!canRun) {
@@ -1115,17 +1956,29 @@ int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
     if (wildOnly(actB)) actB = BA_TACKLE;
   }
   if (a.hp == 0 || b.hp == 0) return 0;
+  TurnCtx c;
+  c.s[0] = &a; c.s[1] = &b;
+  c.rng = &rng; c.ev = ev; c.maxEv = maxEv; c.n = 0; c.canRun = canRun; c.ended = false;
   Battler *side[2] = { &a, &b };
   BAct act[2] = { actA, actB };
+  // ko12.10: el que sigue con un movimiento (carga, enfado, rodar, venganza) no puede hacer otra cosa
+  for (uint8_t s = 0; s < 2; s++) if (battleLocked(*side[s])) act[s] = BA_M0;
+  turnStart(c);
+  if (!a.hp || !b.hp) { turnEnd(a, b); return c.n < maxEv ? c.n : maxEv; }
 
   // prioridad: huir y protegerse van antes que cualquier ataque
   for (uint8_t s = 0; s < 2; s++) {
     Battler &me = *side[s], &op = *side[s ^ 1];
     if (act[s] == BA_RUN) {
+      if (!battleCanEscape(me)) {  // ko12.10: atrapado / mal de ojo
+        c.msg(s, MSG_NOESCAPE, me.trapT ? me.trapMv : 212);
+        continue;
+      }
       int ch = runChance(effSpe(me), effSpe(op));
       if ((int)rng.below(100) < ch) {
-        push(ev, maxEv, n, s, EV_RUN_OK, BA_RUN, 2, false, 0, a, b);
-        return n < maxEv ? n : maxEv;
+        push(ev, maxEv, c.n, s, EV_RUN_OK, BA_RUN, 2, false, 0, a, b);
+        turnEnd(a, b);
+        return c.n < maxEv ? c.n : maxEv;
       }
       // ko12.9.13: al fallar, el rival le da un golpe flojo por la espalda (a suertes; nunca lo debilita)
       uint16_t d = 0;
@@ -1136,26 +1989,27 @@ int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
         if (d >= me.hp) d = me.hp - 1;
         me.hp -= d;
       }
-      push(ev, maxEv, n, s, EV_RUN_FAIL, BA_RUN, 2, false, d, a, b, 0, (int8_t)(d ? RUN_FAIL_HIT : RUN_FAIL_DODGE));
+      push(ev, maxEv, c.n, s, EV_RUN_FAIL, BA_RUN, 2, false, d, a, b, 0, (int8_t)(d ? RUN_FAIL_HIT : RUN_FAIL_DODGE));
     } else if (act[s] == BA_POTION) {  // fork KO: cura la mitad de la vida
       uint16_t heal = me.maxHp / 2;
       if (heal < 1) heal = 1;
       if (me.hp + heal > me.maxHp) heal = me.maxHp - me.hp;
       me.hp += heal;
-      push(ev, maxEv, n, s, EV_HEAL, BA_POTION, 2, false, heal, a, b);
+      push(ev, maxEv, c.n, s, EV_HEAL, BA_POTION, 2, false, heal, a, b);
     } else if (act[s] == BA_BALL) {    // fork KO: intento de captura
       if (rng.below(100) < catchChance(op)) {
-        push(ev, maxEv, n, s, EV_CATCH, BA_BALL, 2, false, 0, a, b);
-        return n < maxEv ? n : maxEv;
+        push(ev, maxEv, c.n, s, EV_CATCH, BA_BALL, 2, false, 0, a, b);
+        turnEnd(a, b);
+        return c.n < maxEv ? c.n : maxEv;
       }
-      push(ev, maxEv, n, s, EV_BREAK, BA_BALL, 2, false, 0, a, b);
+      push(ev, maxEv, c.n, s, EV_BREAK, BA_BALL, 2, false, 0, a, b);
     } else if (act[s] == BA_GUARD) {
       me.guard = true;
       uint16_t heal = me.maxHp / 10;
       if (heal < 1) heal = 1;
       if (me.hp + heal > me.maxHp) heal = me.maxHp - me.hp;
       me.hp += heal;
-      push(ev, maxEv, n, s, EV_GUARD, BA_GUARD, 2, false, heal, a, b);
+      push(ev, maxEv, c.n, s, EV_GUARD, BA_GUARD, 2, false, heal, a, b);
     }
   }
 
@@ -1175,47 +2029,84 @@ int battleTurn(Battler &a, Battler &b, BAct actA, BAct actB, BRng &rng,
     Battler &me = *side[s], &op = *side[s ^ 1];
     if (me.hp == 0) continue;
     bool landed = false;
-    if (doMove(me, op, act[s], s, k == 0, rng, ev, maxEv, n, a, b, &landed)) { over = true; break; }
+    if (doMoveC(c, s, act[s], k == 0, &landed) || c.ended) { over = true; break; }
     // ko11.8: el otro se protegia y el golpe entro: devuelve un golpe (los dos lados igual)
     if (landed && op.guard && op.hp > 0 && me.hp > 0) {
       uint8_t eff;
       uint16_t d = counterDamage(op, me, rng, &eff);
       if (eff) {
         me.hp -= d;
-        push(ev, maxEv, n, s ^ 1, EV_COUNTER, BA_TACKLE, eff, false, d, a, b, MOVE_TACKLE);
+        push(ev, maxEv, c.n, s ^ 1, EV_COUNTER, BA_TACKLE, eff, false, d, a, b, MOVE_TACKLE);
         if (me.hp == 0) {
-          push(ev, maxEv, n, s, EV_FAINT, BA_TACKLE, 2, false, 0, a, b);
+          push(ev, maxEv, c.n, s, EV_FAINT, BA_TACKLE, 2, false, 0, a, b);
           over = true;
         }
       }
     }
   }
-  if (!over && a.hp && b.hp) endOfTurn(a, b, rng, ev, maxEv, n);
-  a.flinch = b.flinch = false;
-  a.guard = b.guard = false;
-  restTick(a); restTick(b);
-  return n < maxEv ? n : maxEv;
+  if (!over && a.hp && b.hp) endOfTurnC(c);
+  turnEnd(a, b);
+  return c.n < maxEv ? c.n : maxEv;
 }
 
-// ko11.20: cambio voluntario: el rival ataca y yo no hago nada
+// ko11.20: cambio voluntario: el rival ataca y yo no hago nada (persecucion: el doble)
 int battleFoeOnly(Battler &a, Battler &b, BAct actB, BRng &rng, BEvent *ev, int maxEv) {
-  int n = 0;
   if (a.hp == 0 || b.hp == 0) return 0;
   if (!isAttack(actB)) actB = BA_TACKLE;
+  TurnCtx c;
+  c.s[0] = &a; c.s[1] = &b;
+  c.rng = &rng; c.ev = ev; c.maxEv = maxEv; c.n = 0; c.canRun = false; c.ended = false;
+  turnStart(c);
   bool landed = false;
-  doMove(b, a, actB, 1, true, rng, ev, maxEv, n, a, b, &landed);
-  a.flinch = b.flinch = false;
-  a.guard = b.guard = false;
-  restTick(a); restTick(b);
-  return n < maxEv ? n : maxEv;
+  sPursuitX2 = true;
+  if (a.hp && b.hp) doMoveC(c, 1, actB, true, &landed);
+  sPursuitX2 = false;
+  turnEnd(a, b);
+  return c.n < maxEv ? c.n : maxEv;
+}
+
+static void clearBattleOnly(Battler &b) {
+  if (b.xform) {  // vuelve a ser el de antes
+    b.type = b.oType; b.type2 = b.oType2; b.atk = b.oAtk; b.def = b.oDef; b.spe = b.oSpe;
+    memcpy(b.mv, b.oMv, 4); memcpy(b.pp, b.oPp, 4);
+    b.xform = 0;
+  }
+  memset(b.stg, 0, sizeof(b.stg));
+  b.cnf = 0;
+  b.flinch = b.guard = false;
+  b.trapT = b.trapMv = 0;
+  b.chargeMv = b.invul = 0;
+  b.protN = 0;
+  b.disMv = b.disT = b.encMv = b.encT = 0;
+  b.lastMv = 0;
+  b.rampMv = b.rampT = b.rollT = b.furyN = b.bideT = 0;
+  b.futT = 0; b.futDmg = 0;
+  b.perish = 0;
+  b.subHp = 0;
+  b.lastDmgP = b.lastDmgS = 0;
+  b.bideDmg = 0;
+  b.protect = b.endure = b.focus = b.seeded = b.lockon = b.foresight = false;
+  b.nightmare = b.cursed = b.dbond = b.attract = b.meanLook = b.rage = false;
+  b.curled = b.spkPend = b.minimized = false;
 }
 
 // ko11.31: al acabar la batalla se pasan los estados y los cambios de caracteristicas
 void battleClearVolatile(Battler &b) {
-  b.st = b.stT = b.cnf = 0;
+  clearBattleOnly(b);
+  b.st = b.stT = 0;
+  b.tox = 0;
   b.restMv = b.restT = 0;
-  b.flinch = b.guard = false;
-  b.stg[0] = b.stg[1] = b.stg[2] = 0;
+  b.reflT = b.lscrT = b.mistT = b.safeT = 0;
+  b.spikes = 0;
+}
+
+void battleSwitchIn(Battler &out, Battler &in) {
+  if (&out == &in) return;
+  in.spikes = out.spikes;
+  in.reflT = out.reflT; in.lscrT = out.lscrT; in.mistT = out.mistT; in.safeT = out.safeT;
+  in.spkPend = in.spikes != 0;
+  clearBattleOnly(out);
+  if (out.tox) out.tox = 1;  // 2a gen: el toxico vuelve a empezar
 }
 
 bool linkSideAlive(const LinkSide &s) {
@@ -1235,10 +2126,7 @@ bool linkApplySwap(LinkSide &s, uint8_t act) {
     for (uint8_t i = 0; i < s.n && i < LINK_TEAM; i++) if (s.mon[i].hp) { j = i; break; }
     if (j == 255) return false;
   }
-  Battler &o = s.act();  // el que se va: pierde los cambios de caracteristicas y la confusion
-  o.stg[0] = o.stg[1] = o.stg[2] = 0;
-  o.cnf = 0;
-  o.flinch = o.guard = false;
+  battleSwitchIn(s.act(), s.mon[j]);  // ko12.10: el que se va pierde lo de la batalla; puas al que entra
   s.cur = j;
   return true;
 }
@@ -1280,7 +2168,7 @@ uint8_t battleAuto(Battler a, Battler b, uint32_t seed, BEvent *ev, int maxEv, i
   // tongsin: los dos aparatos simulan la misma batalla; su reloj puede no
   // coincidir, asi que aqui siempre hace buen tiempo (si no, se desincronizan)
   uint8_t keepWx = sBattleWx;
-  sBattleWx = WX_CLEAR;
+  battleSetWeather(WX_CLEAR);
   BRng rng(seed);
   int n = 0;
   for (int t = 0; t < BATTLE_AUTO_TURNS && a.hp && b.hp; t++) {
@@ -1294,7 +2182,7 @@ uint8_t battleAuto(Battler a, Battler b, uint32_t seed, BEvent *ev, int maxEv, i
     }
   }
   if (nEv) *nEv = (n < maxEv) ? n : maxEv;
-  sBattleWx = keepWx;
+  battleSetWeather(keepWx);
   if (a.hp == 0) return 1;
   if (b.hp == 0) return 0;
   // tope de turnos: gana quien conserve mas vida (en proporcion)

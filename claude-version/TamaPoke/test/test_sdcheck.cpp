@@ -29,22 +29,18 @@ TEST(sdcheck, cuenta_y_falta) {
   CHECK(!v.firstMissing(SDC_SPR, nm, sizeof(nm)));
 }
 
-// los nombres de efecto que comprueba son los mismos que abre fxanim (fTTSV.bin / mNNN.bin)
+// ko12.10: los nombres de efecto que comprueba son los mismos que abre fxanim (wNNN.bin, ids originales)
 TEST(sdcheck, efectos_como_el_firmware) {
   SdInv v;
   char nm[24];
-  for (uint8_t id = 1; id < MOVE_N; id++) {
-    uint8_t t, s, k;
-    if (moveDecode(id, &t, &s, &k)) snprintf(nm, sizeof(nm), "fx/f%02u%u%u.bin", t, s, k);
-    else snprintf(nm, sizeof(nm), id % 2 ? "fx/m%03u.bin" : "m%03u.bin", id);  // tambien sueltos en mons/
+  for (uint16_t id = 1; id < MOVE_N; id++) {
+    snprintf(nm, sizeof(nm), id % 2 ? "fx/w%03u.bin" : "w%03u.bin", (unsigned)id);  // tambien sueltos en mons/
     if (id != 88) v.add(nm);
   }
+  v.add("fx/f0000.bin");  // los de antes ya no cuentan
+  v.add("fx/m145.bin");
   CHECK_EQ(SdInv::need(SDC_FX), (uint16_t)(MOVE_N - 1));
   CHECK_EQ(v.have(SDC_FX), (uint16_t)(MOVE_N - 2));
   CHECK(v.firstMissing(SDC_FX, nm, sizeof(nm)));
-  uint8_t t, s, k;
-  moveDecode(88, &t, &s, &k);
-  char want[24];
-  snprintf(want, sizeof(want), "fx/f%02u%u%u.bin", t, s, k);
-  CHECK(!strcmp(nm, want));
+  CHECK(!strcmp(nm, "fx/w088.bin"));
 }

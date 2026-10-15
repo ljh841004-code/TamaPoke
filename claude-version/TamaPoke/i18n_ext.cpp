@@ -1,5 +1,4 @@
 #include "i18n_ext.h"
-#include "moves_data.h"
 #include "dex.h"  // PT_*
 #include "battle.h"
 #include <string.h>
@@ -582,14 +581,186 @@ const char *moveName(uint8_t move, uint8_t type, uint8_t tier, uint8_t var) {
   return XT(X_M_TACKLE);
 }
 
-// ko11.31: nombre por id (battle.h): de tipo, placaje, de estado y forcejeo
+// ko11.31: nombre por id (battle.h). ko12.10: los 251 originales (nombres oficiales)
 const char *moveNameId(uint8_t id) {
-  uint8_t t, s, v;
-  if (moveDecode(id, &t, &s, &v)) return moveName(BA_TYPE, t, s, v);
-  if (id == MOVE_STRUGGLE) return isKo() ? "발버둥" : "STRUGGLE";
-  if (id >= MOVE_TACKLE && id < MOVE_N) return isKo() ? MOVE_X_KO[id - MOVE_TACKLE] : MOVE_X_EN[id - MOVE_TACKLE];
-  return XT(X_M_TACKLE);
+  if (!id || id >= MOVE_N) return XT(X_M_TACKLE);
+  return isKo() ? moveNameKo(id) : moveNameEn(id);
 }
+const char *moveDescId(uint8_t id) { return isKo() ? moveDescKo(id) : moveDescEn(id); }
+
+
+// ko12.10: mensajes de los movimientos originales (EV_MSG). {1} = el de "side", {2} = movimiento, numero o tipo
+static const char *const BMSG_KO[MSG_N] = {
+  "그러나 실패했다!",  // MSG_FAIL
+  "{1}{은} 힘을 모으고 있다!",  // MSG_CHARGE
+  "{1}{은} 하늘 높이 날아올랐다!",  // MSG_FLY
+  "{1}{은} 땅속으로 파고들었다!",  // MSG_DIG
+  "{1}{은} 방어 태세에 들어갔다!",  // MSG_PROTECT
+  "{1}{은} 공격으로부터 몸을 지켰다!",  // MSG_PROTECTED
+  "{1}{은} 버티기 태세에 들어갔다!",  // MSG_ENDURE
+  "{1}{은} 공격을 버텼다!",  // MSG_ENDURED
+  "{1}{은} {2}에 붙잡혔다!",  // MSG_TRAPPED
+  "{1}{은} {2}의 데미지를 입고 있다!",  // MSG_TRAPDMG
+  "{1}{은} {2}에서 풀려났다!",  // MSG_TRAPEND
+  "{1}에게 씨앗을 심었다!",  // MSG_SEEDED
+  "씨뿌리기가 {1}의 체력을 빼앗는다!",  // MSG_SEEDDMG
+  "비가 내리기 시작했다!",  // MSG_WX_RAIN
+  "햇살이 강해졌다!",  // MSG_WX_SUN
+  "모래바람이 불기 시작했다!",  // MSG_WX_SAND
+  "날씨가 원래대로 돌아왔다.",  // MSG_WX_END
+  "모래바람이 {1}{을} 덮쳤다!",  // MSG_SANDDMG
+  "{1}의 멸망의 카운트가 {2}{이} 되었다!",  // MSG_PERISH
+  "{1}{은} 상대를 겨냥했다!",  // MSG_LOCKON
+  "{1}의 대타가 나타났다!",  // MSG_SUB
+  "대타가 {1} 대신 공격을 받았다!",  // MSG_SUBHIT
+  "{1}의 대타는 사라져 버렸다...",  // MSG_SUBBREAK
+  "{1}의 {2}{을} 쓸 수 없게 되었다!",  // MSG_DISABLE
+  "{1}의 사슬묶기가 풀렸다!",  // MSG_DISABLE_END
+  "{1}{은} 앵콜을 받았다!",  // MSG_ENCORE
+  "{1}의 앵콜이 끝났다!",  // MSG_ENCORE_END
+  "{1}의 발밑에 압정이 뿌려졌다!",  // MSG_SPIKES
+  "{1}{은} 압정의 데미지를 입었다!",  // MSG_SPIKEDMG
+  "{1}에게 저주를 걸었다!",  // MSG_CURSE
+  "{1}{은} 저주를 받고 있다!",  // MSG_CURSEDMG
+  "{1}{은} 악몽을 꾸기 시작했다!",  // MSG_NIGHTMARE
+  "{1}{은} 악몽에 시달리고 있다!",  // MSG_NIGHTMAREDMG
+  "{1}의 정체를 꿰뚫어 보았다!",  // MSG_FORESIGHT
+  "{1}{은} 상대를 길동무로 삼으려 하고 있다!",  // MSG_DBOND
+  "{1}{은} 상대를 길동무로 삼았다!",  // MSG_DBOND_HIT
+  "{1}{은} 참고 있다!",  // MSG_BIDE
+  "{1}의 참았던 힘이 터져 나왔다!",  // MSG_BIDE_GO
+  "{1}{은} 잠들어 건강해졌다!",  // MSG_REST
+  "{1}{은} 상대로 변신했다!",  // MSG_TRANSFORM
+  "{1}{은} {2}{을} 흉내 냈다!",  // MSG_MIMIC
+  "{1}{은} {2} 타입이 되었다!",  // MSG_CONVERSION
+  "모든 능력 변화가 원래대로 돌아왔다!",  // MSG_HAZE
+  "{1}{은} 흰안개에 둘러싸였다!",  // MSG_MIST
+  "{1}{은} 흰안개에 보호받고 있다!",  // MSG_MISTED
+  "빛의장막으로 특수공격에 강해졌다!",  // MSG_LSCREEN
+  "리플렉터로 물리공격에 강해졌다!",  // MSG_REFLECT
+  "{1}{은} 신비의 베일에 둘러싸였다!",  // MSG_SAFEGUARD
+  "{1}{은} 신비의 베일에 보호받고 있다!",  // MSG_SAFEGUARDED
+  "{1}의 {2}{이} 사라졌다!",  // MSG_SCREEN_END
+  "{1}{은} 헤롱헤롱해졌다!",  // MSG_LOVE
+  "{1}{은} 체력을 깎아서 공격을 최대로 올렸다!",  // MSG_BELLYDRUM
+  "{1}{은} 상대의 능력 변화를 복사했다!",  // MSG_PSYCHUP
+  "서로의 체력을 나눠 가졌다!",  // MSG_PAINSPLIT
+  "{2}번 맞았다!",  // MSG_HITS
+  "일격필살!",  // MSG_OHKO
+  "그러나 아무 일도 일어나지 않았다!",  // MSG_SPLASH
+  "{1}{은} 지쳐서 혼란에 빠졌다!",  // MSG_RAMPAGE_END
+  "{1}{은} 의욕이 넘치고 있다!",  // MSG_FOCUS
+  "방울소리가 울려 퍼졌다! 상태이상이 나았다!",  // MSG_HEALBELL
+  "{1}의 {2} PP가 줄었다!",  // MSG_SPITE
+  "{1}{은} 미래를 내다보았다!",  // MSG_FUTURE
+  "{1}{은} 미래예지 공격을 받았다!",  // MSG_FUTURE_HIT
+  "매그니튜드 {2}!",  // MSG_MAGNITUDE
+  "{1}의 체력이 회복되었다!",  // MSG_PRESENT_HEAL
+  "{1}{은} 기세 좋게 땅에 부딪혔다!",  // MSG_CRASH
+  "{1}{은} 이제 도망칠 수 없다!",  // MSG_MEANLOOK
+  "{1}{은} 묶인 것에서 벗어났다!",  // MSG_RAPIDSPIN
+  "주변에 돈이 흩어졌다!",  // MSG_PAYDAY
+  "{1}{은} {2}{을} 스케치했다!",  // MSG_SKETCH
+  "도망칠 수 없다!",  // MSG_NOESCAPE
+  "{1}{은} 뽐내기에 넘어갔다!",  // MSG_SWAGGER
+  "{1}의 {2}!",  // MSG_SLEEPTALK
+  "{1}의 {2}!",  // MSG_METRONOME
+  "{1}의 {2}!",  // MSG_MIRRORMOVE
+  "{1}의 분노가 불타오른다!",  // MSG_RAGE
+  "노래를 들은 포켓몬은 3턴 후에 쓰러진다!",  // MSG_PERISH_SING
+};
+static const char *const BMSG_EN[MSG_N] = {
+  "But it failed!",
+  "{1} is gathering power!",
+  "{1} flew up high!",
+  "{1} dug a hole!",
+  "{1} protected itself!",
+  "{1} protected itself!",
+  "{1} braced itself!",
+  "{1} endured the hit!",
+  "{1} was trapped by {2}!",
+  "{1} is hurt by {2}!",
+  "{1} was freed from {2}!",
+  "{1} was seeded!",
+  "LEECH SEED saps {1}!",
+  "It started to rain!",
+  "The sunlight got bright!",
+  "A sandstorm brewed!",
+  "The weather returned to normal.",
+  "The sandstorm hits {1}!",
+  "{1}'s perish count fell to {2}!",
+  "{1} took aim!",
+  "{1} made a SUBSTITUTE!",
+  "The SUBSTITUTE took the hit for {1}!",
+  "{1}'s SUBSTITUTE faded!",
+  "{1}'s {2} was disabled!",
+  "{1} is no longer disabled!",
+  "{1} got an ENCORE!",
+  "{1}'s ENCORE ended!",
+  "Spikes scattered around {1}'s feet!",
+  "{1} is hurt by spikes!",
+  "{1} was cursed!",
+  "{1} is afflicted by the curse!",
+  "{1} began to have a NIGHTMARE!",
+  "{1} is locked in a NIGHTMARE!",
+  "{1} was identified!",
+  "{1} is trying to take its foe with it!",
+  "{1} took its foe with it!",
+  "{1} is storing energy!",
+  "{1} unleashed energy!",
+  "{1} slept and became healthy!",
+  "{1} transformed!",
+  "{1} learned {2}!",
+  "{1} became the {2} type!",
+  "All stat changes were eliminated!",
+  "{1}'s shrouded in MIST!",
+  "{1} is protected by MIST!",
+  "{1}'s SPCL.DEF rose!",
+  "{1}'s DEFENSE rose!",
+  "{1} is covered by a veil!",
+  "{1} is protected by SAFEGUARD!",
+  "{1}'s {2} wore off!",
+  "{1} fell in love!",
+  "{1} cut its HP and maximized ATTACK!",
+  "{1} copied the foe's stat changes!",
+  "The battlers shared their pain!",
+  "Hit {2} times!",
+  "It's a one-hit KO!",
+  "But nothing happened!",
+  "{1} became confused due to fatigue!",
+  "{1} is getting pumped!",
+  "A bell chimed! Status was cured!",
+  "{1}'s {2} PP was reduced!",
+  "{1} foresaw an attack!",
+  "{1} took the FUTURE SIGHT attack!",
+  "Magnitude {2}!",
+  "{1}'s HP was restored!",
+  "{1} kept going and crashed!",
+  "{1} can't escape now!",
+  "{1} shed the hazards!",
+  "Coins scattered everywhere!",
+  "{1} sketched {2}!",
+  "Can't escape!",
+  "{1} fell for the SWAGGER!",
+  "{1}'s {2}!",
+  "{1}'s {2}!",
+  "{1}'s {2}!",
+  "{1}'s RAGE is building!",
+  "All affected faint in 3 turns!",
+};
+const char *battleMsgTpl(uint8_t code, uint8_t mid) {
+  if (code >= MSG_N) return "";
+  if (code == MSG_CHARGE && isKo()) {  // como en el juego, cada carga con su frase
+    if (mid == 76) return "{1}{은} 빛을 흡수했다!";
+    if (mid == 13) return "{1}{은} 바람을 일으켰다!";
+    if (mid == 130) return "{1}{은} 목을 움츠렸다!";
+    if (mid == 143) return "{1}{은} 강렬한 빛에 휩싸였다!";
+  }
+  return isKo() ? BMSG_KO[code] : BMSG_EN[code];
+}
+static const char *const STG_KO[7] = { "공격", "방어", "스피드", "특수공격", "특수방어", "명중률", "회피율" };
+static const char *const STG_EN[7] = { "ATTACK", "DEFENSE", "SPEED", "SPCL.ATK", "SPCL.DEF", "ACCURACY", "EVASION" };
+const char *stageName(uint8_t idx) { return idx < 7 ? (isKo() ? STG_KO[idx] : STG_EN[idx]) : ""; }
 
 // ultima silaba hangul (U+AC00..U+D7A3) del texto ya escrito: -1 si no hay,
 // 0 si acaba en vocal, 1 si acaba en consonante (batchim)

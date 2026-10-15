@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ko12.10: tipos de 2a generacion (dos tipos, con volador) de cada especie -> ../dex_types.h
 
-  python3 gen_types2.py <cache>     (<cache>/pk/NNN.json = PokeAPI /pokemon/NNN, ver gen_moves2.py)
+  python3 gen_types2.py <cache>     (<cache>/pk/NNN.json = PokeAPI /pokemon/NNN, ver gen_moves.py)
 
 PokeAPI da los tipos de hoy; past_types dice los que tenia hasta una generacion (p. ej. Clefairy era
 normal hasta la 5a). Hada no existe en 2a: no deberia quedar ninguno (si queda, normal).

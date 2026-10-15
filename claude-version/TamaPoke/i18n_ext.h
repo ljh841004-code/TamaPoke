@@ -201,7 +201,10 @@ const char *XT(XId id);
 const char *typeName(uint8_t type);
 // nombre del movimiento: BA_TACKLE / BA_TYPE (este segun el tipo PT_*)
 const char *moveName(uint8_t move, uint8_t type, uint8_t tier = 0, uint8_t var = 0);
-const char *moveNameId(uint8_t id);  // ko11.31: por id de movimiento (battle.h)  // ko10.4: tier = moveTier(dex); ko11.31: var 0..2
+const char *moveNameId(uint8_t id);
+const char *moveDescId(uint8_t id);  // ko12.10: la frase del juego
+const char *battleMsgTpl(uint8_t code, uint8_t mid);  // ko12.10: plantilla de EV_MSG (MSG_*), para txFmtRaw
+const char *stageName(uint8_t idx);                   // ko12.10: STG_* (공격, 특수공격, 명중률...)  // ko11.31: por id de movimiento (battle.h)  // ko10.4: tier = moveTier(dex); ko11.31: var 0..2
 // rellena out con la plantilla id, sustituyendo {1}/{2} y las particulas
 void txFmt(char *out, size_t n, XId id, const char *a1, const char *a2 = nullptr);
 // lo mismo con una plantilla cualquiera (para los tests)

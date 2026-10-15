@@ -621,6 +621,8 @@ static BAct foeMoveRule(BAct a) {
 bool bMoveMenu = false;  // ko11.31: [싸운다] abierto: los 4 movimientos en lugar del menu
 // el que crias: sus movimientos y PP (los demas traen los de su especie)
 static void petMovesInto(Battler &b) {
+  b.bond = pet.bond;  // ko12.10: retribucion / frustracion
+  b.hpType = (uint8_t)(1 + (pet.geneAtk * 7u + pet.geneDef * 3u + pet.geneSpe) % (PT_BATTLE_N - 1));  // poder oculto
   if (!moveCount(pet.mv)) return;
   memcpy(b.mv, pet.mv, 4);
   memcpy(b.pp, pet.pp, 4);
@@ -927,6 +929,23 @@ uint32_t evDur(const BEvent &e) {
 }
 
 bool evIsMe(uint8_t side) { return (side == 0) == bqAisMe; }
+static const char *LK(const char *ko, const char *en) { return gLang == LANG_KO ? ko : en; }
+
+// ko12.10: mensaje de un efecto original (EV_MSG). {2}: movimiento, o numero / tipo segun el mensaje
+static void evMsgText(const BEvent &e, const char *who) {
+  char num[8];
+  const char *a2 = moveNameId(e.mid);
+  switch (e.val) {
+    case MSG_HITS: case MSG_MAGNITUDE: case MSG_PERISH:
+      snprintf(num, sizeof(num), "%u", (unsigned)e.eff);
+      a2 = num;
+      break;
+    case MSG_CONVERSION: a2 = typeName(e.eff); break;
+    case MSG_SPITE: break;
+    default: break;
+  }
+  txFmtRaw(bvL1, sizeof(bvL1), battleMsgTpl((uint8_t)e.val, e.mid), who, a2);
+}
 
 void evMessages(const BEvent &e) {
   bool me = evIsMe(e.side);
@@ -940,19 +959,22 @@ void evMessages(const BEvent &e) {
       txFmt(bvL1, sizeof(bvL1), X_USED, who, moveNameId(e.mid));
       break;
     case EV_STAT: {
-      static const XId SN[3] = { X_STAT_ATK, X_STAT_DEF, X_STAT_SPE };
       XId f = e.val >= 2 ? X_STAT_UP2 : e.val == 1 ? X_STAT_UP : e.val <= -2 ? X_STAT_DN2 : e.val == -1 ? X_STAT_DN
             : (moveDef(e.mid).stD > 0 ? X_STAT_MAX : X_STAT_MIN);
-      txFmt(bvL2, sizeof(bvL2), f, who, XT(SN[e.eff < 3 ? e.eff : 0]));
+      txFmt(bvL2, sizeof(bvL2), f, who, stageName(e.eff));  // ko12.10: las 7 (at. esp., precision...)
       if (!bvL1[0] || bqI == 0 || bq[bqI - 1].kind != EV_USE) { strncpy(bvL1, bvL2, sizeof(bvL1) - 1); bvL2[0] = 0; }
       break;
     }
     case EV_STATUS:
-      txFmt(bvL2, sizeof(bvL2), (XId)(X_ST_PSN + (e.val >= ST_PSN && e.val <= ST_CNF ? e.val - ST_PSN : 0)), who);
+      if (e.val == ST_TOX) txFmtRaw(bvL2, sizeof(bvL2), LK("{1}{은} 맹독을 입었다!", "{1} was badly poisoned!"), who, nullptr);
+      else txFmt(bvL2, sizeof(bvL2), (XId)(X_ST_PSN + (e.val >= ST_PSN && e.val <= ST_CNF ? e.val - ST_PSN : 0)), who);
       break;
+    case EV_MSG: evMsgText(e, who); break;
     case EV_NOEFFECT: strncpy(bvL2, XT(X_ST_FAIL), sizeof(bvL2) - 1); break;
     case EV_STDMG: txFmt(bvL1, sizeof(bvL1), e.val == ST_BRN ? X_STD_BRN : X_STD_PSN, who); break;
     case EV_CANT: {
+      if (e.val == ST_LOVE) { txFmtRaw(bvL1, sizeof(bvL1), LK("{1}{은} 헤롱헤롱해서 기술을 쓸 수 없었다!", "{1} is immobilized by love!"), who, nullptr); break; }
+      if (e.val == ST_DISABLED) { txFmtRaw(bvL1, sizeof(bvL1), LK("{1}의 {2}{은} 쓸 수 없다!", "{1}'s {2} is disabled!"), who, moveNameId(e.mid)); break; }
       XId f = e.val == ST_PAR ? X_CANT_PAR : e.val == ST_SLP ? X_CANT_SLP : e.val == ST_FRZ ? X_CANT_FRZ
             : e.val == ST_RECHARGE ? X_CANT_RECHARGE : X_CANT_FLINCH;
       txFmt(bvL1, sizeof(bvL1), f, who);
@@ -985,7 +1007,11 @@ void evMessages(const BEvent &e) {
       if (e.eff == 4) strncpy(bvL2, XT(X_SUPER), sizeof(bvL2) - 1);
       else if (e.eff == 1) strncpy(bvL2, XT(X_NOTVERY), sizeof(bvL2) - 1);
       break;
-    case EV_RUN_OK: strncpy(bvL1, XT(X_FLED), sizeof(bvL1) - 1); break;
+    case EV_RUN_OK:
+      if (e.val == 1) txFmtRaw(bvL1, sizeof(bvL1), LK("{1}{은} 멀리 날려 보내졌다!", "{1} was blown away!"), who, nullptr);  // ko12.10: 울부짖기
+      else if (e.val == 2) txFmtRaw(bvL1, sizeof(bvL1), LK("{1}{은} 순간이동으로 도망쳤다!", "{1} teleported away!"), who, nullptr);
+      else strncpy(bvL1, XT(X_FLED), sizeof(bvL1) - 1);
+      break;
     case EV_RUN_FAIL:
       strncpy(bvL1, XT(X_CANT_RUN), sizeof(bvL1) - 1);
       if (e.val == RUN_FAIL_HIT) strncpy(bvL2, XT(X_RUN_HIT), sizeof(bvL2) - 1);  // ko12.9.13
@@ -1197,7 +1223,10 @@ static const bool FX_BEAM[PT_COUNT] = {
 // ---- ko11.31: estados alterados y cambios de caracteristicas
 static const uint16_t ST_COL[8] = { 0, C565(0xa0, 0x40, 0xc0), C565(0xf0, 0x60, 0x20), C565(0xf0, 0xd0, 0x30),
                                     C565(0x90, 0x90, 0xb8), C565(0x80, 0xd8, 0xf0), C565(0xf0, 0x70, 0xb0), 0 };
-static const uint16_t STAT_COL[3] = { C565(0xe8, 0x50, 0x40), C565(0x40, 0x80, 0xe0), C565(0xf0, 0xc0, 0x20) };
+// ko12.10: las 7 (STG_*): ataque, defensa, velocidad, at. esp., def. esp., precision, evasion
+static const uint16_t STAT_COL[STG_N] = { C565(0xe8, 0x50, 0x40), C565(0x40, 0x80, 0xe0), C565(0xf0, 0xc0, 0x20),
+                                          C565(0xd0, 0x58, 0xd8), C565(0x50, 0xb8, 0x70), C565(0xf0, 0x90, 0x30),
+                                          C565(0x90, 0xa0, 0xb8) };
 
 // flechas que suben (mejora) o bajan (empeora) alrededor de (cx, cy)
 static void fxArrows(int cx, int cy, uint32_t t, bool up, uint16_t c) {
@@ -1216,7 +1245,7 @@ void drawStateFx(const BEvent &e, int cx, int cy, uint32_t t) {
   if (t > 1100) return;
   switch (e.kind) {
     case EV_STAT:
-      if (e.val) fxArrows(cx, cy, t, e.val > 0, STAT_COL[e.eff < 3 ? e.eff : 0]);
+      if (e.val) fxArrows(cx, cy, t, e.val > 0, STAT_COL[e.eff < STG_N ? e.eff : 0]);
       break;
     case EV_STATUS:
     case EV_STDMG: {
@@ -1257,8 +1286,13 @@ void drawStateFx(const BEvent &e, int cx, int cy, uint32_t t) {
 }
 
 // un movimiento de estado (sin archivo de la SD): ondas, polvo, chispas... hacia el objetivo
+void drawMoveFx2(uint8_t fam, int x0, int y0, int x1, int y1, uint32_t t, uint16_t c);
 void drawStatusMoveFx(uint8_t id, int ax, int ay, int tx, int ty, uint32_t t) {
   const MoveDef &m = moveDef(id);
+  if (m.fam) {  // ko12.10: el dibujo de su familia (sonido, polvo, curar, barrera...)
+    drawMoveFx2((uint8_t)(m.fam - 1), ax, ay, tx, ty, t * 900 / 1300, typeColor(m.type));
+    return;
+  }
   float p = fxClamp01(((float)t - 150) / 600.0f);
   if (m.stSelf && m.stD > 0) {  // se mejora a si mismo: brillo que sube
     for (int i = 0; i < 8; i++) {
@@ -2049,7 +2083,7 @@ void updateShake(uint32_t now) {
   const BEvent &e = bq[bqI];
   // ko10.4: tambien tiembla con los ataques definitivos (fase final)
   uint8_t mtier = 0;
-  bool fin = moveDecode(e.mid, nullptr, &mtier, nullptr) && mtier == 2;
+  bool fin = moveFxInfo(e.mid, nullptr, &mtier, nullptr) && mtier == 2;
   if (e.kind != EV_HIT || !(e.crit || fin) || !e.eff) return;
   int k = (int)(now - bqT) - 350;
   if (k < 0 || k >= 360) return;
@@ -2290,7 +2324,7 @@ void drawBattlers() {
     if (e.kind == EV_HIT || e.kind == EV_MISS || e.kind == EV_COUNTER || e.kind == EV_USE) {
       bool me = evIsMe(e.side);
       uint8_t mt = 0, mtier = 0, mvar = 0;
-      bool typed = moveDecode(e.mid, &mt, &mtier, &mvar);
+      bool typed = moveFxInfo(e.mid, &mt, &mtier, &mvar);
       uint8_t fx = typed ? mt : 0xFF;
       int ax = me ? 140 : 316, ay = me ? 200 : 116, tx = me ? 316 : 140, ty = me ? 116 : 200;
       if (e.kind != EV_USE) drawRarityCharge((me ? meX : foeX), (me ? meG - 60 : foeG - 50), rarityKind(me ? bvMeDex : bvFoeDex), t);  // ko12.9.23
@@ -2741,6 +2775,7 @@ static void partyAskSwap(uint8_t mode) {
 }
 static void partySwitchTo(uint8_t j) {
   pMon[pCur] = bMe;
+  battleSwitchIn(pMon[pCur], pMon[j]);  // ko12.10: el que se va pierde lo de la batalla; puas al que entra
   pCur = j;
   pUsed |= (uint8_t)(1 << j);
   bMe = pMon[j];
@@ -3217,6 +3252,7 @@ uint8_t petRegion() { return pet.isEgg() ? 0 : DEX_TBL[pet.speciesId].biome; }
 void battleWeatherIntro() {
   uint8_t wx = sceneWeather();
   battleSetWeather(wx);
+  battleSetFleeMoves(bKind == BK_WILD);  // ko12.10: rugido / teletransporte acaban solo los salvajes
   const char *m = wx == WX_RAIN ? XT(X_WX_RAIN) : wx == WX_SUNNY && sceneHour() >= 6 && sceneHour() < 20 ? XT(X_WX_SUNNY)
                 : wx == WX_SNOW ? XT(X_WX_SNOW) : "";
   if (wx == WX_SUNNY && !m[0]) battleSetWeather(WX_CLEAR);  // de noche no hay sol
@@ -3295,7 +3331,11 @@ static bool nextTrainerMon() {
     uint8_t j = pickNextFoe(bTeam, bTeamI, bTeamN, bMe.dex);
     if (j != bTeamI) { Battler t = bTeam[bTeamI]; bTeam[bTeamI] = bTeam[j]; bTeam[j] = t; }
   }
-  bFoe = bTeam[bTeamI];
+  {
+    Battler gone = bFoe;
+    bFoe = bTeam[bTeamI];
+    battleSwitchIn(gone, bFoe);  // ko12.10: las puas / pantallas de su lado siguen
+  }
   // ko11.18: reto del dia: antes del siguiente rival se recupera el 35 % de la vida
   // que queda (40 -> +14 = 54), sin pasar del maximo. Gimnasio y liga, como antes
   uint16_t healed = 0;
@@ -4238,6 +4278,10 @@ void vibBattle(uint8_t kind, uint8_t eff, bool crit, bool mine);
 static void petPPAfter(bool won) {
   if (bLink || !pSlot0Pet) return;  // historia / expedicion: lucha el companero
   const Battler &b = pCur == 0 ? bMe : pMon[0];
+  // ko12.10: esquema: lo que copio se queda para siempre (en esa casilla)
+  if (b.sketched && !b.xform)
+    for (uint8_t i = 0; i < 4; i++)
+      if (b.mv[i] == b.sketched && pet.mv[i] == 166) { pet.mv[i] = b.sketched; pet.moveKnowAdd(b.sketched); pet.pp[i] = b.pp[i]; }
   if (won) pet.ppRefill();
   else for (uint8_t i = 0; i < 4; i++) {
     if (b.mv[i] == pet.mv[i]) pet.pp[i] = b.pp[i];
@@ -4708,6 +4752,7 @@ void startLinkBattle() {
   lkBuild(lkMine, linkMine());
   lkBuild(lkTheirs, th);
   battleSetWeather(WX_CLEAR);  // las dos placas, el mismo tiempo (su reloj puede no coincidir)
+  battleSetFleeMoves(false);
   bRng = BRng(linkSeed());
   pN = lkMine.n; pCur = 0; pUsed = 1; pShiny = 0; pSlot0Pet = true;
   for (uint8_t i = 0; i < pN; i++) {

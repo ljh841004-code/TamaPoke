@@ -4888,11 +4888,10 @@ static void dexMvPoll() {
 uint8_t dexTopMoves(int16_t dex, uint8_t out[4]) {
   uint8_t pool[200];
   uint8_t n = movePool(dex, pool, sizeof(pool));
-  auto score = [](uint8_t id) -> int {
-    uint8_t s = 0;
+  auto score = [dex](uint8_t id) -> int {
     if (moveIsStatus(id)) return 0;
-    moveDecode(id, nullptr, &s, nullptr);
-    return 1000 + s * 300 + moveDef(id).pow;
+    bool stab = moveDef(id).type == DEX_TBL[dex].ptype || moveDef(id).type == dexType2(dex);
+    return 1000 + (stab ? 300 : 0) + moveDef(id).pow;
   };
   memset(out, 0, 4);
   // ko11.31: primero los que saben los mios (los mas fuertes); el resto, los fuertes que faltan (???)
@@ -5098,9 +5097,9 @@ void renderDexDetail() {
         if (const FxAnim *fa = dexMvSd ? fxFind(dexMvFx) : nullptr) fa->drawFg(gfx->getFramebuffer(), 0, mvT, DEXFX_AX - 140, DEXFX_AY - 200);
         else if (moveIsStatus(dexMvFx)) drawStatusMoveFx(dexMvFx, CX, 150, tx, ty, mvT);
         else {
-          uint8_t t, tr, v;
-          moveDecode(dexMvFx, &t, &tr, &v);
-          drawMoveFx(moveIsTyped(dexMvFx) ? t : 0xFF, ax, ay, tx, ty, mvT, true, 2, tr, v);
+          uint8_t t = 0xFF, tr = 0, v = 0;
+          moveFxInfo(dexMvFx, &t, &tr, &v);
+          drawMoveFx(t, ax, ay, tx, ty, mvT, true, 2, tr, v);
         }
       }
     }

@@ -261,7 +261,7 @@ public:
   uint16_t stepsToday(uint32_t dayIdx);
   void lifeStart(uint8_t from);
   void lifeMemory(MemRec &m, uint32_t endEpoch) const;  // lo que se guarda al despedirse
-  uint8_t moveLv = 0;          // ultimo multiplo de 5 en que se ofrecio
+  uint8_t moveLv = 0;          // ko12.10: ultimo nivel ya mirado para aprender (antes: multiplo de 5)
   uint8_t moveOffer = 0;       // movimiento ofrecido pendiente de respuesta (0 = ninguno)
   uint8_t moveLearned = 0;     // aviso "새 기술 X을 배웠다!" (id, 0 = nada)
   uint8_t moveMain() const;    // su ataque de tipo (el de los dibujos de "su ataque")
@@ -269,7 +269,24 @@ public:
   void movesNew();             // los de su especie y nivel, PP llenos
   void moveOfferNew(uint8_t id);   // con hueco lo aprende ya (moveLearned); si no, queda ofrecido
   void moveAccept(uint8_t slot);   // el ofrecido sustituye a esa casilla (0..3)
-  void moveDecline() { moveOffer = 0; pendingSave = true; }
+  void moveDecline() { moveOffer = 0; pendingSave = true; moveQueuePop(); }
+  // ko12.10: como en el original. Aprende a su nivel lo de su especie (Cristal); si ya hay una oferta
+  // pendiente, los siguientes esperan en la cola. Lo que ha aprendido alguna vez (mvKnown) se puede
+  // volver a poner en la ficha [기술] gratis; lo de su lista que se salto, con 3 caramelos
+  uint8_t mvKnown[32] = { 0 };   // bit id: lo sabe (aprendido, MT, esquema)
+  uint8_t moveQ[4] = { 0, 0, 0, 0 };  // ofertas en espera
+  uint8_t moveFbLv = 0;          // ultimo nivel con oferta "sin original" (Lv75+)
+  uint8_t tmBag[TM_COUNT] = { 0 };  // MT01..50 (cuantas) y MO01..07 (1 = la tiene; no se gastan)
+  bool moveKnown(uint8_t id) const { return id && (mvKnown[id / 8] >> (id % 8)) & 1; }
+  void moveKnowAdd(uint8_t id) { if (id) mvKnown[id / 8] |= (uint8_t)(1 << (id % 8)); }
+  void moveQueuePop();
+  void moveLevelUp(uint16_t from, uint16_t to);  // lo que aprende al pasar de nivel "from" a "to"
+  bool moveEquip(uint8_t slot, uint8_t id);      // pone uno que ya sabe en esa casilla (0..3)
+  bool moveCanRemind(uint8_t id) const;          // de su lista a su nivel o menos y aun no lo sabe
+  bool moveRemind(uint8_t id);                   // lo recuerda (3 caramelos de su familia)
+  bool tmTeach(uint8_t tm);                      // usa la MT/MO tm (0..56): false si no puede
+  uint8_t tmCount() const;
+#define MOVE_REMIND_CANDY 3
   // ko12.9.11: un combate salvaje con el 부르는 구슬 en uso (false = no hay ninguno)
   bool lureTick() { if (!lureLeft) return false; lureLeft--; pendingSave = true; return true; }
   void ppRefill();

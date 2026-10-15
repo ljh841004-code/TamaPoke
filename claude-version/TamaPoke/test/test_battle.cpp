@@ -111,17 +111,19 @@ static uint8_t effOf(Battler &a, Battler &b) {
   }
   return 255;
 }
+// ko12.10: ya hay tipo volador: la familia Pidgey (normal/volador) pega x2 a la hierba con sus
+// movimientos voladores, en la historia y fuera (el arreglo de la historia ya no hace falta)
 TEST(battle, historia_pidgey_contra_hierba) {
-  Battler p = makeBattler(17, 30, 80, 60, 80);  // Pidgeotto (normal)
-  Battler g = makeBattler(2, 30, 80, 60, 60);   // Ivysaur (hierba)
+  Battler p = makeBattler(17, 30, 80, 60, 80);  // Pidgeotto
+  p.mv[0] = 17; p.mv[1] = p.mv[2] = p.mv[3] = 0;  // ataque ala
+  movesFillPP(p);
+  Battler g = makeBattler(2, 30, 80, 60, 60);   // Ivysaur (planta/veneno)
   gStoryFlyAt = nullptr;
-  CHECK_EQ(effOf(p, g), (uint8_t)2);            // fuera de la historia: normal
+  CHECK_EQ(effOf(p, g), (uint8_t)4);
   gStoryFlyAt = &p;
-  CHECK_EQ(effOf(p, g), (uint8_t)4);            // el mio, en la historia: x2
-  Battler w = makeBattler(7, 30, 80, 60, 60);   // contra agua: nada especial
+  CHECK_EQ(effOf(p, g), (uint8_t)4);
+  Battler w = makeBattler(7, 30, 80, 60, 60);   // contra agua: normal
   CHECK_EQ(effOf(p, w), (uint8_t)2);
-  Battler r = makeBattler(18, 30, 80, 60, 80);  // el Pidgeot del rival (otro Battler): normal
-  CHECK_EQ(effOf(r, g), (uint8_t)2);
   gStoryFlyAt = nullptr;
 }
 
@@ -946,7 +948,7 @@ TEST(battle, pp_baja_y_forcejeo) {
 }
 
 TEST(battle, sueno_no_deja_moverse) {
-  Battler a = withMoves(1, 167), b = withMoves(16, MOVE_TACKLE);  // espora
+  Battler a = withMoves(1, 147), b = withMoves(16, MOVE_TACKLE);  // espora
   BRng rng(9);
   BEvent ev[BATTLE_MAX_EVENTS];
   a.spe = 999;
@@ -967,25 +969,25 @@ TEST(battle, sueno_no_deja_moverse) {
 TEST(battle, inmunidades_de_estado) {
   BRng rng(3);
   BEvent ev[BATTLE_MAX_EVENTS];
-  Battler a = withMoves(25, 161), g = withMoves(50, MOVE_TACKLE);  // onda trueno contra tierra
+  Battler a = withMoves(25, 86), g = withMoves(50, MOVE_TACKLE);  // onda trueno contra tierra
   a.spe = 999;
   int n = battleTurn(a, g, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
   CHECK_EQ(g.st, (uint8_t)ST_NONE);
   bool noeff = false;
   for (int i = 0; i < n; i++) if (ev[i].kind == EV_NOEFFECT) noeff = true;
   CHECK(noeff);
-  Battler p = withMoves(1, 158), v = withMoves(23, MOVE_TACKLE);  // polvo veneno contra veneno
+  Battler p = withMoves(1, 77), v = withMoves(23, MOVE_TACKLE);  // polvo veneno contra veneno
   for (int t = 0; t < 10; t++) battleTurn(p, v, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
   CHECK_EQ(v.st, (uint8_t)ST_NONE);
-  Battler q = withMoves(1, 162), gr = withMoves(43, MOVE_TACKLE);  // paralizador contra planta
-  for (int t = 0; t < 10; t++) battleTurn(q, gr, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
-  CHECK_EQ(gr.st, (uint8_t)ST_NONE);
+  Battler q = withMoves(1, 73), gr = withMoves(43, MOVE_TACKLE);  // drenadoras contra planta
+  battleTurn(q, gr, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK(!gr.seeded);
 }
 
 TEST(battle, caracteristicas_suben_y_bajan) {
   BRng rng(4);
   BEvent ev[BATTLE_MAX_EVENTS];
-  Battler a = withMoves(4, 146), b = withMoves(7, 151);  // danza espada / grunido
+  Battler a = withMoves(4, 14), b = withMoves(7, 45);  // danza espada / grunido
   for (int t = 0; t < 5; t++) battleTurn(a, b, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
   CHECK(a.stg[0] <= 6 && a.stg[0] >= -6);
   CHECK(a.stg[0] == 6 - 5 || a.stg[0] >= 1);  // +2 x5 tope 6, -1 x5
@@ -1073,13 +1075,8 @@ TEST(battle, especial_alakazam_y_machamp) {
 }
 
 TEST(battle, especial_pega_mas_con_alakazam) {
-  uint8_t psy = 0, phy = 0;  // uno especial y uno fisico de la misma potencia
-  for (uint8_t a = 1; a < MOVE_N && !(psy && phy); a++)
-    for (uint8_t b = 1; b < MOVE_N; b++)
-      if (moveIsSpecial(a) && !moveIsSpecial(b) && !moveIsStatus(b) && moveDef(a).pow == moveDef(b).pow &&
-          moveDef(a).pow >= 60 && moveDef(a).type == moveDef(b).type && !(moveDef(a).flags & (MF_FIX | MF_FIXLVL)) &&
-          !(moveDef(b).flags & (MF_FIX | MF_FIXLVL))) { psy = a; phy = b; break; }
-  CHECK(psy && phy);
+  uint8_t psy = 60, phy = 30;  // 2a gen: psicorrayo (especial, 65) y cornada (fisico, 65)
+  CHECK(moveIsSpecial(psy) && !moveIsSpecial(phy) && moveDef(psy).pow == moveDef(phy).pow);
   Battler ala = withMoves(65, psy, phy), foe = makeBattler(19, 50, 90, 90, 90);
   foe.maxHp = foe.hp = 60000;
   uint32_t ds = 0, dp = 0;
@@ -1114,14 +1111,13 @@ TEST(battle, movimientos_por_defecto_validos) {
     for (uint16_t lv : { 3, 20, 45, 80 }) {
       uint8_t mv[4];
       movesDefault(d, lv, mv);
-      CHECK(moveCount(mv) >= 2);
+      CHECK(moveCount(mv) >= 1);
       for (int i = 0; i < 4; i++) {
         if (!mv[i]) continue;
         CHECK(mv[i] < MOVE_N);
         CHECK(moveCanLearn(d, mv[i]));
         for (int j = 0; j < i; j++) CHECK(mv[i] != mv[j]);
       }
-      CHECK(moveIsTyped(mv[0]));
     }
 }
 
@@ -1144,7 +1140,7 @@ TEST(battle, estados_se_pasan_a_veces) {
 }
 
 TEST(battle, pp_doble_ko126) {
-  CHECK_EQ(movePP(7), (uint8_t)10);   // hyper-beam: 5 -> 10
+  CHECK_EQ(movePP(63), (uint8_t)10);  // hyper-beam: 5 -> 10
   CHECK_EQ(movePP(MOVE_STRUGGLE), (uint8_t)1);
   for (uint8_t id = 1; id < MOVE_N; id++) CHECK(movePP(id) <= 80);
 }
@@ -1196,4 +1192,282 @@ TEST(battle, fuerza_del_salvaje_por_rareza_y_tipo) {
   CHECK(rar > com);              // raro mas fuerte
   CHECK(bad * 100 < com * 95);   // el de tipo ventajoso para el, mas flojo
   CHECK(good > com);             // el que pierde por tipo, algo mas fuerte
+}
+
+// ---- ko12.10: los movimientos originales (Cristal) y sus efectos
+static int countEv(const BEvent *ev, int n, uint8_t kind, int8_t val = -128, int side = -1) {
+  int k = 0;
+  for (int i = 0; i < n; i++)
+    if (ev[i].kind == kind && (val == -128 || ev[i].val == val) && (side < 0 || ev[i].side == side)) k++;
+  return k;
+}
+static Battler tank(int16_t dex, uint8_t m0, uint8_t m1 = 0) {
+  Battler b = withMoves(dex, m0, m1);
+  b.maxHp = b.hp = 3000;
+  return b;
+}
+
+TEST(moves2, ids_como_los_juegos) {
+  CHECK(!strcmp(MOVE_EN[33], "Tackle"));
+  CHECK(!strcmp(MOVE_KO[33], "몸통박치기"));
+  CHECK(!strcmp(MOVE_EN[MOVE_STRUGGLE], "Struggle"));
+  CHECK_EQ(moveDef(85).type, (uint8_t)PT_ELECTRIC);  // 10만볼트
+  CHECK_EQ(moveDef(85).pow, (uint8_t)95);             // 2a gen: 95
+  CHECK_EQ(moveDef(16).type, (uint8_t)PT_FLYING);     // bajo los de 2a gen, gust es volador
+  CHECK_EQ(moveDef(44).type, (uint8_t)PT_DARK);       // mordisco: siniestro
+  CHECK(moveIsSpecial(44));                           // 2a gen: siniestro = especial
+  CHECK(moveIsSpecial(7));                            // punetazo fuego: fuego = especial
+  CHECK(!moveIsSpecial(24));                          // doble patada: lucha = fisico
+  CHECK_EQ(tmMove(23), (uint8_t)225);                 // MT24 = dragoaliento (Cristal)
+}
+
+TEST(moves2, todos_se_pueden_usar_sin_romper_nada) {
+  // cada movimiento contra un rival normal, 6 turnos: el motor no se cuelga ni deja vida imposible
+  for (uint16_t id = 1; id < MOVE_N; id++) {
+    for (uint32_t seed = 1; seed <= 3; seed++) {
+      Battler a = withMoves(25, (uint8_t)id, MOVE_TACKLE), b = withMoves(19, MOVE_TACKLE, 45);
+      BRng rng(seed * 977 + id);
+      BEvent ev[BATTLE_MAX_EVENTS];
+      battleSetFleeMoves(seed == 2);
+      for (int t = 0; t < 6 && a.hp && b.hp; t++) {
+        int n = battleTurn(a, b, BA_M0, battleAi(b, a, rng), rng, ev, BATTLE_MAX_EVENTS, true);
+        CHECK(n <= BATTLE_MAX_EVENTS);
+        CHECK(a.hp <= a.maxHp && b.hp <= b.maxHp);
+        bool end = false;
+        for (int i = 0; i < n; i++) if (ev[i].kind == EV_RUN_OK) end = true;
+        if (end) break;
+      }
+    }
+  }
+  battleSetFleeMoves(false);
+  battleSetWeather(WX_CLEAR);
+}
+
+TEST(moves2, ia_con_cualquier_lista) {
+  BRng rng(5);
+  for (int16_t d = 1; d <= DEX_COUNT; d++) {
+    Battler a = makeBattler(d, 50, 120, 120, 120), b = makeBattler((int16_t)(DEX_COUNT + 1 - d), 50, 120, 120, 120);
+    for (int t = 0; t < 4; t++) {
+      BAct x = battleAi(a, b, rng);
+      CHECK(x >= BA_TACKLE && x < BA_COUNT);
+    }
+  }
+}
+
+TEST(moves2, proteccion_para_el_golpe) {
+  Battler a = tank(25, 182), b = tank(19, MOVE_TACKLE);
+  a.spe = 999;
+  BRng rng(3);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  int n = battleTurn(a, b, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK_EQ(a.hp, a.maxHp);
+  CHECK(countEv(ev, n, EV_MSG, MSG_PROTECTED) == 1);
+  CHECK(!a.protect);  // solo ese turno
+}
+
+TEST(moves2, vuelo_dos_turnos_e_intocable) {
+  Battler a = tank(18, 19), b = tank(19, MOVE_TACKLE);
+  a.spe = 999;
+  BRng rng(4);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  int n = battleTurn(a, b, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK(countEv(ev, n, EV_MSG, MSG_FLY) == 1);
+  CHECK_EQ(a.hp, a.maxHp);          // en el aire: el placaje falla
+  CHECK(countEv(ev, n, EV_MISS, -128, 1) == 1);
+  CHECK_EQ(a.pp[0], (uint8_t)(movePP(19) - 1));
+  n = battleTurn(a, b, BA_M1, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);  // elija lo que elija, baja
+  bool hit = false;
+  for (int i = 0; i < n; i++) if (ev[i].kind == EV_HIT && ev[i].mid == 19 && ev[i].side == 0) hit = true;
+  CHECK(hit);
+  CHECK_EQ(a.pp[0], (uint8_t)(movePP(19) - 1));  // la 2a parte no gasta PP
+  CHECK_EQ(a.invul, (uint8_t)0);
+}
+
+TEST(moves2, golpes_multiples) {
+  int total = 0, minH = 9, maxH = 0;
+  for (uint32_t seed = 1; seed <= 60; seed++) {
+    Battler a = tank(19, 31), b = tank(19, MOVE_TACKLE);  // ataque furia 2-5
+    a.spe = 999;
+    BRng rng(seed);
+    BEvent ev[BATTLE_MAX_EVENTS];
+    int n = battleTurn(a, b, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+    int h = 0;
+    for (int i = 0; i < n; i++) if (ev[i].kind == EV_HIT && ev[i].side == 0) h++;
+    if (!h) continue;  // fallo
+    total++;
+    if (h < minH) minH = h;
+    if (h > maxH) maxH = h;
+    CHECK(countEv(ev, n, EV_MSG, MSG_HITS) == 1);
+  }
+  CHECK(total > 30);
+  CHECK_EQ(minH, 2);
+  CHECK(maxH >= 4 && maxH <= 5);
+}
+
+TEST(moves2, toxico_cada_vez_mas) {
+  Battler a = tank(23, 92), b = tank(19, 150);  // toxico / salpicadura
+  b.spe = 1;
+  BRng rng(11);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  int n = 0;
+  for (int t = 0; t < 4 && b.st != ST_PSN; t++) n = battleTurn(a, b, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK_EQ(b.st, (uint8_t)ST_PSN);
+  CHECK(b.tox >= 1);
+  uint16_t last = 0;
+  for (int t = 0; t < 3; t++) {
+    n = battleTurn(a, b, BA_GUARD, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+    uint16_t d = 0;
+    for (int i = 0; i < n; i++) if (ev[i].kind == EV_STDMG) d = ev[i].dmg;
+    CHECK(d > last);
+    last = d;
+  }
+}
+
+TEST(moves2, drenadoras_y_planta_inmune) {
+  Battler a = tank(1, 73), b = tank(19, 150);
+  a.spe = 999;
+  a.hp = 1000;
+  BRng rng(2);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  for (int t = 0; t < 4 && !b.seeded; t++) battleTurn(a, b, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK(b.seeded);
+  uint16_t ha = a.hp, hb = b.hp;
+  int n = battleTurn(a, b, BA_GUARD, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK(countEv(ev, n, EV_MSG, MSG_SEEDDMG, 1) == 1);
+  CHECK(b.hp < hb);
+  CHECK(a.hp > ha);
+}
+
+TEST(moves2, sustituto_se_lleva_el_golpe) {
+  Battler a = tank(25, 164), b = tank(19, MOVE_TACKLE);
+  a.spe = 999;
+  BRng rng(6);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  battleTurn(a, b, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK(a.subHp > 0);
+  CHECK_EQ(a.hp, (uint16_t)(a.maxHp - a.maxHp / 4 + a.maxHp / 10 * 0));
+  uint16_t hp = a.hp;
+  int n = battleTurn(a, b, BA_GUARD, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  bool sub = countEv(ev, n, EV_MSG, MSG_SUBHIT) == 1 || countEv(ev, n, EV_MISS) == 1;
+  CHECK(sub);
+  CHECK(a.hp >= hp);  // el sustituto (o la proteccion) aguanta; el placaje no le llega
+}
+
+TEST(moves2, contraataque_devuelve_el_doble) {
+  Battler a = tank(68, 68), b = tank(19, MOVE_TACKLE);  // Machamp con contraataque
+  BRng rng(8);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  int n = battleTurn(a, b, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  uint16_t got = 0, back = 0;
+  for (int i = 0; i < n; i++) {
+    if (ev[i].kind == EV_HIT && ev[i].side == 1) got = ev[i].dmg;
+    if (ev[i].kind == EV_HIT && ev[i].side == 0) back = ev[i].dmg;
+  }
+  if (got) CHECK_EQ(back, (uint16_t)(got * 2));
+}
+
+TEST(moves2, sismico_igual_al_nivel) {
+  Battler a = tank(66, 69), b = tank(19, 150);
+  a.lvl = 37;
+  a.spe = 999;
+  BRng rng(1);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  int n = battleTurn(a, b, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  for (int i = 0; i < n; i++) if (ev[i].kind == EV_HIT && ev[i].side == 0) CHECK_EQ(ev[i].dmg, (uint16_t)37);
+  Battler g = tank(92, MOVE_TACKLE);  // Gastly: fantasma, no le hace nada
+  n = battleTurn(a, g, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK_EQ(g.hp, g.maxHp);
+}
+
+TEST(moves2, descanso_cura_y_duerme) {
+  Battler a = tank(143, 156), b = tank(19, 150);
+  a.hp = 100;
+  a.st = ST_PSN;
+  BRng rng(1);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  battleTurn(a, b, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK_EQ(a.hp, a.maxHp);
+  CHECK_EQ(a.st, (uint8_t)ST_SLP);
+}
+
+TEST(moves2, danza_lluvia_cinco_turnos) {
+  battleSetWeather(WX_CLEAR);
+  Battler a = tank(9, 240), b = tank(19, 150);
+  BRng rng(1);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  battleTurn(a, b, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK_EQ(battleWeather(), (uint8_t)WX_RAIN);
+  int ended = 0;
+  for (int t = 0; t < 5; t++) {
+    int n = battleTurn(a, b, BA_GUARD, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+    ended += countEv(ev, n, EV_MSG, MSG_WX_END);
+  }
+  CHECK_EQ(battleWeather(), (uint8_t)WX_CLEAR);
+  CHECK_EQ(ended, 1);
+  battleSetWeather(WX_CLEAR);
+}
+
+TEST(moves2, canto_mortal_tumba_a_los_dos) {
+  Battler a = tank(124, 195), b = tank(19, 150);
+  a.spe = 999;
+  BRng rng(1);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  battleTurn(a, b, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  for (int t = 0; t < 3 && a.hp && b.hp; t++) battleTurn(a, b, BA_GUARD, BA_M0, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK_EQ(a.hp, (uint16_t)0);
+  CHECK_EQ(b.hp, (uint16_t)0);
+}
+
+TEST(moves2, rugido_solo_contra_salvajes) {
+  BRng rng(1);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  Battler a = tank(58, 46), b = tank(19, 150);
+  a.spe = 999;
+  battleSetFleeMoves(false);
+  int n = battleTurn(a, b, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, true);
+  CHECK(countEv(ev, n, EV_RUN_OK) == 0);
+  battleSetFleeMoves(true);
+  n = battleTurn(a, b, BA_M0, BA_M0, rng, ev, BATTLE_MAX_EVENTS, true);
+  CHECK(countEv(ev, n, EV_RUN_OK, 1, 1) == 1);
+  battleSetFleeMoves(false);
+}
+
+TEST(moves2, transformacion_copia_y_vuelve) {
+  Battler d = tank(132, 144), b = withMoves(6, 53, 17, 89, 14);
+  d.spe = 999;
+  BRng rng(1);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  battleTurn(d, b, BA_M0, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+  CHECK_EQ(d.xform, (int16_t)6);
+  CHECK_EQ(d.mv[0], (uint8_t)53);
+  CHECK_EQ(d.pp[0], (uint8_t)5);
+  CHECK(battlerHasType(d, PT_FIRE));
+  battleClearVolatile(d);
+  CHECK_EQ(d.mv[0], (uint8_t)144);
+  CHECK_EQ(d.xform, (int16_t)0);
+}
+
+TEST(moves2, migracion_de_ids_viejos) {
+  // 1 headbutt -> 29 golpe cabeza; 145 placaje -> 33; 146 danza espada -> 14
+  CHECK_EQ(MOVE_OLD2NEW[1], (uint8_t)29);
+  CHECK_EQ(MOVE_OLD2NEW[145], (uint8_t)33);
+  CHECK_EQ(MOVE_OLD2NEW[146], (uint8_t)14);
+  for (int16_t d = 1; d <= DEX_COUNT; d++)
+    for (uint8_t o = 1; o < MOVE_OLD_N; o++) {
+      uint8_t n = moveMigrate(d, o);
+      CHECK(n == 0 || moveCanLearn(d, n));
+    }
+  CHECK_EQ(moveMigrate(25, 255), (uint8_t)0);  // forcejeo de antes: nada
+}
+
+TEST(moves2, aprende_a_su_nivel_como_en_cristal) {
+  Pet p;
+  p.speciesId = 25;  // Pikachu: onda trueno a 8 (Cristal)
+  p.exp = expForLevel(7);
+  memset(p.mv, 0, 4);
+  p.mv[0] = 84;
+  p.moveLv = 7;
+  p.moveLevelUp(7, 8);
+  CHECK(movesHas(p.mv, 86) || p.moveOffer == 86);
+  CHECK(p.moveKnown(86));
 }

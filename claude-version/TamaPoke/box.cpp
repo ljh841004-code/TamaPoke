@@ -47,9 +47,25 @@ void Box::begin() {
                    prefs.getBytes("mons", mons, sizeof(BoxMon) * c) != sizeof(BoxMon) * c)) {
     c = 0;
   }
+  // ko12.10: ids de antes (ko11.31..ko12.9) -> los originales de Cristal (una sola vez: "mvid")
+  bool oldIds = !prefs.isKey("mvid");
   // nada invalido entra en juego aunque la NVS venga danada
   for (uint8_t i = 0; i < c; i++) {
     if (mons[i].dex < 1 || mons[i].dex > DexLog::N) continue;
+    if (oldIds) {
+      uint8_t nm[4] = { 0, 0, 0, 0 };
+      for (uint8_t k = 0; k < 4; k++) {
+        uint8_t id = moveMigrate(mons[i].dex, mons[i].mv[k]);
+        if (id && !movesHas(nm, id)) nm[k] = id;
+      }
+      uint8_t def[4];
+      movesDefault(mons[i].dex, mons[i].lvl, def);
+      for (uint8_t q = 0; q < 4; q++)
+        if (def[q] && !movesHas(nm, def[q]))
+          for (uint8_t k = 0; k < 4; k++) if (!nm[k]) { nm[k] = def[q]; break; }
+      memcpy(mons[i].mv, nm, 4);
+      fixed = true;
+    }
     for (uint8_t k = 0; k < 4; k++)
       if (mons[i].mv[k] && !moveValid(mons[i].mv[k])) { mons[i].mv[k] = 0; fixed = true; }
     if (!moveCount(mons[i].mv)) { movesDefault(mons[i].dex, mons[i].lvl, mons[i].mv); fixed = true; }
@@ -59,6 +75,7 @@ void Box::begin() {
     mons[n++] = mons[i];
   }
   if (fixed) save();
+  if (oldIds) prefs.putUChar("mvid", 2);
 }
 
 void Box::save() {
@@ -202,7 +219,20 @@ void DexLog::begin() {
   load("seen", seenN, sizeof(seenN[0]), sizeof(seenN));
   load("caught", caughtN, sizeof(caughtN[0]), sizeof(caughtN));
   memset(lrn, 0, sizeof(lrn));
-  if (prefs.getBytesLength("lrn") == sizeof(lrn)) prefs.getBytes("lrn", lrn, sizeof(lrn));
+  if (prefs.getBytesLength("lrn2") == sizeof(lrn)) prefs.getBytes("lrn2", lrn, sizeof(lrn));
+  else if (prefs.getBytesLength("lrn") == (size_t)N * 24) {
+    // ko12.10: lo de antes (ids ko11.31, 24 bytes por especie) -> los originales
+    static uint8_t old[N][24];
+    prefs.getBytes("lrn", old, sizeof(old));
+    for (int d = 0; d < N; d++)
+      for (int id = 1; id < 192; id++)
+        if ((old[d][id / 8] >> (id % 8)) & 1) {
+          uint8_t nid = moveMigrate((int16_t)(d + 1), (uint8_t)id);
+          if (nid) lrn[d][nid / 8] |= (uint8_t)(1 << (nid % 8));
+        }
+    saveLearned();
+    prefs.remove("lrn");
+  }
 }
 
 bool DexLog::learned(int16_t dex, uint8_t id, bool save) {
@@ -211,7 +241,7 @@ bool DexLog::learned(int16_t dex, uint8_t id, bool save) {
   if (save) saveLearned();
   return true;
 }
-void DexLog::saveLearned() { prefs.putBytes("lrn", lrn, sizeof(lrn)); }
+void DexLog::saveLearned() { prefs.putBytes("lrn2", lrn, sizeof(lrn)); }
 
 void DexLog::wipe() {
   prefs.clear();

@@ -36,9 +36,7 @@ static void fxAsyncCancel();
 // abre el archivo del movimiento: mons/fx/<n> o suelto en mons/ (el instalador web)
 static File fxOpen(uint8_t id) {
   char name[16], path[28];
-  uint8_t t, s, v;
-  if (moveDecode(id, &t, &s, &v)) snprintf(name, sizeof(name), "f%02u%u%u.bin", t, s, v);
-  else snprintf(name, sizeof(name), "m%03u.bin", id);
+  snprintf(name, sizeof(name), "w%03u.bin", id);  // ko12.10: uno por movimiento original
   // ko11.32: sin la carpeta mons/fx (lo normal con el instalador web) ni se prueba; y los que no
   // estan en ningun sitio (sin animacion) se recuerdan: cada intento recorria la carpeta mons entera
   File f;
@@ -178,8 +176,7 @@ static void fxPumpOne() {
     uint8_t id = gQ.ids[gQ.i++];
     Serial.printf("PERF fx %u %uKB %ums\n", (unsigned)id, (unsigned)(gQ.sz / 1024), (unsigned)(millis() - gQ.t0));
     if (ok && fxValidate(*a, gQ.sz)) {
-      uint8_t t, s2, v;
-      a->key = moveDecode(id, &t, &s2, &v) ? (uint16_t)(t * 9 + s2 * 3 + v) : (uint16_t)(1000 + id);
+      a->key = (uint16_t)(1000 + id);
       a->mid = id;
       gQ.used += a->size;
     } else {

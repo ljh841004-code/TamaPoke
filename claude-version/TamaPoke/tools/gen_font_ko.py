@@ -50,7 +50,7 @@ def firmware_syllables():
     """silabas que aparecen en los literales del firmware (para el tamano 36)"""
     out = set()
     files = glob.glob(os.path.join(SKETCH, '*.cpp')) + glob.glob(os.path.join(SKETCH, '*.ino'))
-    files += [os.path.join(SKETCH, 'dex.h'), os.path.join(SKETCH, 'moves2_data.h')]  # ko12.10: 원작 기술 이름·설명
+    files += [os.path.join(SKETCH, 'dex.h'), os.path.join(SKETCH, 'moves_data.h')]  # ko12.10: 원작 기술 이름·설명
     for f in files:
         with open(f, encoding='utf-8', errors='ignore') as fh:
             src = fh.read()

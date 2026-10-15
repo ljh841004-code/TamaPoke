@@ -137,7 +137,7 @@ public:
     return false;
   }
 private:
-  static const int LRN_BYTES = 24;  // ids 0..191
+  static const int LRN_BYTES = 32;  // ko12.10: ids 0..255 (los 251 originales)
   uint8_t lrn[N][LRN_BYTES];
   Preferences prefs;
   uint32_t first[N];

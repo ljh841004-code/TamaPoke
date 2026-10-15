@@ -38,6 +38,87 @@ enum BEvKind : uint8_t {
   EV_CONFHIT,    // confuso: se golpea a si mismo (dmg)
   EV_RECOIL,     // dano de retroceso (dmg)
   EV_DRAIN,      // recupera vida al drenar (dmg = curado)
+  // ko12.10: efectos de los movimientos originales: val = MSG_*, mid = el movimiento, eff = un numero
+  // (golpes, cuenta atras, tipo...) y dmg si quita o cura vida (a quien dice side)
+  EV_MSG,
+};
+
+// ko12.10: mensajes de EV_MSG
+enum : uint8_t {
+  MSG_FAIL = 0,     // pero ha fallado
+  MSG_CHARGE,       // carga (rayo solar, viento cortante, cabezazo, ataque aereo: mid dice cual)
+  MSG_FLY,          // vuela alto
+  MSG_DIG,          // se mete bajo tierra
+  MSG_PROTECT,      // se protege (proteccion / detectar)
+  MSG_PROTECTED,    // side se protegio del ataque
+  MSG_ENDURE,       // aguante: se prepara
+  MSG_ENDURED,      // aguanto el golpe con 1 PS
+  MSG_TRAPPED,      // side queda atrapado (mid = atadura, constriccion...)
+  MSG_TRAPDMG,      // le hace dano estar atrapado (dmg)
+  MSG_TRAPEND,      // se libera
+  MSG_SEEDED,       // drenadoras plantadas en side
+  MSG_SEEDDMG,      // drenadoras: side pierde dmg (y el otro lo recupera)
+  MSG_WX_RAIN, MSG_WX_SUN, MSG_WX_SAND,  // empieza a llover / hace sol / tormenta de arena
+  MSG_WX_END,       // el tiempo vuelve a ser el de antes
+  MSG_SANDDMG,      // la arena le hace dano (dmg)
+  MSG_PERISH,       // canto mortal: eff = cuenta (3, 2, 1, 0 = se debilita)
+  MSG_LOCKON,       // apunta (fijar blanco / telepatia)
+  MSG_SUB,          // sustituto (dmg = vida que pone)
+  MSG_SUBHIT,       // el sustituto recibe el golpe
+  MSG_SUBBREAK,     // el sustituto se rompe
+  MSG_DISABLE,      // anula el movimiento mid del rival
+  MSG_DISABLE_END,
+  MSG_ENCORE,       // otra vez: side repite mid
+  MSG_ENCORE_END,
+  MSG_SPIKES,       // puas en el lado de side
+  MSG_SPIKEDMG,     // las puas le hacen dano al salir (dmg)
+  MSG_CURSE,        // maldicion (fantasma): side maldito
+  MSG_CURSEDMG,
+  MSG_NIGHTMARE,
+  MSG_NIGHTMAREDMG,
+  MSG_FORESIGHT,    // profecia: side ya no esquiva / el fantasma recibe normal y lucha
+  MSG_DBOND,        // mismodestino: se prepara
+  MSG_DBOND_HIT,    // se lleva al rival con el
+  MSG_BIDE,         // venganza: aguanta
+  MSG_BIDE_GO,      // venganza: suelta el dano
+  MSG_REST,         // descanso: duerme y se cura
+  MSG_TRANSFORM,    // se transforma en el rival (eff = 0)
+  MSG_MIMIC,        // aprende mid (mimetismo / esquema)
+  MSG_CONVERSION,   // cambia a tipo eff
+  MSG_HAZE,         // niebla: todos los cambios fuera
+  MSG_MIST,         // neblina: no le bajan las caracteristicas
+  MSG_MISTED,       // la neblina lo protege
+  MSG_LSCREEN, MSG_REFLECT, MSG_SAFEGUARD,
+  MSG_SAFEGUARDED,  // velo sagrado lo protege
+  MSG_SCREEN_END,   // se acaba eff: 0 pantalla luz, 1 reflejo, 2 neblina, 3 velo sagrado
+  MSG_LOVE,         // se enamora
+  MSG_BELLYDRUM,    // tambor: pierde la mitad y ataque al maximo
+  MSG_PSYCHUP,      // copia los cambios del rival
+  MSG_PAINSPLIT,    // divide el dolor
+  MSG_HITS,         // golpeo eff veces
+  MSG_OHKO,         // fulminante
+  MSG_SPLASH,       // no pasa nada
+  MSG_RAMPAGE_END,  // se cansa y se confunde
+  MSG_FOCUS,        // foco energia
+  MSG_HEALBELL,     // campana cura: se le pasa el estado
+  MSG_SPITE,        // rencor: eff PP menos a mid
+  MSG_FUTURE,       // premonicion: lo ve venir
+  MSG_FUTURE_HIT,   // premonicion: llega (dmg)
+  MSG_MAGNITUDE,    // magnitud eff
+  MSG_PRESENT_HEAL, // presente: le cura (dmg)
+  MSG_CRASH,        // falla y se estrella (dmg)
+  MSG_MEANLOOK,     // side ya no puede huir
+  MSG_RAPIDSPIN,    // giro rapido: se libera
+  MSG_PAYDAY,       // dia de pago: monedas
+  MSG_SKETCH,       // esquema: lo aprende para siempre (mid)
+  MSG_NOESCAPE,     // no puede huir (atrapado / mal de ojo)
+  MSG_SWAGGER,      // contoneo
+  MSG_SLEEPTALK,    // sonambulo: mid = el que sale
+  MSG_METRONOME,    // metronomo: mid = el que sale
+  MSG_MIRRORMOVE,   // mov. espejo: mid = el que sale
+  MSG_RAGE,         // furia: sube el ataque (al recibir un golpe)
+  MSG_PERISH_SING,  // canto mortal: los dos caen en 3 turnos
+  MSG_N
 };
 
 // ko11.31: estados alterados (val de los eventos). Los de batalla se quitan al terminar
@@ -45,7 +126,10 @@ enum BEvKind : uint8_t {
 enum : uint8_t { HIT_GUARDED = 1, HIT_REST = 2 };
 // ko12.9.13: val de EV_RUN_FAIL: el rival le pego al huir (dmg) o lo esquivo
 enum : uint8_t { RUN_FAIL_HIT = 1, RUN_FAIL_DODGE = 2 };
-enum : uint8_t { ST_NONE = 0, ST_PSN, ST_BRN, ST_PAR, ST_SLP, ST_FRZ, ST_CNF, ST_FLINCH, ST_RECHARGE };
+enum : uint8_t { ST_NONE = 0, ST_PSN, ST_BRN, ST_PAR, ST_SLP, ST_FRZ, ST_CNF, ST_FLINCH, ST_RECHARGE,
+                 ST_LOVE, ST_TOX, ST_DISABLED };  // ko12.10: los 3 ultimos solo en eventos (enamorado, toxico, anulado)
+// ko12.10: caracteristicas con cambios (-6..+6), como en el original (2a gen: at. esp. y def. esp. aparte)
+enum : uint8_t { STG_ATK = 0, STG_DEF, STG_SPE, STG_SPA, STG_SPD, STG_ACC, STG_EVA, STG_N };
 
 struct Battler {
   int16_t dex = 1;
@@ -58,13 +142,43 @@ struct Battler {
   // ko11.31: sus 4 movimientos (0 = hueco) y los PP que les quedan
   uint8_t mv[4] = { 0, 0, 0, 0 };
   uint8_t pp[4] = { 0, 0, 0, 0 };
-  int8_t stg[3] = { 0, 0, 0 };  // atq, def, vel: -6..+6
+  int8_t stg[STG_N] = { 0, 0, 0, 0, 0, 0, 0 };  // STG_*: -6..+6
   uint8_t st = 0, stT = 0;      // estado (ST_PSN..ST_FRZ) y turnos de sueno
   uint8_t cnf = 0;              // turnos de confusion
   bool flinch = false;
   // ko12.8: tras hiperrayo y similares (si el otro sigue en pie): ESE movimiento no se puede
   // usar el turno siguiente (los demas y protegerse, si). restT: turnos que le quedan
   uint8_t restMv = 0, restT = 0;
+  // ko12.10: lo que piden los movimientos originales (todo se borra al acabar o al cambiar)
+  uint8_t bond = 70;            // amistad (retribucion / frustracion)
+  uint8_t hpType = 0;           // tipo de poder oculto
+  uint8_t tox = 0;              // veneno grave: cuenta (0 = normal)
+  uint8_t trapT = 0, trapMv = 0;  // atrapado (atadura...): turnos y movimiento
+  uint8_t chargeMv = 0;         // cargando (2 turnos)
+  uint8_t invul = 0;            // 1 en el aire (vuelo), 2 bajo tierra (excavar)
+  uint8_t protN = 0;            // protecciones seguidas
+  uint8_t reflT = 0, lscrT = 0, mistT = 0, safeT = 0;  // reflejo, pantalla luz, neblina, velo sagrado
+  uint8_t disMv = 0, disT = 0;  // anulado
+  uint8_t encMv = 0, encT = 0;  // otra vez
+  uint8_t lastMv = 0;           // el ultimo que uso
+  uint8_t rampMv = 0, rampT = 0;  // golpe/danza petalo/enfado
+  uint8_t rollT = 0;            // rodar: golpes seguidos
+  uint8_t furyN = 0;            // corte furia: aciertos seguidos
+  uint8_t bideT = 0;            // venganza: turnos aguantando
+  uint8_t futT = 0;             // premonicion que le va a llegar (turnos)
+  uint8_t perish = 0;           // canto mortal: cuenta + 1
+  uint8_t spikes = 0;           // puas en su lado
+  uint8_t sketched = 0;         // esquema: lo aprendio para siempre (el que crias)
+  uint16_t subHp = 0;           // sustituto
+  uint16_t lastDmgP = 0, lastDmgS = 0;  // dano fisico / especial recibido este turno (contraataque, manto espejo)
+  uint16_t bideDmg = 0, futDmg = 0;
+  int16_t xform = 0;            // transformado en esa especie (0 = no)
+  bool protect = false, endure = false, focus = false, seeded = false, lockon = false, foresight = false;
+  bool nightmare = false, cursed = false, dbond = false, attract = false, meanLook = false, rage = false;
+  bool curled = false, spkPend = false, minimized = false;
+  // lo de antes de transformarse
+  uint8_t oType = 0, oType2 = 0xFF, oMv[4] = { 0, 0, 0, 0 }, oPp[4] = { 0, 0, 0, 0 };
+  uint16_t oAtk = 0, oDef = 0, oSpe = 0;
 };
 
 struct BEvent {
@@ -86,7 +200,7 @@ struct BRng {
   uint32_t below(uint32_t n) { return n ? next() % n : 0; }
 };
 
-#define BATTLE_MAX_EVENTS 16  // por turno (2 acciones con efectos + estados + desmayo)
+#define BATTLE_MAX_EVENTS 32  // por turno (ko12.10: golpes multiples y efectos de fin de turno)
 #define BATTLE_AUTO_TURNS 40  // tope de la batalla automatica (tongsin)
 
 // eficacia del tipo atacante contra el defensor, en mitades: 0, 1, 2 o 4
@@ -262,7 +376,10 @@ int16_t dexFirstForm(int16_t dex);
 // ko10.4: tiempo de la batalla (WX_* de weather.h). Lluvia: agua x1,5, fuego x0,5;
 // sol: fuego x1,5, agua x0,5; nieve: hielo x1,5. battleAuto (tongsin) usa siempre buen tiempo
 void battleSetWeather(uint8_t wx);
-uint8_t battleWeather();
+uint8_t battleWeather();  // ko12.10: el que cuenta ahora (danza lluvia / dia soleado / tormenta arena: 5 turnos)
+#define WX_SAND 6         // ko12.10: tormenta de arena (solo en batalla; weather.h no la tiene)
+// ko12.10: rugido / remolino / teletransporte acaban la batalla: solo contra salvajes (por defecto, fallan)
+void battleSetFleeMoves(bool ok);
 uint8_t weatherMul(uint8_t wx, uint8_t moveType);  // en medios (3 = x1,5)
 
 // resuelve un turno: a hace actA, b hace actB. Rellena ev[] y devuelve cuantos.
@@ -332,46 +449,85 @@ uint8_t evoLevel(int16_t dex);
 #define MOVE_TYPE_ACC 88
 
 // ---- ko11.31: movimientos (4 por Pokemon, con PP). Ids: moves_data.h
-//   1..144 ataque de tipo (1 + tipo*9 + fase*3 + variante), 145 placaje, 146.. de estado
+// ko12.10: los 251 de Pokemon Cristal, con el id de los juegos (PokeAPI): 33 placaje, 165 forcejeo
 #define STATUS_CURE_PCT 16  // ko11.31: % por turno de que se pase el veneno / quemadura / paralisis
-#define MOVE_TACKLE 145
-#define MOVE_STATUS0 146
-#define MOVE_STRUGGLE 255
+#define MOVE_TACKLE 33
+#define MOVE_STRUGGLE 165
 // banderas de MoveDef::flags
-enum : uint8_t { MF_HICRIT = 1, MF_DRAIN = 2, MF_RECOIL = 4, MF_FIXLVL = 8, MF_FIX = 16, MF_STATUS = 32, MF_RECHARGE = 64,
-                 MF_SELFCNF = 128 };
+enum : uint8_t { MF_HICRIT = 1, MF_DRAIN = 2, MF_RECOIL = 4, MF_SELF = 8, MF_THAW = 16, MF_STATUS = 32,
+                 MF_RECHARGE = 64, MF_NOMISS = 128 };
+// ko12.10: efecto especial de cada movimiento (MoveDef::fx), lo hace battle.cpp
+enum : uint8_t {
+  MX_NONE = 0,
+  // de ataque
+  MX_OHKO, MX_SONICBOOM, MX_DRAGONRAGE, MX_LEVEL, MX_PSYWAVE, MX_SUPERFANG, MX_COUNTER, MX_MIRRORCOAT, MX_BIDE,
+  MX_CHARGE, MX_SOLAR, MX_FLY, MX_DIG, MX_RAMPAGE, MX_TRAP, MX_CRASH, MX_SELFKO, MX_RAGE, MX_FURYCUTTER,
+  MX_ROLLOUT, MX_FLAIL, MX_RETURN, MX_FRUSTRATION, MX_PRESENT, MX_MAGNITUDE, MX_HIDDENPOWER, MX_FALSESWIPE,
+  MX_PURSUIT, MX_SNORE, MX_DREAMEATER, MX_TRIATTACK, MX_FUTURESIGHT, MX_THUNDER, MX_RAPIDSPIN, MX_ALLUP,
+  MX_TRIPLEKICK, MX_BEATUP, MX_TWISTER, MX_QUAKE, MX_STRUGGLE, MX_PAYDAY, MX_THIEF, MX_STOMP,
+  // de estado
+  MX_SLEEPTALK, MX_TOXIC, MX_HEAL, MX_HEALWX, MX_REST, MX_LEECHSEED, MX_DISABLE, MX_MIST, MX_LIGHTSCREEN,
+  MX_REFLECT, MX_HAZE, MX_FOCUS, MX_METRONOME, MX_MIRRORMOVE, MX_TRANSFORM, MX_SPLASH, MX_CONVERSION,
+  MX_CONVERSION2, MX_SUBSTITUTE, MX_MIMIC, MX_MEANLOOK, MX_LOCKON, MX_NIGHTMARE, MX_CURSE, MX_SPITE,
+  MX_PROTECT, MX_ENDURE, MX_BELLYDRUM, MX_SPIKES, MX_FORESIGHT, MX_DESTINYBOND, MX_PERISH, MX_SANDSTORM,
+  MX_RAINDANCE, MX_SUNNYDAY, MX_SWAGGER, MX_ATTRACT, MX_HEALBELL, MX_SAFEGUARD, MX_PAINSPLIT, MX_BATONPASS,
+  MX_ENCORE, MX_PSYCHUP, MX_ROAR, MX_TELEPORT,
+  MX_COUNT
+};
 // estado alterado (ail): 1 veneno, 2 quemadura, 3 paralisis, 4 sueno, 5 congelado, 6 confusion
 struct MoveDef {
-  uint8_t type, pow, acc, pp;
+  uint8_t type, pow, acc, pp;  // acc 0 = no falla (o es sobre si mismo)
   int8_t prio;
   uint8_t flags;
   uint8_t ail, ailCh;      // estado y su % (0 = siempre si es de estado)
-  uint8_t st; int8_t stD;  // caracteristica (0 atq, 1 def, 2 vel) y cambio
+  uint8_t st; int8_t stD;  // caracteristica (STG_*) y cambio
   uint8_t stSelf, stCh;    // 1 = a si mismo; % (0 = siempre si es de estado)
   uint8_t flinch, drain;   // % de retroceso; % drenado (MF_DRAIN) o de retroceso (MF_RECOIL)
+  uint8_t st2; int8_t stD2;  // ko12.10: segundo cambio (desarrollo, maldicion...)
+  uint8_t hits;            // golpes: max << 4 | min (0 = uno)
+  uint8_t fx;              // MX_*
+  uint8_t fam;             // dibujo de reserva (FX2_* + 1 de ui_moves.ino; 0 = el de su tipo)
 };
+#define MOVE_N 252          // ids 1..251 (0 = vacio); la tabla, en moves_data.h
 const MoveDef &moveDef(uint8_t id);
-uint8_t moveIdTyped(uint8_t type, uint8_t tier, uint8_t var);
+const char *moveNameKo(uint8_t id);
+const char *moveNameEn(uint8_t id);
+const char *moveDescKo(uint8_t id);
+const char *moveDescEn(uint8_t id);
+// ko12.10: las 57 MT/MO de Cristal (MT01..50 = 0..49, MO01..07 = 50..56)
+#define TM_COUNT 57
+#define TM_HM_FIRST 50
+uint8_t tmMove(uint8_t tm);
+bool tmCompatible(int16_t dex, uint8_t tm);
+const char *tmLabel(uint8_t tm, bool ko);   // "기술머신01" / "TM01"
+int8_t tmOfMove(uint8_t id);                // -1 = no es de ninguna MT/MO
 bool moveValid(uint8_t id);                         // 1..MOVE_N-1
-bool moveIsTyped(uint8_t id);                       // 1..144
 bool moveIsStatus(uint8_t id);
 uint8_t moveType(uint8_t id);
 #define PP_MULT 2            // ko12.6: PP de la tabla x2
 #define PP_LOSS_MIN_PCT 50   // ko12.6: al perder, los PP vuelven al menos a la mitad
 uint8_t movePP(uint8_t id);                         // PP maximos
-// tipo, fase y variante de un ataque de tipo (para nombre y efecto); false si no lo es
-bool moveDecode(uint8_t id, uint8_t *type, uint8_t *tier, uint8_t *var);
-// lo que puede aprender: placaje + los de su tipo hasta su fase + los que aprende en los juegos
+// ko12.10: lo que puede aprender en Cristal (subiendo de nivel, MT/MO, tutor y lo de sus preevoluciones)
 bool moveCanLearn(int16_t dex, uint8_t id);
 uint8_t movePool(int16_t dex, uint8_t *out, uint8_t max);
-// los 4 de un Pokemon que no es el que crias (rivales, ayudantes, historia): fijos por
-// especie y tramo de 5 niveles. Huecos = 0
+// ko12.10: lo que aprende subiendo de nivel (como en Cristal): lv[i], mv[i] por orden; devuelve cuantos
+uint8_t moveLearnset(int16_t dex, uint8_t *lv, uint8_t *mv, uint8_t max);
+// el que aprende justo a ese nivel (0 = ninguno; si hay varios, el k-esimo)
+uint8_t moveAtLevel(int16_t dex, uint16_t lvl, uint8_t k = 0);
+// ko12.10: aprende a ese nivel si es "sin original" (10 niveles sin nada nuevo desde Lv.75): uno de los suyos
+#define MOVE_FALLBACK_LV 75
+#define MOVE_FALLBACK_GAP 10
+// lo de antes (ko11.31..ko12.9) -> el original mas parecido que pueda aprender esa especie (0 = nada)
+uint8_t moveMigrate(int16_t dex, uint8_t oldId);
+// los 4 de un Pokemon que no es el que crias (rivales, ayudantes, historia): como en los juegos, los
+// 4 ultimos que aprende subiendo de nivel hasta su nivel. Huecos = 0
 void movesDefault(int16_t dex, uint16_t lvl, uint8_t out[4]);
 uint8_t moveCount(const uint8_t mv[4]);
 void movesFillPP(Battler &b);                       // PP llenos
 bool movesHas(const uint8_t mv[4], uint8_t id);
-// el que se ve en los dibujos de "su ataque" (el primero de su tipo; si no, el de su fase)
+// el que se ve en los dibujos de "su ataque" (el mas fuerte de su tipo; si no, el mas fuerte)
 uint8_t movesMain(const Battler &b);
+uint8_t movesMainOf(int16_t dex, const uint8_t mv[4]);
 // accion -> casilla (0..3) o -1; BA_TYPE/BA_TACKLE buscan ese movimiento entre los suyos
 int8_t battleSlot(const Battler &b, BAct a);
 bool battleHasPP(const Battler &b);                 // false: solo puede forcejear
@@ -381,4 +537,16 @@ uint32_t spStat(const Battler &b, uint32_t v, bool defense);  // ko12.8: v (atq 
 bool battleResting(const Battler &b, uint8_t id);   // ko12.8: ese movimiento descansa este turno (tras hiperrayo)
 // dano esperado de un movimiento (para la IA y para marcar "muy eficaz" en el menu)
 uint8_t moveEffAgainst(uint8_t id, const Battler &df);
+uint8_t moveTypeFor(const Battler &at, uint8_t id);
+// ko12.10: para el dibujo de reserva de un golpe (sin animacion en la SD): su tipo (0..15; volador -> 0xFF,
+// el golpe generico), "fase" por la potencia (0 < 65 <= 1 < 100 <= 2) y variante. false = de estado
+bool moveFxInfo(uint8_t id, uint8_t *type, uint8_t *tier, uint8_t *var);  // ko12.10: poder oculto: el tipo de ese Pokemon
+uint16_t movePowerShown(const Battler &at, uint8_t id);  // ko12.10: la potencia que tiene ahora (0 = no hace dano normal)
 void battleClearVolatile(Battler &b);  // al terminar: fuera estados y cambios
+// ko12.10: cambio de Pokemon: el que se va pierde lo de la batalla (cambios, confusion, atrapado...) y el
+// que entra hereda lo del lado (puas, reflejo, pantalla luz, neblina, velo sagrado). Las puas le
+// hacen dano al empezar el turno siguiente
+void battleSwitchIn(Battler &out, Battler &in);
+bool battleCanEscape(const Battler &b);   // atrapado o mal de ojo: no puede huir
+bool battleLocked(const Battler &b);      // sigue con el mismo movimiento (carga, enfado, rodar, venganza)
+uint8_t battleLockedMove(const Battler &b);
