@@ -5,6 +5,7 @@
 //    espaldas, sf/sb = shiny), en la pantalla principal (con el paseo, salto, sueno... del PMD encima) y en
 //    el combate (el rival de frente, el tuyo de espaldas). Si falta el fichero, el PMD de siempre.
 #include "host_hd_canvas.h"
+#include "m3d.h"
 #include <math.h>
 #include <stdio.h>
 #include <string>
@@ -232,9 +233,46 @@ enum { A_IDLE = 0, A_WALKL, A_WALKR, A_SLEEP, A_EAT, A_HURT, A_ATTACK, A_POSE, A
 bool gHdArt = true;  // [메뉴] "3D 움직임" (por defecto) / "도트"
 bool hdArtOn() { return gHdArt; }
 
+// ---------------------------------------------------------------- modelos 3D de verdad (mons/m3d/NNN.m3d)
+struct M3dSlot { M3dModel m; uint32_t tried = 0; bool ok = false; };
+static std::unordered_map<int, M3dSlot> gM3d;
+static M3dModel *m3dGet(int dex) {
+  M3dSlot &s = gM3d[dex];
+  if (s.ok) return &s.m;
+  uint32_t now = millis();
+  if (s.tried && now - s.tried < 5000) return nullptr;
+  s.tried = now ? now : 1;
+  char name[48];
+  snprintf(name, sizeof(name), "/mons/m3d/%03d.m3d", dex);
+  std::vector<uint8_t> d;
+  if (!gSdRoot || !readFile(std::string(gSdRoot) + name, d)) return nullptr;
+  if (!s.m.load(d)) return nullptr;
+  s.ok = true;
+  if (gM3d.size() > 6)
+    for (auto it = gM3d.begin(); it != gM3d.end();) it = (it->first != dex && it->second.ok) ? gM3d.erase(it) : std::next(it);
+  return &gM3d[dex].m;
+}
+static bool m3dPet(int16_t dex, uint8_t act, int x, int ground, uint32_t t, float yaw, float hLogical, bool sil, int mulBoost) {
+  M3dModel *m = m3dGet(dex);
+  if (!m) return false;
+  M3dPose pose;
+  M3dView v;
+  v.yaw = yaw;
+  v.pitch = 0.16f;
+  v.scale = hLogical * HDK / m->height;
+  v.ox = x * HDK + HDK / 2.0f;
+  v.oy = ground * HDK;
+  m3dAnimate(*m, act, t, pose, v);
+  v.silhouette = sil;
+  if (mulBoost) v.add += mulBoost;
+  m3dDraw(*m, pose, v, gfx->hdfb(), gfx->hdw(), gfx->hdh());
+  return true;
+}
+
 // pantalla principal: la animacion 3D + lo que hace segun la accion del PMD (andar, saltar, dormir...)
 bool hdPetDraw(int16_t dex, bool shiny, uint8_t act, int x, int ground, uint32_t t, bool) {
   if (!gfx || dex <= 0) return false;
+  if (m3dPet(dex, act, x, ground, t, -0.35f, 150, false, 0)) return true;  // modelo 3D de verdad (si esta)
   AniImg *a = aniGet(dex, shiny, false);
   if (!a) return false;
   const float TAU = 6.2831853f;
@@ -300,6 +338,8 @@ bool hdPetDraw(int16_t dex, bool shiny, uint8_t act, int x, int ground, uint32_t
 // grande) con tope de alto; sil = desmayandose (sombra oscura)
 bool hdBattlerDraw(int16_t dex, bool shiny, bool back, int x, int ground, bool sil, uint8_t act) {
   if (!gfx || !gHdArt || dex <= 0) return false;
+  // 3D: el rival mira hacia abajo a la izquierda (a ti); el tuyo de espaldas hacia arriba a la derecha
+  if (m3dPet(dex, act, x, ground, millis(), back ? 3.14159f - 0.75f : -0.75f, back ? 150 : 118, sil, 0)) return true;
   AniImg *a = aniGet(dex, shiny, back);
   if (!a) return false;
   int ch = a->feet - a->top;

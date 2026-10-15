@@ -33,7 +33,7 @@ echo "== nativo (arm64)"
 INC="-I $HERE/jni -I $HERE/jni/shim -I $R/shim -I $SKETCH/test/shim -I $SKETCH -I $GFX -I $B -I $NDK/sources/android/native_app_glue"
 CXXF="-std=gnu++17 -O2 -fPIC -w -ffunction-sections -fdata-sections -DHOST_REAL_AUDIO -DHOST_HD $INC"
 rm -f "$B"/obj/*.o
-for f in "$HERE/jni/host.cpp" "$HERE/jni/host_hd.cpp" "$HERE/jni/audio_host.cpp" "$HERE/jni/host_stubs.cpp" "$SKETCH/pet.cpp" "$SKETCH/box.cpp" "$SKETCH/battle.cpp" "$SKETCH/i18n.cpp" \
+for f in "$HERE/jni/host.cpp" "$HERE/jni/host_hd.cpp" "$HERE/jni/m3d.cpp" "$HERE/jni/audio_host.cpp" "$HERE/jni/host_stubs.cpp" "$SKETCH/pet.cpp" "$SKETCH/box.cpp" "$SKETCH/battle.cpp" "$SKETCH/i18n.cpp" \
          "$SKETCH/i18n_ext.cpp" "$SKETCH/story_ko.cpp" "$SKETCH/sdmon.cpp" "$SKETCH/fxanim.cpp" "$SKETCH/sdcheck.cpp" \
          "$SKETCH/pak_core.cpp" "$GFX/Arduino_GFX.cpp" "$GFX/Arduino_G.cpp" "$GFX/canvas/Arduino_Canvas.cpp"; do
   "$CXX" $CXXF -c "$f" -o "$B/obj/$(basename "$f").o" &

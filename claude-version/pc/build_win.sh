@@ -24,7 +24,7 @@ echo "== compilar"
 INC="-I $AN/jni -I $AN/jni/shim -I $R/shim -I $SK/test/shim -I $SK -I $GFX -I $B"
 CXXF="-std=gnu++17 -O2 -w -DHOST_REAL_AUDIO -DHOST_HD -DTP_FONT_PATH=\"$AN/assets/NotoSansKR-Medium-hd.otf\" $INC"
 rm -f "$B"/obj/*.o
-for f in "$HERE/host_win.cpp" "$HERE/audio_win.cpp" "$AN/jni/host_hd.cpp" "$AN/jni/host_stubs.cpp" "$SK/pet.cpp" "$SK/box.cpp" "$SK/battle.cpp" \
+for f in "$HERE/host_win.cpp" "$HERE/audio_win.cpp" "$AN/jni/host_hd.cpp" "$AN/jni/m3d.cpp" "$AN/jni/host_stubs.cpp" "$SK/pet.cpp" "$SK/box.cpp" "$SK/battle.cpp" \
          "$SK/i18n.cpp" "$SK/i18n_ext.cpp" "$SK/story_ko.cpp" "$SK/sdmon.cpp" "$SK/fxanim.cpp" "$SK/sdcheck.cpp" "$SK/pak_core.cpp" \
          "$GFX/Arduino_GFX.cpp" "$GFX/Arduino_G.cpp" "$GFX/canvas/Arduino_Canvas.cpp"; do
   "$CXX" $CXXF -c "$f" -o "$B/obj/$(basename "$f").o" &
