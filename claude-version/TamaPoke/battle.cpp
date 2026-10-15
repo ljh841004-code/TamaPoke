@@ -4,39 +4,46 @@
 #include "weather.h"
 #include "moves_data.h"
 #include "dex_special.h"
+#include "dex_types.h"
 #include "sdcheck.h"
 #include <string.h>
+#include <stdio.h>
 static_assert(SDC_FX_N == MOVE_N - 1, "sdcheck.h: SDC_FX_N = numero de movimientos");
 #include <string.h>
 
-// Tabla de tipos de gen 2 (atacante x defensor), en mitades: 0 inmune, 1 poco
-// eficaz, 2 normal, 4 muy eficaz. Solo hay tipo primario y no existe "volador"
-// (los voladores son normales aqui). ko10: + SINIESTRO y ACERO, y los cambios de
-// gen 2 (fantasma -> psiquico x2, bicho <-> veneno, hielo -> fuego x0,5).
-// Orden: NOR FUE AGU PLA ELE HIE LUC VEN TIE PSI BIC ROC FAN DRA SIN ACE
-static const uint8_t TYPE_CHART[PT_COUNT][PT_COUNT] = {
-  /* NOR */ { 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0, 2, 2, 1 },
-  /* FUE */ { 2, 1, 1, 4, 2, 4, 2, 2, 2, 2, 4, 1, 2, 1, 2, 4 },
-  /* AGU */ { 2, 4, 1, 1, 2, 2, 2, 2, 4, 2, 2, 4, 2, 1, 2, 2 },
-  /* PLA */ { 2, 1, 4, 1, 2, 2, 2, 1, 4, 2, 1, 4, 2, 1, 2, 1 },
-  /* ELE */ { 2, 2, 4, 1, 1, 2, 2, 2, 0, 2, 2, 2, 2, 1, 2, 2 },
-  /* HIE */ { 2, 1, 1, 4, 2, 1, 2, 2, 4, 2, 2, 2, 2, 4, 2, 1 },
-  /* LUC */ { 4, 2, 2, 2, 2, 4, 2, 1, 2, 1, 1, 4, 0, 2, 4, 4 },
-  /* VEN */ { 2, 2, 2, 4, 2, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2, 0 },
-  /* TIE */ { 2, 4, 2, 1, 4, 2, 2, 4, 2, 2, 1, 4, 2, 2, 2, 4 },
-  /* PSI */ { 2, 2, 2, 2, 2, 2, 4, 4, 2, 1, 2, 2, 2, 2, 0, 1 },
-  /* BIC */ { 2, 1, 2, 4, 2, 2, 1, 1, 2, 4, 2, 2, 1, 2, 4, 1 },
-  /* ROC */ { 2, 4, 2, 2, 2, 4, 1, 2, 1, 2, 4, 2, 2, 2, 2, 1 },
-  /* FAN */ { 0, 2, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 4, 2, 1, 1 },
-  /* DRA */ { 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 2, 1 },
-  /* SIN */ { 2, 2, 2, 2, 2, 2, 1, 2, 2, 4, 2, 2, 4, 2, 1, 1 },
-  /* ACE */ { 2, 1, 1, 2, 1, 4, 2, 2, 2, 2, 2, 4, 2, 2, 2, 1 },
+// ko12.10: tabla de tipos de 2a generacion con VOLADOR (atacante x defensor), en mitades: 0 inmune,
+// 1 poco eficaz, 2 normal, 4 muy eficaz. Con dos tipos se multiplican (cuartos: 0..16, normal 4).
+// Orden: NOR FUE AGU PLA ELE HIE LUC VEN TIE PSI BIC ROC FAN DRA SIN ACE VOL
+static const uint8_t TYPE_CHART[PT_BATTLE_N][PT_BATTLE_N] = {
+  /* NOR */ { 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0, 2, 2, 1, 2 },
+  /* FUE */ { 2, 1, 1, 4, 2, 4, 2, 2, 2, 2, 4, 1, 2, 1, 2, 4, 2 },
+  /* AGU */ { 2, 4, 1, 1, 2, 2, 2, 2, 4, 2, 2, 4, 2, 1, 2, 2, 2 },
+  /* PLA */ { 2, 1, 4, 1, 2, 2, 2, 1, 4, 2, 1, 4, 2, 1, 2, 1, 1 },
+  /* ELE */ { 2, 2, 4, 1, 1, 2, 2, 2, 0, 2, 2, 2, 2, 1, 2, 2, 4 },
+  /* HIE */ { 2, 1, 1, 4, 2, 1, 2, 2, 4, 2, 2, 2, 2, 4, 2, 1, 4 },
+  /* LUC */ { 4, 2, 2, 2, 2, 4, 2, 1, 2, 1, 1, 4, 0, 2, 4, 4, 1 },
+  /* VEN */ { 2, 2, 2, 4, 2, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2, 0, 2 },
+  /* TIE */ { 2, 4, 2, 1, 4, 2, 2, 4, 2, 2, 1, 4, 2, 2, 2, 4, 0 },
+  /* PSI */ { 2, 2, 2, 2, 2, 2, 4, 4, 2, 1, 2, 2, 2, 2, 0, 1, 2 },
+  /* BIC */ { 2, 1, 2, 4, 2, 2, 1, 1, 2, 4, 2, 2, 1, 2, 4, 1, 1 },
+  /* ROC */ { 2, 4, 2, 2, 2, 4, 1, 2, 1, 2, 4, 2, 2, 2, 2, 1, 4 },
+  /* FAN */ { 0, 2, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 4, 2, 1, 1, 2 },
+  /* DRA */ { 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 2, 1, 2 },
+  /* SIN */ { 2, 2, 2, 2, 2, 2, 1, 2, 2, 4, 2, 2, 4, 2, 1, 1, 2 },
+  /* ACE */ { 2, 1, 1, 2, 1, 4, 2, 2, 2, 2, 2, 4, 2, 2, 2, 1, 2 },
+  /* VOL */ { 2, 2, 2, 4, 1, 2, 4, 2, 2, 2, 4, 1, 2, 2, 2, 1, 2 },
 };
 
 uint8_t typeEff(uint8_t atkType, uint8_t defType) {
-  if (atkType >= PT_COUNT || defType >= PT_COUNT) return 2;
+  if (atkType >= PT_BATTLE_N || defType >= PT_BATTLE_N) return 2;
   return TYPE_CHART[atkType][defType];
 }
+uint8_t typeEffQ(uint8_t atkType, uint8_t t1, uint8_t t2) {
+  uint8_t a = typeEff(atkType, t1);
+  return (t2 < PT_BATTLE_N && t2 != t1) ? a * typeEff(atkType, t2) : a * 2;
+}
+uint8_t effCat(uint8_t q) { return q == 0 ? 0 : q < 4 ? 1 : q == 4 ? 2 : 4; }
+bool battlerHasType(const Battler &b, uint8_t t) { return b.type == t || b.type2 == t; }
 
 static uint16_t lvlCap(uint16_t lvl) { return lvl > LEVEL_MAX ? LEVEL_MAX : (lvl < 1 ? 1 : lvl); }  // ko12.9.23: hasta 150
 
@@ -57,6 +64,7 @@ Battler makeBattler(int16_t dex, uint16_t lvl, uint16_t atk, uint16_t def, uint1
   b.def = def ? def : 1;
   b.spe = spe ? spe : 1;
   b.type = DEX_TBL[dex].ptype;
+  b.type2 = DEX_T2[dex] == b.type ? 0xFF : DEX_T2[dex];  // ko12.10: segundo tipo (volador...)
   b.guard = false;
   movesDefault(dex, b.lvl, b.mv);  // ko11.31: los suyos (el que crias los cambia despues)
   movesFillPP(b);
@@ -735,7 +743,7 @@ static uint32_t effSpe(const Battler &b) {
 
 uint8_t moveEffAgainst(uint8_t id, const Battler &df) {
   if (id == MOVE_STRUGGLE) return 2;
-  return typeEff(moveDef(id).type, df.type);
+  return effCat(typeEffQ(moveDef(id).type, df.type, df.type2));  // ko12.10: dos tipos
 }
 
 // ko12.8: ataque / defensa especial. No se guardan: salen del ataque / defensa que ya tiene
@@ -755,8 +763,9 @@ uint32_t spStat(const Battler &b, uint32_t v, bool defense) {
 static uint32_t rawDamageId(const Battler &at, const Battler &df, uint8_t mid, uint8_t *effOut) {
   const MoveDef &m = moveDef(mid);
   uint8_t mtype = m.type;
-  uint8_t eff = mid == MOVE_STRUGGLE ? 2 : typeEff(mtype, df.type);
-  if (storyFly(at, df, mtype)) eff = 4;  // ko11.23.3
+  uint8_t q = mid == MOVE_STRUGGLE ? 4 : typeEffQ(mtype, df.type, df.type2);  // ko12.10: en cuartos (dos tipos)
+  if (storyFly(at, df, mtype)) q = 8;  // ko11.23.3
+  uint8_t eff = effCat(q);
   if (effOut) *effOut = eff;
   if (m.flags & MF_STATUS) return 0;
   if (m.flags & MF_FIXLVL) return eff ? lvlCap(at.lvl) : 0;
@@ -767,9 +776,9 @@ static uint32_t rawDamageId(const Battler &at, const Battler &df, uint8_t mid, u
   if (at.st == ST_BRN && !sp) atk /= 2;
   uint32_t def = stgMul(sp ? spStat(df, df.def, true) : df.def, df.stg[1]);
   uint32_t d = ((2 * L / 5 + 2) * m.pow * atk / (def ? def : 1)) / 50 + 2;
-  if (mtype == at.type && mid != MOVE_STRUGGLE) d = d * 3 / 2;  // STAB
+  if (battlerHasType(at, mtype) && mid != MOVE_STRUGGLE) d = d * 3 / 2;  // STAB (cualquiera de sus dos tipos)
   d = d * weatherMul(sBattleWx, mtype) / 2;  // ko10.4: lluvia / sol / nieve
-  return d * eff / 2;
+  return d * q / 4;
 }
 
 bool battleResting(const Battler &b, uint8_t id) { return id && b.restT && b.restMv == id; }
@@ -809,17 +818,17 @@ static uint32_t aiDamage(const Battler &self, const Battler &foe, uint8_t id) {
 
 static bool statusImmune(uint8_t st, const Battler &df) {
   switch (st) {
-    case ST_PSN: return df.type == PT_POISON || df.type == PT_STEEL;
-    case ST_BRN: return df.type == PT_FIRE;
-    case ST_PAR: return df.type == PT_ELECTRIC;
-    case ST_FRZ: return df.type == PT_ICE;
+    case ST_PSN: return battlerHasType(df, PT_POISON) || battlerHasType(df, PT_STEEL);
+    case ST_BRN: return battlerHasType(df, PT_FIRE);
+    case ST_PAR: return battlerHasType(df, PT_ELECTRIC);
+    case ST_FRZ: return battlerHasType(df, PT_ICE);
     default: return false;
   }
 }
 // los polvos no hacen nada a los de planta; onda trueno, nada a los de tierra
 static bool statusMoveBlocked(uint8_t id, const Battler &df) {
-  if ((id == 158 || id == 162 || id == 164 || id == 167) && df.type == PT_GRASS) return true;
-  if (id == 161 && typeEff(PT_ELECTRIC, df.type) == 0) return true;
+  if ((id == 158 || id == 162 || id == 164 || id == 167) && battlerHasType(df, PT_GRASS)) return true;
+  if (id == 161 && typeEffQ(PT_ELECTRIC, df.type, df.type2) == 0) return true;
   return false;
 }
 static bool canAfflict(uint8_t st, const Battler &df) {
@@ -1367,16 +1376,40 @@ Battler makeBoxBattler(int16_t dex, uint16_t lvl, uint16_t petLvl, uint8_t gA, u
   return makeBattler(dex, lvl, wildStat(e.bAtk, gA, lvl), wildStat(e.bDef, gD, lvl), wildStat(e.bSpe, gS, lvl));
 }
 
-uint8_t pickNextFoe(const Battler *team, uint8_t from, uint8_t n, uint8_t myType) {
+uint8_t pickNextFoe(const Battler *team, uint8_t from, uint8_t n, int16_t myDex) {
   uint8_t best = from;
   int bs = -10;
   for (uint8_t i = from; i < n; i++) {
-    int sc = typeMatch(team[i].type, myType);
+    int sc = typeMatchD(team[i].dex, myDex);  // ko12.10: dos tipos
     if (sc > bs) { bs = sc; best = i; }
   }
   return best;
 }
 
+// ko12.10: con los dos tipos de cada especie: mi mejor tipo contra el, y su mejor tipo contra mi
+uint8_t dexType2(int16_t dex) { return dex >= 1 && dex <= DEX_COUNT ? DEX_T2[dex] : 0xFF; }
+// ko12.10: "불꽃/비행" (un tipo: "불꽃")
+const char *typeName(uint8_t type);
+const char *dexTypesStr(int16_t dex, char *buf, int n) {
+  if (dex < 1 || dex > DEX_COUNT) { if (n) buf[0] = 0; return buf; }
+  uint8_t t2 = DEX_T2[dex];
+  if (t2 < PT_BATTLE_N && t2 != DEX_TBL[dex].ptype) snprintf(buf, n, "%s/%s", typeName(DEX_TBL[dex].ptype), typeName(t2));
+  else snprintf(buf, n, "%s", typeName(DEX_TBL[dex].ptype));
+  return buf;
+}
+int8_t typeMatchD(int16_t mine, int16_t foe) {
+  if (mine < 1 || mine > DEX_COUNT || foe < 1 || foe > DEX_COUNT) return 0;
+  return typeMatchTT(DEX_TBL[mine].ptype, DEX_T2[mine], DEX_TBL[foe].ptype, DEX_T2[foe]);
+}
+int8_t typeMatchTT(uint8_t m1, uint8_t m2, uint8_t f1, uint8_t f2) {
+  uint8_t out = typeEffQ(m1, f1, f2), in = typeEffQ(f1, m1, m2);
+  if (m2 < PT_BATTLE_N) { uint8_t o = typeEffQ(m2, f1, f2); if (o > out) out = o; }
+  if (f2 < PT_BATTLE_N) { uint8_t o = typeEffQ(f2, m1, m2); if (o > in) in = o; }
+  if (out > 4 && in <= 4) return 1;
+  if (in > 4 && out <= 4) return -1;
+  if (out < 4 && in >= 4) return -1;
+  return 0;
+}
 int8_t typeMatch(uint8_t mine, uint8_t foe) {
   uint8_t out = typeEff(mine, foe), in = typeEff(foe, mine);
   if (out > 2 && in <= 2) return 1;
@@ -1430,7 +1463,7 @@ void wildMatchPower(Battler &foe, const Battler &me, BRng &rng, bool legend) {
   if (legend) pct = WILD_POW_LEGEND - 12 + (me.lvl > 120 ? 120 : me.lvl) / 10 + rng.below(16);  // Lv40 116..131, Lv120+ 125..140
   else if (DEX_TBL[foe.dex].rarity == R_RARO) pct = (me.lvl < 20 ? WILD_POW_RARE - 6 : WILD_POW_RARE) + rng.below(16);
   else pct = (me.lvl < 20 ? WILD_POW_LOW : WILD_POW_NORMAL) + rng.below(16);
-  int8_t tm = typeMatch(me.type, foe.type);
+  int8_t tm = typeMatchD(me.dex, foe.dex);  // ko12.10: dos tipos
   if (tm < 0) pct = pct * WILD_POW_TYPE_BAD / 100;
   else if (tm > 0) pct = pct * WILD_POW_TYPE_GOOD / 100;
   uint32_t target = battlerPower(me) * pct / 100;

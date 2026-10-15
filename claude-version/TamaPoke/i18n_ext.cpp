@@ -564,6 +564,7 @@ static const char *const TYPES_KO[PT_COUNT] = {
 static inline bool isKo() { return gLang == LANG_KO; }
 
 const char *typeName(uint8_t type) {
+  if (type == PT_FLYING) return isKo() ? "비행" : "Flying";  // ko12.10
   if (type >= PT_COUNT) type = PT_NORMAL;
   return isKo() ? TYPES_KO[type] : TYPES_EN[type];
 }

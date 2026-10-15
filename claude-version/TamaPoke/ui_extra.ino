@@ -1077,7 +1077,7 @@ void drawBattleBg() {
 static uint16_t nameInkFor(int16_t dex) { return dex > 151 ? UI_GEN2_INK : UI_INK; }
 
 void drawHpBox(int x, int y, int w, const char *name, uint16_t lvl, float hp, uint16_t maxHp, bool showNum,
-               uint16_t nameInk, int8_t ptype, uint8_t rk) {
+               uint16_t nameInk, int8_t ptype, uint8_t rk, int8_t ptype2) {
   int ph = showNum ? 58 : 46;
   if (rk) {  // ko12.9.23: raro (violeta) / legendario (dorado): marco de color alrededor del panel
     uint16_t c = rk == 2 ? C565(0xff, 0xc0, 0x20) : C565(0xa0, 0x70, 0xff);
@@ -1129,16 +1129,20 @@ void drawHpBox(int x, int y, int w, const char *name, uint16_t lvl, float hp, ui
     setCur(x + w - textW(hs, 1) - 8, y + 43);
     printT(hs);
   }
-  if (ptype >= 0 && ptype < PT_COUNT) {  // ko12.9.22: el tipo, abajo a la izquierda
-    const char *tn = typeName((uint8_t)ptype);
+  int tx = bx;
+  for (int k = 0; k < 2; k++) {  // ko12.9.22: el tipo, abajo a la izquierda (ko12.10: y el segundo)
+    int8_t pt = k ? ptype2 : ptype;
+    if (pt < 0 || pt >= PT_BATTLE_N || (k && pt == ptype)) continue;
+    const char *tn = typeName((uint8_t)pt);
     int tw = textW(tn, 1) + 14, ty = y + (showNum ? 41 : 30);
-    uint16_t tc = typeColor((uint8_t)ptype);
-    gfx->fillRoundRect(bx, ty, tw, 16, 8, tc);
-    gfx->drawRoundRect(bx, ty, tw, 16, 8, uiLerp(tc, UI_INK, 8, 16));
+    uint16_t tc = typeColor((uint8_t)pt);
+    gfx->fillRoundRect(tx, ty, tw, 16, 8, tc);
+    gfx->drawRoundRect(tx, ty, tw, 16, 8, uiLerp(tc, UI_INK, 8, 16));
     setSize(1);
     gfx->setTextColor(uiLerp(tc, UI_INK, 13, 16));
-    setCur(bx + 7, ty - 1);
+    setCur(tx + 7, ty - 1);
     printT(tn);
+    tx += tw + 3;
   }
 }
 
@@ -2334,7 +2338,7 @@ static uint8_t autoRemaining() { return bKind != BK_WILD && bTeamN > bTeamI ? (u
 static bool foeLegend() { return bKind == BK_WILD && bFoe.dex >= 1 && bFoe.dex <= DEX_COUNT && DEX_TBL[bFoe.dex].rarity == R_LEGENDARIO; }
 static uint8_t foeSloppy() { return foeLegend() ? 0 : 35; }
 static bool autoHardFoe() {
-  return bKind == BK_CHAMP || foeLegend() || bFoe.lvl > bMe.lvl + 2 || typeEff(bFoe.type, bMe.type) > 2 ||
+  return bKind == BK_CHAMP || foeLegend() || bFoe.lvl > bMe.lvl + 2 || typeEffQ(bFoe.type, bMe.type, bMe.type2) > 4 ||
          bFoe.maxHp > bMe.maxHp + bMe.maxHp / 4;
 }
 // que haria un buen jugador: pocion si hace falta (mas pronto si el rival es fuerte),
@@ -2347,7 +2351,7 @@ static uint8_t autoPick() {
   if (pet.potAuto && pet.potions && !foeAlmostDown && hpPct < (hard ? AUTO_POTION_HP_HARD : AUTO_POTION_HP) &&
       (hard || autoPotions < AUTO_POTION_MAX))
     return BA_POTION;
-  if (typeEff(bFoe.type, bMe.type) >= 4 && hpPct < 70 && bRng.below(100) < 25) return BA_GUARD;
+  if (typeEffQ(bFoe.type, bMe.type, bMe.type2) > 4 && hpPct < 70 && bRng.below(100) < 25) return BA_GUARD;
   return battleAi(bMe, bFoe, bRng, 0);
 }
 
@@ -2359,6 +2363,7 @@ uint16_t typeColor(uint8_t t) {
     C565(0xd0, 0xa8, 0x58), C565(0xf8, 0x58, 0x88), C565(0xa8, 0xb8, 0x20), C565(0xb8, 0xa0, 0x38),
     C565(0x70, 0x58, 0x98), C565(0x70, 0x38, 0xf8), C565(0x70, 0x58, 0x48), C565(0x98, 0x98, 0xb8),
   };
+  if (t == PT_FLYING) return C565(0x98, 0xa8, 0xf0);  // ko12.10: volador
   return t < PT_COUNT ? TC[t] : UI_TRACK;
 }
 // ko12.2.1: el dibujo de cada tipo en los botones de movimientos de la ficha (antes ">" / "+")
@@ -2479,6 +2484,14 @@ static void tgShape(int x, int y, uint8_t t, bool status, uint16_t c, uint16_t b
       }
       gfx->fillCircle(x, y, 10, c);
       gfx->fillCircle(x, y, 4, bg);
+      break;
+    case PT_FLYING:  // ko12.10: volador: dos alas
+      gfx->fillTriangle(x - 14, y + 5, x, y - 3, x - 4, y + 9, c);
+      gfx->fillTriangle(x - 14, y + 5, x - 11, y - 10, x, y - 3, c);
+      gfx->fillTriangle(x + 14, y + 5, x, y - 3, x + 4, y + 9, c);
+      gfx->fillTriangle(x + 14, y + 5, x + 11, y - 10, x, y - 3, c);
+      fxLine(x - 9, y - 5, x - 6, y + 3, 1, bg);
+      fxLine(x + 9, y - 5, x + 6, y + 3, 1, bg);
       break;
     default:  // normal
       tgStar(x, y + 1, 14, c);
@@ -2711,11 +2724,11 @@ static int8_t partyBest(bool forced) {
   int bs = -10000;
   for (uint8_t j = 0; j < pN; j++) {
     if (j == pCur || pMon[j].hp == 0) continue;
-    int sc = typeMatch(pMon[j].type, bFoe.type) * 100 + (int)((uint32_t)pMon[j].hp * 50 / pMon[j].maxHp);
+    int sc = typeMatchD(pMon[j].dex, bFoe.dex) * 100 + (int)((uint32_t)pMon[j].hp * 50 / pMon[j].maxHp);
     if (sc > bs) { bs = sc; best = (int8_t)j; }
   }
   if (!forced && best >= 0) {
-    int cur = typeMatch(bMe.type, bFoe.type) * 100 + (int)((uint32_t)bMe.hp * 50 / bMe.maxHp);
+    int cur = typeMatchD(bMe.dex, bFoe.dex) * 100 + (int)((uint32_t)bMe.hp * 50 / bMe.maxHp);
     if (bs < cur + 60) return -1;  // solo si se gana mucho
   }
   return best;
@@ -2828,7 +2841,7 @@ static void drawSwapPanel() {
       continue;
     }
     const Battler &b = pMon[who[i]];
-    int8_t tm = typeMatch(b.type, bFoe.type);
+    int8_t tm = typeMatchD(b.dex, bFoe.dex);
     uint16_t bg = tm > 0 ? C565(0xd6, 0xf5, 0xcc) : tm < 0 ? C565(0xff, 0xdc, 0xdc) : UI_WHITE;
     if (ws[i] < 90) {  // ko12.2: 4 o 5 para elegir (equipo de 6): solo dibujo, nivel y vida
       uiButton(xs[i], ys[i], ws[i], SW_H, 8, bg, UI_INK);
@@ -3010,8 +3023,8 @@ static void renderBattleViewImpl() {
   updateShake(now);
   drawBattleBg();
   drawBattlers();
-  drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true, nameInkFor(bvFoeDex), bvFoeDex >= 1 && bvFoeDex <= DEX_COUNT ? (int8_t)DEX_TBL[bvFoeDex].ptype : -1, rarityKind(bvFoeDex));  // ko9: rival con numeros
-  drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true, nameInkFor(bvMeDex), bvMeDex >= 1 && bvMeDex <= DEX_COUNT ? (int8_t)DEX_TBL[bvMeDex].ptype : -1, rarityKind(bvMeDex));
+  drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true, nameInkFor(bvFoeDex), bvFoeDex >= 1 && bvFoeDex <= DEX_COUNT ? (int8_t)DEX_TBL[bvFoeDex].ptype : -1, rarityKind(bvFoeDex), (int8_t)dexType2(bvFoeDex));  // ko9: rival con numeros
+  drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true, nameInkFor(bvMeDex), bvMeDex >= 1 && bvMeDex <= DEX_COUNT ? (int8_t)DEX_TBL[bvMeDex].ptype : -1, rarityKind(bvMeDex), (int8_t)dexType2(bvMeDex));
   if (!bvFoeFainted) drawStatusBadge(206, 112, bFoe);  // ko11.31
   if (!bvMeFainted) drawStatusBadge(350, 150, bMe);
   drawPartyBalls();  // ko11.20
@@ -3279,7 +3292,7 @@ static bool nextTrainerMon() {
   if (pCur == 0 && pSlot0Pet) bvMeLvl = pet.level();
   bTeamI++;
   if (bKind == BK_CHAMP) {  // ko11.20: el campeon elige segun el que tengo en el campo
-    uint8_t j = pickNextFoe(bTeam, bTeamI, bTeamN, bMe.type);
+    uint8_t j = pickNextFoe(bTeam, bTeamI, bTeamN, bMe.dex);
     if (j != bTeamI) { Battler t = bTeam[bTeamI]; bTeam[bTeamI] = bTeam[j]; bTeam[j] = t; }
   }
   bFoe = bTeam[bTeamI];
@@ -4729,7 +4742,7 @@ static uint8_t lkAutoPick() {
   BRng r(esp_random() ^ millis());
   uint32_t hpPct = (uint32_t)bMe.hp * 100 / (bMe.maxHp ? bMe.maxHp : 1);
   if (pet.potAuto && hpPct < AUTO_POTION_HP && pet.potions && pet.usePotion()) return BA_POTION;  // de mi bolsa
-  if (typeEff(bFoe.type, bMe.type) >= 4 && hpPct < 70 && r.below(100) < 25) return BA_GUARD;
+  if (typeEffQ(bFoe.type, bMe.type, bMe.type2) > 4 && hpPct < 70 && r.below(100) < 25) return BA_GUARD;
   uint8_t a = battleAi(bMe, bFoe, r, 0);
   if (a == BA_POTION || a == BA_BALL || a == BA_RUN || a >= BA_COUNT) a = BA_TACKLE;
   return a;

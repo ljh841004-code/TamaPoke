@@ -436,7 +436,8 @@ void renderBoxDetail() {
   if (m.flags & BOXF_RAISED) drawRibbon(CX + 78, 104, 14);  // ko11.17: lo criaste hasta el final
   if (rk) rarityTag(CX - 84, 100, rk);  // ko12.10
   char l[48];
-  snprintf(l, sizeof(l), "No.%03d  Lv.%u  %s", m.dex, m.lvl, typeName(DEX_TBL[m.dex].ptype));
+  char tys[32];
+  snprintf(l, sizeof(l), "No.%03d  Lv.%u  %s", m.dex, m.lvl, dexTypesStr(m.dex, tys, sizeof(tys)));  // ko12.10
   drawFit(l, 204, 340, UI_INK, 2);
   char date[8];
   boxDate(m.epoch, date, sizeof(date));
@@ -2510,8 +2511,8 @@ static void ppBuildView() {
   for (uint8_t a = 0; a < ppViewN; a++)
     for (uint8_t b = a + 1; b < ppViewN; b++) {
       const BoxMon &x = box.at(ppView[a]), &y = box.at(ppView[b]);
-      int sx = (ft >= 0 ? typeMatch(DEX_TBL[x.dex].ptype, (uint8_t)ft) * 1000 : 0) + x.lvl;
-      int sy = (ft >= 0 ? typeMatch(DEX_TBL[y.dex].ptype, (uint8_t)ft) * 1000 : 0) + y.lvl;
+      int sx = (ft >= 0 ? typeMatchTT(DEX_TBL[x.dex].ptype, dexType2(x.dex), (uint8_t)ft, 0xFF) * 1000 : 0) + x.lvl;
+      int sy = (ft >= 0 ? typeMatchTT(DEX_TBL[y.dex].ptype, dexType2(y.dex), (uint8_t)ft, 0xFF) * 1000 : 0) + y.lvl;
       if (sy > sx) { uint8_t t = ppView[a]; ppView[a] = ppView[b]; ppView[b] = t; }
     }
 }
@@ -2552,7 +2553,9 @@ void renderPartyPick() {
     setCur(126, y + 3);
     printT(l);
     uint8_t ty = DEX_TBL[m.dex].ptype;
-    snprintf(l, sizeof(l), "Lv%u  %s", m.lvl < pl || ppKind == PP_LINK ? m.lvl : pl, typeName(ty));  // ko12.9.16: tongsin = su nivel
+    char tys[32];
+    dexTypesStr(m.dex, tys, sizeof(tys));  // ko12.10: dos tipos
+    snprintf(l, sizeof(l), "Lv%u  %s", m.lvl < pl || ppKind == PP_LINK ? m.lvl : pl, tys);  // ko12.9.16: tongsin = su nivel
     setSize(1);
     gfx->setTextColor(orbColor(ty));
     setCur(126, y + 26);
@@ -2560,11 +2563,11 @@ void renderPartyPick() {
     if (ppKind != PP_LINK) {  // ko12.9.16: el tongsin no gasta los usos del dia
       snprintf(l, sizeof(l), XT(X_PT_USES_FMT), left, (unsigned)HELPER_USES_PER_DAY);
       gfx->setTextColor(left ? 0x8410 : UI_BAR_BAD);
-      setCur(126 + textW("Lv100  ", 1) + textW(typeName(ty), 1) + 6, y + 26);
+      setCur(126 + textW("Lv100  ", 1) + textW(tys, 1) + 6, y + 26);
       printT(l);
     }
     if (ft >= 0) {
-      int8_t tm = typeMatch(ty, (uint8_t)ft);
+      int8_t tm = typeMatchTT(ty, dexType2(m.dex), (uint8_t)ft, 0xFF);
       if (tm) drawBtn(286, y + 9, 50, 26, tm > 0 ? UI_BAR_OK : UI_BAR_BAD, UI_WHITE, XT(tm > 0 ? X_PT_GOOD : X_PT_BAD));
     }
     if (sel) drawCheckMark(364, y + PP_ROW_H / 2, true);

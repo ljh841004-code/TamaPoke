@@ -3611,7 +3611,7 @@ void sackTap(int16_t x, int16_t y) {
     audioCry(pet.speciesId);
     sfxPlay(SFX_MEDAL);
     // ko11.15.1: la tecnica respeta el tipo del rival (x2 muy eficaz, x0,5 poco, x0,25 nada)
-    sackEff = typeEff(DEX_TBL[pet.speciesId].ptype, DEX_TBL[sackFoe].ptype);
+    sackEff = effCat(typeEffQ(DEX_TBL[pet.speciesId].ptype, DEX_TBL[sackFoe].ptype, dexType2(sackFoe)));  // ko12.10: dos tipos
     uint16_t base = 12 + (sackBags > 40 ? 40 : sackBags);
     uint16_t dmg = sackEff >= 4 ? base * 2 : sackEff == 2 ? base : sackEff == 1 ? base / 2 : base / 4;
     sackDamage(dmg ? dmg : 1, now);
@@ -5031,7 +5031,8 @@ void renderDexDetail() {
   } else {
     char l[64];
     static const XId RAR[4] = { X_RARITY_EVO, X_RARITY_COMMON, X_RARITY_RARE, X_RARITY_LEGEND };
-    snprintf(l, sizeof(l), "%s  /  %s", typeName(d.ptype), XT(RAR[d.rarity < 4 ? d.rarity : 1]));
+    char tys[32];
+    snprintf(l, sizeof(l), "%s  /  %s", dexTypesStr(dx, tys, sizeof(tys)), XT(RAR[d.rarity < 4 ? d.rarity : 1]));  // ko12.10: dos tipos
     drawFit(l, 208, 340, UI_INK, 2);
     if (dexHintView) {  // ko12.9.23: donde sale (tambien ya descubierto: para ir a buscarlo)
       drawDexHint(dx, 238);

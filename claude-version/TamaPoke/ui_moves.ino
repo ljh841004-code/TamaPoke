@@ -11,8 +11,8 @@
 
 enum : uint8_t { MVK2_0 = 0, MVK2_SUPER, MVK2_WEAK, MVK2_NONE, MVK2_REST };
 
-uint16_t mv2Col(uint8_t t) { return t == MV2_FLYING ? C565(0x78, 0x98, 0xe8) : typeColor(t); }
-const char *mv2TypeName(uint8_t t) { return t == MV2_FLYING ? "비행" : typeName(t); }
+uint16_t mv2Col(uint8_t t) { return typeColor(t); }
+const char *mv2TypeName(uint8_t t) { return typeName(t); }
 const char *mv2ClassName(uint8_t c) { return c == MV2_PHYS ? "물리" : c == MV2_SPEC ? "특수" : "변화"; }
 uint8_t mv2Find(const char *ko) {
   for (uint8_t i = 1; i < MV2_N; i++) if (!strcmp(MV2_KO[i], ko)) return i;
@@ -44,18 +44,8 @@ void mv2ClassIcon(int cx, int cy, uint8_t cls, int r) {
   }
 }
 
-// 비행 그림 (날개 둘): 나머지 속성은 drawTypeGlyph
-static void mv2Glyph(int x, int y, uint8_t t, uint8_t cls, uint16_t bg) {
-  if (t != MV2_FLYING) { drawTypeGlyph(x, y, t, cls == MV2_STAT, bg); return; }
-  for (int s = 0; s < 2; s++) {
-    uint16_t c = s ? UI_WHITE : UI_INK;
-    int o = s ? 0 : 1;
-    gfx->fillTriangle(x - 13 + o, y + 6 + o, x + o, y - 2 + o, x - 4 + o, y + 9 + o, c);
-    gfx->fillTriangle(x - 13 + o, y + 6 + o, x - 10 + o, y - 9 + o, x + o, y - 2 + o, c);
-    gfx->fillTriangle(x + 13 + o, y + 6 + o, x + o, y - 2 + o, x + 4 + o, y + 9 + o, c);
-    gfx->fillTriangle(x + 13 + o, y + 6 + o, x + 10 + o, y - 9 + o, x + o, y - 2 + o, c);
-  }
-}
+// 속성 그림 (비행 포함: tgShape)
+static void mv2Glyph(int x, int y, uint8_t t, uint8_t cls, uint16_t bg) { drawTypeGlyph(x, y, t, cls == MV2_STAT, bg); }
 
 // 글자 줄바꿈 (띄어쓰기 기준)
 static int mvWrap(const char *s, int w, uint8_t size, char out[][120], int maxL) {

@@ -13,6 +13,9 @@ enum : uint8_t { R_EVO = 0, R_COMUN, R_RARO, R_LEGENDARIO };
 
 // tipo primario (gen 1-2) para las batallas
 enum : uint8_t { PT_NORMAL, PT_FIRE, PT_WATER, PT_GRASS, PT_ELECTRIC, PT_ICE, PT_FIGHT, PT_POISON, PT_GROUND, PT_PSYCHIC, PT_BUG, PT_ROCK, PT_GHOST, PT_DRAGON, PT_DARK, PT_STEEL, PT_COUNT };
+// ko12.10: volador (solo en combate: segundo tipo y movimientos). PT_COUNT sigue siendo 16 (regiones, orbes...)
+#define PT_FLYING 16
+#define PT_BATTLE_N 17
 
 struct DexEntry {
   const char *name;

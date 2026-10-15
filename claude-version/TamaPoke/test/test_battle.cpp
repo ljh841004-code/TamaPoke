@@ -893,9 +893,27 @@ TEST(battle, cambiar_cuesta_el_turno) {
 TEST(battle, el_campeon_saca_el_que_mejor_le_va) {
   Battler t[4] = { makeTrainerMon(4, 30), makeTrainerMon(74, 30), makeTrainerMon(25, 30), makeTrainerMon(1, 30) };
   // contra un agua: planta (Bulbasaur, 3) o electrico (Pikachu, 2) -> el primero de ellos
-  CHECK_EQ(pickNextFoe(t, 1, 4, PT_WATER), 2);
-  CHECK_EQ(pickNextFoe(t, 3, 4, PT_WATER), 3);           // solo queda uno
-  CHECK_EQ(pickNextFoe(t, 1, 4, PT_NORMAL), 1);          // nadie tiene ventaja: el orden de siempre
+  CHECK_EQ(pickNextFoe(t, 1, 4, 7), 2);    // contra Squirtle (agua) ko12.10: por especie (dos tipos)
+  CHECK_EQ(pickNextFoe(t, 3, 4, 7), 3);    // solo queda uno
+  CHECK_EQ(pickNextFoe(t, 1, 4, 19), 1);   // Rattata: nadie tiene ventaja: el orden de siempre
+}
+
+// ko12.10: dos tipos, volador, x4 y x1/4
+TEST(battle, dos_tipos_y_volador) {
+  CHECK_EQ(typeEffQ(PT_ELECTRIC, PT_WATER, PT_FLYING), (uint8_t)16);  // Gyarados: x4
+  CHECK_EQ(typeEffQ(PT_GRASS, PT_FIRE, PT_FLYING), (uint8_t)1);       // Charizard: x1/4
+  CHECK_EQ(typeEffQ(PT_GROUND, PT_NORMAL, PT_FLYING), (uint8_t)0);    // Pidgey: inmune a tierra
+  CHECK_EQ(typeEffQ(PT_FIRE, PT_STEEL, 0xFF), (uint8_t)8);
+  CHECK_EQ(effCat(16), (uint8_t)4);
+  CHECK_EQ(effCat(1), (uint8_t)1);
+  Battler c = makeBattler(6, 40, 100, 100, 100);
+  CHECK_EQ(c.type, (uint8_t)PT_FIRE);
+  CHECK_EQ(c.type2, (uint8_t)PT_FLYING);
+  Battler p = makeBattler(25, 40, 100, 100, 100);
+  CHECK_EQ(p.type2, (uint8_t)0xFF);
+  CHECK(battlerHasType(c, PT_FLYING));
+  CHECK_EQ(typeMatchD(25, 130), (int8_t)1);  // Pikachu contra Gyarados: ventaja
+  CHECK_EQ(typeMatchD(130, 25), (int8_t)-1);
 }
 
 // ---- ko11.31: 4 movimientos, PP, estados

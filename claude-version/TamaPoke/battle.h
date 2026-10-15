@@ -52,7 +52,8 @@ struct Battler {
   uint16_t lvl = 1;
   uint16_t maxHp = 1, hp = 1;
   uint16_t atk = 1, def = 1, spe = 1;
-  uint8_t type = 0;   // PT_*
+  uint8_t type = 0;   // PT_* (el primero; = DEX_TBL.ptype)
+  uint8_t type2 = 0xFF;  // ko12.10: segundo tipo (PT_FLYING...) o 0xFF
   bool guard = false; // protegido este turno
   // ko11.31: sus 4 movimientos (0 = hueco) y los PP que les quedan
   uint8_t mv[4] = { 0, 0, 0, 0 };
@@ -90,6 +91,11 @@ struct BRng {
 
 // eficacia del tipo atacante contra el defensor, en mitades: 0, 1, 2 o 4
 uint8_t typeEff(uint8_t atkType, uint8_t defType);
+// ko12.10: contra dos tipos, en CUARTOS: 0, 1 (x1/4), 2 (x1/2), 4 (normal), 8 (x2), 16 (x4)
+uint8_t typeEffQ(uint8_t atkType, uint8_t t1, uint8_t t2);
+// cuartos -> la eficacia de siempre (mitades, para mensajes y marcas): 0, 1 poco, 2 normal, 4 mucho
+uint8_t effCat(uint8_t q);
+bool battlerHasType(const Battler &b, uint8_t t);
 
 // HP maximo: formula gen 1 con el nivel topado en 100 (aqui el nivel son horas
 // de vida y puede pasar de 100; el ataque/defensa ya lo suman aparte)
@@ -216,11 +222,15 @@ extern const Battler *gStoryFlyAt;  // ko11.23.3: historia: la familia Pidgey (s
 // tipo mio contra el tipo del rival: +1 ventaja (le pego muy eficaz y el a mi no),
 // -1 desventaja (al reves), 0 igual
 int8_t typeMatch(uint8_t mine, uint8_t foe);
+int8_t typeMatchD(int16_t mine, int16_t foe);  // ko12.10: especie contra especie (dos tipos)
+int8_t typeMatchTT(uint8_t m1, uint8_t m2, uint8_t f1, uint8_t f2);  // tipos (0xFF = sin segundo)
+uint8_t dexType2(int16_t dex);  // ko12.10: segundo tipo de la especie (0xFF = ninguno)
+const char *dexTypesStr(int16_t dex, char *buf, int n);  // "불꽃/비행"
 // el que entra al cambiar voluntariamente pierde el turno: solo ataca el rival (a = yo)
 int battleFoeOnly(Battler &a, Battler &b, BAct actB, BRng &rng, BEvent *ev, int maxEv);
 // liga (como PokeRogue): de los que le quedan (team[from..n-1]) el campeon saca el
 // que mejor le va contra mi tipo; empate = el primero (el orden de siempre)
-uint8_t pickNextFoe(const Battler *team, uint8_t from, uint8_t n, uint8_t myType);
+uint8_t pickNextFoe(const Battler *team, uint8_t from, uint8_t n, int16_t myDex);
 
 // probabilidad (por mil) de la especie "dex" en ese momento, antes de evolucionar
 // por nivel (para tests y para el comando serie WILD)
