@@ -405,6 +405,8 @@ void renderBoxDetail() {
   snprintf(head, sizeof(head), "%s%s", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex));
   drawFit(head, 44, 300, DEX_TBL[m.dex].accent, 3);
   bool perfect = m.flags & BOXF_PERFECT;
+  uint8_t rk = DEX_TBL[m.dex].rarity == R_LEGENDARIO ? 2 : DEX_TBL[m.dex].rarity == R_RARO ? 1 : 0;  // ko12.10
+  if (rk && !perfect) rarityBackGlow(CX, 136, rk, 60);
   if (perfect) {  // ko11.21: crianza perfecta: halo dorado que late, rayos que giran y destellos
     uint32_t t = millis();
     uint16_t gold = C565(0xf0, 0xc0, 0x30);
@@ -432,6 +434,7 @@ void renderBoxDetail() {
     }
   }
   if (m.flags & BOXF_RAISED) drawRibbon(CX + 78, 104, 14);  // ko11.17: lo criaste hasta el final
+  if (rk) rarityTag(CX - 84, 100, rk);  // ko12.10
   char l[48];
   snprintf(l, sizeof(l), "No.%03d  Lv.%u  %s", m.dex, m.lvl, typeName(DEX_TBL[m.dex].ptype));
   drawFit(l, 204, 340, UI_INK, 2);
@@ -535,7 +538,11 @@ void renderBox() {
     uint16_t rowBg = same > 1 ? DUP_BG[m.dex % 6] : UI_WHITE;
     bool perfect = m.flags & BOXF_PERFECT;  // ko11.21
     if (perfect) rowBg = C565(0xff, 0xf2, 0xc4);
+    uint8_t rk = DEX_TBL[m.dex].rarity == R_LEGENDARIO ? 2 : DEX_TBL[m.dex].rarity == R_RARO ? 1 : 0;  // ko12.10
+    if (rk == 2 && !perfect) rowBg = C565(0xff, 0xf6, 0xd8);
+    else if (rk == 1 && !perfect) rowBg = C565(0xf4, 0xee, 0xff);
     uiButton(73, y, 320, BOX_ROW_H, 10, rowBg, UI_INK);
+    rarityRowFrame(73, y, 320, BOX_ROW_H, rk);
     drawThumbFitAt(m.dex, 104, y + BOX_ROW_H / 2, 60, BOX_ROW_H + 8, 8, false);  // ko12.9.23: x2 si cabe (puede pisar 4 px el borde)
     if (same > 1) {
       char xn[8];
@@ -544,10 +551,11 @@ void renderBox() {
     }
     char l[48];
     snprintf(l, sizeof(l), "%s%s", (m.flags & BOXF_SHINY) ? "*" : "", dexName(m.dex));
-    gfx->setTextColor(UI_INK);
+    gfx->setTextColor(rk ? rarityInk(rk) : UI_INK);
     setSize(2);
     setCur(134, y + 6);
     printT(l);
+    if (rk && same <= 1) rarityTag(134 + textW(l, 2) + 8 + (textW(rk == 2 ? "전설" : "희귀", 1) + 30) / 2, y + 17, rk);
     snprintf(l, sizeof(l), "Lv.%u  %s", m.lvl, XT((m.flags & BOXF_RAISED) ? X_RAISED_TAG
                                                  : (m.flags & BOXF_CAUGHT) ? X_CAUGHT_TAG : X_WON_TAG));
     setSize(1);

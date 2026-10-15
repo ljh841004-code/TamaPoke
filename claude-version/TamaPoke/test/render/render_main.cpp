@@ -842,6 +842,37 @@ static void scenes(bool ko, const char *sfx) {
       navCheck("ko12.8: marca muy eficaz", moveMarkFor(bMe, bFoe, 2) == MVK_SUPER);
       navCheck("ko12.8: marca poco eficaz", moveMarkFor(bMe, bFoe, 3) == MVK_WEAK);
       render(); shot("08m2_fight_marks");
+      {  // ko12.10 미리보기: 전투 기술 창 v2 + 설명 창 (원작 크리스탈 기술)
+        uint16_t *fb = gfx->getFramebuffer();
+        uint16_t bgc = fb[440 * LCD_WIDTH + 233];
+        uint8_t lv[24], ls[24], n = mv2Learnset(4, lv, ls, 24), mv[4] = { 0, 0, 0, 0 }, k = 0;
+        for (uint8_t i = 0; i < n; i++) if (lv[i] <= 20) { mv[k % 4] = ls[i]; k++; }
+        uint8_t pp[4], mk[4];
+        for (uint8_t i = 0; i < 4; i++) { pp[i] = MV2[mv[i]].pp; mk[i] = MV2[mv[i]].type == PT_FIRE ? MVK2_WEAK : 0; }
+        pp[1] = 2;
+        gfx->fillRect(0, 262, LCD_WIDTH, LCD_HEIGHT - 262, bgc);
+        drawFightPanelV2(mv, pp, mk);
+        shot("P1_fight_v2");
+        uint8_t mv2[4] = { mv2Find("화염방사"), mv2Find("베어가르기"), mv2Find("날개치기"), mv2Find("지진") };
+        uint8_t pp2[4] = { 12, 20, 0, 9 }, mk2[4] = { MVK2_SUPER, MVK2_REST, 0, MVK2_NONE };
+        for (uint8_t i = 0; i < 4; i++) if (i != 2) pp2[i] = pp2[i] > MV2[mv2[i]].pp ? MV2[mv2[i]].pp : pp2[i];
+        gfx->fillRect(0, 262, LCD_WIDTH, LCD_HEIGHT - 262, bgc);
+        drawFightPanelV2(mv2, pp2, mk2);
+        shot("P1b_fight_v2_marks");
+        drawMoveInfoV2(mv2[0], 0);
+        shot("P2_move_info_battle");
+        // ko12.10 미리보기: 새 이펙트 (종류별, 가운데쯤 장면)
+        static const char *FXN[FX2_N] = { "punch", "kick", "slash", "bite", "body", "sound", "powder", "statup",
+                                          "statdown", "heal", "barrier", "drain" };
+        static const uint16_t FXC[FX2_N] = { 0xFD20, 0xFD20, 0xFFFF, 0xFFFF, 0xFFFF, 0xF81F, 0xBFE0, 0xF800,
+                                             0x041F, 0x07E0, 0x5DFF, 0x07E0 };
+        for (uint8_t f = 0; f < FX2_N; f++) {
+          render();
+          gfx->fillRect(0, 262, LCD_WIDTH, LCD_HEIGHT - 262, bgc);
+          drawMoveFx2(f, 150, 200, 316, 120, f == FX2_SOUND || f == FX2_DRAIN || f == FX2_POWDER || f == FX2_HEAL ? 520 : 640, FXC[f]);
+          char fn[40]; snprintf(fn, sizeof(fn), "P7_fx_%02u_%s", f, FXN[f]); shot(fn);
+        }
+      }
       bMe = keepMe; bFoe.type = keepT;
     }
     onTap(MV_BACK_X + 10, MV_Y0 + 40);
@@ -1350,6 +1381,16 @@ static void scenes(bool ko, const char *sfx) {
   box.add(143, 22, false, true, gMockEpoch);
   box.add(16, 18, false, true, gMockEpoch);   // ko10.4: repetidos (x2 Pidgey)
   openBox(); render(); shot("10_box");
+  {  // ko12.10 미리보기: 전설 · 희귀 표시 (보관함 목록 / 상세)
+    box.add(150, 70, false, true, gMockEpoch);
+    box.add(131, 31, false, true, gMockEpoch);
+    render(); shot("P8_box_rarity");
+    for (uint8_t i = 0; i < box.count(); i++) if (box.at(i).dex == 150) boxSel = i;
+    render(); shot("P8b_box_detail_legend");
+    boxSel = -1;
+    box.release(box.count() - 1); box.release(box.count() - 1);
+    render();
+  }
   {  // ko12.9.15: paginas con botones grandes; tocar abajo / arriba ya no sale
     int n0 = box.count();
     for (int i = 0; i < 8; i++) box.add((int16_t)(19 + i * 3), (uint16_t)(5 + i), false, true, gMockEpoch);
@@ -1539,6 +1580,24 @@ static void scenes(bool ko, const char *sfx) {
     dexLog.learned(25, mv[0]); dexLog.learned(25, mv[2]);
   }
   render(); shot("13_dex_detail");
+  {  // ko12.10 미리보기: 상태 카드 "기술" 쪽 · 기술 설명(장착) · 도감 기술표 · 기술머신 가방
+    uint8_t lv[24], ls[24], n = mv2Learnset(6, lv, ls, 24), lr[64], nl = 0;
+    for (uint8_t i = 0; i < n; i++) if (lv[i] <= 44) lr[nl++] = ls[i];
+    const char *tmk[] = { "지진", "잠자기", "잠꼬대", "공중날기", "괴력", "불대문자", "용의숨결" };
+    for (const char *nm : tmk) { uint8_t id = mv2Find(nm); if (id) lr[nl++] = id; }
+    uint8_t eq[4] = { mv2Find("화염방사"), mv2Find("베어가르기"), mv2Find("공중날기"), mv2Find("지진") }, eqpp[4] = { 15, 20, 15, 10 };
+    renderMovesCardV2(eq, eqpp, lr, nl, 0, 0); shot("P3_card_moves");
+    renderMovesCardV2(eq, eqpp, lr, nl, 3, 0); shot("P3b_card_moves_status");
+    renderMovesCardV2(eq, eqpp, lr, nl, 0, 0); drawMoveInfoV2(mv2Find("용의분노"), 1); shot("P4_move_info_equip");
+    renderDexMovesV2(6, 0, 0, lr, nl, 44); shot("P5_dex_moves_level");
+    renderDexMovesV2(6, 0, 1, lr, nl, 44); shot("P5b_dex_moves_level2");
+    renderDexMovesV2(6, 1, 0, lr, nl, 44); shot("P5c_dex_moves_tm");
+    uint8_t have[TM_N] = {};
+    const char *th[] = { "폭발펀치", "잠자기", "지진", "불대문자", "번개", "냉동빔", "사이코키네시스", "섀도볼", "공중날기", "파도타기" };
+    for (const char *nm : th) { uint8_t id = mv2Find(nm); for (uint8_t i = 0; i < TM_N; i++) if (TM_MOVE[i] == id) have[i] = 1 + (i % 3); }
+    renderTmBagV2(have, 0, 6); shot("P6_tm_bag");
+    renderTmBagV2(have, 0, 6); drawMoveInfoV2(mv2Find("불대문자"), 2); shot("P6b_tm_teach");
+  }
   {  // ko12.3.3: el toque guarda un millis() posterior al "now" de la vuelta: no debe contar como 5 min sin tocar
     uint32_t keepLI = lastInteract;
     lastInteract = millis() + 20;

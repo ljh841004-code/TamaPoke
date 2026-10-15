@@ -4091,8 +4091,12 @@ void renderCardProfile() {
     printT(par);
   }
 
+  // ko12.10: 전설 / 희귀: 초상 뒤 빛 + 딱지
+  uint8_t prk = d.rarity == R_LEGENDARIO ? 2 : d.rarity == R_RARO ? 1 : 0;
+  if (prk) rarityBackGlow(CX, 150, prk, 70);
   // ko9: retrato mas grande (x6) y letra de 26 px en todo el perfil
   if (pmd.loaded) drawPmdActFit(PMD_IDLE, CX, 214, millis(), 6, 230);
+  if (prk) rarityTag(CX + 92, 92, prk);
 
   // racha con llama
   char rl[64];  // ko11.18: "연속 돌봄 N일  최고 N일" (mas largo: 64)
@@ -6048,9 +6052,10 @@ int petBodyH() {  // alto del cuerpo en pantalla (misma escala que el bocadillo)
   }
   return bh;
 }
-static void drawLegendHalo(int cx, int g, uint32_t now) {
-  float p = 0.5f + 0.5f * sinf(now / 420.0f);
-  uint16_t c = C565(0xff, 0xc8, 0x30), cl = C565(0xff, 0xf0, 0xa0);
+// ko12.10: rk 2 = 전설 (금색), 1 = 희귀 (보라색, 더 은은하게)
+static void drawLegendHalo(int cx, int g, uint32_t now, uint8_t rk) {
+  float p = 0.5f + 0.5f * sinf(now / (rk == 2 ? 420.0f : 620.0f));
+  uint16_t c = rk == 2 ? C565(0xff, 0xc8, 0x30) : C565(0xb0, 0x80, 0xff), cl = rk == 2 ? C565(0xff, 0xf0, 0xa0) : C565(0xe4, 0xd4, 0xff);
   int rx = 58 + (int)(6 * p), ry = 11 + (int)(2 * p);
   gfx->drawEllipse(cx, g - 2, rx, ry, c);
   gfx->drawEllipse(cx, g - 2, rx - 1, ry - 1, cl);
@@ -6068,10 +6073,11 @@ static void sparkStar(int x, int y, int l, uint16_t c, uint16_t core) {
   }
   gfx->fillRect(x - 1, y - 1, 3, 3, core);
 }
-static void drawLegendSparkle(int cx, int g, uint32_t now, bool calm) {
-  uint16_t gold = C565(0xff, 0xd0, 0x40), pale = C565(0xff, 0xf6, 0xc8);
+static void drawLegendSparkle(int cx, int g, uint32_t now, bool calm, uint8_t rk) {
+  uint16_t gold = rk == 2 ? C565(0xff, 0xd0, 0x40) : C565(0xb8, 0x90, 0xff),
+           pale = rk == 2 ? C565(0xff, 0xf6, 0xc8) : C565(0xec, 0xe0, 0xff);
   int bh = petBodyH();
-  int cy = g - bh / 2, rx = bh * 6 / 10 + 14, ry = bh * 6 / 10, n = calm ? 4 : 9;
+  int cy = g - bh / 2, rx = bh * 6 / 10 + 14, ry = bh * 6 / 10, n = rk == 2 ? (calm ? 4 : 9) : (calm ? 2 : 4);
   for (int k = 0; k < n; k++) {
     uint32_t per = (calm ? 2600 : 1500) + k * 97, tt = now + k * 373;
     uint32_t c = tt / per;
@@ -6081,11 +6087,11 @@ static void drawLegendSparkle(int cx, int g, uint32_t now, bool calm) {
     float a = (h % 628) / 100.0f, rf = 0.62f + (h >> 10) % 40 / 100.0f;
     int sx = cx + (int)(cosf(a) * rx * rf), sy = cy + (int)(sinf(a) * ry * rf);
     if (sy > g - 4) sy = g - 4 - (int)((h >> 4) % 20);
-    int l = (int)((calm ? 6 : 11) * sinf(ph * 3.1416f) + 0.5f);
+    int l = (int)((calm ? 6 : rk == 2 ? 11 : 8) * sinf(ph * 3.1416f) + 0.5f);
     if (l >= 6) gfx->drawCircle(sx, sy, l / 2 + 2, pale);  // brillo alrededor
     sparkStar(sx, sy, l, (k & 1) ? gold : pale, UI_WHITE);
   }
-  if (calm) return;
+  if (calm || rk != 2) return;
   for (int k = 0; k < 6; k++) {  // motas doradas que suben desde el halo
     uint32_t ph = (now / 14 + k * 41) % (uint32_t)(bh * 3 / 4);
     int sx = cx - 50 + (int)((k * 37 + (now / 1500) * 23) % 100);
@@ -6178,15 +6184,16 @@ void drawPetPMD() {
     gfx->fillEllipse((int)beh.x, PET_GROUND - 2, 60, 10, lerp565(soil, C565(0, 0, 0), 3, 16));
     gfx->fillEllipse((int)beh.x, PET_GROUND - 2, 44, 7, lerp565(soil, C565(0, 0, 0), 6, 16));
   }
-  bool legend = DEX_TBL[pet.speciesId].rarity == R_LEGENDARIO;  // ko12.9.27: los legendarios brillan
-  if (legend) drawLegendHalo((int)beh.x, PET_GROUND, now);
+  uint8_t rar = DEX_TBL[pet.speciesId].rarity;  // ko12.9.27: los legendarios brillan (ko12.10: los raros, en morado)
+  uint8_t rk = rar == R_LEGENDARIO ? 2 : rar == R_RARO ? 1 : 0;
+  if (rk) drawLegendHalo((int)beh.x, PET_GROUND, now, rk);
 #ifdef HOST_HD
   if (!hdArtOn() || !hdPetDraw(pet.speciesId, pet.shiny, act, (int)beh.x, PET_GROUND, now - beh.t0, pmd.loaded))
 #endif
   drawPmdActM(pmd, act, (int)beh.x, PET_GROUND, (beh.mode == 3 && petFxT != 0xFFFFFFFFu) ? petFxT : now - beh.t0,
               loop || act == PMD_IDLE, false, PET_MAXS, PET_FITH);
   if (beh.mode == 4 && beh.decoT0 && m == MOOD_HAPPY) drawDecoPlay(now, pet.roomOn ? false : gNight);  // ko12.9.27
-  if (legend) drawLegendSparkle((int)beh.x, PET_GROUND, now, m == MOOD_SLEEPING);
+  if (rk) drawLegendSparkle((int)beh.x, PET_GROUND, now, m == MOOD_SLEEPING, rk);
   if (orbValid(pet.orb)) drawOrbSlot((int)beh.x + 60, PET_GROUND - 18, 12, pet.orb, now);  // ko11.16: su orbe, abajo a la derecha
   {  // ko11.9.2: pulsacion larga para soltarlo: el circulo se llena en 3 s
     float hp = petHoldProgress();
