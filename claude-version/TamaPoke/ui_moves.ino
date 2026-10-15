@@ -30,11 +30,14 @@ static const TmNameT TM_NAME = {};
 #define MV2_N MOVE_N
 #define TM_N TM_COUNT
 
-enum : uint8_t { MVK2_0 = 0, MVK2_SUPER, MVK2_WEAK, MVK2_NONE, MVK2_REST };
+enum : uint8_t { MVK2_0 = 0, MVK2_SUPER, MVK2_WEAK, MVK2_NONE, MVK2_REST, MVK2_DIS };
 
 uint16_t mv2Col(uint8_t t) { return typeColor(t); }
 const char *mv2TypeName(uint8_t t) { return typeName(t); }
-const char *mv2ClassName(uint8_t c) { return c == MV2_PHYS ? "물리" : c == MV2_SPEC ? "특수" : "변화"; }
+static const char *LK(const char *ko, const char *en);
+const char *mv2ClassName(uint8_t c) {
+  return c == MV2_PHYS ? LK("물리", "Physical") : c == MV2_SPEC ? LK("특수", "Special") : LK("변화", "Status");
+}
 uint8_t mv2Find(const char *ko) {
   for (uint8_t i = 1; i < MV2_N; i++) if (!strcmp(MV2_KO[i], ko)) return i;
   return 0;
@@ -94,16 +97,7 @@ static int mvWrap(const char *s, int w, uint8_t size, char out[][120], int maxL)
 }
 
 // ---------------------------------------------------------------- 전투 기술 창 v2
-#define FV_X0 69
-#define FV_X1 237
-#define FV_W 160
-#define FV_H 64
-#define FV_Y0 266
-#define FV_Y1 336
-#define FV_BX 166
-#define FV_BY 408
-#define FV_BW 134
-#define FV_BH 36
+// FV_*: en ui_extra.ino (el combate los usa antes)
 void drawFightBtnV2(int x, int y, uint8_t id, uint8_t pp, uint8_t mark) {
   if (!id) {
     uiButton(x, y, FV_W, FV_H, 16, UI_TRACK, C565(0xb8, 0xb4, 0xac));
@@ -111,7 +105,7 @@ void drawFightBtnV2(int x, int y, uint8_t id, uint8_t pp, uint8_t mark) {
     return;
   }
   const Mv2Def &d = MV2[id];
-  bool off = pp == 0 || mark == MVK2_REST;
+  bool off = pp == 0 || mark == MVK2_REST || mark == MVK2_DIS;
   uint16_t bg = off ? UI_TRACK : mv2Col(d.type);
   uiButton(x, y, FV_W, FV_H, 16, bg, UI_INK);
   if (!off) gfx->fillRoundRect(x + 4, y + 3, FV_W - 8, 10, 5, lerp565(bg, UI_WHITE, 5, 16));  // 윗쪽 빛
@@ -121,7 +115,8 @@ void drawFightBtnV2(int x, int y, uint8_t id, uint8_t pp, uint8_t mark) {
   // 아랫줄: 물리/특수/변화 아이콘 + PP, 오른쪽 효과
   mv2ClassIcon(x + 50, y + 46, d.cls, 6);
   char pps[16];
-  if (mark == MVK2_REST) snprintf(pps, sizeof(pps), "쉬는 중");
+  if (mark == MVK2_REST) snprintf(pps, sizeof(pps), "%s", LK("쉬는 중", "resting"));
+  else if (mark == MVK2_DIS) snprintf(pps, sizeof(pps), "%s", LK("사슬묶기", "disabled"));
   else snprintf(pps, sizeof(pps), "%u/%u", pp, d.pp);
   bool low = !off && pp * 4 <= d.pp;
   gfx->setTextColor(low ? C565(0xff, 0xe0, 0x50) : ink);
@@ -133,7 +128,7 @@ void drawFightBtnV2(int x, int y, uint8_t id, uint8_t pp, uint8_t mark) {
   gfx->fillRoundRect(bx, by, bw, 4, 2, lerp565(bg, UI_INK, 6, 16));
   if (d.pp) gfx->fillRoundRect(bx, by, bw * pp / d.pp, 4, 2, low ? C565(0xff, 0xd0, 0x40) : UI_WHITE);
   if (mark == MVK2_SUPER || mark == MVK2_WEAK || mark == MVK2_NONE) {
-    const char *tx = mark == MVK2_SUPER ? "굉장" : mark == MVK2_WEAK ? "별로" : "없음";
+    const char *tx = mark == MVK2_SUPER ? LK("굉장", "x2") : mark == MVK2_WEAK ? LK("별로", "x1/2") : LK("없음", "x0");
     uint16_t pc = mark == MVK2_SUPER ? C565(0xe8, 0x30, 0x20) : mark == MVK2_WEAK ? C565(0x50, 0x5a, 0x70) : UI_INK;
     int pw = textW(tx, 1) + 14;  // 오른쪽 위 모서리에 걸친 딱지 (이름·PP를 가리지 않게)
     uiButton(x + FV_W - pw + 6, y - 11, pw, 22, 11, pc, UI_WHITE);
@@ -144,7 +139,7 @@ void drawFightBtnV2(int x, int y, uint8_t id, uint8_t pp, uint8_t mark) {
 void drawFightPanelV2(const uint8_t mv[4], const uint8_t pp[4], const uint8_t mark[4]) {
   for (uint8_t i = 0; i < 4; i++) drawFightBtnV2(i & 1 ? FV_X1 : FV_X0, i & 2 ? FV_Y1 : FV_Y0, mv[i], pp[i], mark[i]);
   uiButton(FV_BX, FV_BY, FV_BW, FV_BH, 18, UI_WHITE, UI_INK);
-  drawFitIn("< 뒤로", FV_BX, FV_BY + 6, FV_BW, UI_INK, 2);
+  drawFitIn(LK("< 뒤로", "< Back"), FV_BX, FV_BY + 6, FV_BW, UI_INK, 2);
 }
 
 // ---------------------------------------------------------------- 기술 설명 창
@@ -168,7 +163,7 @@ void drawMoveInfoV2(uint8_t id, uint8_t buttons) {
   drawFitIn(mv2ClassName(d.cls), px + 150, y + 4, 70, UI_INK, 1);
   // 위력 · 명중 · PP
   y += 40;
-  const char *lab[3] = { "위력", "명중", "PP" };
+  const char *lab[3] = { LK("위력", "Power"), LK("명중", "Acc."), "PP" };
   char val[3][8];
   if (d.pow) snprintf(val[0], 8, "%u", d.pow); else strcpy(val[0], "-");
   if (d.acc) snprintf(val[1], 8, "%u", d.acc); else strcpy(val[1], "-");
@@ -189,10 +184,14 @@ void drawMoveInfoV2(uint8_t id, uint8_t buttons) {
   // 버튼
   int by = py + ph - 52;
   if (buttons) {
-    drawBtn(px + 34, by, 140, 40, buttons == 1 ? UI_BAR_OK : C565(0x6a, 0x4c, 0xf0), UI_WHITE, buttons == 1 ? "장착하기" : "가르치기");
-    drawBtn(px + pw - 174, by, 140, 40, UI_TRACK, UI_INK, "닫기");
+    char rm[32];
+    snprintf(rm, sizeof(rm), LK("기억 (사탕 %u)", "Recall (%u candy)"), (unsigned)MOVE_REMIND_CANDY);
+    const char *lb = buttons == 1 ? LK("장착하기", "Equip") : buttons == 2 ? LK("가르치기", "Teach") : rm;
+    uint16_t bc = buttons == 1 ? UI_BAR_OK : buttons == 2 ? C565(0x6a, 0x4c, 0xf0) : C565(0xe8, 0x90, 0x30);
+    drawBtn(px + 34, by, 140, 40, bc, UI_WHITE, lb);
+    drawBtn(px + pw - 174, by, 140, 40, UI_TRACK, UI_INK, LK("닫기", "Close"));
   } else {
-    drawBtn(px + pw / 2 - 75, by, 150, 40, UI_TRACK, UI_INK, "닫기");
+    drawBtn(px + pw / 2 - 75, by, 150, 40, UI_TRACK, UI_INK, LK("닫기", "Close"));
   }
 }
 
@@ -266,7 +265,19 @@ void renderMovesCardV2(const uint8_t eq[4], const uint8_t eqpp[4], const uint8_t
 }
 
 // ---------------------------------------------------------------- 도감 "기술표"
-uint8_t mv2Learnset(int16_t dex, uint8_t lv[], uint8_t mv[], uint8_t max) { return moveLearnset(dex, lv, mv, max); }
+// ko12.10: "처음"(Lv1)과 나중 레벨에 같은 기술이 또 있으면 (진화형 목록) 처음 것은 빼요
+uint8_t mv2Learnset(int16_t dex, uint8_t lv[], uint8_t mv[], uint8_t max) {
+  uint8_t L[96], M[96];
+  uint8_t n = moveLearnset(dex, L, M, sizeof(L)), k = 0;
+  for (uint8_t i = 0; i < n && k < max; i++) {
+    bool later = false;
+    if (L[i] <= 1)
+      for (uint8_t j = 0; j < n; j++) if (j != i && M[j] == M[i] && L[j] > 1) later = true;
+    if (later) continue;
+    lv[k] = L[i]; mv[k] = M[i]; k++;
+  }
+  return k;
+}
 bool mv2TmCan(int16_t dex, uint8_t tm) { return tmCompatible(dex, tm); }
 
 #define DL_ROWS 6
@@ -275,12 +286,12 @@ void renderDexMovesV2(int16_t dex, uint8_t tab, uint8_t page, const uint8_t *kno
   char t[48];
   snprintf(t, sizeof(t), "No.%03d %s", dex, dexName(dex));
   drawFit(t, 30, 300, UI_INK, 2);
-  uint8_t lv[24], mv[24], n = mv2Learnset(dex, lv, mv, 24);
+  uint8_t lv[64], mv[64], n = mv2Learnset(dex, lv, mv, 64);
   uint8_t tms[TM_N], nt = 0;
   for (uint8_t i = 0; i < TM_N; i++) if (mv2TmCan(dex, i)) tms[nt++] = i;
   char a[24], b[24];
-  snprintf(a, sizeof(a), "레벨업 %u", n);
-  snprintf(b, sizeof(b), "기술머신 %u", nt);
+  snprintf(a, sizeof(a), LK("레벨업 %u", "Level %u"), n);
+  snprintf(b, sizeof(b), LK("기술머신 %u", "TM/HM %u"), nt);
   uiButton(88, 64, 140, 34, 17, tab == 0 ? UI_INK : UI_WHITE, UI_INK);
   drawFitIn(a, 88, 70, 140, tab == 0 ? UI_WHITE : UI_INK, 1);
   uiButton(238, 64, 140, 34, 17, tab == 1 ? UI_INK : UI_WHITE, UI_INK);
@@ -297,17 +308,19 @@ void renderDexMovesV2(int16_t dex, uint8_t tab, uint8_t page, const uint8_t *kno
     bool future = !tab && lv[k] > petLv;
     uiButton(56, y, 354, 40, 10, has ? C565(0xe6, 0xf6, 0xe0) : UI_WHITE, UI_INK);
     char l[24];
-    snprintf(l, sizeof(l), lv[k] <= 1 ? "처음" : "Lv.%u", lv[k]);
+    snprintf(l, sizeof(l), lv[k] <= 1 ? LK("처음", "Start") : "Lv.%u", lv[k]);
     gfx->setTextColor(future ? 0x8410 : UI_INK);
     setSize(1);
-    if (tab) {  // "기술머신01": 위에 "기술머신", 아래 번호 (한글 4자 = 12바이트)
+    if (tab) {  // "기술머신01": 위에 "기술머신"/"TM", 아래 번호
+      const char *nm = TM_NAME[tms[k]];
+      size_t L = strlen(nm), cut = L >= 2 ? L - 2 : 0;
       char head[16];
-      memcpy(head, TM_NAME[tms[k]], 12);
-      head[12] = 0;
+      memcpy(head, nm, cut < 15 ? cut : 15);
+      head[cut < 15 ? cut : 15] = 0;
       setCur(66, y + 3);
       printT(head);
       setCur(66, y + 20);
-      printT(TM_NAME[tms[k]] + 12);
+      printT(nm + cut);
     } else {
       setCur(66, y + 11);
       printT(l);
@@ -326,7 +339,7 @@ void renderDexMovesV2(int16_t dex, uint8_t tab, uint8_t page, const uint8_t *kno
   drawBtn(118, 382, 64, 38, page ? UI_WHITE : UI_TRACK, UI_INK, "<");
   drawBtn(284, 382, 64, 38, page + 1 < pages ? UI_WHITE : UI_TRACK, UI_INK, ">");
   drawFit(t, 392, 90, UI_INK, 2);
-  drawFit("○ 배운 기술, 회색 = 레벨 부족", 432, 300, 0x8410, 1);
+  drawFit(LK("빨간 동그라미 = 배운 기술", "red ring = known"), 426, 260, 0x8410, 1);
   drawNav(NAV_L, UI_INK);
 }
 
@@ -337,8 +350,8 @@ void renderTmBagV2(const uint8_t *have, uint8_t page, int16_t petDex) {
   uint8_t list[TM_N], n = 0;
   for (uint8_t i = 0; i < TM_N; i++) if (have[i]) list[n++] = i;
   char t[40];
-  drawFit("기술머신", 34, 220, UI_INK, 2);
-  snprintf(t, sizeof(t), "%u종류, 밝은 것 = 배울 수 있음", n);
+  drawFit(LK("기술머신", "TMs & HMs"), 34, 220, UI_INK, 2);
+  snprintf(t, sizeof(t), LK("%u종류, 밝은 것 = 배울 수 있음", "%u kinds, bright = can learn"), n);
   drawFit(t, 64, 330, 0x8410, 1);
   uint8_t pages = n ? (n + TB_ROWS - 1) / TB_ROWS : 1;
   for (uint8_t r = 0; r < TB_ROWS; r++) {
@@ -369,7 +382,7 @@ void renderTmBagV2(const uint8_t *have, uint8_t page, int16_t petDex) {
   drawBtn(118, 372, 64, 38, page ? UI_WHITE : UI_TRACK, UI_INK, "<");
   drawBtn(284, 372, 64, 38, page + 1 < pages ? UI_WHITE : UI_TRACK, UI_INK, ">");
   drawFit(t, 382, 90, UI_INK, 2);
-  drawFit("누르면 설명 / 가르치기", 424, 260, 0x8410, 1);
+  drawFit(LK("누르면 설명 / 가르치기", "Tap: details / teach"), 424, 260, 0x8410, 1);
   drawNav(NAV_L, UI_INK);
 }
 
@@ -592,4 +605,276 @@ void drawMoveFx2(uint8_t fam, int x0, int y0, int x1, int y1, uint32_t t, uint16
       break;
     }
   }
+}
+
+// ======================================================================
+// ko12.10: lo de arriba, conectado al juego
+//   - combate: el panel v2 en [싸운다]; mantener el dedo en un movimiento = su ficha
+//   - ficha [기술] (pagina 7 de la tarjeta): equipar lo que sabe, recordar lo de su lista (3 caramelos),
+//     [기술머신] = la bolsa de MT/MO (ensenar)
+//   - Pokedex: [기술표] = lo que aprende subiendo de nivel y con MT
+//   - premios de MT: medallas (MT del gimnasio + MO), revanchas, liga, reto del dia, expediciones, salvajes
+// ======================================================================
+uint8_t mvInfoId = 0;      // ficha abierta (0 = ninguna)
+uint8_t mvInfoBtns = 0;    // 0 cerrar, 1 equipar, 2 ensenar (MT), 3 recordar
+uint8_t mvInfoTm = 0;      // la MT de la ficha (si mvInfoBtns == 2)
+uint8_t mvcFilt = 0, mvcPage = 0;  // ficha [기술]: pestana y pagina
+uint8_t mvEquipId = 0;     // eligiendo casilla para este (0 = no)
+bool tmBagOpen = false;
+uint8_t tmBagPage = 0;
+int16_t dexLsDex = 0;      // [기술표] abierto de esta especie (0 = no)
+uint8_t dexLsTab = 0, dexLsPage = 0;
+
+static bool mvInfoBtnHit(int16_t x, int16_t y, bool left) {
+  const int px = 52, py = 92, pw = 362, ph = 300, by = py + ph - 52;
+  if (!mvInfoBtns) return !left && inRect(x, y, px + pw / 2 - 75, by, 150, 40);
+  return left ? inRect(x, y, px + 34, by, 140, 40) : inRect(x, y, px + pw - 174, by, 140, 40);
+}
+void mvInfoOpen(uint8_t id, uint8_t btns, uint8_t tm = 0) {
+  mvInfoId = id;
+  mvInfoBtns = btns;
+  mvInfoTm = tm;
+  sfxPlay(SFX_TAP);
+}
+void mvInfoDraw() { if (mvInfoId) drawMoveInfoV2(mvInfoId, mvInfoBtns); }
+
+// lo de la ficha [기술]: lo que sabe (+ lo de su lista que se puede recordar). rem[i] = recordable
+static uint8_t mvcList(uint8_t *out, bool *rem, uint8_t max) {
+  uint8_t n = 0;
+  for (uint16_t id = 1; id < MOVE_N && n < max; id++)
+    if (pet.moveKnown((uint8_t)id) && (!mvcFilt || MV2[id].cls == mvcFilt - 1)) { out[n] = (uint8_t)id; rem[n++] = false; }
+  for (uint16_t id = 1; id < MOVE_N && n < max; id++)
+    if (pet.moveCanRemind((uint8_t)id) && (!mvcFilt || MV2[id].cls == mvcFilt - 1)) { out[n] = (uint8_t)id; rem[n++] = true; }
+  return n;
+}
+#define MVC_ROWS 3
+#define MVC_LIST_Y 222
+#define MVC_ROW_H 36
+#define MVC_NAV_Y 334
+void renderCardMoves() {
+  char t[48];
+  uint8_t list[MOVE_N];
+  bool rem[MOVE_N];
+  uint8_t n = mvcList(list, rem, sizeof(list));
+  uint8_t nk = 0, nr = 0;
+  for (uint16_t id = 1; id < MOVE_N; id++) { if (pet.moveKnown((uint8_t)id)) nk++; else if (pet.moveCanRemind((uint8_t)id)) nr++; }
+  drawFit(LK("기술", "Moves"), 30, 200, UI_INK, 2);
+  if (mvEquipId) snprintf(t, sizeof(t), "%s", LK("바꿀 칸을 누르세요", "Tap a slot to replace"));
+  else if (nr) snprintf(t, sizeof(t), LK("배운 기술 %u, 기억 가능 %u", "Known %u, recallable %u"), nk, nr);
+  else snprintf(t, sizeof(t), LK("배운 기술 %u개", "%u moves known"), nk);
+  drawFit(t, 58, 300, mvEquipId ? C565(0xd8, 0x50, 0x30) : 0x8410, 1);
+  for (uint8_t i = 0; i < 4; i++) {
+    int x = i & 1 ? 237 : 83, y = i & 2 ? 132 : 84;
+    uint8_t id = pet.mv[i];
+    if (mvEquipId) gfx->fillRoundRect(x - 3, y - 3, 152, 48, 14, C565(0xff, 0xc8, 0x40));
+    if (!id) { uiButton(x, y, 146, 42, 12, UI_TRACK, UI_INK); continue; }
+    uint16_t c = mv2Col(MV2[id].type);
+    uiButton(x, y, 146, 42, 12, c, UI_INK);
+    drawFitIn(MV2_KO[id], x + 6, y + 3, 112, UI_WHITE, 1);
+    char p[12];
+    snprintf(p, sizeof(p), "%u/%u", pet.pp[i], movePP(id));
+    gfx->setTextColor(UI_WHITE);
+    setSize(1);
+    setCur(x + 8, y + 21);
+    printT(mv2TypeName(MV2[id].type));
+    setCur(x + 138 - textW(p, 1), y + 21);
+    printT(p);
+    mv2ClassIcon(x + 133, y + 12, MV2[id].cls, 5);
+  }
+  const char *TAB[4] = { LK("전체", "All"), LK("물리", "Phys."), LK("특수", "Spec."), LK("변화", "Status") };
+  for (uint8_t k = 0; k < 4; k++) {
+    int x = 75 + k * 80;
+    bool on = k == mvcFilt;
+    uiButton(x, 184, 74, 32, 16, on ? UI_INK : UI_WHITE, UI_INK);
+    drawFitIn(TAB[k], x, 189, 74, on ? UI_WHITE : UI_INK, 1);
+  }
+  uint8_t pages = n ? (n + MVC_ROWS - 1) / MVC_ROWS : 1;
+  if (mvcPage >= pages) mvcPage = pages - 1;
+  for (uint8_t r = 0; r < MVC_ROWS; r++) {
+    uint8_t k = mvcPage * MVC_ROWS + r;
+    if (k >= n) break;
+    uint8_t id = list[k];
+    int y = MVC_LIST_Y + r * MVC_ROW_H;
+    bool eqd = movesHas(pet.mv, id);
+    uiButton(66, y, 334, 33, 10, eqd ? C565(0xff, 0xf4, 0xd6) : rem[k] ? C565(0xee, 0xea, 0xe2) : UI_WHITE, UI_INK);
+    gfx->fillRoundRect(68, y + 2, 10, 29, 5, mv2Col(MV2[id].type));
+    mv2ClassIcon(94, y + 16, MV2[id].cls, 7);
+    drawFitIn(MV2_KO[id], 108, y + 4, 150, rem[k] ? 0x8410 : UI_INK, 2);
+    char s2[24];
+    if (rem[k]) snprintf(s2, sizeof(s2), LK("사탕 %u", "%u candy"), (unsigned)MOVE_REMIND_CANDY);
+    else if (MV2[id].pow) snprintf(s2, sizeof(s2), LK("위력 %u", "Pow %u"), MV2[id].pow);
+    else snprintf(s2, sizeof(s2), "%s", LK("변화", "Status"));
+    gfx->setTextColor(rem[k] ? C565(0xd0, 0x70, 0x20) : 0x8410);
+    setSize(1);
+    setCur((eqd ? 340 : 394) - textW(s2, 1), y + 7);
+    printT(s2);
+    if (eqd) { uiButton(344, y + 5, 50, 22, 11, UI_BAR_OK, UI_INK); drawFitIn(LK("장착", "On"), 344, y + 6, 50, UI_WHITE, 1); }
+  }
+  drawBtn(96, MVC_NAV_Y, 56, 32, mvcPage ? UI_WHITE : UI_TRACK, UI_INK, "<");
+  drawBtn(314, MVC_NAV_Y, 56, 32, mvcPage + 1 < pages ? UI_WHITE : UI_TRACK, UI_INK, ">");
+  snprintf(t, sizeof(t), LK("기술머신 %u", "TMs %u"), pet.tmCount());
+  drawBtn(160, MVC_NAV_Y, 146, 32, pet.tmCount() ? C565(0x6a, 0x4c, 0xf0) : UI_TRACK, pet.tmCount() ? UI_WHITE : UI_INK, t);
+  if (pages > 1) {
+    snprintf(t, sizeof(t), "%u/%u", mvcPage + 1, pages);
+    gfx->setTextColor(0x8410);
+    setSize(1);
+    setCur(CX + 70, 36);
+    printT(t);
+  }
+  // la ficha del movimiento la pinta renderCard al final (encima de los puntos de pagina)
+}
+
+// toque en la ficha [기술] (true = lo uso)
+bool cardMovesTap(int16_t x, int16_t y) {
+  if (mvInfoId) {
+    if (mvInfoBtnHit(x, y, true) && mvInfoBtns) {
+      uint8_t id = mvInfoId;
+      if (mvInfoBtns == 1) { mvEquipId = id; sfxPlay(SFX_TAP); }
+      else if (mvInfoBtns == 3) {
+        if (pet.moveRemind(id)) { sfxPlay(SFX_MEDAL); mvEquipId = id; }
+        else { sfxPlay(SFX_DENY); showToast(LK("사탕이 모자라요", "Not enough candy")); }
+      }
+      mvInfoId = 0;
+    } else {
+      mvInfoId = 0;
+      sfxPlay(SFX_TAP);
+    }
+    return true;
+  }
+  for (uint8_t i = 0; i < 4; i++) {
+    int bx = i & 1 ? 237 : 83, by = i & 2 ? 132 : 84;
+    if (!inRect(x, y, bx - 4, by - 4, 154, 50)) continue;
+    if (mvEquipId) {
+      if (pet.moveEquip(i, mvEquipId)) { sfxPlay(SFX_MEDAL); pet.saveNow(); }
+      else sfxPlay(SFX_DENY);
+      mvEquipId = 0;
+    } else if (pet.mv[i]) mvInfoOpen(pet.mv[i], 0);
+    return true;
+  }
+  if (mvEquipId) { mvEquipId = 0; sfxPlay(SFX_TAP); return true; }  // fuera: cancelar
+  for (uint8_t k = 0; k < 4; k++)
+    if (inRect(x, y, 75 + k * 80, 180, 74, 40)) { mvcFilt = k; mvcPage = 0; sfxPlay(SFX_TAP); return true; }
+  uint8_t list[MOVE_N];
+  bool rem[MOVE_N];
+  uint8_t n = mvcList(list, rem, sizeof(list));
+  uint8_t pages = n ? (n + MVC_ROWS - 1) / MVC_ROWS : 1;
+  for (uint8_t r = 0; r < MVC_ROWS; r++) {
+    uint8_t k = mvcPage * MVC_ROWS + r;
+    if (k >= n || !inRect(x, y, 66, MVC_LIST_Y + r * MVC_ROW_H, 334, MVC_ROW_H)) continue;
+    uint8_t id = list[k];
+    mvInfoOpen(id, rem[k] ? 3 : movesHas(pet.mv, id) ? 0 : 1);
+    return true;
+  }
+  if (inRect(x, y, 90, MVC_NAV_Y - 4, 66, 44)) { if (mvcPage) { mvcPage--; sfxPlay(SFX_TAP); } return true; }
+  if (inRect(x, y, 310, MVC_NAV_Y - 4, 66, 44)) { if (mvcPage + 1 < pages) { mvcPage++; sfxPlay(SFX_TAP); } return true; }
+  if (inRect(x, y, 156, MVC_NAV_Y - 4, 154, 44)) {
+    if (!pet.tmCount()) { sfxPlay(SFX_DENY); showToast(LK("기술머신이 없어요", "No TMs yet")); return true; }
+    tmBagOpen = true;
+    tmBagPage = 0;
+    sfxPlay(SFX_TAP);
+    return true;
+  }
+  return false;
+}
+
+// ---- bolsa de MT
+void renderTmBag() {
+  renderTmBagV2(pet.tmBag, tmBagPage, pet.speciesId);
+  mvInfoDraw();
+}
+bool tmBagTap(int16_t x, int16_t y) {
+  if (mvInfoId) {
+    if (mvInfoBtns == 2 && mvInfoBtnHit(x, y, true)) {
+      uint8_t id = mvInfoId;
+      if (pet.tmTeach(mvInfoTm)) {
+        char t[64];
+        txFmtRaw(t, sizeof(t), LK("{1}{을} 배웠다!", "Learned {1}!"), moveNameId(id), nullptr);
+        showToast(t);
+        sfxPlay(SFX_MEDAL);
+        pet.saveNow();
+      } else {
+        sfxPlay(SFX_DENY);
+        showToast(pet.moveKnown(id) ? LK("이미 알고 있어요", "Already known") : LK("배울 수 없어요", "Can't learn it"));
+      }
+    } else sfxPlay(SFX_TAP);
+    mvInfoId = 0;
+    return true;
+  }
+  if (navHit(NAV_L, x, y)) { tmBagOpen = false; sfxPlay(SFX_TAP); return true; }
+  uint8_t list[TM_COUNT], n = 0;
+  for (uint8_t i = 0; i < TM_COUNT; i++) if (pet.tmBag[i]) list[n++] = i;
+  uint8_t pages = n ? (n + TB_ROWS - 1) / TB_ROWS : 1;
+  for (uint8_t r = 0; r < TB_ROWS; r++) {
+    uint8_t k = tmBagPage * TB_ROWS + r;
+    if (k >= n || !inRect(x, y, 60, 96 + r * 54, 346, 50)) continue;
+    uint8_t tm = list[k];
+    bool can = tmCompatible(pet.speciesId, tm) && !pet.moveKnown(tmMove(tm));
+    mvInfoOpen(tmMove(tm), can ? 2 : 0, tm);
+    return true;
+  }
+  if (inRect(x, y, 112, 366, 76, 50)) { if (tmBagPage) { tmBagPage--; sfxPlay(SFX_TAP); } return true; }
+  if (inRect(x, y, 278, 366, 76, 50)) { if (tmBagPage + 1 < pages) { tmBagPage++; sfxPlay(SFX_TAP); } return true; }
+  return true;  // la bolsa tapa toda la pantalla
+}
+
+// ---- Pokedex: [기술표]
+const char *dexMovesBtnLabel() { return LK("기술표", "Moves"); }
+void renderDexLearnset() {
+  uint8_t known[64], nk = 0;
+  for (uint16_t id = 1; id < MOVE_N && nk < sizeof(known); id++) if (dexLog.hasLearned(dexLsDex, (uint8_t)id)) known[nk++] = (uint8_t)id;
+  renderDexMovesV2(dexLsDex, dexLsTab, dexLsPage, known, nk, dexLsDex == pet.speciesId ? (uint8_t)pet.level() : (uint8_t)LEVEL_MAX);
+  mvInfoDraw();
+}
+bool dexLearnsetTap(int16_t x, int16_t y) {
+  if (mvInfoId) { mvInfoId = 0; sfxPlay(SFX_TAP); return true; }
+  if (navHit(NAV_L, x, y)) { dexLsDex = 0; sfxPlay(SFX_TAP); return true; }
+  if (inRect(x, y, 84, 60, 148, 42)) { dexLsTab = 0; dexLsPage = 0; sfxPlay(SFX_TAP); return true; }
+  if (inRect(x, y, 234, 60, 148, 42)) { dexLsTab = 1; dexLsPage = 0; sfxPlay(SFX_TAP); return true; }
+  uint8_t lv[64], mv[64], n = mv2Learnset(dexLsDex, lv, mv, 64);
+  uint8_t tms[TM_COUNT], nt = 0;
+  for (uint8_t i = 0; i < TM_COUNT; i++) if (tmCompatible(dexLsDex, i)) tms[nt++] = i;
+  uint8_t total = dexLsTab ? nt : n;
+  uint8_t pages = total ? (total + DL_ROWS - 1) / DL_ROWS : 1;
+  for (uint8_t r = 0; r < DL_ROWS; r++) {
+    uint8_t k = dexLsPage * DL_ROWS + r;
+    if (k >= total || !inRect(x, y, 56, 110 + r * 44, 354, 42)) continue;
+    mvInfoOpen(dexLsTab ? tmMove(tms[k]) : mv[k], 0);
+    return true;
+  }
+  if (inRect(x, y, 112, 376, 76, 50)) { if (dexLsPage) { dexLsPage--; sfxPlay(SFX_TAP); } return true; }
+  if (inRect(x, y, 278, 376, 76, 50)) { if (dexLsPage + 1 < pages) { dexLsPage++; sfxPlay(SFX_TAP); } return true; }
+  return true;
+}
+
+// ---- premios de MT
+// medalla del gimnasio i: su MT (como las medallas de Johto: una por lider, de su tipo)
+static const uint8_t GYM_TM[GYM_COUNT] = { 3, 17, 40, 18, 5, 28, 37, 25 };  // MT04 rodar, MT18 danza lluvia, MT41 puno trueno,
+                                                                           // MT19 gigadrenado, MT06 toxico, MT29 psiquico,
+                                                                           // MT38 llamarada, MT26 terremoto
+// y con la medalla 2..8, una MO (surf, fuerza, corte, vuelo, destello, torbellino, cascada)
+static const uint8_t BADGE_HM[9] = { 0xFF, 0xFF, 52, 53, 50, 51, 54, 55, 56 };
+static void tmToast(uint8_t tm) {
+  char t[80];
+  snprintf(t, sizeof(t), LK("%s(%s)을 얻었다!", "Got %s (%s)!"), tmLabel(tm, gLang == LANG_KO), moveNameId(tmMove(tm)));
+  showToast(t);
+}
+bool tmDrop(uint8_t tm) {
+  if (!pet.tmGive(tm)) return false;
+  tmToast(tm);
+  sfxPlay(SFX_MEDAL);
+  pet.saveNow();
+  return true;
+}
+// una MT al azar (no MO); 2 de cada 3, una que el que crias puede aprender y aun no sabe
+uint8_t tmRandom() {
+  uint8_t ok[TM_HM_FIRST], n = 0;
+  if (random(3)) for (uint8_t i = 0; i < TM_HM_FIRST; i++)
+    if (tmCompatible(pet.speciesId, i) && !pet.moveKnown(tmMove(i))) ok[n++] = i;
+  if (n) return ok[random(n)];
+  return (uint8_t)random(TM_HM_FIRST);
+}
+void tmBadgeReward(uint8_t gym) {
+  if (gym < GYM_COUNT) tmDrop(GYM_TM[gym]);
+  uint8_t b = badgeCount(pet.badges);
+  if (b < 9 && BADGE_HM[b] != 0xFF) pet.tmGive(BADGE_HM[b]);
 }

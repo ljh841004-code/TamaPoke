@@ -2144,6 +2144,19 @@ static const FxAnim *bvFxNow(uint8_t &side) {
 
 // ko11.31.5: un efecto de la SD se esta viendo: no leer otros de la SD mientras (el dibujo va justo)
 bool battleScreenOn() { return xScreen == XS_WILD; }  // ko12.1
+// ko12.10: mantener el dedo en un movimiento del panel = su ficha (como en los juegos de ahora)
+extern bool linkBattleStarted;
+extern uint8_t autoLeft;
+void mvInfoOpen(uint8_t id, uint8_t btns, uint8_t tm);
+bool battleLongPress(int16_t x, int16_t y) {
+  bool fighting = xScreen == XS_WILD || (xScreen == XS_LINK && linkBattleStarted);
+  if (!fighting || bPhase != BP_MENU || !bMoveMenu || mvInfoId || autoLeft) return false;
+  int a = battleMenuHit(x, y);
+  if (a < BA_M0 || a > BA_M3 || !bMe.mv[a - BA_M0]) return false;
+  mvInfoOpen(bMe.mv[a - BA_M0], 0, 0);
+  vibPulse(30, 1, 0);
+  return true;
+}
 bool battleFxPlaying() {
   if (xScreen != XS_WILD) return false;
   uint8_t side;
@@ -2536,6 +2549,28 @@ void drawTypeGlyph(int x, int y, uint8_t t, bool status, uint16_t bg) {
   tgShape(x + 1, y + 2, t, status, UI_INK, bg);  // sombra para que se lea en colores claros
   tgShape(x, y, t, status, UI_WHITE, bg);
 }
+// ko12.10: MT de premio (ui_moves.ino). % por combate
+#define TM_WILD_PCT 3
+#define TM_WILD_RARE_PCT 10
+#define TM_WILD_SPECIAL_PCT 30
+#define TM_REMATCH_PCT 25
+#define TM_EXPED_8H_PCT 30
+#define TM_EXPED_4H_PCT 15
+#define TM_EXPED_2H_PCT 5
+bool tmDrop(uint8_t tm);
+uint8_t tmRandom();
+void tmBadgeReward(uint8_t gym);
+// ko12.10: panel v2 de los movimientos (ui_moves.ino lo dibuja)
+#define FV_X0 69
+#define FV_X1 237
+#define FV_W 160
+#define FV_H 64
+#define FV_Y0 266
+#define FV_Y1 336
+#define FV_BX 166
+#define FV_BY 408
+#define FV_BW 134
+#define FV_BH 36
 #define MV_X0 70
 #define MV_X1 238
 #define MV_W 160
@@ -2554,6 +2589,7 @@ uint8_t moveMarkFor(const Battler &me, const Battler &foe, uint8_t i) {
   uint8_t id = me.mv[i];
   if (!id) return MVK_0;
   if (battleResting(me, id)) return MVK_REST;
+  if (me.disT && me.disMv == id) return 5;  // ko12.10: MVK2_DIS (사슬묶기)
   if (moveIsStatus(id)) return MVK_0;
   uint8_t e = moveEffAgainst(id, foe);
   return e >= 4 ? MVK_SUPER : e == 1 ? MVK_WEAK : e == 0 ? MVK_NONE : MVK_0;
@@ -2591,13 +2627,13 @@ void drawBattleMenu() {
   snprintf(pot, sizeof(pot), XT(X_POTION_FMT), pet.potions);
   snprintf(ball, sizeof(ball), XT(X_BALL_FMT), pet.balls);
   int x0 = BM_X, x1 = BM_X + BM_W + BM_GAP, x2 = BM_X + 2 * (BM_W + BM_GAP);
-  if (bMoveMenu) {  // ko11.31: los 4 movimientos (2x2) y [◀]
-    uiButton(MV_BACK_X, MV_Y0 + 12, MV_BACK_W, MV_Y1 + MV_H - MV_Y0 - 28, 10, UI_TRACK, UI_INK);
-    drawFitIn("<", MV_BACK_X, MV_Y0 + (MV_Y1 + MV_H - MV_Y0) / 2 - 10, MV_BACK_W, UI_INK, 2);
-    for (uint8_t i = 0; i < 4; i++) {
-      drawMoveBtn(i & 1 ? MV_X1 : MV_X0, i & 2 ? MV_Y1 : MV_Y0, MV_W, MV_H, bMe.mv[i], bMe.pp[i], moveMarkFor(bMe, bFoe, i));
-    }
-    if (!battleHasPP(bMe)) drawFit(XT(X_NO_PP), MV_Y1 + MV_H + 8, 300, UI_BAR_BAD, 1);
+  if (bMoveMenu) {  // ko12.10: el panel v2 (grande, con tipo, clase, PP y eficacia) y [< 뒤로]
+    uint8_t mk[4];
+    for (uint8_t i = 0; i < 4; i++) mk[i] = moveMarkFor(bMe, bFoe, i);
+    drawFightPanelV2(bMe.mv, bMe.pp, mk);
+    if (!battleHasPP(bMe)) drawFit(XT(X_NO_PP), FV_Y0 - 24, 300, UI_BAR_BAD, 1);
+    else drawFit(gLang == LANG_KO ? "길게 누르면 설명" : "Hold for details", FV_Y0 - 22, 300, 0x8410, 1);
+    mvInfoDraw();
     return;
   }
   drawBtn(x0, BM_Y1, BM_W, BM_H, C565(0xe8, 0x48, 0x38), UI_WHITE, XT(X_FIGHT));
@@ -2624,10 +2660,10 @@ void drawBattleMenu() {
 }
 
 int battleMenuHit(int16_t x, int16_t y) {
-  if (bMoveMenu) {
-    if (inRect(x, y, MV_BACK_X - 8, MV_Y0, MV_BACK_W + 14, MV_Y1 + MV_H - MV_Y0)) return BMH_BACK;
+  if (bMoveMenu) {  // ko12.10: panel v2 (huecos de 8 px entre botones: cuenta el mas cercano)
+    if (inRect(x, y, FV_BX - 10, FV_BY - 4, FV_BW + 20, FV_BH + 12)) return BMH_BACK;
     for (uint8_t i = 0; i < 4; i++)
-      if (inRect(x, y, i & 1 ? MV_X1 : MV_X0, i & 2 ? MV_Y1 : MV_Y0, MV_W, MV_H)) return BA_M0 + i;
+      if (inRect(x, y, (i & 1 ? FV_X1 : FV_X0) - 4, (i & 2 ? FV_Y1 : FV_Y0) - 4, FV_W + 8, FV_H + 8)) return BA_M0 + i;
     return -1;
   }
   int row = (y >= BM_Y1 && y < BM_Y1 + BM_H) ? 0 : (y >= BM_Y2 && y < BM_Y2 + BM_H) ? 1 : -1;
@@ -4098,8 +4134,10 @@ void wildTap(int16_t x, int16_t y) {
     partyAskSwap(2);
     return;
   }
+  if (mvInfoId) { mvInfoId = 0; sfxPlay(SFX_TAP); return; }  // ko12.10: la ficha del movimiento se cierra
   int a = battleMenuHit(x, y);
   if (a < 0) return;
+  if (a == BMH_FIGHT && battleLocked(bMe)) { battleDoAction(BA_M0); return; }  // ko12.10: sigue con el que empezo
   if (a == BMH_FIGHT) { bMoveMenu = true; sfxPlay(SFX_TAP); return; }  // ko11.31
   if (a == BMH_BACK) { bMoveMenu = false; sfxPlay(SFX_TAP); return; }
   if (a >= BA_M0 && a <= BA_M3 && battleHasPP(bMe) && !bMe.pp[a - BA_M0]) { sfxPlay(SFX_DENY); return; }  // sin PP
@@ -4338,11 +4376,15 @@ void finishBattle(bool won, bool fled, bool caught) {
       orbDrop(DEX_TBL[bFoe.dex].ptype);
     if (wildSolo && (won || caught) && tier > WT_NORMAL) wildTierBonus(tier);  // ko12.9.14
     if (wildSolo) wildStreakNote(won || caught);
+    if (wildSolo && (won || caught) &&  // ko12.10: a veces una MT (mas con los raros y legendarios)
+        (uint32_t)random(100) < (tier == WT_SPECIAL ? TM_WILD_SPECIAL_PCT : tier == WT_RARE ? TM_WILD_RARE_PCT : TM_WILD_PCT))
+      tmDrop(tmRandom());
     if (won && bKind == BK_GYM && !(pet.badges & (1 << bGym))) {  // ko10.4: medalla nueva
       pet.badges |= (uint8_t)(1 << bGym);
       char nb[4];
       snprintf(nb, sizeof(nb), "%u", badgeCount(pet.badges));
       txFmt(bNote, sizeof(bNote), X_BADGE_GOT, XT((XId)(X_BADGE_0 + bGym)), nb);
+      tmBadgeReward(bGym);  // ko12.10: la MT del lider (y una MO desde la 2a medalla)
       pet.saveNow();
       sfxPlay(SFX_EVOLVE);
     } else if (won && bKind == BK_GYM) {  // ko10.11: revancha ganada
@@ -4352,6 +4394,7 @@ void finishBattle(bool won, bool fled, bool caught) {
         pet.giveItems(1, 1);
         pet.addCandy(pet.speciesId, 2);
         strncpy(bNote, XT(X_REMATCH_REWARD), sizeof(bNote) - 1);
+        if ((uint32_t)random(100) < TM_REMATCH_PCT) tmDrop(tmRandom());  // ko12.10
         if ((uint32_t)random(100) < ORB_GYM_PCT) orbDrop(DEX_TBL[bFoe.dex].ptype);  // ko11.16
       } else {
         snprintf(bNote, sizeof(bNote), XT(X_REMATCH_NOREWARD_FMT), pet.gymWins[bGym]);
@@ -4365,6 +4408,7 @@ void finishBattle(bool won, bool fled, bool caught) {
       pet.giveItems(3, 3);  // ko11.1: antes +5/+5
       pet.addCandy(pet.speciesId, 10);
       if ((uint32_t)random(100) < LURE_CHAMP_PCT) lureDrop();  // ko12.9.11
+      tmDrop(tmRandom());  // ko12.10: y una MT
       // ko11.20: una ficha por Pokemon; con ayudantes que llegaron a luchar = en equipo
       bool teamWin = pUsed & (uint8_t)~1u;
       int ci = fameCardOfPet();
@@ -4423,6 +4467,7 @@ void finishBattle(bool won, bool fled, bool caught) {
         pet.giveItems(2, 2);  // ko11.1: antes +3/+3
         pet.addCandy(pet.speciesId, 3);
         if ((uint32_t)random(100) < LURE_DAILY_PCT) lureDrop();  // ko12.9.11
+        tmDrop(tmRandom());  // ko12.10: el reto del dia da una MT
         strncpy(bNote, XT(X_DAILY_WIN), sizeof(bNote) - 1);
         bNote[sizeof(bNote) - 1] = 0;
         pet.saveNow();
@@ -4926,9 +4971,11 @@ static void lkTap(int16_t x, int16_t y) {
   if (potAskTap(x, y)) return;  // ko12.9.20
   if (battleArtTap(x, y)) return;
   if (inRect(x, y, 236, 176, 176, 58) && linkSideCanSwap(lkMine)) { sfxPlay(SFX_TAP); partyAskSwap(2); return; }
+  if (mvInfoId) { mvInfoId = 0; sfxPlay(SFX_TAP); return; }  // ko12.10
   int a = battleMenuHit(x, y);
   if (a < 0) return;
   if (a != BMH_GIVEUP) lkGiveUpArm = 0;
+  if (a == BMH_FIGHT && battleLocked(bMe)) { sfxPlay(SFX_TAP); lkChoose(BA_M0); return; }  // ko12.10
   if (a == BMH_FIGHT) { bMoveMenu = true; sfxPlay(SFX_TAP); return; }
   if (a == BMH_BACK) { bMoveMenu = false; sfxPlay(SFX_TAP); return; }
   if (a >= BA_M0 && a <= BA_M3 && battleHasPP(bMe) && !bMe.pp[a - BA_M0]) { sfxPlay(SFX_DENY); return; }

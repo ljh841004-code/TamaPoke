@@ -1078,6 +1078,17 @@ bool Pet::tmTeach(uint8_t tm) {
   pendingSave = true;
   return true;
 }
+bool Pet::tmGive(uint8_t tm) {
+  if (tm >= TM_COUNT) return false;
+  if (tm >= TM_HM_FIRST) {
+    if (tmBag[tm]) return false;
+    tmBag[tm] = 1;
+  } else if (tmBag[tm] < 99) {
+    tmBag[tm]++;
+  }
+  pendingSave = true;
+  return true;
+}
 uint8_t Pet::tmCount() const {
   uint16_t n = 0;
   for (uint8_t i = 0; i < TM_COUNT; i++) n += tmBag[i] ? 1 : 0;

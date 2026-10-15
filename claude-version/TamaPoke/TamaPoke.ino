@@ -176,7 +176,12 @@ uint8_t cardPage = 0;         // 0 perfil, 1 stats+medallas
 #define CH_BH 120
 #define CH_B1X 70
 #define CH_B2X 256
-#define CARD_PAGES 6          // ko10.4: + pagina de caramelos. ko12.5: + vida (caracter, educacion, rutina)
+#define CARD_PAGES 7          // ko10.4: + pagina de caramelos. ko12.5: + vida (caracter, educacion, rutina). ko12.10: + [기술]
+#define CARD_PAGE_MOVES 6     // ko12.10: la de los movimientos (ui_moves.ino)
+extern bool tmBagOpen;        // ko12.10 (ui_moves.ino)
+extern int16_t dexLsDex;
+extern uint8_t dexLsTab, dexLsPage;
+extern uint8_t mvInfoId, mvEquipId;
 const char *cardMsg = nullptr;  // ko10.4: aviso breve en la pagina de caramelos (ko11.27: y el perfil)
 #define PROF_FAV_Y 290   // ko11.27: filas del perfil (comida favorita, dias juntos, aviso)
 #define PROF_DAY_Y 316
@@ -1714,6 +1719,10 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
       backToTrainMenu();  // ko11.9.3
       sfxPlay(SFX_DENY);
     }
+    // ko12.10: mantener 0,45 s sin moverse sobre un movimiento del combate = su ficha
+    if (!holdFired && !swallowGesture && millis() - tStart > 450 && abs(tXl - tX0) < 24 && abs(tYl - tY0) < 24 &&
+        battleLongPress(tX0, tY0))
+      holdFired = true;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
     // ko11.9.2: tambien si el toque desperto la pantalla (antes se ignoraba entero)
     if (!holdFired && (!swallowGesture || petHoldDimWake) && petHoldAllowed() && petHoldT0 &&
@@ -1813,6 +1822,7 @@ void onSwipe(int dir) {
     }
     return;
   }
+  if (galleryDetail && dexLsDex) { dexLsDex = 0; return; }  // ko12.10: [기술표] -> la ficha
   if (galleryDetail) {  // en detalle: volver a la rejilla
     galleryDetail = 0;
     galleryPmd.unload();
@@ -1862,12 +1872,16 @@ void onTap(int16_t x, int16_t y) {
   }
   if (pet.ceremony) return;  // durante la despedida no hay botones
   if (cardOpen) {
+    // ko12.10: la bolsa de MT y la ficha de un movimiento van antes que las flechas
+    if (tmBagOpen) { tmBagTap(x, y); return; }
+    if (cardPage == CARD_PAGE_MOVES && (mvInfoId || mvEquipId) && !navHit(NAV_DOWN, x, y)) { cardMovesTap(x, y); return; }
     // ko10.8: flechas (antes de todo lo demas: tocar fuera cierra la ficha)
     if (navHit(NAV_L, x, y) || navHit(NAV_R, x, y)) cardMsgUntil = 0;  // ko11.27
     if (navHit(NAV_L, x, y)) { if (cardPage > 0) cardPage--; else cardOpen = false; sfxPlay(SFX_TAP); return; }  // ko11.17: 1a pagina = cerrar
     if (navHit(NAV_R, x, y)) { if (cardPage < CARD_PAGES - 1) { cardPage++; sfxPlay(SFX_TAP); } return; }
     if (navHit(NAV_DOWN, x, y)) { cardOpen = false; sfxPlay(SFX_TAP); return; }
-    if (cardPage == 4) cardCandyTap(x, y);        // ko10.4: caramelos
+    if (cardPage == CARD_PAGE_MOVES) { if (!cardMovesTap(x, y)) cardOpen = false; }  // ko12.10
+    else if (cardPage == 4) cardCandyTap(x, y);        // ko10.4: caramelos
     else if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
     else if (cardPage == 0 && y >= PROF_FAV_Y - 14 && y < PROF_FAV_Y + 30) {  // ko11.27: que es la comida favorita
       cardMsg = XT(pet.berryKnown ? X_FAV_HINT_KNOWN : X_FAV_HINT_UNK);
@@ -4460,7 +4474,12 @@ void renderCard() {
   else if (cardPage == 2) renderCardMedals();
   else if (cardPage == 3) renderCardProgress();
   else if (cardPage == 4) renderCardCandy();
-  else renderCardLife();  // ko12.5
+  else if (cardPage == 5) renderCardLife();  // ko12.5
+  if (cardPage != CARD_PAGE_MOVES) { tmBagOpen = false; mvInfoId = 0; mvEquipId = 0; }  // ko12.10: al salir de [기술]
+  else {  // ko12.10: [기술] (y la bolsa de MT, a pantalla entera)
+    if (tmBagOpen) { renderTmBag(); uiFlush(); return; }
+    renderCardMoves();
+  }
 
   // indicador de paginas + ayuda
   for (int i = 0; i < CARD_PAGES; i++) {
@@ -4472,6 +4491,7 @@ void renderCard() {
   drawNav(NAV_L, UI_INK);  // ko10.8 (ko11.17: en la 1a pagina = volver)
   if (cardPage < CARD_PAGES - 1) drawNav(NAV_R, UI_INK);
   drawNav(NAV_DOWN, UI_INK);
+  if (cardPage == CARD_PAGE_MOVES) mvInfoDraw();  // ko12.10: encima de todo
   uiFlush();
 }
 
@@ -4991,7 +5011,11 @@ static void drawDexHint(int16_t dx, int y0 = 280) {  // ko12.9.23: y0 = titulo
   for (int i = 0; i < nl; i++) drawFit(lines[i], y0 + 22 + i * 26, 330, UI_INK, 2);
 }
 
+void renderDexLearnset();
+bool dexLearnsetTap(int16_t x, int16_t y);
+#define DEXLS_W 140  // ko12.10: [출현 장소] [기술표] lado a lado
 void renderDexDetail() {
+  if (dexLsDex) { renderDexLearnset(); uiFlush(); return; }  // ko12.10: [기술표]
   dexMvPoll();  // ko12.2.1
   uiScreenBg();  // ko11.6.1: sin pasar por negro (parpadeo)
   uint32_t mvT0 = dexMvFx ? millis() - dexMvT0 : 0;
@@ -5104,9 +5128,13 @@ void renderDexDetail() {
       }
     }
   }
-  if (disc && dexHasHint(dx)) {  // ko12.9.23: [출현 장소] / [정보 보기]
-    drawBtn(DEXW_X, DEXW_Y, DEXW_W, DEXW_H, dexHintView ? UI_WHITE : C565(0x80, 0x48, 0xe8),
-            dexHintView ? UI_INK : UI_WHITE, XT(dexHintView ? X_DEX_INFO_BTN : X_DEX_WHERE_BTN));
+  if (disc) {  // ko12.9.23: [출현 장소] / [정보 보기]; ko12.10: + [기술표]
+    bool hint = dexHasHint(dx);
+    if (hint)
+      drawBtn(CX - DEXLS_W - 4, DEXW_Y, DEXLS_W, DEXW_H, dexHintView ? UI_WHITE : C565(0x80, 0x48, 0xe8),
+              dexHintView ? UI_INK : UI_WHITE, XT(dexHintView ? X_DEX_INFO_BTN : X_DEX_WHERE_BTN));
+    drawBtn(hint ? CX + 4 : CX - DEXLS_W / 2, DEXW_Y, DEXLS_W, DEXW_H, C565(0x30, 0x90, 0xd0), UI_WHITE,
+            dexMovesBtnLabel());
     drawFit(T(S_DETAIL_BACK), 422, 240, UI_INK, 1);
     drawFit(XT(X_DEX_EXIT), 440, 200, UI_INK, 1);
   } else {
@@ -5221,6 +5249,7 @@ void galleryTap(int16_t x, int16_t y) {
   // fork KO (ko5): doble toque = salir de la pokedex (antes habia que deslizar
   // hasta la primera pagina y una vez mas)
   static uint32_t lastTap = 0;
+  if (galleryDetail && dexLsDex) { dexLearnsetTap(x, y); lastTap = 0; return; }  // ko12.10: [기술표]
   uint32_t now = millis();
   // ko10.8: flechas de la rejilla (sin contar como doble toque)
   if (!galleryDetail) {
@@ -5266,8 +5295,17 @@ void galleryTap(int16_t x, int16_t y) {
         return;
       }
     }
+    if (dexDiscovered(galleryDetail) && inRect(x, y, dexHasHint(galleryDetail) ? CX : CX - DEXLS_W / 2 - 8, DEXW_Y - 8,
+                                               DEXLS_W + 12, DEXW_H + 14)) {  // ko12.10: [기술표]
+      dexLsDex = galleryDetail;
+      dexLsTab = 0;
+      dexLsPage = 0;
+      lastTap = 0;
+      sfxPlay(SFX_TAP);
+      return;
+    }
     if (dexDiscovered(galleryDetail) && dexHasHint(galleryDetail) &&
-        inRect(x, y, DEXW_X - 10, DEXW_Y - 8, DEXW_W + 20, DEXW_H + 14)) {  // ko12.9.23: datos <-> donde sale
+        inRect(x, y, CX - DEXLS_W - 12, DEXW_Y - 8, DEXLS_W + 12, DEXW_H + 14)) {  // ko12.9.23: datos <-> donde sale
       dexHintView = !dexHintView;
       lastTap = 0;  // no cuenta como primer toque del doble toque (salir)
       sfxPlay(SFX_TAP);

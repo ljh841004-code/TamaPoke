@@ -285,6 +285,7 @@ public:
   bool moveCanRemind(uint8_t id) const;          // de su lista a su nivel o menos y aun no lo sabe
   bool moveRemind(uint8_t id);                   // lo recuerda (3 caramelos de su familia)
   bool tmTeach(uint8_t tm);                      // usa la MT/MO tm (0..56): false si no puede
+  bool tmGive(uint8_t tm);                       // una MT mas (tope 99) / la MO; false si ya la tenia (MO)
   uint8_t tmCount() const;
 #define MOVE_REMIND_CANDY 3
   // ko12.9.11: un combate salvaje con el 부르는 구슬 en uso (false = no hay ninguno)

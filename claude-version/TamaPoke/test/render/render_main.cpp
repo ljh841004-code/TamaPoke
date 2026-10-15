@@ -833,34 +833,20 @@ static void scenes(bool ko, const char *sfx) {
     bMe.pp[1] = 2;
     render(); shot("08m_fight_moves");
     {  // ko12.8: marcas: descansa (gris), no le hace nada (aspa), muy eficaz (*), poco eficaz (triangulo)
-      Battler keepMe = bMe; uint8_t keepT = bFoe.type;
-      const uint8_t mv[4] = { 7, 41, 22, 66 };
+      Battler keepMe = bMe; uint8_t keepT = bFoe.type, keepT2 = bFoe.type2;
+      const uint8_t mv[4] = { 63, 85, 57, 124 };  // ko12.10: hiperrayo, 10만볼트, 파도타기, 오물공격
       memcpy(bMe.mv, mv, 4); movesFillPP(bMe);
-      bFoe.type = PT_GROUND; bMe.restMv = 7; bMe.restT = 1;
+      bFoe.type = PT_GROUND; bFoe.type2 = 0xFF; bMe.restMv = 63; bMe.restT = 1;
       navCheck("ko12.8: marca descanso", moveMarkFor(bMe, bFoe, 0) == MVK_REST);
       navCheck("ko12.8: marca inmune", moveMarkFor(bMe, bFoe, 1) == MVK_NONE);
       navCheck("ko12.8: marca muy eficaz", moveMarkFor(bMe, bFoe, 2) == MVK_SUPER);
       navCheck("ko12.8: marca poco eficaz", moveMarkFor(bMe, bFoe, 3) == MVK_WEAK);
       render(); shot("08m2_fight_marks");
-      {  // ko12.10 미리보기: 전투 기술 창 v2 + 설명 창 (원작 크리스탈 기술)
-        uint16_t *fb = gfx->getFramebuffer();
-        uint16_t bgc = fb[440 * LCD_WIDTH + 233];
-        uint8_t lv[24], ls[24], n = mv2Learnset(4, lv, ls, 24), mv[4] = { 0, 0, 0, 0 }, k = 0;
-        for (uint8_t i = 0; i < n; i++) if (lv[i] <= 20) { mv[k % 4] = ls[i]; k++; }
-        uint8_t pp[4], mk[4];
-        for (uint8_t i = 0; i < 4; i++) { pp[i] = MV2[mv[i]].pp; mk[i] = MV2[mv[i]].type == PT_FIRE ? MVK2_WEAK : 0; }
-        pp[1] = 2;
-        gfx->fillRect(0, 262, LCD_WIDTH, LCD_HEIGHT - 262, bgc);
-        drawFightPanelV2(mv, pp, mk);
-        shot("P1_fight_v2");
-        uint8_t mv2[4] = { mv2Find("화염방사"), mv2Find("베어가르기"), mv2Find("날개치기"), mv2Find("지진") };
-        uint8_t pp2[4] = { 12, 20, 0, 9 }, mk2[4] = { MVK2_SUPER, MVK2_REST, 0, MVK2_NONE };
-        for (uint8_t i = 0; i < 4; i++) if (i != 2) pp2[i] = pp2[i] > MV2[mv2[i]].pp ? MV2[mv2[i]].pp : pp2[i];
-        gfx->fillRect(0, 262, LCD_WIDTH, LCD_HEIGHT - 262, bgc);
-        drawFightPanelV2(mv2, pp2, mk2);
-        shot("P1b_fight_v2_marks");
-        drawMoveInfoV2(mv2[0], 0);
-        shot("P2_move_info_battle");
+      {  // ko12.10: 길게 누르면 기술 설명 (전투 기술 창 v2 그대로)
+        mvInfoOpen(bMe.mv[2] ? bMe.mv[2] : bMe.mv[0], 0, 0);
+        render(); shot("P2_move_info_battle");
+        mvInfoId = 0;
+        uint16_t bgc = gfx->getFramebuffer()[440 * LCD_WIDTH + 233];
         // ko12.10 미리보기: 새 이펙트 (종류별, 가운데쯤 장면)
         static const char *FXN[FX2_N] = { "punch", "kick", "slash", "bite", "body", "sound", "powder", "statup",
                                           "statdown", "heal", "barrier", "drain" };
@@ -873,9 +859,9 @@ static void scenes(bool ko, const char *sfx) {
           char fn[40]; snprintf(fn, sizeof(fn), "P7_fx_%02u_%s", f, FXN[f]); shot(fn);
         }
       }
-      bMe = keepMe; bFoe.type = keepT;
+      bMe = keepMe; bFoe.type = keepT; bFoe.type2 = keepT2;
     }
-    onTap(MV_BACK_X + 10, MV_Y0 + 40);
+    onTap(FV_BX + FV_BW / 2, FV_BY + FV_BH / 2);
     navCheck("batalla: [<] vuelve al menu", !bMoveMenu);
     bFoe.st = ST_PAR; bMe.st = ST_PSN;
     render(); shot("08n_status_badges");
@@ -884,9 +870,9 @@ static void scenes(bool ko, const char *sfx) {
     // un movimiento de estado (grunido) y lo que pasa despues
     bPhase = BP_PLAY; bqAisMe = true; bqN = 3; bqI = 0;
     memset(bq, 0, sizeof(BEvent) * 3);
-    bq[0].side = 0; bq[0].kind = EV_USE; bq[0].mid = 151;
-    bq[1].side = 1; bq[1].kind = EV_STAT; bq[1].mid = 151; bq[1].eff = 0; bq[1].val = -1;
-    bq[2].side = 1; bq[2].kind = EV_STATUS; bq[2].mid = 161; bq[2].val = ST_PAR;
+    bq[0].side = 0; bq[0].kind = EV_USE; bq[0].mid = 45;
+    bq[1].side = 1; bq[1].kind = EV_STAT; bq[1].mid = 45; bq[1].eff = 0; bq[1].val = -1;
+    bq[2].side = 1; bq[2].kind = EV_STATUS; bq[2].mid = 86; bq[2].val = ST_PAR;
     for (int i = 0; i < 3; i++) { bq[i].hpA = bMe.hp; bq[i].hpB = bFoe.hp; }
     for (int i = 0; i < 3; i++) {
       startEvent(i);
@@ -940,9 +926,11 @@ static void scenes(bool ko, const char *sfx) {
         pmd.load((uint8_t)d, false);
         bMe = makeBattler(d, 30, 60, 60, 60);
         bvSetup(bMe, bFoe, nullptr, false);
-        // ko11.31: los 3 ataques de su tipo en esa fase (id 1 + tipo*9 + fase*3 + variante)
+        // ko12.10: 3 de sus golpes originales a Lv60
+        uint8_t dm[4];
+        movesDefault(d, 60, dm);
         for (uint8_t v = 0; v < 3; v++) {
-          uint8_t id = moveIdTyped(DEX_TBL[d].ptype, moveTier(d), v);
+          uint8_t id = dm[v] ? dm[v] : (uint8_t)MOVE_TACKLE;
           bPhase = BP_PLAY; bqAisMe = true; bqN = 1; bqI = 0;
           memset(&bq[0], 0, sizeof(bq[0]));
           bq[0].side = 0; bq[0].kind = EV_HIT; bq[0].move = BA_M0; bq[0].mid = id;
@@ -1580,23 +1568,38 @@ static void scenes(bool ko, const char *sfx) {
     dexLog.learned(25, mv[0]); dexLog.learned(25, mv[2]);
   }
   render(); shot("13_dex_detail");
-  {  // ko12.10 미리보기: 상태 카드 "기술" 쪽 · 기술 설명(장착) · 도감 기술표 · 기술머신 가방
-    uint8_t lv[24], ls[24], n = mv2Learnset(6, lv, ls, 24), lr[64], nl = 0;
-    for (uint8_t i = 0; i < n; i++) if (lv[i] <= 44) lr[nl++] = ls[i];
-    const char *tmk[] = { "지진", "잠자기", "잠꼬대", "공중날기", "괴력", "불대문자", "용의숨결" };
-    for (const char *nm : tmk) { uint8_t id = mv2Find(nm); if (id) lr[nl++] = id; }
-    uint8_t eq[4] = { mv2Find("화염방사"), mv2Find("베어가르기"), mv2Find("공중날기"), mv2Find("지진") }, eqpp[4] = { 15, 20, 15, 10 };
-    renderMovesCardV2(eq, eqpp, lr, nl, 0, 0); shot("P3_card_moves");
-    renderMovesCardV2(eq, eqpp, lr, nl, 3, 0); shot("P3b_card_moves_status");
-    renderMovesCardV2(eq, eqpp, lr, nl, 0, 0); drawMoveInfoV2(mv2Find("용의분노"), 1); shot("P4_move_info_equip");
-    renderDexMovesV2(6, 0, 0, lr, nl, 44); shot("P5_dex_moves_level");
-    renderDexMovesV2(6, 0, 1, lr, nl, 44); shot("P5b_dex_moves_level2");
-    renderDexMovesV2(6, 1, 0, lr, nl, 44); shot("P5c_dex_moves_tm");
-    uint8_t have[TM_N] = {};
-    const char *th[] = { "폭발펀치", "잠자기", "지진", "불대문자", "번개", "냉동빔", "사이코키네시스", "섀도볼", "공중날기", "파도타기" };
-    for (const char *nm : th) { uint8_t id = mv2Find(nm); for (uint8_t i = 0; i < TM_N; i++) if (TM_MOVE[i] == id) have[i] = 1 + (i % 3); }
-    renderTmBagV2(have, 0, 6); shot("P6_tm_bag");
-    renderTmBagV2(have, 0, 6); drawMoveInfoV2(mv2Find("불대문자"), 2); shot("P6b_tm_teach");
+  {  // ko12.10: 상태 카드 [기술] 쪽 · 설명(장착/기억) · 기술머신 가방 · 도감 기술표
+    galleryOpen = false; galleryDetail = 0;
+    uint16_t keepSp = pet.speciesId; uint32_t keepExp = pet.exp;
+    pet.speciesId = 6; pet.exp = expForLevel(44);
+    memset(pet.mvKnown, 0, sizeof(pet.mvKnown));
+    uint8_t lv[64], ls[64], n = moveLearnset(6, lv, ls, 64);
+    for (uint8_t i = 0; i < n; i++) if (lv[i] <= 44 && i != 4 && i != 6) pet.moveKnowAdd(ls[i]);  // 2 sin aprender: para recordar
+    uint8_t eq[4] = { 53, 163, 19, 89 };
+    for (uint8_t i = 0; i < 4; i++) { pet.mv[i] = eq[i]; pet.pp[i] = movePP(eq[i]) - i; pet.moveKnowAdd(eq[i]); }
+    memset(pet.tmBag, 0, sizeof(pet.tmBag));
+    for (uint8_t t : { 0, 25, 37, 43, 12, 28, 29, 52, 51 }) pet.tmGive(t);
+    pet.addCandy(6, 5);
+    cardOpen = true; cardPage = CARD_PAGE_MOVES; mvcFilt = 0; mvcPage = 0;
+    render(); shot("P3_card_moves");
+    mvcPage = 1; render(); shot("P3a_card_moves_p2");
+    mvcPage = 0; mvcFilt = 3; render(); shot("P3b_card_moves_status");
+    mvcFilt = 0; mvInfoOpen(82, 1, 0); render(); shot("P4_move_info_equip");
+    mvInfoId = 0; mvEquipId = 82; render(); shot("P4b_equip_pick"); mvEquipId = 0;
+    for (uint8_t i = 0; i < n; i++) if (pet.moveCanRemind(ls[i])) { mvInfoOpen(ls[i], 3, 0); break; }
+    render(); shot("P4c_move_remind"); mvInfoId = 0;
+    tmBagOpen = true; tmBagPage = 0; render(); shot("P6_tm_bag");
+    mvInfoOpen(tmMove(37), 2, 37); render(); shot("P6b_tm_teach"); mvInfoId = 0;
+    tmBagOpen = false; cardOpen = false; cardPage = 0;
+    dexLog.caught(6, gMockEpoch);
+    galleryOpen = true; galleryDetail = 6; galleryPmd.load(6, false); dexLsDex = 0;
+    render(); shot("P5_dex_detail_moves_btn");
+    dexLsDex = 6; dexLsTab = 0; dexLsPage = 0; render(); shot("P5a_dex_moves_level");
+    dexLsPage = 1; render(); shot("P5b_dex_moves_level2");
+    dexLsTab = 1; dexLsPage = 0; render(); shot("P5c_dex_moves_tm");
+    dexLsDex = 0; galleryOpen = false; galleryDetail = 0;
+    pet.speciesId = keepSp; pet.exp = keepExp;
+    memset(pet.tmBag, 0, sizeof(pet.tmBag));
   }
   {  // ko12.3.3: el toque guarda un millis() posterior al "now" de la vuelta: no debe contar como 5 min sin tocar
     uint32_t keepLI = lastInteract;

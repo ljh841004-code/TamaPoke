@@ -143,6 +143,10 @@ static void expCollect() {
   }
   expGotLure = pet.exped.hours >= 8 && (uint32_t)random(100) < LURE_EXPED8_PCT && pet.lureN < LURE_MAX;  // ko12.9.11
   if (expGotLure) pet.lureN++;
+  {  // ko12.10: de la expedicion, a veces una MT
+    uint8_t h = pet.exped.hours, pc = h >= 8 ? TM_EXPED_8H_PCT : h >= 4 ? TM_EXPED_4H_PCT : TM_EXPED_2H_PCT;
+    if ((uint32_t)random(100) < pc) tmDrop(tmRandom());
+  }
   expNewDex = 0;
   if (expRes.newMon && !box.full()) {  // un Pokemon de su region se viene con el
     Battler w = makeWildIn(DEX_TBL[m.dex].biome, m.lvl, (uint8_t)sceneHour(), 0, 0, rng, nullptr);
