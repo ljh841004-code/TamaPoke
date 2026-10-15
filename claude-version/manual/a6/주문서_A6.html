@@ -1,0 +1,106 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>다마포케 A6 설명서 주문서</title>
+<!-- 다마포케 A6 설명서 주문서. PDF: fontsource noto-sans-kr 패키지를 fontsrc/ 로 두고 Chromium으로 인쇄 -->
+<link rel="stylesheet" href="fontsrc/400.css"><link rel="stylesheet" href="fontsrc/700.css"><link rel="stylesheet" href="fontsrc/900.css">
+<style>
+@page{size:A4;margin:12mm 13mm}
+*{box-sizing:border-box}
+body{font-family:'Noto Sans KR',sans-serif;font-size:9.6pt;line-height:1.5;color:#2c2a33;margin:0;word-break:keep-all}
+h1{font-size:17pt;font-weight:900;color:#e3350d;margin:0 0 1mm}
+.sub{color:#6d6875;margin:0 0 4mm;font-size:9pt}
+h2{font-size:11.5pt;font-weight:900;margin:4mm 0 1.6mm;padding:1mm 2.5mm;background:#e3350d;color:#fff;border-radius:1.5mm}
+h2.g{background:#2f6fd0} h2.p{background:#7c4fc4} h2.k{background:#2f9e5a} h2.d{background:#5d6470}
+table{width:100%;border-collapse:collapse;margin:1mm 0}
+th,td{border:.25mm solid #d9d2c8;padding:1.4mm 2mm;text-align:left;vertical-align:top}
+th{background:#f6f1ea;white-space:nowrap;width:30mm}
+td b,li b,p b{color:#d0290b}
+.big{font-size:10.5pt;font-weight:700}
+ul,ol{margin:1mm 0;padding-left:5.5mm} li{margin:.7mm 0}
+.box{border:.4mm solid #d8392b;background:#fff3f1;border-radius:2mm;padding:2mm 3mm;margin:2mm 0}
+.msg{border:.3mm dashed #2f6fd0;background:#f1f6ff;border-radius:2mm;padding:2.5mm 3.5mm;margin:1.5mm 0;white-space:pre-line}
+.ck li{list-style:none;margin-left:-5.5mm} .ck li::before{content:'☐  ';font-weight:700}
+.two{display:flex;gap:4mm}.two>div{flex:1}
+.small{font-size:8.2pt;color:#6d6875}
+table,.msg,.box,ul{break-inside:avoid} h2{break-after:avoid}
+</style></head><body>
+<h1>다마포케 사용 설명서 A6 — 주문서</h1>
+<p class="sub">디티피아 · 소량 디지털 책자 (dtpia.co.kr/Order/Book/CommonBookDigital.aspx) · 펌웨어 v1.17-ko12.9.27 기준 · 60쪽 중철</p>
+
+<h2>1. 책 정보</h2>
+<table>
+<tr><th>완성 크기</th><td><b>105 × 148 mm (A6)</b> · 세로형</td></tr>
+<tr><th>작업 크기</th><td>111 × 154 mm (사방 도련 3mm 포함)</td></tr>
+<tr><th>쪽 수</th><td><b>모두 60쪽 = 표지 4쪽 + 본문 56쪽</b> (1쪽 앞표지 · 2쪽 앞표지 안쪽 · 59쪽 뒤표지 안쪽 · 60쪽 뒤표지)</td></tr>
+<tr><th>제본</th><td>중철 (가운데 스테이플), 세로형 좌철</td></tr>
+<tr><th>색</th><td>표지 · 본문 모두 양면 컬러</td></tr>
+</table>
+
+<h2 class="g">2. 옵션표 입력값</h2>
+<table>
+<tr><th>규격</th><td><span class="big">비규격</span> → [비규격 입력]<br>재단사이즈 <b>105*148</b> · 작업사이즈 <b>111*154</b><br>표지사이즈 <b>210*148</b> (펼친 크기) · 세네카 <b>0</b> (중철은 책등 없음)</td></tr>
+<tr><th>주문수량</th><td>원하는 권수 (2권부터)</td></tr>
+<tr><th>표지 선택</th><td><b>고급지</b> (스노우지 또는 아트지 200~250g) / <b>양면</b> / <b>칼라</b> / <b>단면무광코팅</b> / 오시 <b>있음</b> / 후가공 · 표지날개 없음</td></tr>
+<tr><th>본문1 내지(컬러)</th><td><b>고급지</b> (스노우지 100~120g) / <b>양면</b> / <b>칼라</b> / <b>56</b> 페이지</td></tr>
+<tr><th>본문2 내지(흑백)</th><td><b>0</b> 페이지</td></tr>
+<tr><th>면지</th><td><b>없음</b></td></tr>
+<tr><th>제본</th><td><b>중철</b> · 제본방향 <b>세로형 좌철</b></td></tr>
+</table>
+<p class="small">종이 이름은 사이트 목록에 나온 것 중에서 고르세요. 무광 스노우지는 글이 번쩍이지 않아 읽기 편하고, 아트지는 사진색이 더 진해요. 오시(접는 자리 눌러 주기)는 두꺼운 표지가 접히며 갈라지지 않게 해 줘요.</p>
+
+<h2 class="p">3. 올릴 파일</h2>
+<table>
+<tr><th>하나로 올릴 때</th><td><b>인쇄용_A6_전체_60쪽.pdf</b> — 60쪽 낱장, 1쪽부터 순서대로 (추천)</td></tr>
+<tr><th>표지 · 본문 따로</th><td>표지: <b>인쇄용_A6_표지_펼침.pdf</b> (1면 바깥 = 뒤표지 | 앞표지, 2면 안쪽 = 앞표지 안 | 뒤표지 안)<br>본문: <b>인쇄용_A6_본문_56쪽.pdf</b> (3쪽~58쪽)</td></tr>
+<tr><th>올리지 말 것</th><td>TamaPoke_사용설명서_A6.pdf (화면 확인용, 도련 없음) · 인쇄소_사양_A6.txt</td></tr>
+</table>
+<p class="small">파일 여러 개를 한꺼번에 올려야 하면 ZIP 하나로 묶어서 올려요 (사이트 안내).</p>
+
+<h2 class="k">4. 파일 점검 결과 (사이트 안내사항)</h2>
+<table>
+<tr><th>색</th><td>CMYK (SWOP 인쇄 프로필로 변환) ✔</td></tr>
+<tr><th>해상도</th><td>300 dpi ✔</td></tr>
+<tr><th>잉크 총량</th><td>가장 진한 곳 약 240% (한도 250%) ✔</td></tr>
+<tr><th>글꼴 · 효과</th><td>글꼴 없음 (모두 그림 = 아웃라인과 같음), 투명 · 그림자 효과 없음 ✔</td></tr>
+<tr><th>재단 여유</th><td>도련 3mm, 글자 · 사진은 재단선에서 4mm 이상 안쪽 ✔ (재단 오차 1~2mm 괜찮음)</td></tr>
+<tr><th>쪽 확인</th><td>60쪽 모두 넘치거나 잘린 곳 없음 ✔</td></tr>
+</table>
+
+
+<h2>5. 주문 전에 문의할 것 (게시판 / 전화)</h2>
+<div class="box">A6는 규격 목록에 없고, 제본방향 안내에도 A6 크기가 나와 있지 않아요. <b>결제 전에 꼭</b> 아래처럼 물어보세요.</div>
+<div class="msg">안녕하세요. 소량 디지털 책자 주문 문의드립니다.
+- 크기: 비규격 105 x 148 mm (A6), 세로형 좌철, 중철 제본
+- 쪽수: 표지 4쪽 + 본문 56쪽 (모두 60쪽), 표지/본문 모두 양면 칼라
+- 파일: 도련 3mm 포함 작업사이즈 111 x 154 mm, CMYK 300dpi PDF
+1. 이 크기로 중철 제본이 가능한가요?
+2. 중철일 때 표지사이즈 칸에는 펼친 크기(210*148)를 넣는 게 맞나요, 한 쪽 크기(105*148)를 넣나요?
+3. 파일은 60쪽 한 파일로 올려도 되나요, 표지(펼침 2면)와 본문(56쪽)을 나눠야 하나요?
+4. 본문 56쪽 + 250g 표지 중철이면 안쪽 종이 밀림(크리프) 보정을 해 주시나요?
+감사합니다.</div>
+<p class="small">답에 따라: 2번이 "한 쪽 크기"면 표지사이즈 105*148. 3번이 "나눠서"면 표지_펼침 + 본문_56쪽 파일을 올려요. 4번은 해 주면 좋고, 안 해 줘도 안쪽 바깥 여백이 1mm 이내로 줄어드는 정도라 괜찮아요.</p>
+
+<h2 class="d">6. 결제 직전 확인</h2>
+<ul class="ck">
+<li>규격: 비규격 105*148 / 111*154 로 들어갔는지</li>
+<li>본문1 컬러 56페이지, 본문2 흑백 0페이지인지 (표지 4쪽은 따로 계산)</li>
+<li>제본: 중철, 세로형 좌철</li>
+<li>표지: 양면 칼라 · 단면무광코팅 · 오시 있음</li>
+<li>면지: 없음</li>
+<li>올린 파일 이름이 "인쇄용_" 으로 시작하는지</li>
+<li>견적 금액과 수량 확인 후 결제</li>
+</ul>
+
+<h2 class="d">7. 받은 뒤 확인</h2>
+<ul class="ck">
+<li>쪽 순서: 1쪽 표지 → 2쪽 차례 → … → 60쪽 뒤표지</li>
+<li>재단: 글자가 잘린 곳 없는지 (특히 맨 위 색 띠의 제목, 아래 쪽 번호)</li>
+<li>색: 너무 진하거나 번진 곳 없는지</li>
+<li>문제가 있으면 사진을 찍어 바로 사이트에 문의</li>
+</ul>
+
+<h2 class="d">8. 참고</h2>
+<ul>
+<li>펌웨어가 바뀌면 설명서도 새로 만들어 드려요. 같은 내용이 기기 SD의 manual.pdf(손바닥 가이드)에도 들어가요.</li>
+<li>화면 사진의 포켓몬 그림은 개인이 즐기는 용도예요. 판매용으로 찍지 마세요.</li>
+<li>가격은 사이트 견적 화면에서 수량을 바꿔 가며 확인하세요 (여러 권일수록 1권 값이 내려가요).</li>
+</ul>
+</body></html>
