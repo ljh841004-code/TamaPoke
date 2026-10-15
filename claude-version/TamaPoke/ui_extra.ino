@@ -325,6 +325,10 @@ static void renderLanFw() {
     snprintf(b, sizeof(b), XT(X_LAN_LEFT_FMT), (unsigned)((left + 59) / 60));
     drawFit(b, 268, 340, UI_INK, 2);
     drawFit(XT(X_LAN_OFFICE), 306, 330, UI_INK, 1);
+    // ko12.10: la misma direccion + /sd sube ficheros a la SD (mons/)
+    if (netSdFiles()) snprintf(b, sizeof(b), XT(X_LAN_SD_GOT_FMT), (unsigned)netSdFiles());
+    else snprintf(b, sizeof(b), XT(X_LAN_SD_FMT), netLanIp());
+    drawFit(b, 340, 320, netSdFiles() ? UI_BAR_OK : UI_INK, 2);
   } else {
     bool none = st == LAN_FAIL_NOSAVED;
     drawFit(XT(none ? X_LAN_NOSAVED : X_LAN_FAIL), 176, 360, UI_BAR_BAD, 2);

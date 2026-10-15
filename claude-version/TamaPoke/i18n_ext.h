@@ -193,6 +193,7 @@ enum XId : uint16_t {  // ko10.6: pasaron de 255
   // ko12.9.23: boton del 구슬 abajo (en lugar de [뒤로])
   // ko12.9.23: ficha de la pokedex: donde sale / volver a los datos
   X_DECO_UMBRELLA,  // ko12.9.27
+  X_LAN_SD_FMT, X_LAN_SD_GOT_FMT,  // ko12.10: ficheros de la SD por WiFi (/sd)
   X_COUNT
 };
 

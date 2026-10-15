@@ -83,5 +83,6 @@ enum NetLan : uint8_t { LAN_OFF = 0, LAN_SCAN, LAN_CONNECTING, LAN_ON, LAN_FAIL_
 void netStartLanFw();
 void netStopLanFw();
 NetLan netLanState();
+uint16_t netSdFiles();               // ko12.10: ficheros recibidos por /sd (desde el arranque)
 const char *netLanIp();               // "192.168.0.23" con LAN_ON ("" si no)
 uint32_t netLanLeftS(uint32_t nowMs);  // segundos hasta que se apague solo

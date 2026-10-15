@@ -670,6 +670,35 @@ TEST(net, recordar_sube_arriba_y_topa_en_5) {
 }
 
 // ---------------------------------------------------------------- ko8: reset
+TEST(net, sd_web_ruta_solo_dentro_de_mons) {
+  char o[96];
+  CHECK(netSdPath("w001.bin", o, sizeof(o)));
+  CHECK(strcmp(o, "/mons/w001.bin") == 0);
+  CHECK(netSdPath("fx/w001.bin", o, sizeof(o)));
+  CHECK(strcmp(o, "/mons/fx/w001.bin") == 0);
+  CHECK(netSdPath("mons/fx/w002.bin", o, sizeof(o)));
+  CHECK(strcmp(o, "/mons/fx/w002.bin") == 0);
+  CHECK(netSdPath("TamaPoke_SD_fx_ko12.10/mons/fx/w003.bin", o, sizeof(o)));
+  CHECK(strcmp(o, "/mons/fx/w003.bin") == 0);
+  CHECK(netSdPath("/mons/cry001.wav", o, sizeof(o)));
+  CHECK(strcmp(o, "/mons/cry001.wav") == 0);
+  CHECK(netSdPath("lemons/a.bin", o, sizeof(o)));  // "mons/" dentro de otra palabra no cuenta
+  CHECK(strcmp(o, "/mons/lemons/a.bin") == 0);
+  CHECK(!netSdPath("../x.bin", o, sizeof(o)));
+  CHECK(!netSdPath("fx/../../x.bin", o, sizeof(o)));
+  CHECK(!netSdPath("fx//w.bin", o, sizeof(o)));
+  CHECK(!netSdPath(".DS_Store", o, sizeof(o)));
+  CHECK(!netSdPath("fx/", o, sizeof(o)));
+  CHECK(!netSdPath("", o, sizeof(o)));
+  CHECK(!netSdPath("a b.bin", o, sizeof(o)));
+  CHECK(!netSdPath("fx\\w.bin", o, sizeof(o)));
+  CHECK(!netSdPath(nullptr, o, sizeof(o)));
+  char big[120];
+  memset(big, 'a', sizeof(big) - 1);
+  big[sizeof(big) - 1] = 0;
+  CHECK(!netSdPath(big, o, sizeof(o)));
+}
+
 TEST(reset, borra_partida_y_conserva_ajustes) {
   mockNvsReset();
   Preferences raw;

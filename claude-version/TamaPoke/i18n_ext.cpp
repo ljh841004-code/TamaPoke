@@ -206,6 +206,7 @@ static const char *const XS[2][X_COUNT] = {
     "Scan this to open the manual", "\"No internet\"? Stay connected", "NEXT >", "< BACK",
     "No manual.pdf on the SD card", "Or send it with the web installer",
     "Umbrella",
+    "SD files: %s/sd", "SD files received: %u",
   },
   // ---------------- KO ----------------
   {
@@ -407,6 +408,7 @@ static const char *const XS[2][X_COUNT] = {
     "이 QR을 찍으면 설명서가 열려요", "\"인터넷 없음\"이 떠도 연결 유지", "다음 >", "< 이전",
     "SD카드에 manual.pdf가 없어요", "웹 설치 페이지로 보내도 돼요",
     "우산",
+    "SD 파일 올리기: %s/sd", "SD 파일 %u개 받았어요",
   },
 };
 

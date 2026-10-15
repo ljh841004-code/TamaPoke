@@ -72,6 +72,7 @@ void netStartLanFw() { gMockLan = LAN_SCAN; }
 void netStopLanFw() { gMockLan = LAN_OFF; }
 NetLan netLanState() { return gMockLan; }
 const char *netLanIp() { return gMockLan == LAN_ON ? "192.168.0.123" : ""; }
+uint16_t netSdFiles() { return 0; }
 uint32_t netLanLeftS(uint32_t) { return gMockLan == LAN_ON ? 540 : 0; }
 uint8_t netSavedCount() { return 3; }
 void netForgetSaved(uint8_t) {}

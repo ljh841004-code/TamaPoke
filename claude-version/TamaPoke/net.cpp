@@ -17,6 +17,7 @@
 #include <SD_MMC.h>
 #include "sdmon.h"    // ko12.9.25: sdReady (설명서 manual.pdf)
 #include "sd_lock.h"
+#include "audio.h"    // ko12.10: /sd suelta la SD de la musica mientras escribe
 
 #define NET_CONNECT_MS 12000UL   // ko8: por red (hay varias que probar)
 #define NET_NTP_MS 12000UL
@@ -355,7 +356,8 @@ static void pageRoot() {
   h += F("<p><small>켤 때와 하루 한 번, 주변에서 신호가 가장 센 저장된 WiFi로 시간을 맞춰요."
          " 저장된 WiFi가 없으면 비밀번호 없는 WiFi를 써요.</small></p>"
          "<p><small>2.4GHz WiFi만 됩니다. 5GHz는 안 돼요.</small></p>"
-         "<h2>펌웨어 업데이트</h2><p><a href=/fw>update.bin 올리기 (192.168.4.1/fw)</a></p>");
+         "<h2>펌웨어 업데이트</h2><p><a href=/fw>update.bin 올리기 (192.168.4.1/fw)</a></p>"
+         "<h2>SD 파일</h2><p><a href=/sd>SD카드에 파일 올리기 (192.168.4.1/sd)</a></p>");
   if (netManualOnSd()) h += F("<h2>설명서</h2><p><a href=/manual.pdf>손바닥 가이드 열기 (manual.pdf)</a></p>");
   h += F("</div>");
   // la busqueda aun no acabo: recargar sola en 3 s para que aparezca la lista
@@ -593,6 +595,149 @@ static void pageManual() {
   f.close();
 }
 
+// ---------------------------------------------------------------- ko12.10: ficheros de la SD por WiFi
+// GET /sd = pagina para elegir ficheros o una carpeta; el navegador los manda UNO A UNO a
+// POST /sd?p=<ruta relativa> (multipart). Solo se escribe dentro de /mons/ (como el PUT por USB) y
+// primero en <ruta>.part: el fichero de verdad solo se cambia cuando ha llegado entero.
+#define SDUP_MAX (32UL * 1024UL * 1024UL)
+static File gSdF;
+static char gSdPath[96], gSdTmp[104];
+static bool gSdActive = false, gSdPaused = false;
+static uint8_t gSdRes = 0;  // 0 nada, 1 bien, 2 ruta no valida, 3 sin SD, 4 ocupada, 5 fallo al escribir, 6 grande
+static uint32_t gSdGot = 0;
+static uint16_t gSdFiles = 0;
+
+uint16_t netSdFiles() { return gSdFiles; }
+
+static void sdUpEnd(uint8_t res) {
+  if (gSdF) {
+    SdCardLock l;
+    gSdF.close();
+    if (res != 1) SD_MMC.remove(gSdTmp);
+  }
+  gSdF = File();
+  gSdActive = false;
+  if (gSdPaused) audioResumeAfterUpload();
+  gSdPaused = false;
+  gSdRes = res;
+}
+
+static void pageSd() {
+  gPortalT0 = millis();
+  String h = FPSTR(FW_CSS);
+  h += F("<h1>SD 파일 올리기</h1>"
+         "<p>SD카드의 <b>mons</b> 폴더에 들어가요. 같은 이름은 새 파일로 바뀌어요.</p>"
+         "<p><b>파일 고르기</b> (여러 개 가능)<br><small>mons 폴더 바로 아래에 들어가요</small></p>"
+         "<input id=f type=file multiple>"
+         "<p><b>또는 폴더째 고르기</b><br><small>예: <b>fx</b> 폴더를 고르면 mons/fx/ 안에 들어가요. "
+         "<b>mons</b> 폴더나 zip을 푼 폴더를 골라도 mons 아래 자리 그대로 들어가요</small></p>"
+         "<input id=d type=file webkitdirectory multiple>"
+         "<button id=b onclick='go()'>올리기 / Upload</button>"
+         "<div class=bar><div id=p></div></div><p id=m></p>"
+         "<p><small>끝날 때까지 이 화면을 두세요. 끊기면 다시 올리면 돼요 (끝까지 받은 파일만 바뀌어요). "
+         "올리는 동안 음악이 잠깐 멈춰요.</small></p>");
+  if (gPortal) h += F("<p><a href=/>WiFi 설정으로</a></p>");
+  else h += F("<p><a href=/fw>펌웨어 업데이트로</a></p>");
+  h += F("</div><script>"
+         "function rel(f){var r=f.webkitRelativePath||f.name;var i=r.lastIndexOf('mons/');"
+         "if(i==0||(i>0&&r[i-1]=='/'))return r.substring(i+5);return r}"
+         "function send(f,r){return new Promise(function(ok){var d=new FormData();d.append('f',f,f.name);"
+         "var x=new XMLHttpRequest();x.open('POST','/sd?p='+encodeURIComponent(r));"
+         "x.upload.onprogress=function(e){cur=e.loaded;show()};"
+         "x.onload=function(){ok(x.status==200&&x.responseText.indexOf('OK')==0?'':x.responseText||'?')};"
+         "x.onerror=function(){ok('연결 끊김')};x.send(d)})}"
+         "var tot=0,done=0,cur=0,n=0,k=0;"
+         "function show(){var q=tot?Math.floor((done+cur)*100/tot):0;"
+         "document.getElementById('p').style.width=q+'%';"
+         "document.getElementById('m').textContent=k+'/'+n+' ('+q+'%)'}"
+         "async function go(){var a=[].slice.call(document.getElementById('f').files)"
+         ".concat([].slice.call(document.getElementById('d').files));"
+         "a=a.filter(function(f){var r=rel(f);return !/(^|\\/)\\./.test(r)});"
+         "if(!a.length){alert('파일이나 폴더를 골라 주세요');return}"
+         "var b=document.getElementById('b'),m=document.getElementById('m');b.disabled=true;"
+         "tot=0;done=0;n=a.length;k=0;a.forEach(function(f){tot+=f.size});var bad=[];"
+         "for(var i=0;i<a.length;i++){k=i+1;cur=0;show();var r=rel(a[i]);var e=await send(a[i],r);"
+         "if(e){cur=0;e=await send(a[i],r)}if(e)bad.push(r+': '+e);done+=a[i].size}"
+         "cur=0;show();b.disabled=false;"
+         "m.textContent=bad.length?('못 올린 파일 '+bad.length+'개: '+bad.slice(0,5).join(', ')):"
+         "('완료! '+n+'개 올렸어요')}"
+         "</script></body></html>");
+  gWeb->send(200, "text/html; charset=utf-8", h);
+}
+
+static void pageSdUpload() {
+  HTTPUpload &u = gWeb->upload();
+  gPortalT0 = millis();
+  if (u.status == UPLOAD_FILE_START) {
+    if (gSdActive) sdUpEnd(5);
+    gSdRes = 0;
+    gSdGot = 0;
+    String rel = gWeb->hasArg("p") ? gWeb->arg("p") : u.filename;
+    if (!netSdPath(rel.c_str(), gSdPath, sizeof(gSdPath))) { gSdRes = 2; return; }
+    if (!sdReady) { gSdRes = 3; return; }
+    gSdPaused = audioPauseForUpload();
+    if (!gSdPaused) { audioResumeAfterUpload(); gSdRes = 4; return; }
+    snprintf(gSdTmp, sizeof(gSdTmp), "%s.part", gSdPath);
+    {
+      SdCardLock l;
+      if (l) {
+        // las carpetas que falten (mons/fx/ ...)
+        char dir[96];
+        for (char *q = strchr(gSdPath + 1, '/'); q; q = strchr(q + 1, '/')) {
+          size_t k = (size_t)(q - gSdPath);
+          memcpy(dir, gSdPath, k);
+          dir[k] = 0;
+          if (!SD_MMC.exists(dir)) SD_MMC.mkdir(dir);
+        }
+        if (SD_MMC.exists(gSdTmp)) SD_MMC.remove(gSdTmp);  // FILE_WRITE anade al final
+        gSdF = SD_MMC.open(gSdTmp, FILE_WRITE);
+      }
+    }
+    if (!gSdF) { sdUpEnd(5); return; }
+    gSdActive = true;
+  } else if (u.status == UPLOAD_FILE_WRITE) {
+    if (!gSdActive) return;
+    if (gSdGot + u.currentSize > SDUP_MAX) { sdUpEnd(6); return; }
+    size_t w;
+    {
+      SdCardLock l;
+      w = l ? gSdF.write(u.buf, u.currentSize) : 0;
+    }
+    if (w != u.currentSize) { sdUpEnd(5); return; }
+    gSdGot += u.currentSize;
+  } else if (u.status == UPLOAD_FILE_END) {
+    if (!gSdActive) return;
+    bool ok;
+    {
+      SdCardLock l;
+      gSdF.close();
+      gSdF = File();
+      if (SD_MMC.exists(gSdPath)) SD_MMC.remove(gSdPath);
+      ok = l && SD_MMC.rename(gSdTmp, gSdPath);
+      if (!ok) SD_MMC.remove(gSdTmp);
+    }
+    sdUpEnd(ok ? 1 : 5);
+    if (ok) {
+      gSdFiles++;
+      sdForgetMissing();  // puede ser uno que antes faltaba
+      sdDirty = true;     // recargar sprite / miniaturas
+      Serial.printf("SD web: %s (%u bytes)\n", gSdPath, (unsigned)gSdGot);
+    }
+  } else if (u.status == UPLOAD_FILE_ABORTED) {
+    sdUpEnd(5);
+  }
+}
+
+static void pageSdDone() {
+  if (gSdActive) sdUpEnd(5);  // sin UPLOAD_FILE_END
+  if (!gSdRes) gSdRes = 2;
+  static const char *const ERR[] = { "", "OK", "이름이 안 돼요 (영문, 숫자, . _ - 만)", "SD카드가 없어요",
+                                     "SD카드를 쓰는 중이에요", "SD에 쓰지 못했어요 (자리가 없나요?)",
+                                     "너무 커요 (32MB까지)" };
+  gWeb->send(gSdRes == 1 ? 200 : 500, "text/plain; charset=utf-8", ERR[gSdRes < 7 ? gSdRes : 5]);
+  gSdRes = 0;
+}
+
 void netStartPortal() {
   if (gPortal || linkActive()) return;
   netStopLanFw();
@@ -616,6 +761,8 @@ void netStartPortal() {
   gWeb->on("/fw", HTTP_POST, pageFwDone, pageFwUpload);
   gWeb->on("/manual.pdf", HTTP_GET, pageManual);          // ko12.9.25
   gWeb->on("/manual", HTTP_GET, pageManual);
+  gWeb->on("/sd", HTTP_GET, pageSd);                      // ko12.10
+  gWeb->on("/sd", HTTP_POST, pageSdDone, pageSdUpload);
   gWeb->onNotFound(pageRedirect);
   gWeb->begin();
   gPortal = true;
@@ -704,6 +851,8 @@ static void lanServe(uint32_t now) {
   gWeb->on("/fw", HTTP_GET, pageFw);
   gWeb->on("/fw", HTTP_POST, pageFwDone, pageFwUpload);
   gWeb->on("/manual.pdf", HTTP_GET, pageManual);  // ko12.9.25
+  gWeb->on("/sd", HTTP_GET, pageSd);              // ko12.10
+  gWeb->on("/sd", HTTP_POST, pageSdDone, pageSdUpload);
   gWeb->onNotFound(pageLanRoot);
   gWeb->begin();
   strncpy(gLanIp, WiFi.localIP().toString().c_str(), sizeof(gLanIp) - 1);

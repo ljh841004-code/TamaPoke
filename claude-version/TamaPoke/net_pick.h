@@ -10,6 +10,7 @@
 // por eso van al final y se prueba la siguiente si una falla.
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 
 #define NET_MAX_SAVED 5
 #define NET_MAX_CAND 8
@@ -111,4 +112,33 @@ static inline void netForget(char (*ssids)[33], char (*passes)[65], uint8_t &n, 
   }
   n--;
   ssids[n][0] = passes[n][0] = 0;
+}
+
+// ko12.10: ruta de un fichero subido por WiFi (/sd) -> siempre dentro de /mons/
+// "fx/w001.bin", "mons/fx/w001.bin" o ".../mons/fx/w001.bin" -> "/mons/fx/w001.bin". Solo letras,
+// numeros, . _ - y /; ningun trozo vacio ni que empiece por '.' (ni "..", ni ficheros ocultos)
+static inline bool netSdPath(const char *rel, char *out, size_t n) {
+  if (!rel) return false;
+  while (*rel == '/') rel++;
+  for (const char *m = rel; (m = strstr(m, "mons/")); m++)
+    if (m == rel || m[-1] == '/') { rel = m + 5; break; }
+  size_t len = strlen(rel);
+  if (!len || len > 80 || len + 7 > n) return false;
+  bool segStart = true;
+  for (size_t i = 0; i < len; i++) {
+    char c = rel[i];
+    if (c == '/') {
+      if (segStart) return false;
+      segStart = true;
+      continue;
+    }
+    if (segStart && c == '.') return false;
+    segStart = false;
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' ||
+          c == '_' || c == '-'))
+      return false;
+  }
+  if (segStart) return false;  // acaba en '/'
+  snprintf(out, n, "/mons/%s", rel);
+  return true;
 }
