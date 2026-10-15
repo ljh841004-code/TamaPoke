@@ -192,6 +192,7 @@ enum XId : uint16_t {  // ko10.6: pasaron de 255
   X_MAN_BTN, X_MAN_T1, X_MAN_H1, X_MAN_T2, X_MAN_H2, X_MAN_TIP, X_MAN_NEXT, X_MAN_PREV, X_MAN_NOFILE, X_MAN_NOFILE2,  // ko12.9.25: 설명서 (SD manual.pdf)
   // ko12.9.23: boton del 구슬 abajo (en lugar de [뒤로])
   // ko12.9.23: ficha de la pokedex: donde sale / volver a los datos
+  X_DECO_UMBRELLA,  // ko12.9.27
   X_COUNT
 };
 

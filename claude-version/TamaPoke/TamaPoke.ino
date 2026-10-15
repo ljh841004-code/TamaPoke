@@ -46,7 +46,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.9.26"
+#define FW_VERSION "1.17-ko12.9.27"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -5799,15 +5799,25 @@ static bool typeShoots(uint8_t t) {
 // va andando hasta el y se queda un rato usandolo (siesta en el cojin, olfatea la flor, cabecea la pelota...)
 int decoSlotX(uint8_t slot);  // ui_home.ino
 void drawDecoPlay(uint32_t now, bool night);
-static bool behDecoStart() {
+// ko12.9.27: fuera (paisaje) con lluvia o nieve usa el paraguas si esta puesto; si no, el paraguas es solo adorno
+static bool umbrellaWeather() {
+  uint8_t wx = sceneWeather();
+  return !pet.roomOn && (wx == WX_RAIN || wx == WX_SNOW);
+}
+static bool behDecoStart(bool umbrellaOnly = false) {
   if (!(pmd.has(PMD_WALKL) || pmd.has(PMD_WALKR))) return false;
+  bool wet = umbrellaWeather();
   uint8_t cand[DECO_SLOTS], n = 0;
-  for (uint8_t i = 0; i < DECO_SLOTS; i++)
-    if (pet.deco[i] && pet.deco[i] <= DECO_COUNT) cand[n++] = i;
+  for (uint8_t i = 0; i < DECO_SLOTS; i++) {
+    uint8_t d = pet.deco[i];
+    if (!d || d > DECO_COUNT) continue;
+    bool umb = d - 1 == DECO_UMBRELLA;
+    if (umb ? wet : !umbrellaOnly) cand[n++] = i;
+  }
   if (!n) return false;
   uint8_t i = cand[random(n)], it = pet.deco[i] - 1;
   int ix = decoSlotX(i), side = ix < CX ? 1 : -1;
-  int tx = it == DECO_CUSHION ? ix : ix + side * (it == DECO_DOLL ? 46 : 64);  // encima del cojin; al lado de lo demas
+  int tx = (it == DECO_CUSHION || it == DECO_UMBRELLA) ? ix : ix + side * (it == DECO_DOLL ? 46 : 64);  // encima del cojin / coge el paraguas; al lado de lo demas
   tx = tx < 100 ? 100 : tx > 366 ? 366 : tx;
   beh.mode = 4;
   beh.deco = i;
@@ -5818,7 +5828,7 @@ static bool behDecoStart() {
   return true;
 }
 static uint32_t decoPlayMs(uint8_t it) {
-  return it == DECO_CUSHION ? 6500 : it == DECO_BALL ? 4400 : it == DECO_LAMP ? 5000 : 4000;
+  return it == DECO_UMBRELLA ? 12000 : it == DECO_CUSHION ? 6500 : it == DECO_BALL ? 4400 : it == DECO_LAMP ? 5000 : 4000;
 }
 static uint8_t decoPlayAct(uint8_t it) {
   switch (it) {
@@ -5827,6 +5837,7 @@ static uint8_t decoPlayAct(uint8_t it) {
     case DECO_BALL: return pmdFirst({ PMD_NOD, PMD_POSE, PMD_IDLE });
     case DECO_LAMP: return pmdFirst({ PMD_LAYING, PMD_BREATH, PMD_IDLE });
     case DECO_TROPHY: return pmdFirst({ PMD_POSE, PMD_NOD, PMD_IDLE });
+    case DECO_UMBRELLA: return pmdFirst({ PMD_IDLE, PMD_BREATH });
     default: return pmdFirst({ PMD_POSE, PMD_NOD, PMD_BREATH, PMD_IDLE });
   }
 }
@@ -5862,6 +5873,8 @@ void behNext() {
     behOneShot(a, 3200, bub);
     return;
   }
+  // 1b) ko12.9.27: fuera con lluvia o nieve: coge su paraguas (casi siempre)
+  if (r < 75 && umbrellaWeather() && behDecoStart(true)) return;
   // 2) aburrido: rueda por el suelo o se tumba (ko12.9.27: o se entretiene con un objeto del suelo)
   if (idleMs > 180000UL && pet.joy < 70 && r < 20 && behDecoStart()) return;
   if (idleMs > 180000UL && pet.joy < 70 && r < 45) {
@@ -6024,6 +6037,17 @@ void drawPetBubble(int px) {
 
 // ko12.9.27: legendario en la pantalla principal: halo dorado en el suelo y destellos que se encienden y
 // apagan alrededor del cuerpo (en sitios distintos cada vez), mas motas que suben
+int petBodyH() {  // alto del cuerpo en pantalla (misma escala que el bocadillo)
+  int bh = 150;
+  const PmdAct &ia = pmd.acts[PMD_IDLE];
+  if (ia.h) {
+    int sc = 170 / ia.h;
+    sc = sc < 2 ? 2 : sc > 5 ? 5 : sc;
+    bh = (ia.base ? ia.base : ia.h) * sc;
+    bh = bh < 70 ? 70 : bh > 170 ? 170 : bh;
+  }
+  return bh;
+}
 static void drawLegendHalo(int cx, int g, uint32_t now) {
   float p = 0.5f + 0.5f * sinf(now / 420.0f);
   uint16_t c = C565(0xff, 0xc8, 0x30), cl = C565(0xff, 0xf0, 0xa0);
@@ -6046,14 +6070,7 @@ static void sparkStar(int x, int y, int l, uint16_t c, uint16_t core) {
 }
 static void drawLegendSparkle(int cx, int g, uint32_t now, bool calm) {
   uint16_t gold = C565(0xff, 0xd0, 0x40), pale = C565(0xff, 0xf6, 0xc8);
-  int bh = 150;  // alto del cuerpo en pantalla (misma escala que el bocadillo)
-  const PmdAct &ia = pmd.acts[PMD_IDLE];
-  if (ia.h) {
-    int sc = 170 / ia.h;
-    sc = sc < 2 ? 2 : sc > 5 ? 5 : sc;
-    bh = (ia.base ? ia.base : ia.h) * sc;
-    bh = bh < 70 ? 70 : bh > 170 ? 170 : bh;
-  }
+  int bh = petBodyH();
   int cy = g - bh / 2, rx = bh * 6 / 10 + 14, ry = bh * 6 / 10, n = calm ? 4 : 9;
   for (int k = 0; k < n; k++) {
     uint32_t per = (calm ? 2600 : 1500) + k * 97, tt = now + k * 373;

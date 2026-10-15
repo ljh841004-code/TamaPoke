@@ -112,6 +112,7 @@ bool Pet::decoUnlocked(uint8_t item, uint16_t dexCount) const {
     case DECO_LAMP: return walk.total >= DECO_LAMP_STEPS || wildWins >= 50;
     case DECO_TROPHY: return champWins >= 1;
     case DECO_DOLL: return dexCount >= 100;
+    case DECO_UMBRELLA: return true;  // ko12.9.27: desde el principio (lo usa fuera cuando llueve o nieva)
     default: return false;
   }
 }

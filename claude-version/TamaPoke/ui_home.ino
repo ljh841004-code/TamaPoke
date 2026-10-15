@@ -75,6 +75,26 @@ static void decoDoll(int cx, int cy, int s, bool night) {  // muneco de peluche 
   gfx->fillCircle(cx, cy - 16 * s, s, dk);
   gfx->fillEllipse(cx, cy - 2 * s, 4 * s, 4 * s, uiLerp(b, UI_WHITE, 6, 16));
 }
+// ko12.9.27: paraguas. Cerrado: de pie con el mango arriba. Abierto: lo lleva el bicho encima de la cabeza
+static const uint16_t UMB_A = C565(0x3a, 0x8c, 0xff), UMB_B = C565(0xff, 0xf2, 0x60);
+static void decoUmbrella(int cx, int cy, int s, bool night) {
+  uint16_t a = nightDim(UMB_A, night), b = nightDim(UMB_B, night), hd = nightDim(C565(0x8a, 0x5a, 0x3a), night);
+  gfx->fillRect(cx - s / 2, cy - 30 * s, s > 1 ? s : 1, 30 * s, UI_INK);  // palo
+  gfx->fillTriangle(cx, cy - 2 * s, cx - 5 * s, cy - 22 * s, cx + 5 * s, cy - 22 * s, a);  // tela plegada
+  gfx->fillTriangle(cx, cy - 6 * s, cx - 2 * s, cy - 20 * s, cx + 2 * s, cy - 20 * s, b);
+  gfx->drawTriangle(cx, cy - 2 * s, cx - 5 * s, cy - 22 * s, cx + 5 * s, cy - 22 * s, UI_INK);
+  gfx->fillRect(cx - 2 * s, cy - 23 * s, 4 * s, 2 * s, b);  // cinta
+  gfx->fillArc(cx + 3 * s, cy - 30 * s, 4 * s, 2 * s, 180, 359.9f, hd);  // mango en J
+  gfx->fillRect(cx + 5 * s, cy - 30 * s, 2 * s, 3 * s, hd);
+}
+void drawUmbrellaOpen(int cx, int y, int r, bool night) {  // y = borde de abajo de la tela
+  uint16_t a = nightDim(UMB_A, night), b = nightDim(UMB_B, night);
+  for (int k = 0; k < 6; k++) gfx->fillArc(cx, y, r, 0, 180 + k * 30, k == 5 ? 359.9f : 180 + (k + 1) * 30, (k & 1) ? b : a);
+  for (int k = 0; k < 6; k++) gfx->fillCircle(cx - r + r / 6 + k * r / 3, y, r / 6, (k & 1) ? b : a);  // borde en ondas
+  gfx->drawArc(cx, y, r, r - 1, 180, 359.9f, UI_INK);
+  gfx->fillRect(cx - 1, y - r - 6, 3, 7, UI_INK);  // punta
+  gfx->fillRect(cx - 1, y, 3, 20, UI_INK);         // palo hasta la mano
+}
 void drawDecoItem(uint8_t item, int cx, int cy, int s, bool night) {
   switch (item) {
     case DECO_CUSHION: decoCushion(cx, cy, s, night); break;
@@ -83,6 +103,7 @@ void drawDecoItem(uint8_t item, int cx, int cy, int s, bool night) {
     case DECO_LAMP: decoLamp(cx, cy, s, night); break;
     case DECO_TROPHY: decoTrophy(cx, cy, s, night); break;
     case DECO_DOLL: decoDoll(cx, cy, s, night); break;
+    case DECO_UMBRELLA: decoUmbrella(cx, cy, s, night); break;
   }
 }
 // los 3 sitios del suelo en la pantalla principal (pies en y)
@@ -96,7 +117,7 @@ static int decoScale(uint8_t i, uint8_t item) {
 // ko12.9.27: el objeto con el que esta jugando (pelota, peluche) se pinta delante del bicho (drawDecoPlay)
 static bool decoInPlay(uint8_t i) {
   return beh.mode == 4 && beh.decoT0 && beh.deco == i && pet.mood() == MOOD_HAPPY &&
-         (beh.decoItem == DECO_BALL || beh.decoItem == DECO_DOLL);
+         (beh.decoItem == DECO_BALL || beh.decoItem == DECO_DOLL || beh.decoItem == DECO_UMBRELLA);
 }
 void drawDecor(bool night) {
   for (uint8_t i = 0; i < DECO_SLOTS; i++) {
@@ -174,6 +195,18 @@ void drawDecoPlay(uint32_t now, bool night) {
       }
       break;
     }
+    case DECO_UMBRELLA: {  // ko12.9.27: abierto sobre la cabeza; las gotas resbalan por los bordes
+      int r = petBodyH() * 3 / 10 + 16, y = PET_GROUND - petBodyH() + 6 + (int)(2 * sinf(t / 400.0f));
+      if (r > 56) r = 56;
+      drawUmbrellaOpen(px, y, r, night);
+      if (sceneWeather() == WX_RAIN)
+        for (int k = 0; k < 2; k++) {
+          uint32_t ph = (t / 22 + k * 23) % 46;
+          int dx = (k ? 1 : -1) * (r + 1), dy = y + (int)ph;
+          gfx->fillCircle(px + dx, dy, 2, C565(0x60, 0xa8, 0xf0));
+        }
+      break;
+    }
     default: break;  // cojin: la siesta ya es el gesto (y el Zzz)
   }
 }
@@ -249,8 +282,14 @@ static int8_t roomSel = -1;  // objeto elegido para colocar
 #define ROOM_TOG_Y 66
 #define ROOM_PAN_Y 112
 #define ROOM_GRID_Y 236
-static const XId DECO_NAME[DECO_COUNT] = { X_DECO_CUSHION, X_DECO_PLANT, X_DECO_BALL, X_DECO_LAMP, X_DECO_TROPHY, X_DECO_DOLL };
-static const XId DECO_HOW[DECO_COUNT] = { X_DECO_H_CUSHION, X_DECO_H_PLANT, X_DECO_H_BALL, X_DECO_H_LAMP, X_DECO_H_TROPHY, X_DECO_H_DOLL };
+#define ROOM_ROW_H 48  // ko12.9.27: 7 objetos: 3 filas de 2 + el paraguas centrado abajo
+static const XId DECO_NAME[DECO_COUNT] = { X_DECO_CUSHION, X_DECO_PLANT, X_DECO_BALL, X_DECO_LAMP, X_DECO_TROPHY, X_DECO_DOLL, X_DECO_UMBRELLA };
+static const XId DECO_HOW[DECO_COUNT] = { X_DECO_H_CUSHION, X_DECO_H_PLANT, X_DECO_H_BALL, X_DECO_H_LAMP, X_DECO_H_TROPHY, X_DECO_H_DOLL, X_DECO_H_CUSHION };
+static void roomCell(int i, int &x, int &y) {
+  if (i >= 6) { x = 149; y = ROOM_GRID_Y + 3 * ROOM_ROW_H; return; }
+  x = 60 + (i % 2) * 176;
+  y = ROOM_GRID_Y + (i / 2) * ROOM_ROW_H;
+}
 static const int16_t ROOM_SLOT_X[DECO_SLOTS] = { 118, 233, 348 };
 
 void openRoom() { retMark(); roomSel = -1; xScreen = XS_ROOM; }
@@ -274,7 +313,8 @@ void renderRoomMenu() {
   // los objetos
   uint16_t dc = dexDiscoveredCount();
   for (int i = 0; i < DECO_COUNT; i++) {
-    int x = 60 + (i % 2) * 176, y = ROOM_GRID_Y + (i / 2) * 52;
+    int x, y;
+    roomCell(i, x, y);
     bool got = pet.decoUnlocked((uint8_t)i, dc);
     bool sel = roomSel == i;
     uiPanel(x, y, 168, 46, 12, sel ? C565(0xff, 0xf0, 0xc0) : got ? UI_WHITE : C565(0xe4, 0xe0, 0xd8),
@@ -285,7 +325,7 @@ void renderRoomMenu() {
     drawFitIn(XT(DECO_NAME[i]), x + 50, y + 4, 114, got ? UI_INK : 0x8410, 1);
     drawFitIn(XT(DECO_HOW[i]), x + 50, y + 24, 114, 0x8410, 1);
   }
-  drawFit(XT(roomSel >= 0 ? X_ROOM_HINT2 : X_ROOM_HINT), 396, 280, 0x8410, 1);
+  drawFit(XT(roomSel >= 0 ? X_ROOM_HINT2 : X_ROOM_HINT), ROOM_GRID_Y + 4 * ROOM_ROW_H + 2, 240, 0x8410, 1);
   drawNav(NAV_L, UI_INK);
   uiFlush();
 }
@@ -317,8 +357,12 @@ void roomTap(int16_t x, int16_t y) {
       }
     return;
   }
-  if (y >= ROOM_GRID_Y && y < ROOM_GRID_Y + 3 * 52 && x >= 60 && x < 404) {
-    int i = ((y - ROOM_GRID_Y) / 52) * 2 + (x >= 236 ? 1 : 0);
+  if (y >= ROOM_GRID_Y && y < ROOM_GRID_Y + 4 * ROOM_ROW_H && x >= 60 && x < 404) {
+    int row = (y - ROOM_GRID_Y) / ROOM_ROW_H, i = row * 2 + (x >= 236 ? 1 : 0);
+    if (row == 3) {
+      if (x < 149 || x >= 317) return;
+      i = 6;
+    }
     if (i >= DECO_COUNT) return;
     if (!pet.decoUnlocked((uint8_t)i, dexDiscoveredCount())) { sfxPlay(SFX_DENY); return; }
     roomSel = roomSel == i ? -1 : i;

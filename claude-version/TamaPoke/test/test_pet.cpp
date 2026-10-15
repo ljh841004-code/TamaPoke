@@ -1717,6 +1717,7 @@ TEST(room, objetos_y_condiciones) {
   p.champWins = 1;
   CHECK(p.decoUnlocked(DECO_TROPHY, 0));
   CHECK(!p.decoUnlocked(DECO_DOLL, 99));
+  CHECK(p.decoUnlocked(DECO_UMBRELLA, 0));  // ko12.9.27
   CHECK(p.decoUnlocked(DECO_DOLL, 100));
   p.roomOn = 1; p.deco[0] = DECO_PLANT + 1; p.deco[2] = DECO_CUSHION + 1;
   p.saveNow();

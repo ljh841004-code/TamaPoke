@@ -366,6 +366,19 @@ static void scenes(bool ko, const char *sfx) {
       // al acabar el rato vuelve a lo normal y la pelota a su sitio
       beh.mode = 0; beh.bubble = 0; render();
       navCheck("deco: sin jugar, la pelota en su sitio", !decoInPlay(2));
+      {  // ko12.9.27: fuera con lluvia: coge el paraguas
+        extern int8_t gMockRealWx;
+        pet.roomOn = 0; gMockRealWx = 2;
+        memset(pet.deco, 0, sizeof(pet.deco)); pet.deco[1] = DECO_UMBRELLA + 1;
+        beh.mode = 0; beh.until = 0; render();  // elige: casi siempre el paraguas
+        navCheck("lluvia fuera: va a por el paraguas", beh.mode != 4 || (beh.decoItem == DECO_UMBRELLA));
+        beh.mode = 0; render(); shot("66_deco_umbrella_spot");
+        beh.mode = 4; beh.deco = 1; beh.decoItem = DECO_UMBRELLA; beh.x = beh.targetX = decoSlotX(1);
+        beh.decoT0 = beh.t0 = gMockMillis - 800; beh.until = gMockMillis + 5000; beh.bubble = BUB_NOTE; beh.bubbleUntil = gMockMillis + 5000;
+        render(); shot("66_deco_umbrella");
+        gMockRealWx = 3; render(); shot("66_deco_umbrella_snow");
+        gMockRealWx = -1; beh.mode = 0; beh.bubble = 0;
+      }
       memcpy(pet.deco, d0, sizeof(d0)); pet.roomOn = r0;
       beh.x = beh.targetX = 233;
     }

@@ -23,7 +23,7 @@ enum : uint8_t { PERS_NONE = 0, PERS_GLUTTON, PERS_PLAYFUL, PERS_CUDDLY, PERS_HA
 #define PERS_MIN_ACTS 30        // cuidados que hacen falta para que se vea el caracter
 uint8_t personalityOf(const LifeLog &l, uint8_t discipline);
 #define DECO_SLOTS 3   // ko12.4: izquierda, delante (derecha), derecha
-enum : uint8_t { DECO_CUSHION = 0, DECO_PLANT, DECO_BALL, DECO_LAMP, DECO_TROPHY, DECO_DOLL, DECO_COUNT };
+enum : uint8_t { DECO_CUSHION = 0, DECO_PLANT, DECO_BALL, DECO_LAMP, DECO_TROPHY, DECO_DOLL, DECO_UMBRELLA, DECO_COUNT };  // ko12.9.27: paraguas
 #define WALK_GOAL1 2000   // animo +20, vinculo +2
 #define WALK_GOAL2 5000   // 1 caramelo de su familia
 #define WALK_GOAL3 10000  // 2 trozos de caramelo raro
