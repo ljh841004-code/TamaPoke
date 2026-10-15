@@ -17,7 +17,7 @@ DEX = 251
 MUSIC = ['bgm.wav', 'bgm2.wav', 'battle_wild.wav', 'battle_gym.wav', 'battle_champ.wav', 'fame.wav', 'fame2.wav',
          'story.wav', 'story_anime.wav', 'story_battle.wav', 'story_gym.wav', 'story_rocket.wav',
          'story_league.wav', 'story_end.wav']
-FX_N = 171
+FX_N = 251  # ko12.10: una por movimiento (fx/wNNN.bin)
 
 
 def expected():
@@ -27,8 +27,7 @@ def expected():
         'r (배틀 그림)': ['r%03d.bin' % d for d in range(1, DEX + 1)],
         'rs (배틀 색이 다른)': ['rs%03d.bin' % d for d in range(1, DEX + 1)],
         'cry (울음소리)': ['cry%03d.wav' % d for d in range(1, DEX + 1)],
-        'fx (기술 이펙트)': ['fx/f%02d%d%d.bin' % (k // 9, (k % 9) // 3, k % 3) for k in range(144)] +
-                        ['fx/m%03d.bin' % i for i in range(145, FX_N + 1)],
+        'fx (기술 이펙트)': ['fx/w%03d.bin' % i for i in range(1, FX_N + 1)],
         'thumbs.bin (작은 그림)': ['thumbs.bin'],
         'story.bin (스토리 인물)': ['story.bin'],
     }
