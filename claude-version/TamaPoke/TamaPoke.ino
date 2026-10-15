@@ -102,17 +102,19 @@ bool monShinyFor = false;
 
 // comportamiento del bicho en pantalla
 struct {
-  uint8_t mode = 0;     // 0 idle, 1 paseo, 2 gesto one-shot, 3 (ko10.8) practica su ataque
+  uint8_t mode = 0;     // 0 idle, 1 paseo, 2 gesto one-shot, 3 (ko10.8) practica su ataque, 4 (ko12.9.27) juega con un objeto
   uint8_t act = PMD_IDLE;
   uint32_t t0 = 0;      // inicio de la animacion en curso
   uint32_t until = 0;   // fin del estado actual
   float x = 233, targetX = 233;
   uint8_t bubble = 0;       // ko10.8: bocadillo encima (BUB_*)
   uint32_t bubbleUntil = 0;
+  uint8_t deco = 0, decoItem = 0;  // ko12.9.27: modo 4 = juega con el objeto del sitio deco
+  uint32_t decoT0 = 0;             //   0 = todavia va andando hacia el; luego, inicio del juego
 } beh;
 // ko10.8: bocadillos de la pantalla principal
 enum : uint8_t { BUB_NONE = 0, BUB_DOTS, BUB_BORED, BUB_HUNGRY, BUB_DIRTY, BUB_SLEEPY,
-                 BUB_NOTE, BUB_RAIN, BUB_COLD, BUB_SUN };
+                 BUB_NOTE, BUB_RAIN, BUB_COLD, BUB_SUN, BUB_HEART };
 #define PET_GROUND 304  // linea de suelo de la mascota
 #define PET_MAXS 6      // ko11.10.1: con el dibujo liso el bicho se veia algo pequeno: x6 (antes x5)
 #define PET_FITH 176    //   alto objetivo del lienzo IDLE (antes 170): x5,5 con lienzo de 32
@@ -5793,6 +5795,45 @@ static bool typeShoots(uint8_t t) {
          t == PT_GHOST || t == PT_DRAGON || t == PT_POISON || t == PT_GRASS;
 }
 
+// ko12.9.27: juega solo con los objetos del suelo (cojin, maceta, pelota, lampara, trofeo, peluche):
+// va andando hasta el y se queda un rato usandolo (siesta en el cojin, olfatea la flor, cabecea la pelota...)
+int decoSlotX(uint8_t slot);  // ui_home.ino
+void drawDecoPlay(uint32_t now, bool night);
+static bool behDecoStart() {
+  if (!(pmd.has(PMD_WALKL) || pmd.has(PMD_WALKR))) return false;
+  uint8_t cand[DECO_SLOTS], n = 0;
+  for (uint8_t i = 0; i < DECO_SLOTS; i++)
+    if (pet.deco[i] && pet.deco[i] <= DECO_COUNT) cand[n++] = i;
+  if (!n) return false;
+  uint8_t i = cand[random(n)], it = pet.deco[i] - 1;
+  int ix = decoSlotX(i), side = ix < CX ? 1 : -1;
+  int tx = it == DECO_CUSHION ? ix : ix + side * (it == DECO_DOLL ? 46 : 64);  // encima del cojin; al lado de lo demas
+  tx = tx < 100 ? 100 : tx > 366 ? 366 : tx;
+  beh.mode = 4;
+  beh.deco = i;
+  beh.decoItem = it;
+  beh.decoT0 = 0;
+  beh.targetX = tx;
+  beh.until = millis() + 12000;  // si no llega en 12 s, otra cosa
+  return true;
+}
+static uint32_t decoPlayMs(uint8_t it) {
+  return it == DECO_CUSHION ? 6500 : it == DECO_BALL ? 4400 : it == DECO_LAMP ? 5000 : 4000;
+}
+static uint8_t decoPlayAct(uint8_t it) {
+  switch (it) {
+    case DECO_CUSHION: return pmdFirst({ PMD_SLEEP, PMD_LAYING, PMD_BREATH, PMD_IDLE });
+    case DECO_PLANT: return pmdFirst({ PMD_NOD, PMD_BREATH, PMD_IDLE });
+    case DECO_BALL: return pmdFirst({ PMD_NOD, PMD_POSE, PMD_IDLE });
+    case DECO_LAMP: return pmdFirst({ PMD_LAYING, PMD_BREATH, PMD_IDLE });
+    case DECO_TROPHY: return pmdFirst({ PMD_POSE, PMD_NOD, PMD_IDLE });
+    default: return pmdFirst({ PMD_POSE, PMD_NOD, PMD_BREATH, PMD_IDLE });
+  }
+}
+static uint8_t decoPlayBub(uint8_t it) {
+  return it == DECO_CUSHION ? BUB_SLEEPY : (it == DECO_DOLL || it == DECO_PLANT) ? BUB_HEART : BUB_NOTE;
+}
+
 // elige el siguiente capricho del bicho cuando esta contento.
 // ko10.8: ademas del paseo y los gestos, reacciona a como esta y a lo que pasa:
 //   - necesidad baja (<45): bocadillo con lo que pide (comida, bano, juego, sueno)
@@ -5821,7 +5862,8 @@ void behNext() {
     behOneShot(a, 3200, bub);
     return;
   }
-  // 2) aburrido: rueda por el suelo o se tumba
+  // 2) aburrido: rueda por el suelo o se tumba (ko12.9.27: o se entretiene con un objeto del suelo)
+  if (idleMs > 180000UL && pet.joy < 70 && r < 20 && behDecoStart()) return;
   if (idleMs > 180000UL && pet.joy < 70 && r < 45) {
     uint8_t a = pmdFirst({ random(2) ? PMD_ROTATE : PMD_LAYING, PMD_ROTATE, PMD_LAYING, PMD_BREATH });
     if (a != PMD_NACTS) {
@@ -5860,6 +5902,7 @@ void behNext() {
     beh.until = now + 2600;
     return;
   }
+  if (random(100) < 28 && behDecoStart()) return;  // ko12.9.27: un rato con sus cosas
   r = random(100);
   if (r < 35 && (pmd.has(PMD_WALKL) || pmd.has(PMD_WALKR))) {
     beh.mode = 1;  // paseo
@@ -5957,6 +6000,14 @@ void drawPetBubble(int px) {
       }
       break;
     }
+    case BUB_HEART: {  // ko12.9.27: corazon que late
+      int r = 6 + (int)(1.5f * sinf(t / 160.0f));
+      uint16_t c = C565(0xf0, 0x48, 0x70);
+      gfx->fillCircle(cx - r + 1, cy - 2, r, c);
+      gfx->fillCircle(cx + r - 1, cy - 2, r, c);
+      gfx->fillTriangle(cx - 2 * r + 1, cy, cx + 2 * r - 1, cy, cx, cy + 2 * r + 2, c);
+      break;
+    }
     case BUB_SUN: {  // sol
       uint16_t c = C565(0xff, 0xb0, 0x20);
       gfx->fillCircle(cx, cy, 9, c);
@@ -5968,6 +6019,60 @@ void drawPetBubble(int px) {
       break;
     }
     default: break;
+  }
+}
+
+// ko12.9.27: legendario en la pantalla principal: halo dorado en el suelo y destellos que se encienden y
+// apagan alrededor del cuerpo (en sitios distintos cada vez), mas motas que suben
+static void drawLegendHalo(int cx, int g, uint32_t now) {
+  float p = 0.5f + 0.5f * sinf(now / 420.0f);
+  uint16_t c = C565(0xff, 0xc8, 0x30), cl = C565(0xff, 0xf0, 0xa0);
+  int rx = 58 + (int)(6 * p), ry = 11 + (int)(2 * p);
+  gfx->drawEllipse(cx, g - 2, rx, ry, c);
+  gfx->drawEllipse(cx, g - 2, rx - 1, ry - 1, cl);
+}
+static void sparkStar(int x, int y, int l, uint16_t c, uint16_t core) {
+  if (l <= 0) return;
+  gfx->fillRect(x - l, y, 2 * l + 1, 1, c);
+  gfx->fillRect(x, y - l, 1, 2 * l + 1, c);
+  if (l >= 3) {
+    gfx->fillRect(x - l / 2, y - 1, l + 1, 3, c);
+    gfx->fillRect(x - 1, y - l / 2, 3, l + 1, c);
+    int d = l / 2;
+    gfx->drawPixel(x - d, y - d, c); gfx->drawPixel(x + d, y - d, c);
+    gfx->drawPixel(x - d, y + d, c); gfx->drawPixel(x + d, y + d, c);
+  }
+  gfx->fillRect(x - 1, y - 1, 3, 3, core);
+}
+static void drawLegendSparkle(int cx, int g, uint32_t now, bool calm) {
+  uint16_t gold = C565(0xff, 0xd0, 0x40), pale = C565(0xff, 0xf6, 0xc8);
+  int bh = 150;  // alto del cuerpo en pantalla (misma escala que el bocadillo)
+  const PmdAct &ia = pmd.acts[PMD_IDLE];
+  if (ia.h) {
+    int sc = 170 / ia.h;
+    sc = sc < 2 ? 2 : sc > 5 ? 5 : sc;
+    bh = (ia.base ? ia.base : ia.h) * sc;
+    bh = bh < 70 ? 70 : bh > 170 ? 170 : bh;
+  }
+  int cy = g - bh / 2, rx = bh * 6 / 10 + 14, ry = bh * 6 / 10, n = calm ? 4 : 9;
+  for (int k = 0; k < n; k++) {
+    uint32_t per = (calm ? 2600 : 1500) + k * 97, tt = now + k * 373;
+    uint32_t c = tt / per;
+    float ph = (float)(tt % per) / per;
+    uint32_t h = (uint32_t)(k + 1) * 2654435761u ^ c * 40503u;
+    h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
+    float a = (h % 628) / 100.0f, rf = 0.62f + (h >> 10) % 40 / 100.0f;
+    int sx = cx + (int)(cosf(a) * rx * rf), sy = cy + (int)(sinf(a) * ry * rf);
+    if (sy > g - 4) sy = g - 4 - (int)((h >> 4) % 20);
+    int l = (int)((calm ? 6 : 11) * sinf(ph * 3.1416f) + 0.5f);
+    if (l >= 6) gfx->drawCircle(sx, sy, l / 2 + 2, pale);  // brillo alrededor
+    sparkStar(sx, sy, l, (k & 1) ? gold : pale, UI_WHITE);
+  }
+  if (calm) return;
+  for (int k = 0; k < 6; k++) {  // motas doradas que suben desde el halo
+    uint32_t ph = (now / 14 + k * 41) % (uint32_t)(bh * 3 / 4);
+    int sx = cx - 50 + (int)((k * 37 + (now / 1500) * 23) % 100);
+    gfx->fillRect(sx, g - 6 - (int)ph, 3, 3, (int)ph < bh / 2 ? gold : pale);
   }
 }
 
@@ -6006,6 +6111,27 @@ void drawPetPMD() {
         beh.x += (d > 0 ? 3.0f : -3.0f);
         act = (d > 0) ? PMD_WALKR : PMD_WALKL;
       }
+    } else if (beh.mode == 4) {  // ko12.9.27: va hacia su objeto y juega con el
+      if (!pet.deco[beh.deco] || pet.deco[beh.deco] - 1 != beh.decoItem) {  // lo quitaron
+        behNext();
+        act = PMD_IDLE;
+      } else if (!beh.decoT0) {
+        float d = beh.targetX - beh.x;
+        if (fabsf(d) < 4) {
+          beh.x = beh.targetX;
+          beh.decoT0 = beh.t0 = now;
+          uint32_t ms = decoPlayMs(beh.decoItem);
+          beh.until = now + ms;
+          beh.bubble = decoPlayBub(beh.decoItem);
+          beh.bubbleUntil = now + ms;
+          act = decoPlayAct(beh.decoItem);
+        } else {
+          beh.x += (d > 0 ? 3.0f : -3.0f);
+          act = (d > 0) ? PMD_WALKR : PMD_WALKL;
+        }
+      } else {
+        act = decoPlayAct(beh.decoItem);
+      }
     } else if (beh.mode == 3) {
       // ko10.8: practica: carga (si la trae) y luego su ataque de tipo con el
       // mismo efecto que en batalla, lanzado hacia el lado con mas sitio
@@ -6035,11 +6161,15 @@ void drawPetPMD() {
     gfx->fillEllipse((int)beh.x, PET_GROUND - 2, 60, 10, lerp565(soil, C565(0, 0, 0), 3, 16));
     gfx->fillEllipse((int)beh.x, PET_GROUND - 2, 44, 7, lerp565(soil, C565(0, 0, 0), 6, 16));
   }
+  bool legend = DEX_TBL[pet.speciesId].rarity == R_LEGENDARIO;  // ko12.9.27: los legendarios brillan
+  if (legend) drawLegendHalo((int)beh.x, PET_GROUND, now);
 #ifdef HOST_HD
   if (!hdArtOn() || !hdPetDraw(pet.speciesId, pet.shiny, act, (int)beh.x, PET_GROUND, now - beh.t0, pmd.loaded))
 #endif
   drawPmdActM(pmd, act, (int)beh.x, PET_GROUND, (beh.mode == 3 && petFxT != 0xFFFFFFFFu) ? petFxT : now - beh.t0,
               loop || act == PMD_IDLE, false, PET_MAXS, PET_FITH);
+  if (beh.mode == 4 && beh.decoT0 && m == MOOD_HAPPY) drawDecoPlay(now, pet.roomOn ? false : gNight);  // ko12.9.27
+  if (legend) drawLegendSparkle((int)beh.x, PET_GROUND, now, m == MOOD_SLEEPING);
   if (orbValid(pet.orb)) drawOrbSlot((int)beh.x + 60, PET_GROUND - 18, 12, pet.orb, now);  // ko11.16: su orbe, abajo a la derecha
   {  // ko11.9.2: pulsacion larga para soltarlo: el circulo se llena en 3 s
     float hp = petHoldProgress();

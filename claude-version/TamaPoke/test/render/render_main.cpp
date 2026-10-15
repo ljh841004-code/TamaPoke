@@ -341,6 +341,43 @@ static void scenes(bool ko, const char *sfx) {
     render(); shot("64_beh_rain");
     beh.act = pmd.has(PMD_LAYING) ? PMD_LAYING : PMD_BREATH; beh.bubble = BUB_SUN;
     render(); shot("65_beh_sun");
+    {  // ko12.9.27: juega solo con los objetos del suelo (uno de cada, a media accion)
+      uint8_t r0 = pet.roomOn, d0[DECO_SLOTS];
+      memcpy(d0, pet.deco, sizeof(d0));
+      pet.roomOn = 1;
+      static const char *nm[DECO_COUNT] = { "cushion", "plant", "ball", "lamp", "trophy", "doll" };
+      for (uint8_t it = 0; it < DECO_COUNT; it++) {
+        memset(pet.deco, 0, sizeof(pet.deco));
+        uint8_t slot = it % DECO_SLOTS;
+        pet.deco[slot] = it + 1;
+        beh.mode = 4; beh.deco = slot; beh.decoItem = it;
+        beh.x = beh.targetX = slot == 0 ? (it == DECO_CUSHION ? 100 : 142) : decoSlotX(slot) + (it == DECO_DOLL ? -46 : -64);
+        if (it == DECO_CUSHION && slot) beh.x = decoSlotX(slot);
+        beh.decoT0 = beh.t0 = gMockMillis - 550; beh.until = gMockMillis + 5000;
+        beh.bubble = it == DECO_CUSHION ? BUB_SLEEPY : (it == DECO_DOLL || it == DECO_PLANT) ? BUB_HEART : BUB_NOTE;
+        beh.bubbleUntil = gMockMillis + 5000;
+        render();
+        char fn[40]; snprintf(fn, sizeof(fn), "66_deco_%s", nm[it]); shot(fn);
+      }
+      beh.deco = 2; beh.decoItem = DECO_BALL;  // la pelota en lo alto
+      memset(pet.deco, 0, sizeof(pet.deco)); pet.deco[2] = DECO_BALL + 1;
+      beh.x = decoSlotX(2) - 64; beh.decoT0 = beh.t0 = gMockMillis - 1100 * 3 - 500;
+      render(); shot("66_deco_ball_top");
+      // al acabar el rato vuelve a lo normal y la pelota a su sitio
+      beh.mode = 0; beh.bubble = 0; render();
+      navCheck("deco: sin jugar, la pelota en su sitio", !decoInPlay(2));
+      memcpy(pet.deco, d0, sizeof(d0)); pet.roomOn = r0;
+      beh.x = beh.targetX = 233;
+    }
+    {  // ko12.9.27: legendario en la pantalla principal: brilla
+      int16_t sp0 = pet.speciesId;
+      pet.speciesId = 150; ensureMon();
+      beh.mode = 0; beh.until = gMockMillis + 5000; beh.bubble = 0;
+      render(); shot("67_legend_main");
+      tick(700); render(); shot("67_legend_main2");
+      pet.speciesId = sp0; ensureMon();
+      render();
+    }
     beh.mode = 0; beh.until = 0; beh.bubble = 0; pet.joy = j0; pet.hygiene = h0; pet.careMistakes = m0;
   }
   // ficha: combate

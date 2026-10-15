@@ -87,13 +87,94 @@ void drawDecoItem(uint8_t item, int cx, int cy, int s, bool night) {
 }
 // los 3 sitios del suelo en la pantalla principal (pies en y)
 static const int16_t DECO_POS[DECO_SLOTS][3] = { { 78, 300, 3 }, { 336, 304, 2 }, { 396, 300, 2 } };  // x, y, escala
+int decoSlotX(uint8_t slot) { return slot < DECO_SLOTS ? DECO_POS[slot][0] : CX; }
+static int decoScale(uint8_t i, uint8_t item) {
+  int s = DECO_POS[i][2];
+  if (item == DECO_CUSHION && i) s = 2;  // el cojin solo es grande a la izquierda
+  return s;
+}
+// ko12.9.27: el objeto con el que esta jugando (pelota, peluche) se pinta delante del bicho (drawDecoPlay)
+static bool decoInPlay(uint8_t i) {
+  return beh.mode == 4 && beh.decoT0 && beh.deco == i && pet.mood() == MOOD_HAPPY &&
+         (beh.decoItem == DECO_BALL || beh.decoItem == DECO_DOLL);
+}
 void drawDecor(bool night) {
   for (uint8_t i = 0; i < DECO_SLOTS; i++) {
     uint8_t it = pet.deco[i];
-    if (!it || it > DECO_COUNT) continue;
-    int s = DECO_POS[i][2];
-    if (it - 1 == DECO_CUSHION && i) s = 2;  // el cojin solo es grande a la izquierda
-    drawDecoItem((uint8_t)(it - 1), DECO_POS[i][0], DECO_POS[i][1] - 12, s, night);
+    if (!it || it > DECO_COUNT || decoInPlay(i)) continue;
+    drawDecoItem((uint8_t)(it - 1), DECO_POS[i][0], DECO_POS[i][1] - 12, decoScale(i, it - 1), night);
+  }
+}
+static void decoHeart(int x, int y, int r, uint16_t c) {
+  gfx->fillCircle(x - r + 1, y, r, c);
+  gfx->fillCircle(x + r - 1, y, r, c);
+  gfx->fillTriangle(x - 2 * r + 1, y + 1, x + 2 * r - 1, y + 1, x, y + 2 * r + 2, c);
+}
+static void decoTwinkle(int x, int y, int l, uint16_t c) {
+  if (l <= 0) return;
+  gfx->fillRect(x - l, y, 2 * l + 1, 1, c);
+  gfx->fillRect(x, y - l, 1, 2 * l + 1, c);
+  gfx->fillRect(x - 1, y - 1, 3, 3, UI_WHITE);
+}
+// ko12.9.27: lo que pasa mientras juega con el objeto (encima del bicho)
+void drawDecoPlay(uint32_t now, bool night) {
+  uint8_t i = beh.deco, it = beh.decoItem;
+  if (i >= DECO_SLOTS) return;
+  int ix = DECO_POS[i][0], iy = DECO_POS[i][1] - 12, s = decoScale(i, it), px = (int)beh.x;
+  uint32_t t = now - beh.decoT0;
+  switch (it) {
+    case DECO_BALL: {  // la cabecea: sube en arco hasta encima de su cabeza y vuelve a su sitio
+      float p = (float)(t % 1100) / 1100.0f, a = sinf(p * 3.1416f);
+      int bx = ix + (int)((px - ix) * a), by = iy - (int)(95 * a);
+      if (a < 0.15f) by += (int)(6 * (0.15f - a) / 0.15f) - 3;  // rebota en el suelo
+      drawDecoItem(DECO_BALL, bx, by, s, night);
+      break;
+    }
+    case DECO_DOLL: {  // lo abraza: el peluche se acerca, da saltitos y salen corazones
+      int dx = ix + (px - ix) * 2 / 5, dy = iy - (int)(10 * fabsf(sinf(t / 260.0f)));
+      drawDecoItem(DECO_DOLL, dx, dy, s, night);
+      for (int k = 0; k < 3; k++) {
+        uint32_t ph = (t / 20 + k * 25) % 75;
+        decoHeart(dx - 20 + k * 20, dy - 60 - (int)ph, ph < 55 ? 5 : 3, C565(0xf0, 0x58, 0x80));
+      }
+      break;
+    }
+    case DECO_PLANT: {  // la olfatea: sale una flor y suben corazoncitos/petalos
+      int fx = ix, fy = iy - 34 * s;
+      int r = t < 600 ? (int)(t * 6 * s / 600) / 2 : 3 * s;
+      uint16_t pet_ = nightDim(C565(0xff, 0x9c, 0xc8), night);
+      for (int k = 0; k < 5; k++) {
+        float a = k * 1.2566f + t / 1500.0f;
+        gfx->fillCircle(fx + (int)(r * cosf(a)), fy + (int)(r * sinf(a)), r * 2 / 3 + 1, pet_);
+      }
+      gfx->fillCircle(fx, fy, r / 2 + 1, nightDim(C565(0xff, 0xe0, 0x50), night));
+      for (int k = 0; k < 3; k++) {
+        uint32_t ph = (t / 18 + k * 37) % 100;
+        int hx = fx + (px - fx) / 3 + (int)(8 * sinf((ph + k * 20) / 12.0f));
+        gfx->fillCircle(hx, fy - 6 - (int)ph, 2, pet_);
+      }
+      break;
+    }
+    case DECO_LAMP: {  // se calienta junto a la lampara: la luz late mas grande
+      float p = 0.5f + 0.5f * sinf(t / 500.0f);
+      uint16_t y = C565(0xff, 0xe0, 0x70);
+      for (int k = 0; k < 2; k++) gfx->drawCircle(ix, iy - 16 * s, (int)((18 + k * 6 + 6 * p) * s), uiLerp(y, UI_WHITE, 6 + 4 * k, 16));
+      for (int k = 0; k < 4; k++) {  // motas de luz
+        float a = k * 1.5708f + t / 900.0f;
+        decoTwinkle(ix + (int)(30 * s * cosf(a)), iy - 16 * s + (int)(22 * s * sinf(a)), 2 + (int)(2 * p), y);
+      }
+      break;
+    }
+    case DECO_TROPHY: {  // presume de su trofeo: destellos alrededor
+      for (int k = 0; k < 4; k++) {
+        float ph = (float)((t + k * 310) % 1240) / 1240.0f;
+        int l = (int)(6 * sinf(ph * 3.1416f));
+        int tx = ix + ((k & 1) ? 16 : -16) * s + (k >> 1) * 4, ty = iy - (k < 2 ? 26 : 12) * s;
+        decoTwinkle(tx, ty, l, C565(0xff, 0xe0, 0x60));
+      }
+      break;
+    }
+    default: break;  // cojin: la siesta ya es el gesto (y el Zzz)
   }
 }
 
