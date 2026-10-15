@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko12.9.25)
+# TamaPoke KO (v1.17-ko12.9.26)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
@@ -153,6 +153,7 @@ USB 드라이브 모드는 ko6에서 뺐어요 (실제 보드에서 동작하지
 - ✅ ko11.5: 부팅 단계 기록(RTC_NOINIT) + 화면/콘솔 표시, 재부팅 원인(esp_reset_reason), 2회 연속 실패 시 안전 모드(SD·WiFi·소리 끔). PC 테스트 211개
 - ✅ ko11.6: SD 세이브 백업(2슬롯·CRC·자동/수동·부팅 복원 질문), 파티션 재배치(app 6MB×2 + nvs2 256KB, nvs/otadata 그대로, 박스·도감 nvs2로 이전), 터치 이벤트 시각 기록, 위쪽 두 번 탭 나가기. PC 테스트 217개
 - ✅ ko11.6.1: ◀ 뒤로가기(시간·네트워크·백업), 챔피언 연승(chs/chb/fstk), 백업 flags(수동/자동), screenBase 배경색 직접 채움(깜박임), 포털 TX 8.5dBm, 물약 35%·15, nvs2 표시 점. PC 테스트 219개
+- ✅ ko12.9.26: legendIntroStart() (rarity R_LEGENDARIO) en startTrainer, startWildIn y nextTrainerMon (antes solo startTrainer). prgLoadFor recarga prgMe si cambia prgMeDex/prgMeShiny (cambio en equipo). NET_MANUAL_PATH2 /mons/manual.pdf (manualPathLocked). drawBattleBg vuelve a pedir el framebuffer antes de guardar la cache (app HD)
 - ✅ ko12.9.25: 설정 SET_ID_MAN [설명서] -> openManual(): netManualOnSd() 이면 netStartPortal + renderManual 2단계 QR (makeQr 캐시를 글자 기준으로: WiFi / NET_MANUAL_URL). net.cpp pageManual: SD /manual.pdf를 4KB씩 SdCardLock 잡았다 놓으며 전송 (포털 /manual.pdf, /manual, 집 와이파이 /manual.pdf), 포털 첫 화면에 링크. font_ko 다시 생성
 - ✅ ko12.9.24: 실제 날씨 = NTP 성공 뒤 NET_WX 상태에서 wxTask(코어 0): ip-api.com(하루 1번, lat/lon NVS) + open-meteo current=weather_code(http, 안 되면 https insecure) -> wxClassOfWmo -> netRealWx(3시간 유효) -> sceneWeather = weatherWithReal. 켜짐이면 자동 동기화 2시간마다 (wxon NVS). 겹침: 도감 썸네일 최대 110px, ORB_CELL_H 90, 사탕 가방 drawThumbFit, 배구 글자 y+60, 감기 창 열 때 toastUntil=0, spdNote(y 348 흰 바탕). 아래 [탭: 뒤로] 제거(카드, 훈련 메뉴, 체육관:리그:도전, SD 업데이트 파일 없음), 센터 = NAV_L + CTR_HEAL 가운데. swapLayout 4개 이상 = 두 줄(SW2_PANEL_Y 250, SW2_Y 298)
 - ✅ ko12.9.23: 기분 막대 = 뗀 위치도 판정 (GAUGE_HIT_Y 230, lowLift), imuPoll 60ms + 3회 실패 2초 쉼. 사탕 candyCost = 기본 × (오늘 사용 + 1), cuDay(날짜) / cuUsed[] NVS cud:cuu. LEVEL_MAX 150, lvlCap도 150. wildMatchPower: WILD_POW_* (희귀 98, 전설 125-12+L/10, 속성 불리 ×0.88 / 유리 ×1.06), test/sim 시뮬레이터. 전투 drawRarityAura / drawRarityCharge, drawHpBox(rk) 탭. 도감 dexHintView [출현 장소]. 지역 화면 구슬 = 오른쪽 아래 버튼. simon: 마지막 불 켜질 때 입력 시작, 150ms 튐 무시, 경계 14도. 방어 = 구멍 메우기 (hlX/hlW 96->44, HL_PERF 6, 좋음 = 폭의 40%, hlLimit 6500-150n 최소 3200, 속도 110+8n 최대 300). thumbs2.bin (make_thumbs.py: 자르기 + 48px 블록 축소) 먼저 읽기, drawThumbFit x1/x2/x4. font_ko(멍)
