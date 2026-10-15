@@ -2343,6 +2343,9 @@ void drawBattlers() {
       if (e.kind != EV_USE) drawRarityCharge((me ? meX : foeX), (me ? meG - 60 : foeG - 50), rarityKind(me ? bvMeDex : bvFoeDex), t);  // ko12.9.23
       if (fxa) fxa->drawFg(gfx->getFramebuffer(), fxSide, t, bvShakeX, bvShakeY);
       else if (e.kind == EV_USE) drawStatusMoveFx(e.mid, ax + bvShakeX, ay + bvShakeY, tx + bvShakeX, ty + bvShakeY, t);
+      else if (e.mid && moveDef(e.mid).fam && e.kind != EV_COUNTER)  // ko12.10: puno, patada, mordisco...: su dibujo
+        drawMoveFx2((uint8_t)(moveDef(e.mid).fam - 1), ax + bvShakeX, ay + bvShakeY, tx + bvShakeX, ty + bvShakeY,
+                    t * 900 / 1400, typeColor(moveDef(e.mid).type));
       else drawMoveFx(fx, ax + bvShakeX, ay + bvShakeY, tx + bvShakeX, ty + bvShakeY, t,
                  (e.kind == EV_HIT || e.kind == EV_COUNTER) && e.eff, e.eff, typed ? mtier : 0, typed ? mvar : 0);
     } else if (e.kind == EV_STAT || e.kind == EV_STATUS || e.kind == EV_STDMG || e.kind == EV_CANT ||

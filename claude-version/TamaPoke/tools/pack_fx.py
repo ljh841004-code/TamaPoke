@@ -10,7 +10,7 @@ pantalla redonda de 466x466 para los dos sentidos:
            (si el json trae version del rival, esa ya viene en el espacio del lado 0)
 El firmware solo pega los fotogramas: nada de girar ni escalar en el ESP32.
 
-Formato (mons/fx/fTTSV.bin; TT = tipo, S = fase, V = variante):
+Formato (ko12.10: mons/fx/wNNN.bin, NNN = id del movimiento original; antes fTTSV.bin):
   "TFX2" u8 lados u16 ms_por_fotograma u8 nfondos
   fondo: u16 w, u16 h, u16 npal, npal * (u16 c565, u8 a 0..32), w*h indices
          (color normal, sin premultiplicar; se repite en mosaico)
@@ -81,6 +81,22 @@ FALLBACK = {
     'heat-wave': ['burning-jealousy', 'lava-plume', 'incinerate'],
     'fissure': ['precipice-blades', 'headlong-rush', 'scorching-sands'],
     'tail-whip': ['baby-doll-eyes', 'tearful-look', 'play-nice', 'charm'],
+    # ko12.10: movimientos originales sin animacion propia en PokeRogue: una parecida
+    'vice-grip': ['vise-grip', 'crabhammer'],
+    'bind': ['wrap', 'constrict'],
+    'seismic-toss': ['vital-throw', 'submission', 'circle-throw'],
+    'struggle': ['tackle'],
+    'nightmare': ['dark-void', 'hypnosis'],
+    'transform': ['psych-up', 'imprison'],
+    'mimic': ['copycat', 'psych-up'],
+    'meditate': ['calm-mind', 'bulk-up'],
+    'double-team': ['agility'],
+    'minimize': ['agility'],
+    'rest': ['sleep-talk', 'yawn'],
+    'endure': ['protect', 'detect'],
+    'flash': ['light-screen', 'dazzling-gleam'],
+    'rain-dance': ['water-sport', 'aqua-ring'],
+    'sunny-day': ['morning-sun', 'synthesis'],
 }
 
 
@@ -432,35 +448,34 @@ def pack_or_fallback(t, s, v, name, fname=None):
     return r
 
 
+def crystal_moves():
+    """ko12.10: [(id, slug)] de los 251 movimientos originales (comentarios de moves_data.h)."""
+    src = open(os.path.join(HERE, '..', 'moves_data.h'), encoding='utf-8').read()
+    tbl = src[src.index('MOVE_TBL[MOVE_N]'):src.index('};', src.index('MOVE_TBL[MOVE_N]'))]
+    return [(int(i), n) for i, n in re.findall(r'//\s+(\d+)\s+([a-z0-9-]+)\s*$', tbl, re.M)]
+
+
 def main():
-    types = {int(a) for a in sys.argv[1:] if a.isdigit()} if len(sys.argv) > 1 else None
+    """ko12.10: un fichero por movimiento original: mons/fx/wNNN.bin (id de los juegos).
+    python3 pack_fx.py            -> los 251
+    python3 pack_fx.py 33 85      -> solo esos ids"""
+    want = {int(a) for a in sys.argv[1:] if a.isdigit()}
     miss = []
     total = 0
-    if types is None or 'extra' in sys.argv:
-        for k, sl in enumerate(EXTRA):
-            mid = 145 + k
-            r = pack_or_fallback(0, 0, 0, sl, 'm%03d.bin' % mid)
-            if r is None or r == 'empty':
-                miss.append(sl)
-                print('  -- sin animacion:', sl)
-                continue
-            total += r[3]
-            print('  %-14s m%03d.bin  %2d fot. x %d ms  %4d KB' % (sl, mid, r[1], r[2], r[3] // 1024))
-        if types is None:
-            types = set(range(16))
-    for t, s, v, name in move_names():
-        if types is not None and t not in types:
+    for mid, sl in crystal_moves():
+        if want and mid not in want:
             continue
-        r = pack_or_fallback(t, s, v, name)
+        fname = 'w%03d.bin' % mid
+        r = pack_or_fallback(0, 0, 0, sl, fname)
         if r is None or r == 'empty':
-            miss.append('%s (%s)' % (name, slug(name)))
-            print('  -- sin animacion:', name)
-            path = os.path.join(OUT, 'f%02d%d%d.bin' % (t, s, v))
+            miss.append('%d %s' % (mid, sl))
+            print('  -- sin animacion:', mid, sl)
+            path = os.path.join(OUT, fname)
             if os.path.exists(path):
                 os.remove(path)
             continue
         total += r[3]
-        print('  %-14s f%02d%d%d.bin  %2d fot. x %d ms  %4d KB' % (name, t, s, v, r[1], r[2], r[3] // 1024))
+        print('  %-16s %s  %2d fot. x %d ms  %4d KB' % (sl, fname, r[1], r[2], r[3] // 1024))
     print('total %d KB en %s' % (total // 1024, OUT))
     if miss:
         print('sin animacion (el firmware usa su propio efecto):', ', '.join(miss))
