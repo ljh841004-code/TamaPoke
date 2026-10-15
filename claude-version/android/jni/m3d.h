@@ -24,6 +24,7 @@ struct M3dModel {
   std::vector<M3dJoint> joints;
   std::vector<M3dPrim> prims;
   float minY = 0, maxY = 1, height = 1, cx = 0, cz = 0;  // caja en postura de reposo (modelo)
+  std::vector<float> restRot;  // 9 por hueso: giro global en reposo (para girar en ejes del cuerpo)
   bool load(const std::vector<uint8_t> &d);
   int find(const char *name) const;  // indice de hueso por nombre (o -1)
 };
@@ -33,7 +34,9 @@ struct M3dPose {
   std::vector<float> q;  // 4 por hueso (x y z w), identidad = 0 0 0 1
   float rootY = 0, rootLift = 0;
   void reset(size_t n) { q.assign(n * 4, 0.0f); for (size_t i = 0; i < n; i++) q[i * 4 + 3] = 1.0f; rootY = rootLift = 0; }
-  void rot(int j, float ax, float ay, float az, float ang);  // suma un giro
+  void rot(int j, float ax, float ay, float az, float ang);  // suma un giro (ejes del hueso)
+  // giro en ejes del CUERPO (x = izquierda, y = arriba, z = delante): igual para todos los modelos
+  void rotW(const struct M3dModel &m, int j, float wx, float wy, float wz, float ang);
 };
 
 struct M3dView {
@@ -48,3 +51,5 @@ struct M3dView {
 void m3dDraw(const M3dModel &m, const M3dPose &pose, const M3dView &v, uint16_t *fb, int w, int h);
 // accion PMD (sdmon.h) + tiempo -> postura y ajustes de vista (giro al andar, salto...)
 void m3dAnimate(const M3dModel &m, uint8_t act, uint32_t t, M3dPose &pose, M3dView &view);
+// acercar la postura actual a la nueva (k = 0..1 por fotograma)
+void m3dBlend(M3dPose &cur, const M3dPose &target, float k);

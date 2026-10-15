@@ -128,6 +128,13 @@ void M3dPose::rot(int j, float ax, float ay, float az, float ang) {
   memcpy(&q[j * 4], o, 16);
 }
 
+std::vector<float> gM3dJointPos;
+void M3dPose::rotW(const M3dModel &m, int j, float wx, float wy, float wz, float ang) {
+  if (j < 0 || m.restRot.size() < (size_t)(j + 1) * 9) return;
+  const float *R = &m.restRot[j * 9];  // columnas = ejes locales en el mundo: local = R^T * mundo
+  float lx = R[0] * wx + R[1] * wy + R[2] * wz, ly = R[3] * wx + R[4] * wy + R[5] * wz, lz = R[6] * wx + R[7] * wy + R[8] * wz;
+  rot(j, lx, ly, lz, ang);
+}
 // matrices de piel = global(hueso) * inversa de enlace
 void m3dSkinMats(const M3dModel &m, const M3dPose &pose, std::vector<Mat> &S) {
   size_t n = m.joints.size();
@@ -148,6 +155,18 @@ void m3dSkinMats(const M3dModel &m, const M3dPose &pose, std::vector<Mat> &S) {
       done[i] = 1;
     }
     if (!any) break;
+  }
+  extern std::vector<float> gM3dJointPos;  // (pruebas) posicion de cada hueso
+  gM3dJointPos.resize(n * 3);
+  for (size_t i = 0; i < n; i++) for (int k = 0; k < 3; k++) gM3dJointPos[i * 3 + k] = G[i].m[12 + k];
+  if (m.restRot.size() != n * 9) {  // la primera vez (reposo): giro global de cada hueso, normalizado
+    M3dModel &mm = const_cast<M3dModel &>(m);
+    mm.restRot.resize(n * 9);
+    for (size_t i = 0; i < n; i++)
+      for (int c = 0; c < 3; c++) {
+        float l = sqrtf(G[i].m[c * 4] * G[i].m[c * 4] + G[i].m[c * 4 + 1] * G[i].m[c * 4 + 1] + G[i].m[c * 4 + 2] * G[i].m[c * 4 + 2]);
+        for (int r = 0; r < 3; r++) mm.restRot[i * 9 + c * 3 + r] = l > 0 ? G[i].m[c * 4 + r] / l : 0;
+      }
   }
   S.resize(n);
   for (size_t i = 0; i < n; i++) {
@@ -313,155 +332,194 @@ void m3dDraw(const M3dModel &m, const M3dPose &pose, const M3dView &v, uint16_t 
 }
 
 // ---------------------------------------------------------------- animacion por codigo (por nombre de hueso)
-// Los huesos de los modelos de los juegos tienen nombres parecidos (Waist, Head, Jaw, LArm, RArm, LThigh...,
-// Tail1). Ejes medidos en el de Squirtle: brazos y piernas giran en su Z local (los derechos al reves),
-// la cabeza asiente en Y y gira en X.
-struct M3dRig { int waist, head, jaw, larm, rarm, lfore, rfore, lthigh, rthigh, lleg, rleg, tail[3]; };
+// Los huesos de los modelos de los juegos tienen nombres parecidos (Waist/Hips, Spine, Head, Jaw, LArm, RArm,
+// LThigh..., Tail1). Los giros se dan en ejes del CUERPO (rotW: x = izquierda, y = arriba, z = delante), asi
+// valen para cualquier modelo aunque cada hueso tenga sus ejes locales distintos.
+struct M3dRig { int waist, spine, head, jaw, larm, rarm, lfore, rfore, lthigh, rthigh, lleg, rleg, tail[4]; };
 static M3dRig rigOf(const M3dModel &m) {
   M3dRig r;
   auto f = [&](std::initializer_list<const char *> names) {
     for (const char *n : names) { int i = m.find(n); if (i >= 0) return i; }
     return -1;
   };
-  r.waist = f({ "Waist", "Hips", "Spine", "Root" });
+  r.waist = f({ "Waist", "Hips", "Origin", "Root" });
+  r.spine = f({ "Spine2", "Spine1", "Spine", "Chest" });
   r.head = f({ "Head" });
   r.jaw = f({ "Jaw", "Mouth" });
-  r.larm = f({ "LArm", "LShoulder", "L_Arm" });
-  r.rarm = f({ "RArm", "RShoulder", "R_Arm" });
+  r.larm = f({ "LArm", "LShoulder" });
+  r.rarm = f({ "RArm", "RShoulder" });
   r.lfore = f({ "LForeArm", "LElbow" });
   r.rfore = f({ "RForeArm", "RElbow" });
   r.lthigh = f({ "LThigh", "LLegUpper", "LHip" });
   r.rthigh = f({ "RThigh", "RLegUpper", "RHip" });
   r.lleg = f({ "LLeg", "LKnee" });
   r.rleg = f({ "RLeg", "RKnee" });
-  r.tail[0] = f({ "Tail1", "Tail" });
-  r.tail[1] = f({ "Tail2" });
-  r.tail[2] = f({ "Tail3" });
+  r.tail[0] = f({ "Tail1", "Tail", "TailA01" });
+  r.tail[1] = f({ "Tail2", "TailA02" });
+  r.tail[2] = f({ "Tail3", "TailA03" });
+  r.tail[3] = f({ "Tail4" });
   return r;
 }
 
 enum { A_IDLE = 0, A_WALKL, A_WALKR, A_SLEEP, A_EAT, A_HURT, A_ATTACK, A_POSE, A_HOP, A_NOD, A_BREATH, A_SIT,
        A_ROTATE, A_CHARGE, A_SHOOT, A_LAYING, A_IDLE_UR, A_ATTACK_UR, A_HURT_UR, A_IDLE_DL, A_ATTACK_DL, A_HURT_DL };
 
+// ruido suave (suma de senos) para que el reposo no sea mecanico
+static float soft(float t, float a, float b, float c) { return 0.55f * sinf(t * a) + 0.3f * sinf(t * b + 1.3f) + 0.15f * sinf(t * c + 2.1f); }
+
 void m3dAnimate(const M3dModel &m, uint8_t act, uint32_t t, M3dPose &p, M3dView &v) {
   static const M3dModel *last = nullptr;
   static M3dRig R;
   if (last != &m) { R = rigOf(m); last = &m; }
   p.reset(m.joints.size());
-  const float TAU = 6.2831853f, ph = (float)t;
-  auto S = [&](float period, float off = 0) { return sinf(ph * TAU / period + off); };
-  // postura base: brazos abajo y un poco hacia delante, codos algo doblados
-  float armDown = 0.75f, armFwd = 0.15f, legL = 0, legR = 0, waistB = 0, headN = 0, headT = 0, jaw = 0, tailW = 0;
-  float breath = S(1800);
-  waistB = 0.03f * breath;
-  headN = 0.04f * S(1800, 0.6f);
-  tailW = 0.18f * S(1400);
-  armDown += 0.05f * breath;
+  const float TAU = 6.2831853f, ts = (float)t / 1000.0f;
+  float H = m.height;
+  // valores de la postura (radianes, ejes del cuerpo)
+  float armDown = 1.0f, armSwingL = 0, armSwingR = 0, armFwd = -0.35f, elbow = 0.3f;
+  float thighL = 0, thighR = 0, kneeL = 0, kneeR = 0;
+  float lean = 0, roll = 0, headNod = 0, headTurn = 0, headTilt = 0, jaw = 0, tail = 0, tailSpeed = 1.2f;
+  // reposo vivo: respira (el pecho sube), mira un poco alrededor, balancea el peso, mueve la cola
+  float breath = sinf(ts * TAU / 2.6f);
+  lean = 0.025f * breath;
+  armDown += 0.04f * breath;
+  headNod = 0.04f * sinf(ts * TAU / 2.6f - 0.8f) + 0.05f * soft(ts, 0.5f, 0.31f, 0.17f);
+  headTurn = 0.22f * soft(ts, 0.37f, 0.23f, 0.11f);
+  headTilt = 0.06f * soft(ts, 0.29f, 0.41f, 0.13f);
+  roll = 0.03f * soft(ts, 0.33f, 0.21f, 0.09f);
+  tail = 0.2f * sinf(ts * TAU / 1.6f);
   switch (act) {
     case A_WALKL:
     case A_WALKR: {
-      float w = S(560);
-      legL = 0.55f * w; legR = 0.55f * w;          // ejes en espejo: mismo signo = piernas alternas
-      armFwd = 0.15f + 0.35f * w;
-      p.rootLift = -0.012f * m.height * fabsf(w) + 0.02f * m.height * fabsf(S(560, 1.57f)) * 0.5f;
-      waistB = 0.06f;
-      tailW = 0.35f * S(560);
-      headN = 0.05f * S(280);
-      v.yaw += (act == A_WALKR ? 1.0f : -1.0f) * 1.15f;  // de lado hacia donde anda
+      float ph = ts * TAU / 0.62f, w = sinf(ph);   // un paso por pierna en 0,62 s
+      thighL = 0.42f * w; thighR = -0.42f * w;
+      kneeL = 0.5f * fmaxf(0.0f, cosf(ph));        // dobla la rodilla al levantar
+      kneeR = 0.5f * fmaxf(0.0f, -cosf(ph));
+      armSwingL = -0.35f * w; armSwingR = 0.35f * w;  // brazos al reves que las piernas
+      p.rootLift = 0.022f * H * fabsf(cosf(ph));    // sube en cada paso
+      lean = 0.08f;
+      roll = 0.05f * w;                             // se mece de lado a lado
+      headNod = 0.03f * sinf(ph * 2);
+      headTurn = 0;
+      tail = 0.3f * sinf(ph + 1.0f);
+      v.yaw += (act == A_WALKR ? 1.0f : -1.0f) * 1.2f;  // de lado hacia donde anda
       break;
     }
     case A_SLEEP: {
-      float b = S(3600);
-      waistB = 0.22f + 0.03f * b;   // encogido hacia delante
-      headN = -0.35f + 0.04f * b;   // cabeza caida
-      armDown = 0.95f; armFwd = 0.45f;
-      legL = 0.9f; legR = 0.9f;      // sentado
-      p.rootLift = -0.08f * m.height;
-      tailW = 0.05f * b;
-      v.mulR = v.mulG = 175; v.mulB = 205;
+      float b = sinf(ts * TAU / 4.0f);
+      lean = 0.3f + 0.04f * b;      // hecho una bola
+      headNod = 0.45f + 0.04f * b;  // cabeza caida
+      headTurn = 0; headTilt = 0.15f;
+      armDown = 1.1f; armFwd = 0.5f; elbow = 0.8f;
+      thighL = thighR = -0.9f; kneeL = kneeR = 1.3f;  // sentado
+      p.rootLift = -0.07f * H;
+      tail = 0.04f * b;
+      v.mulR = v.mulG = 180; v.mulB = 210;
       break;
     }
     case A_EAT: {
-      float c = fabsf(S(520));
-      headN = -0.25f * c; jaw = 0.35f * c;
-      armFwd = 0.7f; armDown = 0.5f;  // las manos al frente con la comida
-      waistB = 0.08f * c;
+      float c = 0.5f + 0.5f * sinf(ts * TAU / 0.5f);
+      headNod = 0.25f * c; jaw = 0.35f * c;
+      armFwd = 0.9f; armDown = 0.55f; elbow = 0.9f;  // la comida en las manos, delante
+      lean = 0.1f * c;
+      headTurn = 0;
       break;
     }
     case A_HURT: {
-      float k = (float)(t % 700) / 700.0f;
-      waistB = -0.25f * (1 - k);  // echado hacia atras
-      headT = 0.25f * S(120) * (1 - k);
-      armDown = 0.2f; armFwd = -0.2f;
-      int pulse = (int)(45 * (1 - k));
+      float k = (float)(t % 700) / 700.0f, e = 1 - k;
+      lean = -0.3f * e;  // echado hacia atras
+      headNod = -0.2f * e; headTurn = 0.3f * sinf(ts * TAU / 0.12f) * e;
+      armDown = 0.3f; armFwd = -0.3f;
+      jaw = 0.3f * e;
+      int pulse = (int)(45 * e);
       v.mulG = v.mulB = 256 - pulse; v.add = pulse / 3;
-      jaw = 0.25f;
       break;
     }
     case A_CHARGE: {
-      legL = -0.35f; legR = -0.35f;  // agachado
-      p.rootLift = -0.06f * m.height;
-      armDown = 0.4f; armFwd = 0.6f;
-      waistB = 0.15f + 0.03f * S(80);
-      headN = -0.1f;
-      v.add = (int)(45 * (0.5f + 0.5f * S(300)));
+      thighL = thighR = -0.45f; kneeL = kneeR = 0.8f;  // agachado
+      p.rootLift = -0.05f * H;
+      armDown = 0.45f; armFwd = 0.7f; elbow = 1.0f;
+      lean = 0.2f + 0.02f * sinf(ts * TAU / 0.08f);
+      headNod = 0.1f; headTurn = 0;
+      v.add = (int)(45 * (0.5f + 0.5f * sinf(ts * TAU / 0.3f)));
       break;
     }
     case A_ATTACK:
     case A_SHOOT:
     case A_ATTACK_DL:
     case A_ATTACK_UR: {
-      float k = fmodf(ph, 700.0f) / 700.0f;
+      float k = fmodf((float)t, 700.0f) / 700.0f;
       float lunge = k < 0.3f ? -k / 0.3f * 0.4f : k < 0.5f ? -0.4f + (k - 0.3f) / 0.2f * 1.4f : 1.0f - (k - 0.5f) / 0.5f;
-      waistB = 0.3f * lunge;
-      armFwd = 0.2f + 1.0f * (lunge > 0 ? lunge : 0); armDown = 0.4f;
-      jaw = 0.4f * (lunge > 0 ? lunge : 0);
-      headN = 0.1f * lunge;
+      float fw = lunge > 0 ? lunge : 0;
+      lean = 0.35f * lunge;
+      armFwd = 0.2f + 1.1f * fw; armDown = 0.5f - 0.3f * fw; elbow = 0.3f;
+      jaw = 0.45f * fw;
+      headNod = -0.1f * fw; headTurn = 0;
+      thighL = 0.3f * fw; thighR = -0.2f * fw;
       if (k > 0.3f && k < 0.6f) v.add = 45;
       break;
     }
     case A_POSE:
     case A_HOP: {
-      float k = fmodf(ph, 760.0f) / 760.0f, j = sinf(k * 3.14159f);
-      p.rootLift = 0.28f * m.height * j;
-      armDown = -0.5f * j + 0.6f * (1 - j);  // brazos arriba en el aire
-      legL = legR = -0.25f * j;
-      headN = 0.15f * j; jaw = 0.25f * j;
-      tailW = 0.4f * S(380);
+      float k = fmodf((float)t, 760.0f) / 760.0f, j = sinf(k * 3.14159f);
+      float squat = k < 0.12f ? 1 - k / 0.12f : k > 0.88f ? (k - 0.88f) / 0.12f : 0;
+      p.rootLift = 0.28f * H * j - 0.04f * H * squat;
+      armDown = 0.85f - 1.6f * j;  // brazos arriba en el aire
+      thighL = thighR = -0.3f * squat + 0.25f * j; kneeL = kneeR = 0.6f * squat + 0.4f * j;
+      headNod = -0.15f * j; jaw = 0.3f * j; headTurn = 0;
+      tail = 0.4f * sinf(ts * TAU / 0.38f);
       break;
     }
     case A_ROTATE: {
-      v.yaw += ph * TAU / 900.0f;
-      p.rootLift = 0.06f * m.height * fabsf(S(450));
-      armDown = 0.2f;
+      v.yaw += ts * TAU / 0.9f;
+      p.rootLift = 0.06f * H * fabsf(sinf(ts * TAU / 0.45f));
+      armDown = 0.3f;
       break;
     }
     case A_LAYING:
     case A_SIT: {
-      legL = legR = 1.0f;
-      p.rootLift = -0.15f * m.height;
-      waistB = act == A_LAYING ? -0.25f : 0.05f;
-      armDown = 0.9f;
-      headN = act == A_LAYING ? 0.15f : 0;
+      thighL = thighR = -1.0f; kneeL = kneeR = 1.4f;
+      p.rootLift = -0.08f * H;
+      lean = act == A_LAYING ? -0.2f : 0.05f;
+      armDown = 1.0f; elbow = 0.6f;
       break;
     }
-    case A_NOD: headN = 0.18f * S(800); break;
+    case A_NOD: headNod = 0.22f * sinf(ts * TAU / 0.8f); headTurn = 0; break;
     case A_HURT_DL:
     case A_HURT_UR: {
-      waistB = -0.2f; headT = 0.2f * S(120); jaw = 0.2f;
+      lean = -0.2f; headTurn = 0.2f * sinf(ts * TAU / 0.12f); jaw = 0.2f;
       v.mulG = v.mulB = 200;
       break;
     }
     default: break;
   }
-  p.rot(R.larm, 0, 0, 1, -armDown); p.rot(R.rarm, 0, 0, 1, armDown);
-  p.rot(R.larm, 0, 1, 0, armFwd); p.rot(R.rarm, 0, 1, 0, armFwd);
-  p.rot(R.lfore, 0, 0, 1, -0.25f); p.rot(R.rfore, 0, 0, 1, 0.25f);
-  p.rot(R.lthigh, 0, 0, 1, legL); p.rot(R.rthigh, 0, 0, 1, legR);
-  if (legL > 0.5f) { p.rot(R.lleg, 0, 0, 1, -legL * 0.8f); p.rot(R.rleg, 0, 0, 1, -legR * 0.8f); }
-  p.rot(R.waist, 0, 0, 1, -waistB);
-  p.rot(R.head, 0, 1, 0, headN);
-  p.rot(R.head, 1, 0, 0, headT);
-  p.rot(R.jaw, 0, 0, 1, -jaw);
-  for (int i = 0; i < 3; i++) p.rot(R.tail[i], 0, 1, 0, tailW * (0.6f + 0.3f * i) * (i ? cosf(ph * TAU / 1400 - i * 0.6f) / (fabsf(cosf(ph * TAU / 1400)) + 1) + 0.5f : 1));
+  // aplicar (cuerpo: x izquierda, y arriba, z delante)
+  int torso = R.spine >= 0 ? R.spine : R.waist;
+  p.rotW(m, torso, 1, 0, 0, lean);
+  p.rotW(m, R.waist, 0, 0, 1, roll);
+  p.rotW(m, R.larm, 0, 0, 1, -armDown); p.rotW(m, R.rarm, 0, 0, 1, armDown);
+  p.rotW(m, R.larm, 0, 1, 0, -(armFwd + armSwingL)); p.rotW(m, R.rarm, 0, 1, 0, armFwd + armSwingR);
+  p.rotW(m, R.lfore, 0, 1, 0, -elbow); p.rotW(m, R.rfore, 0, 1, 0, elbow);
+  p.rotW(m, R.lthigh, 1, 0, 0, -thighL); p.rotW(m, R.rthigh, 1, 0, 0, -thighR);
+  p.rotW(m, R.lleg, 1, 0, 0, kneeL); p.rotW(m, R.rleg, 1, 0, 0, kneeR);
+  p.rotW(m, R.head, 1, 0, 0, headNod);
+  p.rotW(m, R.head, 0, 1, 0, headTurn);
+  p.rotW(m, R.head, 0, 0, 1, headTilt);
+  p.rotW(m, R.jaw, 1, 0, 0, jaw);
+  for (int i = 0; i < 4; i++) p.rotW(m, R.tail[i], 0, 1, 0, tail * (1.0f + 0.3f * i) * cosf(i * 0.5f) * (i ? 0.7f : 1.0f));
+  (void)tailSpeed;
+}
+
+// paso entre posturas: se acerca a la nueva poco a poco (sin saltos al cambiar de accion)
+void m3dBlend(M3dPose &cur, const M3dPose &target, float k) {
+  if (cur.q.size() != target.q.size()) { cur = target; return; }
+  for (size_t i = 0; i + 3 < cur.q.size(); i += 4) {
+    float *a = &cur.q[i];
+    const float *b = &target.q[i];
+    float d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+    float sg = d < 0 ? -1.0f : 1.0f;
+    for (int c = 0; c < 4; c++) a[c] = a[c] + (sg * b[c] - a[c]) * k;
+    float n = sqrtf(a[0] * a[0] + a[1] * a[1] + a[2] * a[2] + a[3] * a[3]);
+    if (n > 0) for (int c = 0; c < 4; c++) a[c] /= n;
+  }
+  cur.rootLift += (target.rootLift - cur.rootLift) * k;
 }

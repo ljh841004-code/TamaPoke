@@ -25,5 +25,10 @@ int main(int argc, char **argv) {
     p.rot(j, ax == 'x', ax == 'y', ax == 'z', atof(argv[i + 2]));
   }
   m3dDraw(m, p, v, fb.data(), W, H);
+  extern std::vector<float> gM3dJointPos;
+  if (getenv("DUMP")) for (const char *nm : { "LFoot", "RFoot", "LHand", "RHand", "Head" }) {
+    int j = m.find(nm);
+    if (j >= 0) printf("%s %.3f %.3f %.3f\n", nm, gM3dJointPos[j * 3], gM3dJointPos[j * 3 + 1], gM3dJointPos[j * 3 + 2]);
+  }
   FILE *o = fopen(argv[2], "wb"); fwrite(fb.data(), 2, W * H, o); fclose(o);
 }

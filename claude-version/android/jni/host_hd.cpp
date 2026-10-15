@@ -270,12 +270,31 @@ static bool m3dPet(int16_t dex, uint8_t act, int x, int ground, uint32_t t, floa
   if (!m) return false;
   M3dPose pose;
   M3dView v;
+  // un estado por papel (pantalla principal / rival / tuyo): la postura y el giro se acercan poco a poco
+  struct Smooth { M3dPose p; float yaw = 0; uint32_t t = 0; const M3dModel *m = nullptr; };
+  static Smooth sm[3];
+  Smooth &S = sm[yaw > 2.0f ? 2 : yaw < -0.5f ? 1 : 0];
   v.yaw = yaw;
   v.pitch = 0.16f;
   v.scale = hLogical * HDK / m->height;
   v.ox = x * HDK + HDK / 2.0f;
   v.oy = ground * HDK;
   m3dAnimate(*m, act, t, pose, v);
+  uint32_t now = millis();
+  float dt = S.m == m ? (float)(now - S.t) : 1e9f;
+  S.t = now;
+  if (S.m != m || dt > 500) { S.p = pose; S.yaw = v.yaw; S.m = m; }
+  else {
+    float k = 1.0f - expf(-dt / 110.0f);
+    m3dBlend(S.p, pose, k);
+    float dy = v.yaw - S.yaw;
+    while (dy > 3.14159f) dy -= 6.2831853f;
+    while (dy < -3.14159f) dy += 6.2831853f;
+    if (act == 12) S.yaw = v.yaw;  // rodar: sin suavizar
+    else S.yaw += dy * (1.0f - expf(-dt / 160.0f));
+  }
+  pose = S.p;
+  v.yaw = S.yaw;
   v.silhouette = sil;
   if (mulBoost) v.add += mulBoost;
   m3dDraw(*m, pose, v, gfx->hdfb(), gfx->hdw(), gfx->hdh());
