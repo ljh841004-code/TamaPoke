@@ -5616,9 +5616,38 @@ void drawRunawayButton() {
 
 // animacion epica de evolucion: halo radial + rayos giratorios + parpadeo del
 // sprite acelerando + chispas que salen disparadas + fogonazo final
+// ko12.10: lo especial de los raros (morado) y legendarios (dorado) al evolucionar y al subir de nivel:
+// corona de estrellas que gira y un estallido de destellos (los normales, nada de esto)
+static void rareBurst(int cx, int cy, uint32_t now, float t, uint8_t rk, int r0) {
+  if (!rk) return;
+  uint16_t c = rk == 2 ? C565(0xff, 0xc8, 0x30) : C565(0xb0, 0x80, 0xff);
+  uint16_t cl = rk == 2 ? C565(0xff, 0xf4, 0xc0) : C565(0xe8, 0xdc, 0xff);
+  int n = rk == 2 ? 10 : 6;
+  float rot = now * (rk == 2 ? 0.0032f : 0.0024f);
+  int r = r0 + (int)(t * 40);
+  for (int i = 0; i < n; i++) {  // corona
+    float a = rot + i * 6.2832f / n;
+    int x = cx + (int)(cosf(a) * r), y = cy + (int)(sinf(a) * r * 0.8f);
+    int l = 5 + (int)(3 * sinf(now * 0.01f + i));
+    gfx->drawLine(x - l, y, x + l, y, c);
+    gfx->drawLine(x, y - l, x, y + l, c);
+    gfx->fillCircle(x, y, 2, cl);
+  }
+  for (int k = 0; k < (rk == 2 ? 3 : 2); k++) {  // anillos que se abren
+    float q = fmodf(t * 2.0f + k * 0.33f, 1.0f);
+    int rr = r0 / 2 + (int)(q * r0 * 1.6f);
+    if (q < 0.9f) gfx->drawCircle(cx, cy, rr, q < 0.5f ? cl : c);
+  }
+}
+
 void drawEvolveFX(uint32_t now) {
   float t = pet.evolveT();          // 0..1
   int cx = CX, cy = PET_GROUND - 96;
+  {  // ko12.10: raros y legendarios: corona dorada / morada
+    uint8_t rr = DEX_TBL[pet.speciesId].rarity, prv = pet.prevSpeciesId > 0 ? DEX_TBL[pet.prevSpeciesId].rarity : 0;
+    uint8_t rk = (rr == R_LEGENDARIO || prv == R_LEGENDARIO) ? 2 : (rr == R_RARO || prv == R_RARO) ? 1 : 0;
+    rareBurst(cx, cy, now, t, rk, 92);
+  }
 
   // halo radial que crece y pulsa
   int halo = 36 + (int)(t * 150) + (int)(8 * sinf(now * 0.02f));
@@ -6232,6 +6261,15 @@ void drawPetPMD() {
               loop || act == PMD_IDLE, false, PET_MAXS, PET_FITH);
   if (beh.mode == 4 && beh.decoT0 && m == MOOD_HAPPY) drawDecoPlay(now, pet.roomOn ? false : gNight);  // ko12.9.27
   if (rk) drawLegendSparkle((int)beh.x, PET_GROUND, now, m == MOOD_SLEEPING, rk);
+  {  // ko12.10: al subir de nivel, 1,6 s de corona (solo raros y legendarios)
+    static uint16_t lastL = 0;
+    static uint32_t lvT = 0;
+    uint16_t L = pet.level();
+    if (lastL && L > lastL && rk) lvT = now ? now : 1;
+    lastL = L;
+    if (lvT && now - lvT < 1600) rareBurst((int)beh.x, PET_GROUND - petBodyH() / 2, now, (now - lvT) / 1600.0f, rk, 60);
+    else lvT = 0;
+  }
   if (orbValid(pet.orb)) drawOrbSlot((int)beh.x + 60, PET_GROUND - 18, 12, pet.orb, now);  // ko11.16: su orbe, abajo a la derecha
   {  // ko11.9.2: pulsacion larga para soltarlo: el circulo se llena en 3 s
     float hp = petHoldProgress();

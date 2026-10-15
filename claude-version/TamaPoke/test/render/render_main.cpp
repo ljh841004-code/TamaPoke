@@ -846,6 +846,7 @@ static void scenes(bool ko, const char *sfx) {
         mvInfoOpen(bMe.mv[2] ? bMe.mv[2] : bMe.mv[0], 0, 0);
         render(); shot("P2_move_info_battle");
         mvInfoId = 0;
+        mvInfoOpen(177, 0, 0); render(); shot("P2b_move_info_legend"); mvInfoId = 0;  // ko12.10: 에어로블라스트
         uint16_t bgc = gfx->getFramebuffer()[440 * LCD_WIDTH + 233];
         // ko12.10 미리보기: 새 이펙트 (종류별, 가운데쯤 장면)
         static const char *FXN[FX2_N] = { "punch", "kick", "slash", "bite", "body", "sound", "powder", "statup",

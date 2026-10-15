@@ -98,7 +98,20 @@ static int mvWrap(const char *s, int w, uint8_t size, char out[][120], int maxL)
 
 // ---------------------------------------------------------------- 전투 기술 창 v2
 // FV_*: en ui_extra.ino (el combate los usa antes)
+// ko12.10: los movimientos que en Cristal solo tiene un legendario (Lugia: 에어로블라스트, Ho-Oh: 성스러운불꽃)
+static bool moveLegendSig(uint8_t id) { return id == 177 || id == 221; }
+static void legendSigFrame(int x, int y, int w, int h, int r) {
+  uint32_t now = millis();
+  uint16_t g = C565(0xff, 0xc8, 0x30), gl = C565(0xff, 0xf0, 0xa0);
+  gfx->drawRoundRect(x - 3, y - 3, w + 6, h + 6, r + 3, g);
+  gfx->drawRoundRect(x - 2, y - 2, w + 4, h + 4, r + 2, gl);
+  int k = (int)((now / 40) % (uint32_t)(2 * (w + h)));  // un destello que da la vuelta
+  int px = k < w ? x + k : k < w + h ? x + w : k < 2 * w + h ? x + w - (k - w - h) : x;
+  int py = k < w ? y - 2 : k < w + h ? y + (k - w) : k < 2 * w + h ? y + h + 2 : y + h - (k - 2 * w - h);
+  gfx->fillCircle(px, py, 3, UI_WHITE);
+}
 void drawFightBtnV2(int x, int y, uint8_t id, uint8_t pp, uint8_t mark) {
+  if (id && moveLegendSig(id)) legendSigFrame(x, y, FV_W, FV_H, 16);
   if (!id) {
     uiButton(x, y, FV_W, FV_H, 16, UI_TRACK, C565(0xb8, 0xb4, 0xac));
     drawFitIn("-", x, y + 20, FV_W, 0x8410, 2);
@@ -154,6 +167,10 @@ void drawMoveInfoV2(uint8_t id, uint8_t buttons) {
   gfx->fillRect(px + 2, py + 40, pw - 4, 26, c);
   mv2Glyph(px + 34, py + 34, d.type, d.cls, c);
   drawFitIn(MV2_KO[id], px + 60, py + 14, pw - 76, UI_WHITE, 3);
+  if (moveLegendSig(id)) {  // ko12.10: 전설의 기술
+    uiButton(px + pw - 128, py + 70, 108, 26, 13, C565(0xff, 0xc8, 0x30), UI_INK);
+    drawFitIn(LK("전설의 기술", "Legendary"), px + pw - 128, py + 73, 108, UI_INK, 1);
+  }
   // 속성 · 분류 알약
   int y = py + 78;
   uiButton(px + 22, y, 92, 28, 14, c, UI_INK);
