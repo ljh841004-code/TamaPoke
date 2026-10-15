@@ -200,7 +200,7 @@ static std::string importPak(const std::vector<int> &fds) {
   }
   gImportMerged = false;
   // los dibujos HD / 3D (hd.pak, ani.pak) se quedan aunque se cambie el mons.pak
-  for (const char *sub : { "/hd", "/ani" })
+  for (const char *sub : { "/hd", "/ani", "/m3d" })
     if (stat((fin + sub).c_str(), &st) == 0 && stat((tmp + sub).c_str(), &st) != 0) rename((fin + sub).c_str(), (tmp + sub).c_str());
   rmTree(fin);
   if (rename(tmp.c_str(), fin.c_str()) != 0) return "폴더를 바꿀 수 없어요";
@@ -224,8 +224,8 @@ static void runImport(const std::vector<int> &fds) {
   usleep(1500 * 1000);
 }
 
-static bool haveMons() {
+static bool haveMons() {  // el mons.pak de verdad (no solo los anadidos: ani, m3d...)
   struct stat st;
-  return stat((gSdDir + "/mons").c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+  return stat((gSdDir + "/mons/thumbs.bin").c_str(), &st) == 0 || stat((gSdDir + "/mons/thumbs2.bin").c_str(), &st) == 0;
 }
 

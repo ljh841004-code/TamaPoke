@@ -230,6 +230,18 @@ static void drawAffine(const uint8_t *P, int iw, int ih, float dx, float dy, flo
 enum { A_IDLE = 0, A_WALKL, A_WALKR, A_SLEEP, A_EAT, A_HURT, A_ATTACK, A_POSE, A_HOP, A_NOD, A_BREATH, A_SIT,
        A_ROTATE, A_CHARGE, A_SHOOT, A_LAYING, A_IDLE_UR, A_ATTACK_UR, A_HURT_UR, A_IDLE_DL, A_ATTACK_DL, A_HURT_DL };
 
+// cuantos modelos 3D hay (para el menu de la app)
+#include <dirent.h>
+int hdM3dCount() {
+  int n = 0;
+  for (std::string dir : { std::string(gSdRoot ? gSdRoot : ".") + "/mons/m3d", std::string("../m3d") }) {
+    if (DIR *dd = opendir(dir.c_str())) {
+      while (struct dirent *e = readdir(dd)) if (strstr(e->d_name, ".m3d")) n++;
+      closedir(dd);
+    }
+  }
+  return n;
+}
 bool gHdArt = true;  // [메뉴] "3D 움직임" (por defecto) / "도트"
 bool hdArtOn() { return gHdArt; }
 
@@ -245,7 +257,8 @@ static M3dModel *m3dGet(int dex) {
   char name[48];
   snprintf(name, sizeof(name), "/mons/m3d/%03d.m3d", dex);
   std::vector<uint8_t> d;
-  if (!gSdRoot || !readFile(std::string(gSdRoot) + name, d)) return nullptr;
+  // en la SD importada (m3d.pak) o en la carpeta m3d junto al programa (PC: TamaPoke_data\..\m3d)
+  if ((!gSdRoot || !readFile(std::string(gSdRoot) + name, d)) && !readFile(std::string("..") + (name + 5), d)) return nullptr;
   if (!s.m.load(d)) return nullptr;
   s.ok = true;
   if (gM3d.size() > 6)

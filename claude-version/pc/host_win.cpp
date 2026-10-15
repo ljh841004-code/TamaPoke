@@ -86,7 +86,7 @@ void hostPresent(const uint16_t *fb, int w, int h) {
   gHaveLast = true;
   if (!gMenuOpen) present(fb);
 }
-void hostSetBrightness(uint8_t b) { gHostBright = b < 40 ? 40 : b; }
+void hostSetBrightness(uint8_t b) { gHostBright = b < 170 ? 170 : b; }  // PC: el atenuado del aparato apenas (si no, todo se ve negro)
 void hostDisplayOn(bool on) {
   if (gHostScreenOn == on) return;
   gHostScreenOn = on;
@@ -107,7 +107,13 @@ static void drawHostMenu() {
   save.assign(fb, fb + (size_t)PX * PX);
   memcpy(fb, gLast, (size_t)PX * PX * 2);
   gfx->fillRoundRect(63, 90, 340, 290, 20, 0x2124);
-  drawFit("TamaPoke (PC)", 104, 300, 0xFFFF, 2);
+  drawFit("TamaPoke (PC)", 100, 300, 0xFFFF, 2);
+  {
+    int hdM3dCount();
+    char b[48];
+    snprintf(b, sizeof(b), "3D 모델 %d종", hdM3dCount());
+    drawFit(b, 128, 300, 0xC618, 1);
+  }
   drawBtn(HM_X, HM_Y[0], HM_W, HM_H, 0x4C98, 0xFFFF, "pak 파일 넣기");
   drawBtn(HM_X, HM_Y[1], HM_W, HM_H, 0x6B4D, 0xFFFF, gHdArt ? "그림: 3D 움직임" : "그림: 도트");
   drawBtn(HM_X, HM_Y[2], HM_W, HM_H, 0xFFFF, 0x0000, "닫기");
