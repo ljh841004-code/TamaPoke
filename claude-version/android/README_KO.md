@@ -10,18 +10,19 @@
    - 다마포케 SD카드의 `mons.pak`을 복사해 와도 되고(음악까지 들어 있어요), 따로 받은 `mons.pak`도 돼요
    - **배경음**: `music.pak.001 ~ .003`을 [메뉴] → [mons.pak 고르기]로 함께 고르면 지금 그림에 음악만 **추가**돼요
    - 나중에 바꾸려면: 뒤로 버튼 → [mons.pak 고르기]
-3. 게임 화면 아래 버튼: **[메뉴]** (mons.pak 고르기 / 둥근·네모 화면 / HD 그림 켜기·끄기 / 닫기) · **[화면 끄기]** (기기의 PWR) · **[나가기]** (저장하고 닫기)
+3. 게임 화면 아래 버튼: **[메뉴]** (mons.pak 고르기 / 둥근·네모 화면 / 그림: 3D·도트 / 닫기) · **[화면 끄기]** (기기의 PWR) · **[나가기]** (저장하고 닫기)
    - 폰의 뒤로 버튼도 [메뉴]와 같아요
    - 기본은 **네모 화면**(위아래가 잘리지 않음). 기기처럼 보고 싶으면 [메뉴] → [둥근 화면으로]
 
-## 고화질 (HD, 4판부터)
+## 고화질 (HD, 4판부터) + 3D 움직이는 포켓몬 (6판부터)
 - 화면 전체를 기기의 **3배 해상도**(1398×1398)로 그려요: 글자는 진짜 글꼴(Noto Sans KR), 도형·버튼·게이지는 매끈하게
-- **HD 포켓몬 그림**: `hd.pak.001 ~ .003`을 [메뉴] → [mons.pak 고르기]로 함께 고르면 `mons/hd/`에 **추가**돼요
-  - 5판부터 기본은 **움직이는 도트**(3배 해상도로 매끈하게). [메뉴] → [HD 그림으로 (정지)]를 누르면 기본 화면의 내 포켓몬이
-    큰 그림으로 나와요 (한 장짜리 그림이라 팔다리는 안 움직이고 숨쉬기·걷기·점프 정도만)
-  - 샤이니는 샤이니 그림. hd.pak이 없으면 예전 도트 그림 그대로예요
-  - mons.pak을 다시 넣어도 HD 그림은 지워지지 않아요
-- 아직 도트 그대로인 곳: 전투·도감·보관함·훈련의 포켓몬, 아이콘 (다음 단계)
+- **3D 움직이는 그림**: `ani.pak.001 ~ .002`를 [메뉴] → [mons.pak 고르기]로 함께 고르면 `mons/ani/`에 **추가**돼요
+  - 3D 게임 모델로 만든 움직이는 그림(Showdown, 앞모습·뒷모습·샤이니, 251종)
+  - 기본 화면: 그림 자체가 움직이고(숨쉬기·몸짓), 그 위에 걷기·점프·잠·먹기·아픔·공격 동작을 얹어요
+  - 전투: 상대는 앞모습, 내 포켓몬은 뒷모습
+  - [메뉴] → [그림: 3D 움직임 / 그림: 도트]로 바꿀 수 있어요. ani.pak이 없으면 도트 그대로예요
+  - mons.pak을 다시 넣어도 3D 그림은 지워지지 않아요. 4판의 hd.pak(정지 그림)은 이제 쓰지 않아요
+- 아직 도트 그대로인 곳: 도감·보관함·훈련의 포켓몬, 아이콘
 
 ## 기기와 다른 점
 - 시간 = 폰 시계. 앱을 닫아 둔 동안은 기기를 꺼 둔 것처럼 계산해요 (최대 2주)
@@ -32,9 +33,9 @@
 ## 만들기 (PC)
 ```
 ANDROID_SDK=<sdk> android/build_apk.sh        # -> android/build/TamaPoke.apk
-HD_PAK=<hd.pak> android/test/run_desktop.sh <mons.pak 조각...>   # 같은 코드를 PC에서 점검 (pak 풀기, 실행, 저장, 소리, HD 화면 PNG)
+HD_PAK=<ani.pak> android/test/run_desktop.sh <mons.pak 조각...>   # 같은 코드를 PC에서 점검 (pak 풀기, 실행, 저장, 소리, HD 화면 PNG)
 ```
-HD 그림: PokeAPI HOME 그림을 받아 `mons/hd/fNNN.png`(일반)·`sNNN.png`(샤이니), 긴 변 440px로 줄여 `tools/make_pak.py`로 묶어요 (저장소에는 안 올려요).
+3D 그림: Showdown의 ani / ani-back / ani-shiny / ani-back-shiny GIF를 `mons/ani/fNNN.gif`·`bNNN.gif`·`sfNNN.gif`·`sbNNN.gif`로 받아 `tools/make_pak.py`로 묶어요 (저장소에는 안 올려요).
 글꼴: `python3 android/tools_make_font.py <fontsource files> android/assets/NotoSansKR-Medium-hd.otf` (SIL OFL).
 SDK: platforms;android-34, build-tools;34.0.0, ndk;26.3.11579264 + JDK + arduino-cli.
 `debug.keystore`는 개인 테스트용 서명 키예요 (같은 키로 서명해야 덮어쓰기 설치가 돼요).

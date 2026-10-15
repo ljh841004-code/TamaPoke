@@ -47,7 +47,7 @@ static bool gRound = false;               // "둥근 화면" (como la placa) / "
 extern bool gHdArt;
 static void loadRound() {
   FILE *f = fopen((gFiles + "/round.txt").c_str(), "r");
-  if (f) { gRound = fgetc(f) == '1'; gHdArt = fgetc(f) == '1'; fclose(f); }
+  if (f) { gRound = fgetc(f) == '1'; gHdArt = fgetc(f) != '0'; fclose(f); }  // 3D: por defecto si
 }
 static void saveRound() {
   FILE *f = fopen((gFiles + "/round.txt").c_str(), "w");
@@ -163,7 +163,7 @@ void drawHostMenu() {
   drawFit("TamaPoke (Android)", 84, 300, 0xFFFF, 2);
   drawBtn(HM_X, HM_Y[0], HM_W, HM_H, 0x4C98, 0xFFFF, "mons.pak 고르기");
   drawBtn(HM_X, HM_Y[1], HM_W, HM_H, 0x6B4D, 0xFFFF, gRound ? "네모 화면으로" : "둥근 화면으로");
-  drawBtn(HM_X, HM_Y[2], HM_W, HM_H, 0x6B4D, 0xFFFF, gHdArt ? "움직이는 도트로" : "HD 그림으로 (정지)");
+  drawBtn(HM_X, HM_Y[2], HM_W, HM_H, 0x6B4D, 0xFFFF, gHdArt ? "그림: 3D 움직임" : "그림: 도트");
   drawBtn(HM_X, HM_Y[3], HM_W, HM_H, 0xFFFF, 0x0000, "닫기");
   bool on = gHostScreenOn;
   gHostScreenOn = true;  // con la pantalla "apagada" el menu se ve igual

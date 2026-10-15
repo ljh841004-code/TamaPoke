@@ -2240,6 +2240,11 @@ void drawBattlers() {
   }
   if (!foeGone && !foeSil) drawRarityAura(foeX, foeG, rarityKind(bvFoeDex), now);  // ko12.9.23
   if (!meGone && !meSil) drawRarityAura(meX, meG, rarityKind(bvMeDex), now);
+#ifdef HOST_HD
+  // app HD: animaciones de los modelos 3D (el rival de frente, el tuyo de espaldas) si estan en mons/ani
+  if (!foeHide && !foeGone && hdBattlerDraw(bvFoeDex, bvFoeShiny, false, foeX, foeG, foeSil, foeAct)) {
+  } else
+#endif
   if (!foeHide && !foeGone && prgFoe.loaded && prgFoe.has(PMD_IDLE)) {  // ko11.16: estilo juego, de frente
     drawPrgBattler(prgFoe, PMD_IDLE, foeX + 14, foeG, now, foeSil, 12, 124);  // x3 (x2 si es grande)
   } else if (!foeHide && !foeGone) {
@@ -2254,6 +2259,11 @@ void drawBattlers() {
   }
   if (!meHide && !meGone && pCur == 0 && pSlot0Pet && orbValid(pet.orb) && bvMeDex == pet.speciesId && xScreen != XS_LINK)
     drawOrbSlot(meX + 64, meG - 12, 11, pet.orb, now);  // ko11.16: su orbe, abajo a la derecha (detras del sprite)
+#ifdef HOST_HD
+  if (!meHide && !meGone && hdBattlerDraw(bvMeDex, pet.shiny && bvMeDex == pet.speciesId && pCur == 0 && pSlot0Pet, true,
+                                          meX, meG, meSil, meAct)) {
+  } else
+#endif
   if (!meHide && !meGone && prgMe.loaded && prgMe.has(PMD_IDLE_UR)) {  // ko11.16: de espaldas
     drawPrgBattler(prgMe, PMD_IDLE_UR, meX, meG, now, meSil, 12, 176);
   } else if (!meHide && !meGone) {

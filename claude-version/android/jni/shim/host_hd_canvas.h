@@ -19,8 +19,9 @@
 void hdSetFont(const uint8_t *d, size_t n);
 bool hdFontLoaded();
 bool hdGlyph(uint32_t cp, int x, int base, int px, int adv, uint16_t col);
-bool hdArtOn();  // [메뉴] "HD 그림" (정지 그림): por defecto no, el PMD animado
+bool hdArtOn();  // [메뉴] "3D 움직임" (por defecto) / "도트" (PMD)
 bool hdPetDraw(int16_t dex, bool shiny, uint8_t act, int x, int ground, uint32_t t, bool hasPmd);
+bool hdBattlerDraw(int16_t dex, bool shiny, bool back, int x, int ground, bool sil, uint8_t act);
 
 class TPCanvas : public Print {
 public:

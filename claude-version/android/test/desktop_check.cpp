@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
     std::string e = importPak(m);
     close(m[0]);
     struct stat st;
-    check("hd.pak se añade", e.empty() && stat((gSdDir + "/mons/hd/f025.png").c_str(), &st) == 0);
+    check("ani.pak se añade", e.empty() && stat((gSdDir + "/mons/ani/f025.gif").c_str(), &st) == 0);
   }
   if (pak) {
     // en trozos (como se envia al movil): todos los argumentos, en orden
@@ -90,12 +90,12 @@ int main(int argc, char **argv) {
   if (pak) check("sprite cargado desde la carpeta importada", pmd.loaded || mon.loaded);
   if (getenv("HD_PAK")) {
     struct stat st;
-    check("HD sigue tras mons.pak", stat((gSdDir + "/mons/hd/f025.png").c_str(), &st) == 0);
+    check("3D sigue tras mons.pak", stat((gSdDir + "/mons/ani/f025.gif").c_str(), &st) == 0);
     for (int k = 0; k < 4; k++) { run(700); char n[64]; snprintf(n, sizeof(n), "build/desk_02_main_%d.raw", k); saveRaw(n); }
   }
-  if (getenv("HD_PAK")) {  // HD: dibujo grande quieto (opcion del menu)
+  {  // [메뉴] "그림: 도트"
     extern bool gHdArt;
-    gHdArt = true; run(800); saveRaw("build/desk_02_hdart.raw"); gHdArt = false;
+    gHdArt = false; run(800); saveRaw("build/desk_02_dot.raw"); gHdArt = true;
   }
   {  // combate: sin "fantasmas" (cache del fondo durante el efecto de la SD)
     startWild();
