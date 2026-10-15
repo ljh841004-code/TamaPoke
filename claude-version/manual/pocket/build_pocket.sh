@@ -1,5 +1,5 @@
 #!/bin/sh
-# 다마포케 손바닥 가이드 (A7 64쪽) PDF 만들기
+# 다마포케 손바닥 가이드 (A7 60쪽) PDF 만들기
 #   -> A7 PDF (폰 / SD manual.pdf), 집 A4 양면 · 단면 풀칠 · 만드는 법, 인쇄소 도련 3mm · 재단 표시 · 사양 메모
 #   ./build_pocket.sh <SD 그림이 든 렌더 결과 폴더> [fontsource/files]
 #     예: ./build_pocket.sh ../../TamaPoke/test/render/build/shots ~/noto/package/files

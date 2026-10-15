@@ -30,3 +30,15 @@
 ```
 
 화면 사진은 `TamaPoke/test/render/run.sh`로 새로 그려서 `img/`에 복사해요.
+
+## A6 사용 설명서 (인쇄소 주문용, 펌웨어 v1.17-ko12.9.27)
+
+손바닥 가이드(A7)를 그대로 √2배 키운 105×148mm, 60쪽(표지 4 + 본문 56) 중철 책자예요. 글은 `pocket/gen_pocket.py` 하나로 두 책이 같이 바뀌어요.
+
+```sh
+pocket/build_pocket.sh <렌더 결과 shots> [fontsource/files]   # 먼저 손바닥 가이드
+python3 a6/make_a6.py                                         # 그다음 A6
+```
+
+`a6/` 에 생기는 파일: `인쇄용_A6_전체_60쪽.pdf`(인쇄소에 올리는 파일: CMYK 300dpi, 글꼴 없음, 잉크 240% 이하, 도련 3mm),
+`인쇄용_A6_본문_56쪽.pdf` + `인쇄용_A6_표지_펼침.pdf`(표지·본문 따로 올릴 때), 확인용 `TamaPoke_사용설명서_A6.pdf`, 주문 옵션 메모 `인쇄소_사양_A6.txt`.
