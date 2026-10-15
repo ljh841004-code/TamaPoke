@@ -36,11 +36,11 @@ TEST(battle, todas_las_especies_tienen_tipo_valido) {
   CHECK_EQ(DEX_TBL[94].ptype, (uint8_t)PT_GHOST);
 }
 
-TEST(battle, hp_crece_con_el_nivel_y_se_topa_en_150) {  // ko12.9.23: antes se paraba en 100
+TEST(battle, hp_crece_con_el_nivel_y_se_topa_en_100) {  // ko12.10: tope 100 (ko12.9.23: 150)
   CHECK(battleHp(45, 10) < battleHp(45, 50));
-  CHECK(battleHp(45, 100) < battleHp(45, 150));
-  CHECK_EQ(battleHp(45, 150), battleHp(45, 999));
-  CHECK(battleHp(255, 150) < 4000);  // cabe de sobra en uint16
+  CHECK(battleHp(45, 50) < battleHp(45, 100));
+  CHECK_EQ(battleHp(45, 100), battleHp(45, 999));
+  CHECK(battleHp(255, 100) < 4000);  // cabe de sobra en uint16
   Battler b = makeBattler(4, 20, 60, 50, 70);
   CHECK_EQ(b.hp, b.maxHp);
   CHECK_EQ(b.type, (uint8_t)PT_FIRE);
@@ -415,14 +415,14 @@ TEST(trade, rechaza_datos_basura) {
   CHECK_EQ(a.nick[0], (char)0);
 }
 
-// fork KO (ko7): el salvaje sigue al nivel de la mascota y se topa en LEVEL_MAX (ko12.9.23: 150)
-TEST(battle, salvaje_nivel_topado_en_150) {
+// fork KO (ko7): el salvaje sigue al nivel de la mascota y se topa en LEVEL_MAX (ko12.10: 100)
+TEST(battle, salvaje_nivel_topado_en_100) {
   BRng rng(99);
   for (int i = 0; i < 200; i++) {
-    Battler w = makeWild(150, rng);
-    CHECK(w.lvl >= 146 && w.lvl <= 150);
-    Battler u = makeWild(100, rng);
-    CHECK(u.lvl >= 96 && u.lvl <= 101);
+    Battler w = makeWild(100, rng);
+    CHECK(w.lvl >= 96 && w.lvl <= 100);
+    Battler u = makeWild(60, rng);
+    CHECK(u.lvl >= 56 && u.lvl <= 61);
     Battler v = makeWild(5, rng);
     CHECK(v.lvl >= 2 && v.lvl <= 6);
   }
@@ -434,13 +434,12 @@ TEST(battle, exp_de_batalla_crece_con_el_nivel_del_rival) {
   CHECK_EQ(battleExp(0, 10), (uint32_t)0);
   CHECK(battleExp(129, 1) >= 1);
   CHECK_EQ(levelForExp(expForLevel(37)), (uint16_t)37);
-  CHECK_EQ(careMinutesForLevel(150), (uint32_t)0);
-  CHECK(battleExp(16, 140) > battleExp(16, 100));  // ko12.9.23: tambien por encima de 100
-  CHECK_EQ(careMinutesForLevel(1), (uint32_t)15);   // ko10.2: 15 min x nivel
-  CHECK_EQ(careMinutesForLevel(2), (uint32_t)30);
-  CHECK_EQ(careMinutesForLevel(35), (uint32_t)525);
-  // ko10.2: EXP de batalla x0,75 (Pidgey Lv10: (40+45+40+56)/3 = 60 -> 60*10*3/16 = 112)
-  CHECK_EQ(battleExp(16, 10), (uint32_t)112);
+  CHECK_EQ(careMinutesForLevel(100), (uint32_t)0);
+  CHECK_EQ(careMinutesForLevel(1), (uint32_t)34);   // ko12.10: 34 min x nivel
+  CHECK_EQ(careMinutesForLevel(2), (uint32_t)68);
+  CHECK_EQ(careMinutesForLevel(35), (uint32_t)1190);
+  // ko12.10: EXP de batalla /12 (Pidgey Lv10: (40+45+40+56)/3 = 60 -> 60*10/12 = 50)
+  CHECK_EQ(battleExp(16, 10), (uint32_t)50);
 }
 
 // ---------------------------------------------------------------- ko10.1: regiones
@@ -713,7 +712,7 @@ TEST(gym, liga_seis_fuertes_sin_repetir) {
 
 // ko10.11: el salvaje sale con una fuerza parecida a la tuya
 TEST(wild, salvaje_de_tu_talla) {
-  Battler me = makeBattler(9, 50, 120, 130, 110);  // un Blastoise Lv50 entrenado
+  Battler me = makeBattler(9, 50, battleStat(83, 100, 50, 50), battleStat(100, 100, 50, 50), battleStat(78, 100, 50, 50));  // un Blastoise Lv50 entrenado (ko12.10: formula de los juegos)
   uint32_t mp = battlerPower(me);
   int ok = 0, total = 0;
   for (uint32_t s = 1; s < 200; s++) {
@@ -733,7 +732,8 @@ TEST(wild, salvaje_de_tu_talla) {
   Battler c = makeBattler(10, 47, 1, 1, 1), g = makeBattler(149, 47, 1, 1, 1);
   wildMatchPower(c, me, r1);
   wildMatchPower(g, me, r2);
-  CHECK(c.lvl > g.lvl);
+  CHECK(c.lvl >= g.lvl);  // ko12.10: con la formula de los juegos los dos pueden llegar al tope (+3)
+  CHECK(battlerPower(c) <= battlerPower(g) + battlerPower(g) / 4);
   // ko11: la forma cuadra con el nivel: nada de un Caterpie Lv50 ni un Dragonite Lv20
   for (uint32_t sd = 1; sd < 300; sd++) {
     BRng r(sd);
@@ -751,7 +751,9 @@ TEST(wild, salvaje_de_tu_talla) {
 
 // ko11.12: un Pichu Lv9 muy entrenado: salvajes como mucho Lv12, pero igual de fuertes
 TEST(wild, nivel_topado_y_fuerza_en_stats) {
-  Battler me = makeBattler(172, 9, 90, 80, 110);
+  // ko12.10: con la formula de los juegos: genes 110 y entrenamiento a tope, y aun asi x1,4
+  Battler me = makeBattler(172, 9, battleStat(40, 110, 9, 100) * 7 / 5, battleStat(15, 110, 9, 100) * 7 / 5,
+                           battleStat(60, 110, 9, 100) * 7 / 5);
   uint32_t mp = battlerPower(me);
   int ok = 0, total = 0;
   for (uint32_t s = 1; s < 400; s++) {
@@ -1161,15 +1163,16 @@ TEST(wild, sin_evolucionar_sigue_asi_tras_ajustar) {
   CHECK(kept > 10);
 }
 
-// ko12.9.22: el legendario salvaje sale mas fuerte que tu (125-140 %), el normal de tu talla
+// ko12.9.22: el legendario salvaje sale mas fuerte que tu, el normal de tu talla
+// ko12.10: 116 % - 12 + nivel x 12 / 100 + 0..15 -> a Lv45 ~109..124 %
 TEST(battle, legendario_mas_fuerte_que_el_normal) {
-  Battler me = makeBattler(25, 45, 120, 100, 110);
+  Battler me = makeBattler(25, 45, battleStat(55, 100, 45, 40), battleStat(40, 100, 45, 40), battleStat(90, 100, 45, 40));
   for (int k = 0; k < 30; k++) {
     BRng r1(1000 + k), r2(1000 + k);
     Battler a = makeBattler(144, 40, 100, 100, 100), b = makeBattler(144, 40, 100, 100, 100);
     wildMatchPower(a, me, r1, false);
     wildMatchPower(b, me, r2, true);
-    CHECK(battlerPower(b) * 100 >= battlerPower(me) * 115);
+    CHECK(battlerPower(b) * 100 >= battlerPower(me) * 105);
     CHECK(battlerPower(b) > battlerPower(a));
   }
 }

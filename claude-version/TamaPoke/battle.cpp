@@ -89,7 +89,7 @@ uint32_t battleExp(int16_t foeDex, uint16_t foeLvl) {
   if (foeDex < 1 || foeDex > DEX_COUNT) return 0;
   const DexEntry &e = DEX_TBL[foeDex];
   uint32_t yield = ((uint32_t)e.bHp + e.bAtk + e.bDef + e.bSpe) / 3;  // ~50..200
-  uint32_t x = yield * lvlCap(foeLvl) * 3 / 16;  // ko10.2: x0,75 (antes /4)
+  uint32_t x = yield * lvlCap(foeLvl) / 12;  // ko12.10: x4/9 (antes 3/16): tope 100 en lo mismo que antes 150
   return x ? x : 1;
 }
 
@@ -128,15 +128,16 @@ uint8_t evoLevel(int16_t dex) {
   if (dex < 1 || dex > DEX_COUNT) return 0;
   const DexEntry &e = DEX_TBL[dex];
   if (!e.evolvesTo) return 0;
-  bool nextEvolves = DEX_TBL[e.evolvesTo].evolvesTo != 0;  // ramas (Eevee...): todas finales
-  if (nextEvolves) return 16;                          // base de 3 fases
-  if (hasPreEvo(dex)) return e.evolveLevel < 20 ? 20 : e.evolveLevel;  // intermedia
-  return e.evolveLevel;                                // linea de 2 fases
+  return e.evolveLevel;  // ko12.10: el de los juegos (Caterpie 7, Pidgey 18, Dratini 30...; piedra 30, cambio 40)
 }
 
-static uint16_t wildStat(uint8_t base, uint8_t gene, uint16_t lvl) {
-  return (uint16_t)((uint32_t)base * gene / 100 + lvl);
+uint16_t battleStat(uint8_t base, uint8_t gene, uint16_t lvl, uint8_t tr) {
+  uint32_t L = lvlCap(lvl);
+  uint32_t iv = gene <= 90 ? 0 : gene >= 110 ? 31 : (uint32_t)(gene - 90) * 31 / 20;
+  uint32_t ev = (uint32_t)(tr > 100 ? 100 : tr) * 63 / 100;  // EV/4
+  return (uint16_t)((2u * base + iv + ev) * L / 100 + 5);
 }
+static uint16_t wildStat(uint8_t base, uint8_t gene, uint16_t lvl) { return battleStat(base, gene, lvl, 0); }
 
 // sube por su linea evolutiva segun el nivel y monta el combatiente
 // ko12.9.6: a veces (WILD_STAY_PCT) se queda en una fase anterior aunque el nivel ya diera para
@@ -494,21 +495,23 @@ int wildHints(int16_t dex, WildHint *out, int max, int16_t *viaBase, uint8_t *mi
 
 // ---------------------------------------------------------------- ko10.4: gimnasios
 // region: 4 montana, 1 playa, 6 central, 2 bosque, 8 pantano, 10 ruinas, 3 volcan, 9 desierto
+// ko12.10: con los movimientos originales (Raichu y Starmie ya saben golpes fuertes a nivel 1, Alakazam
+// pega con psiquico) algunos niveles bajan 1-2 (test/sim: como antes, ~30-50 % solo y sin pociones)
 const GymDef GYMS[GYM_COUNT] = {
   { 4, 2, { 74, 95, 0 }, { 12, 14, 0 } },      // Brock: Geodude, Onix
-  { 1, 2, { 120, 121, 0 }, { 17, 19, 0 } },    // Misty: Staryu, Starmie (ko12.8: -1/-2 nv: con at. especial Starmie pega mucho mas)
-  { 6, 2, { 100, 26, 0 }, { 21, 24, 0 } },     // Lt. Surge: Voltorb, Raichu
+  { 1, 2, { 120, 121, 0 }, { 16, 18, 0 } },    // Misty: Staryu, Starmie (ko12.8: -1/-2 nv: con at. especial Starmie pega mucho mas)
+  { 6, 2, { 100, 26, 0 }, { 18, 19, 0 } },     // Lt. Surge: Voltorb, Raichu
   { 2, 2, { 114, 45, 0 }, { 29, 32, 0 } },     // Erika: Tangela, Vileplume
-  { 8, 3, { 109, 89, 110 }, { 37, 39, 43 } },  // Koga: Koffing, Muk, Weezing
-  { 10, 3, { 64, 122, 65 }, { 38, 37, 43 } },  // Sabrina: Kadabra, Mr. Mime, Alakazam
+  { 8, 3, { 109, 89, 110 }, { 36, 38, 41 } },  // Koga: Koffing, Muk, Weezing
+  { 10, 3, { 64, 122, 65 }, { 36, 35, 41 } },  // Sabrina: Kadabra, Mr. Mime, Alakazam
   { 3, 3, { 77, 78, 59 }, { 40, 42, 47 } },    // Blaine: Ponyta, Rapidash, Arcanine
-  { 9, 3, { 111, 34, 112 }, { 45, 45, 50 } },  // Giovanni: Rhyhorn, Nidoking, Rhydon
+  { 9, 3, { 111, 34, 112 }, { 43, 43, 48 } },  // Giovanni: Rhyhorn, Nidoking, Rhydon
 };
 
 Battler makeTrainerMon(int16_t dex, uint16_t lvl) {
   if (dex < 1 || dex > DEX_COUNT) dex = 16;
   const DexEntry &e = DEX_TBL[dex];
-  return makeBattler(dex, lvl, wildStat(e.bAtk, 105, lvl), wildStat(e.bDef, 105, lvl), wildStat(e.bSpe, 105, lvl));
+  return makeBattler(dex, lvl, wildStat(e.bAtk, 98, lvl), wildStat(e.bDef, 98, lvl), wildStat(e.bSpe, 98, lvl));  // ko12.10: genes 98 (antes 105): con la formula de los juegos los genes pesan mas
 }
 
 ExpReward expeditionReward(uint8_t hours, uint16_t lvl, BRng &rng) {
@@ -568,7 +571,7 @@ void dailyTeam(uint32_t day, uint16_t petLvl, Battler out[DAILY_TEAM]) {
 // ---- ko10.4: tiempo de la batalla. ko12.10: danza lluvia / dia soleado / tormenta arena lo cambian 5 turnos
 static uint8_t sBattleWx = WX_CLEAR;   // el de verdad (reloj / internet)
 static uint8_t sWxOv = WX_CLEAR, sWxT = 0;  // el de los movimientos y los turnos que le quedan
-void battleSetWeather(uint8_t wx) { sBattleWx = wx; sWxT = 0; }
+void battleSetWeather(uint8_t wx) { sBattleWx = wx; sWxT = 0; }  // (el de los movimientos va en Battler::fieldWx*)
 uint8_t battleWeather() { return sWxT ? sWxOv : sBattleWx; }
 
 // multiplicador del tiempo en medios: 3 = x1,5, 1 = x0,5, 2 = normal
@@ -693,19 +696,47 @@ uint8_t moveMigrate(int16_t dex, uint8_t oldId) {
   return bs < 1000 ? best : 0;  // de otro tipo no: mejor que lo rellene su lista
 }
 
-// como en los juegos: los 4 ultimos que aprende subiendo de nivel hasta ese nivel (sin repetir)
+// como en los juegos: los 4 ultimos que aprende subiendo de nivel hasta ese nivel (sin repetir).
+// ko12.10: lo que aprendio de pequeno cuenta (Raichu Lv19 sabe lo de Pikachu); lo que su forma evolucionada
+// trae "a nivel 1" lo aprende al evolucionar (Raichu: rayo, a 30). Y al menos un golpe que haga dano
 void movesDefault(int16_t dex, uint16_t lvl, uint8_t out[4]) {
   memset(out, 0, 4);
   if (dex < 1 || dex > DEX_COUNT) return;
+  struct E { uint8_t lv, id; };
+  E all[96];
   uint8_t n = 0;
-  for (int i = (int)MOVE_LS_OFF[dex] - 1; i >= (int)MOVE_LS_OFF[dex - 1] && n < 4; i--) {
-    uint8_t lv = MOVE_LS[i][0], id = MOVE_LS[i][1];
-    if (lv > lvl || movesHas(out, id)) continue;
-    out[n++] = id;
+  int16_t d = dex;
+  for (int g = 0; g < 3 && d; g++) {
+    int16_t pre = dexPrevo(d);
+    uint8_t at1 = pre ? evoLevel(pre) : 1;  // los "de nivel 1" de una forma evolucionada: al evolucionar
+    for (uint16_t i = MOVE_LS_OFF[d - 1]; i < MOVE_LS_OFF[d] && n < 96; i++) {
+      uint8_t lv = MOVE_LS[i][0];
+      if (lv <= 1 && pre && at1 > 1) lv = at1;
+      all[n++] = { lv, MOVE_LS[i][1] };
+    }
+    d = pre;
+  }
+  // por nivel (a igual nivel, el orden de la lista)
+  for (uint8_t i = 1; i < n; i++)
+    for (uint8_t j = i; j > 0 && all[j - 1].lv > all[j].lv; j--) { E t = all[j]; all[j] = all[j - 1]; all[j - 1] = t; }
+  uint8_t k = 0;
+  for (int i = (int)n - 1; i >= 0 && k < 4; i--) {
+    if (all[i].lv > lvl || movesHas(out, all[i].id)) continue;
+    out[k++] = all[i].id;
+  }
+  bool dmg = false;
+  for (uint8_t i = 0; i < k; i++) if (!moveIsStatus(out[i])) dmg = true;
+  if (!dmg) {  // el ultimo golpe que sepa, en lugar del de estado mas antiguo
+    for (int i = (int)n - 1; i >= 0; i--)
+      if (all[i].lv <= lvl && !moveIsStatus(all[i].id) && !movesHas(out, all[i].id)) {
+        if (k < 4) out[k++] = all[i].id;
+        else out[3] = all[i].id;
+        break;
+      }
   }
   // orden de aprendizaje (el mas antiguo primero, como en la pantalla del juego)
-  for (uint8_t i = 0; i < n / 2; i++) { uint8_t t = out[i]; out[i] = out[n - 1 - i]; out[n - 1 - i] = t; }
-  if (!n) out[0] = MOVE_TACKLE;
+  for (uint8_t i = 0; i < k / 2; i++) { uint8_t t = out[i]; out[i] = out[k - 1 - i]; out[k - 1 - i] = t; }
+  if (!k) out[0] = MOVE_TACKLE;
 }
 
 bool moveFxInfo(uint8_t id, uint8_t *type, uint8_t *tier, uint8_t *var) {
@@ -991,7 +1022,8 @@ static uint32_t aiStatus(const Battler &self, const Battler &foe, uint8_t id, ui
   auto P = [&](uint32_t w) { return base * w / 100 * acc / 100; };
   if (foe.subHp && !(m.flags & MF_SELF)) return 0;
   switch (m.fx) {
-    case MX_HEAL: case MX_HEALWX: return low ? P(60 + (100 - self.hp * 100u / self.maxHp)) : 0;
+    case MX_HEAL: case MX_HEALWX:  // ko12.10: como la IA del juego, sin abusar (si no, Starmie se curaba sin fin)
+      return self.hp * 100u < self.maxHp * 40u ? P(40 + (100 - self.hp * 100u / self.maxHp) / 2) : 0;
     case MX_REST: return (self.hp * 100u < self.maxHp * 40u && self.st != ST_SLP) ? P(85) : 0;
     case MX_TOXIC: return canAfflict(ST_PSN, foe) && !foeLow ? P(75) : 0;
     case MX_LEECHSEED: return !foe.seeded && !battlerHasType(foe, PT_GRASS) && !foeLow ? P(55) : 0;
@@ -1917,6 +1949,8 @@ static void restTick(Battler &b) {
   if (b.restT && !--b.restT) b.restMv = 0;
 }
 static void turnEnd(Battler &a, Battler &b) {
+  a.fieldWx = b.fieldWx = sWxOv;  // ko12.10: el tiempo de los movimientos viaja con los combatientes
+  a.fieldWxT = b.fieldWxT = sWxT;
   a.flinch = b.flinch = false;
   a.guard = b.guard = false;
   a.protect = b.protect = false;
@@ -1925,6 +1959,10 @@ static void turnEnd(Battler &a, Battler &b) {
 }
 // al empezar el turno: las puas al que acaba de entrar
 static void turnStart(TurnCtx &c) {
+  // ko12.10: el tiempo de los movimientos sale de los combatientes (asi dos simulaciones en el mismo
+  // aparato, o en los dos del tongsin, no se pisan); el del reloj sigue en sBattleWx
+  sWxOv = c.s[0]->fieldWx;
+  sWxT = c.s[0]->fieldWxT;
   for (uint8_t s = 0; s < 2; s++) {
     Battler &me = *c.s[s];
     me.lastDmgP = me.lastDmgS = 0;
@@ -2098,10 +2136,12 @@ void battleClearVolatile(Battler &b) {
   b.restMv = b.restT = 0;
   b.reflT = b.lscrT = b.mistT = b.safeT = 0;
   b.spikes = 0;
+  b.fieldWx = b.fieldWxT = 0;
 }
 
 void battleSwitchIn(Battler &out, Battler &in) {
   if (&out == &in) return;
+  in.fieldWx = out.fieldWx; in.fieldWxT = out.fieldWxT;
   in.spikes = out.spikes;
   in.reflT = out.reflT; in.lscrT = out.lscrT; in.mistT = out.mistT; in.safeT = out.safeT;
   in.spkPend = in.spikes != 0;
@@ -2289,6 +2329,32 @@ int8_t typeMatchD(int16_t mine, int16_t foe) {
   if (mine < 1 || mine > DEX_COUNT || foe < 1 || foe > DEX_COUNT) return 0;
   return typeMatchTT(DEX_TBL[mine].ptype, DEX_T2[mine], DEX_TBL[foe].ptype, DEX_T2[foe]);
 }
+static uint8_t bestEffQ(const Battler &at, const Battler &df, bool *any) {
+  uint8_t best = 0;
+  *any = false;
+  for (uint8_t i = 0; i < 4; i++) {
+    uint8_t id = at.mv[i];
+    if (!id || moveIsStatus(id)) continue;
+    const MoveDef &m = moveDef(id);
+    if (m.fx == MX_SONICBOOM || m.fx == MX_DRAGONRAGE || m.fx == MX_LEVEL || m.fx == MX_SUPERFANG ||
+        m.fx == MX_COUNTER || m.fx == MX_MIRRORCOAT || m.fx == MX_PSYWAVE) continue;  // dano fijo: el tipo no cuenta
+    *any = true;
+    uint8_t q = typeEffQ(moveTypeFor(at, id), df.type, df.type2);
+    if (battlerHasType(at, moveTypeFor(at, id))) q = (uint8_t)(q * 3 / 2);  // STAB pesa como en el dano
+    if (q > best) best = q;
+  }
+  return best;
+}
+int8_t typeMatchMoves(const Battler &me, const Battler &foe) {
+  bool am, af;
+  uint8_t qm = bestEffQ(me, foe, &am), qf = bestEffQ(foe, me, &af);
+  if (!am || !af) return typeMatchD(me.dex, foe.dex);
+  if (qm >= 12 && qf < 12) return 1;      // x2 con STAB (o x4) contra nada de eso
+  if (qf >= 12 && qm < 12) return -1;
+  if (qm >= 8 && qf <= 4) return 1;
+  if (qf >= 8 && qm <= 4) return -1;
+  return 0;
+}
 int8_t typeMatchTT(uint8_t m1, uint8_t m2, uint8_t f1, uint8_t f2) {
   uint8_t out = typeEffQ(m1, f1, f2), in = typeEffQ(f1, m1, m2);
   if (m2 < PT_BATTLE_N) { uint8_t o = typeEffQ(m2, f1, f2); if (o > out) out = o; }
@@ -2348,10 +2414,10 @@ void wildMatchPower(Battler &foe, const Battler &me, BRng &rng, bool legend) {
   // algo mas suaves, y el tipo pesa menos (con desventaja se perdia ~70 %): el salvaje que te gana por
   // tipo baja su fuerza y el que pierde por tipo la sube un poco
   uint32_t pct;
-  if (legend) pct = WILD_POW_LEGEND - 12 + (me.lvl > 120 ? 120 : me.lvl) / 10 + rng.below(16);  // Lv40 116..131, Lv120+ 125..140
+  if (legend) pct = WILD_POW_LEGEND - 12 + (me.lvl > 100 ? 100 : me.lvl) * 12 / 100 + rng.below(16);  // Lv40 117..132, Lv100 125..140
   else if (DEX_TBL[foe.dex].rarity == R_RARO) pct = (me.lvl < 20 ? WILD_POW_RARE - 6 : WILD_POW_RARE) + rng.below(16);
   else pct = (me.lvl < 20 ? WILD_POW_LOW : WILD_POW_NORMAL) + rng.below(16);
-  int8_t tm = typeMatchD(me.dex, foe.dex);  // ko12.10: dos tipos
+  int8_t tm = typeMatchMoves(me, foe);  // ko12.10: con sus movimientos (el tipo de la especie ya no basta)
   if (tm < 0) pct = pct * WILD_POW_TYPE_BAD / 100;
   else if (tm > 0) pct = pct * WILD_POW_TYPE_GOOD / 100;
   uint32_t target = battlerPower(me) * pct / 100;

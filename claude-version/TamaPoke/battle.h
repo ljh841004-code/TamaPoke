@@ -169,6 +169,7 @@ struct Battler {
   uint8_t perish = 0;           // canto mortal: cuenta + 1
   uint8_t spikes = 0;           // puas en su lado
   uint8_t sketched = 0;         // esquema: lo aprendio para siempre (el que crias)
+  uint8_t fieldWx = 0, fieldWxT = 0;  // tiempo de los movimientos (los dos lados llevan copia: cada placa el suyo)
   uint16_t subHp = 0;           // sustituto
   uint16_t lastDmgP = 0, lastDmgS = 0;  // dano fisico / especial recibido este turno (contraataque, manto espejo)
   uint16_t bideDmg = 0, futDmg = 0;
@@ -304,12 +305,14 @@ void dailyTeam(uint32_t day, uint16_t petLvl, Battler out[DAILY_TEAM]);
 // + velocidad) quede cerca de la tuya (90-105 %): especies flojas salen con mas
 // nivel, y las fuertes con menos (entre -6 y +10 del nivel que traia)
 // ko12.9.23: fuerza del salvaje en % de la tuya (+0..15 al azar). Ajustado con test/sim (make -C test/sim)
-#define WILD_POW_LOW 85        // comun, tu nivel < 20
-#define WILD_POW_NORMAL 90     // comun
-#define WILD_POW_RARE 98       // raro (antes como el comun)
-#define WILD_POW_LEGEND 125    // legendario a Lv120+ (ko12.9.22); mas abajo hasta -8
-#define WILD_POW_TYPE_BAD 88   // te gana por tipo: x0,88
-#define WILD_POW_TYPE_GOOD 106 // le ganas por tipo: x1,06
+// ko12.10: con los movimientos originales, el tope 100 y la formula de los juegos (sim, 800 por casilla):
+// comun ~72 %, raro ~63 %, legendario ~20 %; con ventaja de tipo ~90 %, igual ~68 %, desventaja ~45 %
+#define WILD_POW_LOW 80        // comun, tu nivel < 20
+#define WILD_POW_NORMAL 81     // comun
+#define WILD_POW_RARE 88       // raro (un poco mas fuerte que el comun)
+#define WILD_POW_LEGEND 116    // legendario a Lv100; mas abajo hasta -12
+#define WILD_POW_TYPE_BAD 87   // te gana por tipo (con sus movimientos): x0,87
+#define WILD_POW_TYPE_GOOD 104 // le ganas por tipo: x1,04
 #define WILD_LVL_OVER 3  // ko11.12: el salvaje como mucho 3 niveles por encima del tuyo
 void wildMatchPower(Battler &foe, const Battler &me, BRng &rng, bool legend = false);
 uint32_t battlerPower(const Battler &b);
@@ -337,6 +340,9 @@ extern const Battler *gStoryFlyAt;  // ko11.23.3: historia: la familia Pidgey (s
 // -1 desventaja (al reves), 0 igual
 int8_t typeMatch(uint8_t mine, uint8_t foe);
 int8_t typeMatchD(int16_t mine, int16_t foe);  // ko12.10: especie contra especie (dos tipos)
+// ko12.10: con sus movimientos de verdad: +1 si el mejor golpe mio es muy eficaz y el suyo no (o el suyo
+// no le hace nada), -1 al reves, 0 igual. Sin movimientos de dano: por especie (typeMatchD)
+int8_t typeMatchMoves(const Battler &me, const Battler &foe);
 int8_t typeMatchTT(uint8_t m1, uint8_t m2, uint8_t f1, uint8_t f2);  // tipos (0xFF = sin segundo)
 uint8_t dexType2(int16_t dex);  // ko12.10: segundo tipo de la especie (0xFF = ninguno)
 const char *dexTypesStr(int16_t dex, char *buf, int n);  // "불꽃/비행"
@@ -427,14 +433,17 @@ int linkAttacks(LinkSide &A, LinkSide &B, uint8_t actA, uint8_t actB, BRng &rng,
 
 // ---- fork KO (ko7): niveles por experiencia, como PokeRogue/los juegos ----
 // curva "media-rapida": el nivel n empieza en n^3 de EXP (tope LEVEL_MAX)
-#define LEVEL_MAX 150  // ko12.9.23: 150 (antes 100)
+#define LEVEL_MAX 100  // ko12.10: 100 como en los juegos (ko12.9.23: 150). El tiempo hasta el tope, el mismo que a 150
 uint32_t expForLevel(uint16_t lvl);      // EXP donde empieza ese nivel (1 -> 0)
 uint16_t levelForExp(uint32_t exp);      // nivel que da esa EXP (1..LEVEL_MAX)
 // EXP de derrotar/capturar a un rival: rendimiento de la especie x nivel / 4
 uint32_t battleExp(int16_t foeDex, uint16_t foeLvl);
 // ko9: tiempo de crianza que cuesta subir del nivel lvl al siguiente sin
 // batallas: CARE_MIN_PER_LVL x nivel (ko10.2: 15 min; 1->2 un cuarto de hora, 2->3 media hora...)
-#define CARE_MIN_PER_LVL 15UL  // ko10.2: minutos de crianza por nivel (antes 30)
+#define CARE_MIN_PER_LVL 34UL  // ko12.10: minutos de crianza por nivel (ko10.2: 15; con tope 150): Lv1->100 ~ 117 dias, como antes a 150
+// ko12.10: caracteristica como en los juegos: (2 x base + genes como IV 0..31 + entrenamiento como EV) x nivel / 100 + 5.
+// tr = entrenamiento (0..100, como 0..252 EV)
+uint16_t battleStat(uint8_t base, uint8_t gene, uint16_t lvl, uint8_t tr);
 uint32_t careMinutesForLevel(uint16_t lvl);
 // nivel al que evoluciona esta especie (0 = forma final). Lineas de 3 fases:
 // la base a 16 y la intermedia a su nivel original (minimo 20). Lineas de 2

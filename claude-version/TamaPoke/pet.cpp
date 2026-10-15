@@ -755,7 +755,7 @@ void Pet::rename(const char *name) {
 }
 
 static uint16_t calcStat(uint8_t base, uint8_t gene, uint16_t lvl, uint8_t tr) {
-  return (uint16_t)base * gene / 100 + lvl + tr;
+  return battleStat(base, gene, lvl, tr);  // ko12.10: como en los juegos
 }
 
 uint16_t Pet::atkStat() const {
@@ -1743,6 +1743,7 @@ void Pet::load(bool *migrated) {
   // fork KO (ko7): guardados de antes (nivel = horas, hasta Lv338+) empiezan
   // en Lv1 con la misma especie
   exp = prefs.getUInt("exp", 0);
+  if (exp > expForLevel(LEVEL_MAX)) exp = expForLevel(LEVEL_MAX);  // ko12.10: tope 100 (antes 150): se queda en el tope
   if (prefs.isKey("dexn")) {
     speciesId = prefs.getShort("dexn", -1);
     eggTarget = prefs.getShort("eggT2", 4);

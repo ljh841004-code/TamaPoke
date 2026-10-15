@@ -596,13 +596,13 @@ TEST(sdupdate, busca_la_marca_de_version) {
   CHECK_EQ(updFindTag((const uint8_t *)"TPVE", 4), -1);  // cortada: no
 }
 
-// fork KO (ko7): la caja topa en LEVEL_MAX (ko12.9.23: 150) y los Lv300+ de ko6 vuelven a Lv5
+// fork KO (ko7): la caja topa en LEVEL_MAX (ko12.10: 100) y los Lv300+ de ko6 vuelven a Lv5
 TEST(box, niveles_viejos_vuelven_a_5) {
   mockNvsReset();
   Box b;
   b.begin();
   b.add(25, 250, false, true, 0);
-  CHECK_EQ(b.at(0).lvl, (uint16_t)150);
+  CHECK_EQ(b.at(0).lvl, (uint16_t)100);
   BoxMon old = b.at(0);
   old.lvl = 338;  // como lo guardaba ko6
   Preferences raw;
@@ -851,10 +851,10 @@ TEST(gen2, ramas_bebes_e_intercambios) {
   CHECK_EQ(Pet::tradeTarget(95), (int16_t)208);       // Onix -> Steelix
   CHECK_EQ(Pet::tradeTarget(61), (int16_t)186);       // Poliwhirl -> Politoed
   CHECK_EQ(Pet::tradeTarget(1), (int16_t)0);
-  // niveles: bebe de linea de 3 a 16, la final a su nivel
-  CHECK_EQ(evoLevel(172), (uint8_t)16);               // Pichu
+  // ko12.10: niveles de los juegos (amistad = 25, piedra = 30)
+  CHECK_EQ(evoLevel(172), (uint8_t)25);               // Pichu (amistad)
   CHECK_EQ(evoLevel(25), (uint8_t)30);                // Pikachu
-  CHECK_EQ(evoLevel(41), (uint8_t)16);                // Zubat (ahora linea de 3)
+  CHECK_EQ(evoLevel(41), (uint8_t)22);                // Zubat
   CHECK_EQ(evoLevel(236), (uint8_t)20);               // Tyrogue
   CHECK_EQ(evoLevel(152), (uint8_t)16);               // Chikorita
   CHECK_EQ(evoLevel(153), (uint8_t)32);

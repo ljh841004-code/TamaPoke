@@ -127,16 +127,15 @@ TEST(dex, toda_especie_es_alcanzable) {
     CHECK_MSG(reach[d], std::string("inalcanzable: ") + DEX_TBL[d].name);
 }
 
-// fork KO (ko7): niveles de evolucion. Lineas de 3 fases: la base a 16 y la
-// intermedia a su nivel original (minimo 20); lineas de 2 fases: el original.
+// ko12.10: niveles de evolucion de los juegos (piedra ~30, intercambio ~40, amistad 25).
 // Todo tiene que caber bajo el tope de nivel 100.
-TEST(dex, niveles_de_evolucion_ko7) {
+TEST(dex, niveles_de_evolucion_originales) {
   CHECK_EQ(evoLevel(4), (uint8_t)16);    // CHARMANDER
-  CHECK_EQ(evoLevel(5), (uint8_t)36);    // CHARMELEON: original
+  CHECK_EQ(evoLevel(5), (uint8_t)36);    // CHARMELEON
   CHECK_EQ(evoLevel(6), (uint8_t)0);     // CHARIZARD: final
-  CHECK_EQ(evoLevel(10), (uint8_t)16);   // CATERPIE: base de 3 fases
-  CHECK_EQ(evoLevel(11), (uint8_t)20);   // METAPOD: 10 -> minimo 20
-  CHECK_EQ(evoLevel(147), (uint8_t)16);  // DRATINI
+  CHECK_EQ(evoLevel(10), (uint8_t)7);    // CATERPIE
+  CHECK_EQ(evoLevel(11), (uint8_t)10);   // METAPOD
+  CHECK_EQ(evoLevel(147), (uint8_t)30);  // DRATINI
   CHECK_EQ(evoLevel(148), (uint8_t)55);  // DRAGONAIR
   CHECK_EQ(evoLevel(19), (uint8_t)20);   // RATTATA: 2 fases, original
   CHECK_EQ(evoLevel(25), (uint8_t)30);   // PIKACHU

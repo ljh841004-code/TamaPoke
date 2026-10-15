@@ -70,8 +70,9 @@ void Box::begin() {
       if (mons[i].mv[k] && !moveValid(mons[i].mv[k])) { mons[i].mv[k] = 0; fixed = true; }
     if (!moveCount(mons[i].mv)) { movesDefault(mons[i].dex, mons[i].lvl, mons[i].mv); fixed = true; }
     // fork KO (ko7): tope nivel 100. Los de ko6 (nivel por horas, Lv300+)
-    // vuelven a empezar en Lv5
-    if (mons[i].lvl > LEVEL_MAX) { mons[i].lvl = 5; fixed = true; }
+    // vuelven a empezar en Lv5. ko12.10: los de ko12.9.23 (tope 150) se quedan en el tope 100
+    if (mons[i].lvl > 150) { mons[i].lvl = 5; fixed = true; }
+    else if (mons[i].lvl > LEVEL_MAX) { mons[i].lvl = LEVEL_MAX; fixed = true; }
     mons[n++] = mons[i];
   }
   if (fixed) save();

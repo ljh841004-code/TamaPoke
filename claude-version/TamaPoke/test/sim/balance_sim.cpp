@@ -28,7 +28,7 @@ static Battler makeMe(int lv, BRng &rng, int16_t *pick) {
   if (pick) *pick = d;
   const DexEntry &e = DEX_TBL[d];
   int tr = lv * 6 / 10; if (tr > 100) tr = 100;
-  auto st = [&](uint8_t b) { return (uint16_t)(b + lv + tr); };
+  auto st = [&](uint8_t b) { return battleStat(b, 100, (uint16_t)lv, (uint8_t)tr); };  // ko12.10: formula de los juegos
   Battler b = makeBattler(d, (uint16_t)lv, st(e.bAtk), st(e.bDef), st(e.bSpe));
   return b;
 }
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
         int w = fight(me, foe, legend ? 0 : FOE_WHIM, rng.next()) == 0;
         win[rar] += w; tot[rar]++;
         if (!legend) {
-          int m = typeMatch(me.type, foe.type) + 1;  // 0 desventaja, 1 neutro, 2 ventaja
+          int m = typeMatchMoves(me, foe) + 1;  // 0 desventaja, 1 neutro, 2 ventaja (ko12.10: con sus movimientos)
           tw[m] += w; tt[m]++;
         }
         (void)RN;
@@ -89,6 +89,37 @@ int main(int argc, char **argv) {
     printf("%4d | %5d%% %5d%% %5d%% | %6d%% %6d%% %6d%%\n", lv, pc(win[1], tot[1]), pc(win[2], tot[2]),
            pc(win[3], tot[3]), pc(tw[2], tt[2]), pc(tw[1], tt[1]), pc(tw[0], tt[0]));
     (void)turns; (void)nt;
+  }
+  // ko12.10: gimnasios (equipo fijo, uno tras otro, +20 % de vida al caer cada rival) con tu Pokemon al
+  // nivel del mas fuerte del lider
+  printf("\ngimnasio | nivel | gana\n");
+  for (int g = 0; g < GYM_COUNT; g++) {
+    const GymDef &G = GYMS[g];
+    int top = 0;
+    for (int k = 0; k < G.n; k++) if (G.lv[k] > top) top = G.lv[k];
+    for (int dl = -2; dl <= 2; dl += 2) {
+      int wins = 0, M = N / 2;
+      for (int i = 0; i < M; i++) {
+        BRng rng((uint32_t)(g * 7717 + i * 2654435761u + dl * 31) | 1);
+        Battler me = makeMe(top + dl, rng, nullptr);
+        bool alive = true;
+        for (int k = 0; k < G.n && alive; k++) {
+          Battler foe = makeTrainerMon(G.dex[k], G.lv[k]);
+          BRng r2(rng.next());
+          BEvent tmp[BATTLE_MAX_EVENTS];
+          for (int t = 0; t < 60 && me.hp && foe.hp; t++) {
+            BAct x = battleAi(me, foe, r2, 0), y = battleAi(foe, me, r2, 10);
+            battleTurn(me, foe, x, y, r2, tmp, BATTLE_MAX_EVENTS, false);
+          }
+          if (!me.hp || foe.hp) alive = false;
+          uint16_t add = (uint16_t)((uint32_t)me.maxHp * DAILY_HEAL_PCT / 100);
+          me.hp = me.hp + add > me.maxHp ? me.maxHp : me.hp + add;
+          battleClearVolatile(me);
+        }
+        wins += alive;
+      }
+      printf("%8d | %5d | %3d%%\n", g, top + dl, 100 * wins / M);
+    }
   }
   return 0;
 }

@@ -402,17 +402,17 @@ TEST(level, sale_de_la_exp_con_curva_cubica) {
   CHECK_EQ(p.level(), (uint16_t)16);
 }
 
-TEST(level, tope_en_150) {  // ko12.9.23: 150 (antes 100)
+TEST(level, tope_en_100) {  // ko12.10: 100 como en los juegos (ko12.9.23: 150)
   Pet p;
   makePet(p, 4);
   p.exp = 0xFFFFFFF0u;
-  CHECK_EQ(p.level(), (uint16_t)150);
-  p.exp = expForLevel(150) - 5;
+  CHECK_EQ(p.level(), (uint16_t)100);
+  p.exp = expForLevel(100) - 5;
   p.addExp(0xFFFFFFFFu);  // no desborda
-  CHECK_EQ(p.exp, expForLevel(150));
-  CHECK_EQ(p.level(), (uint16_t)150);
-  p.exp = expForLevel(120);
-  CHECK_EQ(p.level(), (uint16_t)120);
+  CHECK_EQ(p.exp, expForLevel(100));
+  CHECK_EQ(p.level(), (uint16_t)100);
+  p.exp = expForLevel(80);
+  CHECK_EQ(p.level(), (uint16_t)80);
 }
 
 TEST(level, addexp_cuenta_los_niveles_subidos) {
@@ -428,25 +428,25 @@ TEST(level, addexp_cuenta_los_niveles_subidos) {
   CHECK_EQ(e.exp, (uint32_t)0);
 }
 
-// ko10.2: solo con el tiempo, Lv1 -> 2 en 15 min, Lv2 -> 3 en 30 min, Lv3 -> 4 en 45 min
-// (antes 30 min x nivel). Vale para cualquier Pokemon, no depende de la especie
-TEST(level, tiempo_de_crianza_15_min_por_nivel) {
+// ko12.10: solo con el tiempo, Lv1 -> 2 en 34 min, Lv2 -> 3 en 68 min, Lv3 -> 4 en 102 min
+// (tope 100 en el mismo tiempo que antes 150). Vale para cualquier Pokemon, no depende de la especie
+TEST(level, tiempo_de_crianza_34_min_por_nivel) {
   for (int16_t dex : { 4, 7, 147 }) {
     Pet p;
     makePet(p, dex);
-    CHECK_EQ(p.careMinutesLeft(), (uint32_t)15);
-    for (int i = 0; i < 14; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
+    CHECK_EQ(p.careMinutesLeft(), (uint32_t)34);
+    for (int i = 0; i < 33; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
     CHECK_EQ(p.level(), (uint16_t)1);
     CHECK_EQ(p.careMinutesLeft(), (uint32_t)1);
     setStats(p, 100, 100, 100, 100); advance(p, 1);
     CHECK_EQ(p.level(), (uint16_t)2);
-    CHECK_EQ(p.careMinutesLeft(), (uint32_t)30);
-    for (int i = 0; i < 30; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
+    CHECK_EQ(p.careMinutesLeft(), (uint32_t)68);
+    for (int i = 0; i < 68; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
     CHECK_EQ(p.level(), (uint16_t)3);
-    CHECK_EQ(p.careMinutesLeft(), (uint32_t)45);
+    CHECK_EQ(p.careMinutesLeft(), (uint32_t)102);
     // dormido tambien cuenta
     p.toggleLight();
-    for (int i = 0; i < 45; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
+    for (int i = 0; i < 102; i++) { setStats(p, 100, 100, 100, 100); advance(p, 1); }
     CHECK_EQ(p.level(), (uint16_t)4);
   }
   // descuido total (una barra <= 10): ese tiempo no cuenta
@@ -459,9 +459,9 @@ TEST(level, tiempo_de_crianza_15_min_por_nivel) {
   makePet(r, 4);
   r.exp = expForLevel(10);
   uint32_t m0 = r.careMinutesLeft();
-  CHECK_EQ(m0, (uint32_t)150);
+  CHECK_EQ(m0, (uint32_t)340);
   r.addExp((expForLevel(11) - expForLevel(10)) / 2);
-  CHECK(r.careMinutesLeft() >= 74 && r.careMinutesLeft() <= 76);  // la mitad del camino
+  CHECK(r.careMinutesLeft() >= 169 && r.careMinutesLeft() <= 171);  // la mitad del camino
 }
 
 // ko10.2: un Pokemon a medio nivel con la cuenta de crianza de antes no pierde nada
@@ -474,7 +474,7 @@ TEST(level, cuenta_de_crianza_antigua_sigue_valiendo) {
   p.careAcc = span * 20;
   setStats(p, 100, 100, 100, 100); advance(p, 1);
   CHECK_EQ(p.level(), (uint16_t)16);
-  CHECK(p.careMinutesLeft() <= 15u * 16 - 20);
+  CHECK(p.careMinutesLeft() <= 34u * 16 - 20);
 }
 
 TEST(level, ganar_una_batalla_da_exp_y_perder_no) {
@@ -612,20 +612,23 @@ TEST(evolve, boton_de_evolucion_se_pospone_al_declinar) {
 }
 
 // ---------------------------------------------------------------- stats
-TEST(stats, formula_base_por_genes_mas_nivel_y_entreno) {
+// ko12.10: como en los juegos: (2 x base + IV + EV/4) x nivel / 100 + 5. Genes 90..110 = IV 0..31,
+// entrenamiento 0..100 = EV 0..252
+TEST(stats, formula_como_en_los_juegos) {
   Pet p;
   makePet(p, 4);  // CHARMANDER: atk 52, def 43, spe 65
-  p.geneAtk = p.geneDef = p.geneSpe = 100;
+  p.geneAtk = p.geneDef = p.geneSpe = 100;  // IV 15
   p.trAtk = p.trDef = p.trSpe = 0;
   p.exp = 0;  // nivel 1
-  CHECK_EQ(p.atkStat(), (uint16_t)(52 + 1));
-  CHECK_EQ(p.defStat(), (uint16_t)(43 + 1));
-  CHECK_EQ(p.speStat(), (uint16_t)(65 + 1));
-  p.exp = expForLevel(10);  // nivel 10
-  p.trAtk = 20;
-  CHECK_EQ(p.atkStat(), (uint16_t)(52 + 10 + 20));
-  p.geneAtk = 110;
-  CHECK_EQ(p.atkStat(), (uint16_t)(52 * 110 / 100 + 10 + 20));
+  CHECK_EQ(p.atkStat(), (uint16_t)((2 * 52 + 15) * 1 / 100 + 5));
+  p.exp = expForLevel(50);
+  CHECK_EQ(p.atkStat(), (uint16_t)((2 * 52 + 15) * 50 / 100 + 5));
+  CHECK_EQ(p.speStat(), (uint16_t)((2 * 65 + 15) * 50 / 100 + 5));
+  p.trAtk = 100;  // EV 252 -> +63
+  CHECK_EQ(p.atkStat(), (uint16_t)((2 * 52 + 15 + 63) * 50 / 100 + 5));
+  p.geneAtk = 110;  // IV 31
+  p.exp = expForLevel(100);
+  CHECK_EQ(p.atkStat(), (uint16_t)(2 * 52 + 31 + 63 + 5));
 }
 
 TEST(stats, el_huevo_no_tiene_stats) {
