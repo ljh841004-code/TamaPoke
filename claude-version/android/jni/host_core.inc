@@ -9,6 +9,21 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <dirent.h>
+#ifdef _WIN32  // PC (Windows, pc/): lo que POSIX trae y Windows no
+#include <io.h>
+#include <direct.h>
+extern "C" __declspec(dllimport) int __stdcall MoveFileExA(const char *, const char *, unsigned long);  // sin windows.h (CX, CY...)
+static inline int hostMkdir(const char *p, int) { return _mkdir(p); }
+#define mkdir(p, m) hostMkdir(p, m)
+static inline ssize_t pread(int fd, void *b, size_t n, off_t off) {
+  if (_lseeki64(fd, (long long)off, SEEK_SET) < 0) return -1;
+  return _read(fd, b, (unsigned)n);
+}
+// rename en Windows no sustituye un fichero que ya existe
+static inline int hostRename(const char *a, const char *b) { return MoveFileExA(a, b, 1 /* MOVEFILE_REPLACE_EXISTING */) ? 0 : -1; }
+#define rename(a, b) hostRename(a, b)
+#define fsync(fd) _commit(fd)
+#endif
 
 extern const char *gSdRoot;
 extern std::atomic<int64_t> gHostPausedUs;

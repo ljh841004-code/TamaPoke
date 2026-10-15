@@ -175,8 +175,13 @@ int32_t gHostClockAdj = 0;
 static uint32_t phoneLocalEpoch() {
   time_t t = time(nullptr);
   struct tm lt;
+#ifdef _WIN32  // PC (Windows): la hora local como si fuera UTC
+  localtime_s(&lt, &t);
+  return (uint32_t)_mkgmtime(&lt);
+#else
   localtime_r(&t, &lt);
   return (uint32_t)(t + lt.tm_gmtoff);
+#endif
 }
 uint32_t rtcEpoch() { return phoneLocalEpoch() + gHostClockAdj; }
 void hostSaveClockAdj();
@@ -281,13 +286,16 @@ bool monsExists(const char *path) { return SD_MMC.exists(path); }
 bool monsIsDir(const char *path) { File d = SD_MMC.open(path); bool r = d && d.isDirectory(); if (d) d.close(); return r; }
 void pakForEach(void (*)(const char *, uint32_t, void *), void *) {}
 #include <dirent.h>
+#include <sys/stat.h>
 bool monsForEachName(void (*cb)(const char *, void *), void *ctx) {
   for (const char *sub : { "", "fx/" }) {
     std::string dir = std::string(gSdRoot) + "/mons/" + sub;
     DIR *d = opendir(dir.c_str());
     if (!d) continue;
     while (struct dirent *e = readdir(d)) {
-      if (e->d_name[0] == '.' || e->d_type == DT_DIR) continue;
+      if (e->d_name[0] == '.') continue;
+      struct stat st;
+      if (stat((dir + e->d_name).c_str(), &st) == 0 && S_ISDIR(st.st_mode)) continue;
       cb((std::string(sub) + e->d_name).c_str(), ctx);
     }
     closedir(d);

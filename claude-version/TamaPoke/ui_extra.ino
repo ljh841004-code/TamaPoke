@@ -2056,6 +2056,9 @@ void updateShake(uint32_t now) {
 
 // ko11.15.1: en combate se miran: el tuyo de espaldas hacia arriba-derecha y el
 // rival hacia abajo-izquierda (si el sprite de la SD trae esas filas)
+// ko12.9.27: los de bola (찌리리공, 붐볼): en su fila abajo-izquierda del PMD la cara sale de lado y los ojos
+// parecen aplastados. De frente, como antes de los combates mirandose
+static bool pmdDlOdd(int16_t dex) { return dex == 100 || dex == 101; }
 static uint8_t battleFacing(const PmdMon &m, uint8_t act, bool mine) {
   uint8_t d = act == PMD_IDLE ? PMD_IDLE_UR : act == PMD_ATTACK ? PMD_ATTACK_UR : act == PMD_HURT ? PMD_HURT_UR : 0xFF;
   if (d == 0xFF) return act;
@@ -2250,7 +2253,7 @@ void drawBattlers() {
   } else if (!foeHide && !foeGone) {
     if (foePmd.loaded) {
       if (!foePmd.has(foeAct)) foeAct = PMD_IDLE;
-      foeAct = battleFacing(foePmd, foeAct, false);
+      if (!pmdDlOdd(bvFoeDex)) foeAct = battleFacing(foePmd, foeAct, false);
       drawPmdActM(foePmd, foeAct, foeX, foeG, now, true, foeSil, 4, 170);  // ko11.10.1: x4 (antes x3)
     } else {
       const uint8_t *th = thumbs.get(bvFoeDex);
