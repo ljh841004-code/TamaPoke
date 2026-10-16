@@ -1079,6 +1079,7 @@ bool battleFxPlaying();
 static uint16_t *bbCache = nullptr;
 static bool bbValid = false;
 #define BB_ROWS 262
+#define BB_REFRESH_MS 150  // ko12.10.3
 void battleBgCacheReset() { bbValid = false; }
 void drawBattleBg() {
   int hh = sceneHour();
@@ -1089,17 +1090,19 @@ void drawBattleBg() {
   int hor = 150;
   uint16_t *fb = gfx->getFramebuffer();
   bool fxNow = fb && battleFxPlaying();
-  if (fxNow && !bbCache) bbCache = (uint16_t *)ps_malloc((size_t)LCD_WIDTH * BB_ROWS * 2);
-  if (fxNow && bbCache && bbValid) {
+  // ko12.10.3: tambien sin efecto: el cielo y el escenario se pintan cada BB_REFRESH_MS y entre medias se
+  // copian (eran ~30 % del fotograma; las nubes van despacio y no se nota)
+  static uint32_t bbT = 0;
+  if (fb && !bbCache) bbCache = (uint16_t *)ps_malloc((size_t)LCD_WIDTH * BB_ROWS * 2);
+  if (bbCache && bbValid && (fxNow || (uint32_t)(now - bbT) < BB_REFRESH_MS)) {
     memcpy(fb, bbCache, (size_t)LCD_WIDTH * BB_ROWS * 2);
   } else {
     drawSky(hor, hh, night, wx, now, false);
     drawBiome(bio, hor, 262, now, night, wx);
     // se vuelve a pedir: en la app HD el lienzo de 466 es una copia que se pone al dia al pedirlo (con el
     // puntero de antes se guardaba el fotograma anterior con los dos Pokemon: salian "fantasmas")
-    if (fxNow && bbCache) { fb = gfx->getFramebuffer(); memcpy(bbCache, fb, (size_t)LCD_WIDTH * BB_ROWS * 2); bbValid = true; }
+    if (bbCache) { fb = gfx->getFramebuffer(); memcpy(bbCache, fb, (size_t)LCD_WIDTH * BB_ROWS * 2); bbValid = true; bbT = now; }
   }
-  if (!fxNow) bbValid = false;
   uint16_t soil = nightDim(BIOME_SOIL[bio < BIOME_N ? bio : 0], night);
   uint16_t pad = lerp565(soil, C565(0x10, 0x18, 0x20), 4, 16);
   gfx->fillEllipse(316 + bvShakeX, 160 + bvShakeY, 78, 16, pad);   // plataforma del rival

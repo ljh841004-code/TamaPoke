@@ -1,3 +1,4 @@
+#include <chrono>
 // test/render: dibuja pantallas del firmware en el PC y las guarda como .raw
 // (RGB565 466x466). run.sh las convierte a PNG. Usa el MISMO codigo de dibujo
 // que la placa (Arduino_GFX real); solo el hardware es de mentira (stubs.cpp).
@@ -2293,6 +2294,29 @@ int main(int argc, char **argv) {
   pet.balls = 5; pet.potions = 2;
   pet.bgAsked = 1;  // ko12.4.1: el aviso de elegir fondo tiene su propia captura
   ensureMon();
+  if (getenv("PERFBAT")) {  // ko12.10.3: cuanto cuesta cada fotograma del combate (perfil en el PC)
+    extern uint8_t gBattleArt;
+    gBattleArt = atoi(getenv("PERFBAT")) == 2 ? 1 : 0;
+    pet.speciesId = 150; ensureMon();
+    startWildIn(3);
+    foePmd.unload(); loadFoe(249, false);
+    Battler a = makeBattler(150, 40, 60, 60, 60);
+    bFoe = makeBattler(249, 40, 60, 60, 60); bGroup = WG_RARE;
+    bvSetup(a, bFoe, nullptr, false);
+    const char *ph[3] = { "intro", "menu", "play" };
+    for (int p = 0; p < 3; p++) {
+      bPhase = p == 0 ? BP_INTRO : p == 1 ? BP_MENU : BP_PLAY; bPhaseT = gMockMillis;
+      double sum = 0, mx = 0;
+      for (int i = 0; i < 300; i++) {
+        auto t0 = std::chrono::steady_clock::now();
+        gMockMillis += 33; render();
+        double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        sum += ms; if (ms > mx) mx = ms;
+      }
+      printf("PERFBAT %s avg %.3f max %.3f ms\n", ph[p], sum / 300, mx);
+    }
+    return 0;
+  }
   if (getenv("MEASURE")) {  // ko12.10.2: alto en pantalla de cada pokemon en combate (도트 vs 원작)
     auto bbox = [](const PmdAct &a, int &top, int &bot, int &w) {
       top = a.h; bot = -1; int l = a.w, r = -1;

@@ -2328,9 +2328,42 @@ void uiScreenBg() {
 }
 
 // sombra difusa bajo una pieza (dos capas, desplazada hacia abajo)
+// ko12.10.3: lo que tapa el panel que se pinta encima (uiButton / uiPanel) no se oscurece: antes cada sombra
+// leia y escribia todo el rectangulo (34 % del fotograma del combate); ahora solo la franja que se ve
+static void uiShadeOut(int x, int y, int w, int h, int r, uint8_t a, int ex, int ey, int ew, int eh, int er) {
+#ifdef HOST_HD
+  (void)ex; (void)ey; (void)ew; (void)eh; (void)er;
+  uiShade(x, y, w, h, r, a);
+  return;
+#endif
+  uint16_t *fb = gfx->getFramebuffer();
+  if (!fb || w <= 0 || h <= 0) return;
+  if (r * 2 > h) r = h / 2;
+  if (r * 2 > w) r = w / 2;
+  if (er * 2 > eh) er = eh / 2;
+  if (er * 2 > ew) er = ew / 2;
+  uint32_t k = 16 - a;
+  for (int yy = 0; yy < h; yy++) {
+    int py = y + yy;
+    if (py < 0 || py >= LCD_HEIGHT) continue;
+    int in = uiRowInset(yy, h, r);
+    int x0 = x + in, x1 = x + w - in;
+    if (x0 < 0) x0 = 0;
+    if (x1 > LCD_WIDTH) x1 = LCD_WIDTH;
+    int e0 = x1, e1 = x1;  // lo tapado en esta fila
+    if (py >= ey && py < ey + eh) {
+      int ein = uiRowInset(py - ey, eh, er);
+      e0 = ex + ein;
+      e1 = ex + ew - ein;
+    }
+    uint16_t *row = fb + py * LCD_WIDTH;
+    if (e0 > x0) uiShadeSpan(row + x0, (e0 < x1 ? e0 : x1) - x0, k);
+    if (e1 < x1) { int s0 = e1 > x0 ? e1 : x0; uiShadeSpan(row + s0, x1 - s0, k); }
+  }
+}
 void uiShadow(int x, int y, int w, int h, int r) {
-  uiShade(x - 1, y + 3, w + 2, h + 3, r + 1, 2);
-  uiShade(x + 1, y + 2, w - 2, h + 1, r, 2);
+  uiShadeOut(x - 1, y + 3, w + 2, h + 3, r + 1, 2, x, y, w, h, r);
+  uiShadeOut(x + 1, y + 2, w - 2, h + 1, r, 2, x, y, w, h, r);
 }
 
 // relleno redondeado con degradado vertical top -> bot (filas de 2 px)
@@ -4791,13 +4824,25 @@ struct SmAA {
   const uint8_t *src = nullptr;
   const uint16_t *pal = nullptr;
   int s4 = 0, W = 0, H = 0;
-  uint16_t *col = nullptr;
+  uint16_t *col = nullptr;  // W*H colores y detras W*H alfas (0..4), en un solo bloque
   uint8_t *a = nullptr;
+  uint32_t used = 0;
+  void release();
 };
-static SmAA gSmAA[2];
+// ko12.10.3: cache de frames ya hechos (antes 1 por lado: cada cambio de frame de la animacion lo rehacia,
+// 20-60 ms en el ESP32, y la animacion y los efectos iban a saltos). Tras la primera vuelta de la animacion
+// cada fotograma solo copia. Hasta SMAA_SLOTS frames / SMAA_BUDGET bytes; sale el que hace mas que no se usa
+#define SMAA_SLOTS 40
+#define SMAA_BUDGET (2600UL * 1024UL)
+static SmAA gSmAA[SMAA_SLOTS];
+static uint32_t gSmAAUse = 0, gSmAABytes = 0;
 #define SMAA_MAXPX (480 * 480)
 int8_t gSmAASlot = -1;  // lo pone quien dibuja el combate; se consume al dibujar
-void smAAReset() { for (SmAA &c : gSmAA) c.src = nullptr; }  // al cargar otro sprite (puede caer en la misma memoria)
+void SmAA::release() {
+  if (col) { gSmAABytes -= (uint32_t)W * H * 3 + (uint32_t)H * 4; free(col); }
+  *this = SmAA();
+}
+void smAAReset() { for (SmAA &c : gSmAA) c.release(); }  // al cargar otro sprite (puede caer en la misma memoria)
 static inline uint16_t smMix565(uint16_t f, uint16_t b, uint8_t a4) {  // a4 de 0 a 4
   uint32_t fx = (f | ((uint32_t)f << 16)) & 0x07E0F81FUL, bx = (b | ((uint32_t)b << 16)) & 0x07E0F81FUL;
   uint32_t m = ((fx * a4 + bx * (4 - a4)) >> 2) & 0x07E0F81FUL;
@@ -4808,20 +4853,40 @@ static bool smoothBlitAA(const uint8_t *src, int w, int h, const uint16_t *pal, 
   return false;
 #endif
   uint16_t *fb = gfx->getFramebuffer();
-  if (!fb || slot > 1 || w <= 0 || h <= 0 || w > SM_MAX || h > SM_MAX) return false;
+  (void)slot;
+  if (!fb || w <= 0 || h <= 0 || w > SM_MAX || h > SM_MAX) return false;
   int W = w * s4 / 4, H = h * s4 / 4;
   if (W <= 0 || H <= 0 || W * H > SMAA_MAXPX) return false;
-  SmAA &c = gSmAA[slot];
-  if (c.src != src || c.pal != pal || c.s4 != s4 || c.W != W || c.H != H) {
-    if (!c.col) {
-      c.col = (uint16_t *)ps_malloc(SMAA_MAXPX * 2);
-      c.a = (uint8_t *)ps_malloc(SMAA_MAXPX);
+  SmAA *hit = nullptr;
+  for (SmAA &e : gSmAA)
+    if (e.col && e.src == src && e.pal == pal && e.s4 == s4 && e.W == W && e.H == H) { hit = &e; break; }
+  bool build = !hit;
+  if (!hit) {
+    uint32_t need = (uint32_t)W * H * 3 + (uint32_t)H * 4;  // colores + alfas + limites de cada fila
+    for (;;) {  // sitio: uno libre, o fuera los que hace mas que no se usan hasta que quepa
+      SmAA *fr = nullptr, *old = nullptr;
+      for (SmAA &e : gSmAA) {
+        if (!e.col) { if (!fr) fr = &e; }
+        else if (!old || e.used < old->used) old = &e;
+      }
+      if (fr && gSmAABytes + need <= SMAA_BUDGET) { hit = fr; break; }
+      if (!old) return false;
+      old->release();
     }
+    hit->col = (uint16_t *)ps_malloc(need);
+    if (!hit->col) return false;
+    hit->a = (uint8_t *)(hit->col + W * H);
+    hit->W = W; hit->H = H;
+    gSmAABytes += need;
+  }
+  SmAA &c = *hit;
+  c.used = ++gSmAAUse;
+  if (build) {
     if (!gSmA) gSmA = (uint8_t *)ps_malloc(SM_MAX * SM_MAX * 4);
     if (!gSmB) gSmB = (uint8_t *)ps_malloc(SM_MAX * SM_MAX * 16);
     bool big = w > SM_MAX8 || h > SM_MAX8;
     if (!big && !gSmC) gSmC = (uint8_t *)ps_malloc(SM_MAX8 * SM_MAX8 * 64);
-    if (!c.col || !c.a || !gSmA || !gSmB || (!big && !gSmC)) return false;
+    if (!gSmA || !gSmB || (!big && !gSmC)) { c.release(); return false; }
     int k = big ? 4 : 8, IW = w * k, IH = h * k;
     smEpx2(src, w, h, gSmA);
     smEpx2(gSmA, w * 2, h * 2, gSmB);
@@ -4886,6 +4951,16 @@ static bool smoothBlitAA(const uint8_t *src, int w, int h, const uint16_t *pal, 
         }
       }
     }
+    // limites de lo visible en cada fila (al copiar se salta lo transparente de los lados)
+    int16_t *rl = (int16_t *)(c.a + W * H), *rr = rl + H;
+    for (int oy = 0; oy < H; oy++) {
+      const uint8_t *oa = c.a + oy * W;
+      int l = 0, r = W - 1;
+      while (l < W && !oa[l]) l++;
+      while (r >= l && !oa[r]) r--;
+      rl[oy] = (int16_t)l;
+      rr[oy] = (int16_t)r;
+    }
     c.src = src; c.pal = pal; c.s4 = s4; c.W = W; c.H = H;
   }
   for (int oy = 0; oy < H; oy++) {
@@ -4894,7 +4969,24 @@ static bool smoothBlitAA(const uint8_t *src, int w, int h, const uint16_t *pal, 
     const uint16_t *oc = c.col + oy * W;
     const uint8_t *oa = c.a + oy * W;
     uint16_t *row = fb + py * LCD_WIDTH;
-    for (int ox = 0; ox < W; ox++) {
+    const int16_t *rl = (const int16_t *)(c.a + W * H), *rr = rl + H;
+    int l = rl[oy], r = rr[oy];
+    if (!gBlitFlipX && x0 + l >= 0 && x0 + r < LCD_WIDTH) {  // lo normal: tramos opacos de golpe
+      for (int ox = l; ox <= r;) {
+        uint8_t a4 = oa[ox];
+        if (a4 == 4) {
+          int j = ox + 1;
+          while (j <= r && oa[j] == 4) j++;
+          memcpy(row + x0 + ox, oc + ox, (size_t)(j - ox) * 2);
+          ox = j;
+          continue;
+        }
+        if (a4) row[x0 + ox] = smMix565(oc[ox], row[x0 + ox], a4);
+        ox++;
+      }
+      continue;
+    }
+    for (int ox = l; ox <= r; ox++) {
       uint8_t a4 = oa[ox];
       if (!a4) continue;
       int px = gBlitFlipX ? x0 + W - 1 - ox : x0 + ox;
