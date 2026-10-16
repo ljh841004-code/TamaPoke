@@ -1117,7 +1117,7 @@ static uint16_t nameInkFor(int16_t dex) { return dex > 151 ? UI_GEN2_INK : UI_IN
 
 // ko12.10.6 (미리보기): estilo del panel de vida. 0 = de siempre (barra en su fila); 1 = el panel entero es la
 // barra (relleno claro) y en la fila de la barra va el numero de la pokedex; 2 = barra gruesa en el borde de abajo
-uint8_t gHpStyle = 0;
+uint8_t gHpStyle = 1;  // ko12.10.6: el panel entero es la barra
 int16_t gHpBoxDex = 0;    // lo pone quien dibuja: numero de pokedex del panel
 float gHpBoxTgt = -1;     // vida a la que va (la barra ya esta ahi; de hp a tgt queda el rastro del golpe)
 static void hpRarityTab(int x, int y, uint8_t rk) {
