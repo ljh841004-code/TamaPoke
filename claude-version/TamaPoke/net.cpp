@@ -456,6 +456,7 @@ static void pageFw() {
   if (gPortal)
     h += F("파일 고르기가 안 열리면: 이 화면을 닫고 Chrome/Safari에서 <b>192.168.4.1/fw</b> 를 열어 주세요.<br>");
   h += F("0x0 통합 이미지(저장이 지워지는 파일)는 받지 않아요.</small></p>");
+  h += F("<p><a href=/sd>SD카드에 파일 올리기 (3D 그림·소리 등)</a></p>");  // ko12.10.8
   if (gPortal) h += F("<p><a href=/>WiFi 설정으로</a></p>");
   h += F("</div><script>"
          "function up(){var f=document.getElementById('f').files[0],g=document.getElementById('g').files[0];"

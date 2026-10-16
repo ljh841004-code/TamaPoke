@@ -121,6 +121,9 @@ enum : uint8_t { BUB_NONE = 0, BUB_DOTS, BUB_BORED, BUB_HUNGRY, BUB_DIRTY, BUB_S
 #define PET_FITH 176    //   alto objetivo del lienzo IDLE (antes 170): x5,5 con lienzo de 32
 PmdMon galleryPmd;  // sprite grande de la vista detalle de la galeria (PMD/TPK2, legal)
 bool gallery3d = false;  // ko12.10.7: galleryPmd tiene el "3D" de frente (fNNN.bin) de la ficha
+// ko12.10.8: la ultima ficha tenia "3D": mientras se lee el siguiente no se ensena la miniatura de
+// puntos (se veia el dibujo de puntos y luego saltaba al 3D)
+static bool gDex3dSeen = false;
 
 // galeria pokedex
 bool galleryOpen = false;
@@ -5298,7 +5301,7 @@ void renderDexDetail() {
     if (dexMvFx && mvT < 900) act = galleryPmd.has(PMD_SHOOT) && !moveIsStatus(dexMvFx) ? PMD_SHOOT : PMD_ATTACK;
     if (!galleryPmd.has(act)) act = PMD_IDLE;
     drawPmdActM(galleryPmd, act, CX, 196, disc ? millis() : 0, true, !disc, 4, 170);
-  } else {
+  } else if (!gDex3dSeen && battleArt() != 2) {
     // ko12.1.1: mientras llega el sprite grande, la miniatura casi del mismo tamano y con los pies donde los
     // pone el sprite (antes 2x y mas arriba: al llegar el sprite se notaba el salto)
     const uint8_t *t = thumbs.get(dx);
@@ -5609,6 +5612,7 @@ void galleryLoadPending() {
   if (!dex || dex != galleryDetail || !galleryOpen) return;
   // ko12.10.7: la ficha con el "3D" de frente (grande y animado) si esta en la SD; si no, el PMD
   gallery3d = galleryPmd.load(dex, pet.isShinyRegistered(dex), 'f');
+  gDex3dSeen = gallery3d;
   if (!gallery3d) galleryPmd.load(dex, pet.isShinyRegistered(dex));
   if (dexLog.caughtCount(dex)) {  // ko11.31: los efectos de sus botones, poco a poco
     uint8_t mv[4];
