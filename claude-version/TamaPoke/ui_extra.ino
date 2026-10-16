@@ -536,11 +536,16 @@ uint8_t battleArt() {
 }
 static int16_t prgMeDex = 0;  // ko12.9.26: la especie que tiene prgMe (antes se comparaba con bvMeDex, que en el
 static bool prgMeShiny = false;  // cambio del equipo ya era el nuevo: seguia el sprite del anterior en "원작")
+static bool prgAlways(int16_t dex) { return dex == 101; }
 static void prgLoadFor(int16_t meDex, int16_t foeDex, bool foeShiny) {
   prgFoeDex = foeDex;
   prgFoeShiny = foeShiny;
-  if (!battleArt()) { prgFoe.unload(); prgMe.unload(); prgMeDex = 0; return; }  // PMD: ni se leen (menos SD y RAM)
-  prgFoe.load((uint8_t)foeDex, foeShiny, 'r');  // ~100 KB de la SD, una vez por combate
+  // ko12.10.2: con "도트" se usa el dibujo original para los que el PMD dibuja mal (붐볼: rueda y los ojos
+  // salen aplastados); el resto, PMD (ni se leen los originales: menos SD y RAM)
+  bool all = battleArt();
+  if (all || prgAlways(foeDex)) prgFoe.load((uint8_t)foeDex, foeShiny, 'r');  // ~100 KB de la SD, una vez por combate
+  else prgFoe.unload();
+  if (!all && !prgAlways(meDex)) { prgMe.unload(); prgMeDex = 0; return; }
   bool meShiny = pet.shiny && meDex == pet.speciesId;
   if (!prgMe.loaded || prgMeDex != meDex || prgMeShiny != meShiny) {
     prgMe.load((uint8_t)meDex, meShiny, 'r');
@@ -579,6 +584,7 @@ bool foePmdShiny = false;
 void loadFoe(int16_t dex, bool shiny) {
   if (foePmd.loaded && foePmdDex == dex && foePmdShiny == shiny) return;
   foePmd.unload();
+  smAAReset();  // ko12.10.2
   foePmdDex = dex;
   foePmdShiny = shiny;
   if (dex >= 1 && dex <= DEX_COUNT) foePmd.load(dex, shiny);
@@ -2102,24 +2108,32 @@ void updateShake(uint32_t now) {
 // parecen aplastados. De frente, como antes de los combates mirandose
 static bool pmdDlOdd(int16_t dex) { return dex == 100 || dex == 101; }
 // ko12.10.1: 붐볼 (dot): su Idle/Attack del PMD es la bola rodando y en medio del giro los ojos salen
-// aplastados; y aun de frente los ojos son 2-3 pixeles en diagonal. En combate se queda en el frame
-// de frente (el 2o del Idle), con la cara redibujada (ojos enfadados con brillo + sonrisa ancha, como
-// en el original), y solo flota un poco
-extern const uint8_t *gPmdFrameOverride;
-static const char EL_FACE[9][15] = {  // x 5..18, y 10..18 del lienzo 24x32; indices de la paleta, '.' = igual
-  "3033333333330.", "3003333333300.", "3030333333030.", "330003333000..", "330333333330..",
-  "333000000003..", "..0333333330..", "...00000000...", "....555555....",
-};
-static uint8_t elFaceBuf[24 * 32];
-static const uint8_t *electrodeFace(const PmdAct &a, uint8_t fi) {
-  if (a.w != 24 || a.h != 32 || fi >= a.frames) return nullptr;
-  const uint8_t *fr = a.data + (uint32_t)fi * 24 * 32;
-  if (fr[13 * 24 + 3] != 0 || fr[4 * 24 + 12] != 0) return nullptr;  // no es el sprite que conocemos
-  memcpy(elFaceBuf, fr, sizeof(elFaceBuf));
-  for (int y = 0; y < 9; y++)
-    for (int x = 0; x < 14; x++)
-      if (EL_FACE[y][x] != '.') elFaceBuf[(10 + y) * 24 + 5 + x] = (uint8_t)(EL_FACE[y][x] - '0');
-  return elFaceBuf;
+// aplastados. Normalmente se usa su dibujo original (prgAlways); si la SD no lo trae, el frame de frente
+// (el 2o del Idle) quieto, flotando un poco
+// ko12.10.2: con "도트" cada Pokemon mide en combate lo mismo que con "원작" (BATTLE_H_*, lo visible, sin el
+// margen del lienzo del PMD). Antes se ajustaba el LIENZO a 170 px: los de lienzo grande y mucho hueco (뮤츠
+// de espaldas, 잉어킹...) salian a la mitad que el dibujo original
+extern int gPmdForceS4;
+extern int8_t gSmAASlot;
+void smAAReset();
+static int pmdVisH(const PmdAct &a) {
+  if (!a.frames || !a.data) return 0;
+  int top = a.h, bot = -1;
+  for (int y = 0; y < a.h; y++) {
+    const uint8_t *row = a.data + y * a.w;
+    for (int x = 0; x < a.w; x++)
+      if (row[x] != 0xFF) { if (y < top) top = y; bot = y; break; }
+  }
+  return bot >= top ? bot - top + 1 : 0;
+}
+static void battleDotScale(const PmdMon &m, int16_t dex, bool mine) {
+  if (dex < 1 || dex > 251) return;
+  uint8_t tgt = mine ? BATTLE_H_ME[dex] : BATTLE_H_FOE[dex];
+  int h = pmdVisH(m.acts[mine && m.has(PMD_IDLE_UR) ? PMD_IDLE_UR : PMD_IDLE]);
+  if (!tgt || h <= 0) return;
+  int s4 = (tgt * 4 + h / 2) / h;
+  gPmdForceS4 = s4 < 8 ? 8 : s4 > 28 ? 28 : s4;
+  gSmAASlot = mine ? 1 : 0;
 }
 static bool pmdSteady(const PmdMon &m, int16_t dex, uint8_t &act, uint32_t &t, int &gy) {
   if (dex != 101 || (act != PMD_IDLE && act != PMD_ATTACK)) return false;
@@ -2128,7 +2142,6 @@ static bool pmdSteady(const PmdMon &m, int16_t dex, uint8_t &act, uint32_t &t, i
   act = PMD_IDLE;
   t = a.ms[0];  // inicio del frame 1
   gy += (int)lroundf(2.5f * sinf(millis() / 260.0f));
-  gPmdFrameOverride = electrodeFace(a, 1);
   return true;
 }
 static uint8_t battleFacing(const PmdMon &m, uint8_t act, bool mine) {
@@ -2191,6 +2204,10 @@ bool battleLongPress(int16_t x, int16_t y) {
   vibPulse(30, 1, 0);
   return true;
 }
+// ko12.10.2: la entrada del combate (deslizar, nombres, legendario) es lo que mas se nota si va a saltos:
+// mientras dura, los efectos de la SD se leen de 8 KB en 8 KB (antes hasta 20 ms por vuelta); con el
+// menu esperando al dedo ya van a toda velocidad
+bool battleIntroBusy() { return xScreen == XS_WILD && bPhase == BP_INTRO; }
 bool battleFxPlaying() {
   if (xScreen != XS_WILD) return false;
   uint8_t side;
@@ -2342,6 +2359,7 @@ void drawBattlers() {
       uint32_t ft = now;
       int fg = foeG;
       pmdSteady(foePmd, bvFoeDex, foeAct, ft, fg);
+      battleDotScale(foePmd, bvFoeDex, false);
       drawPmdActM(foePmd, foeAct, foeX, fg, ft, true, foeSil, 4, 170);  // ko11.10.1: x4 (antes x3)
     } else {
       const uint8_t *th = thumbs.get(bvFoeDex);
@@ -2362,6 +2380,7 @@ void drawBattlers() {
     if (mm.loaded) {
       if (!mm.has(meAct)) meAct = PMD_IDLE;
       meAct = battleFacing(mm, meAct, true);
+      battleDotScale(mm, bvMeDex, true);
       drawPmdActM(mm, meAct, meX, meG, now, true, meSil, 4, 170);
     } else {
       const uint8_t *th = thumbs.get(bvMeDex);
@@ -2826,6 +2845,7 @@ static void partyLoadMe() {
   helperPmd.unload();
   helperPmdDex = bMe.dex;
   helperPmdShiny = sh;
+  smAAReset();  // ko12.10.2
   helperPmd.load((uint8_t)bMe.dex, sh);
 }
 // el mejor para salir contra el rival de ahora (-1 = mejor quedarse, si se puede)
@@ -3261,6 +3281,7 @@ void bvPreloadFx() {
 void bvSetup(const Battler &me, const Battler &foe, const char *foeNick, bool foeShiny) {
   uint32_t perfT0 = millis();  // ko11.32
   battleBgCacheReset();
+  smAAReset();  // ko12.10.2
   // ko11.16: sprites de combate (si la SD los tiene)
   prgLoadFor(me.dex, foe.dex, foeShiny);
   {  // ko11.31: y los efectos de sus movimientos, poco a poco mientras sale (entrar ya no se para;
@@ -3948,6 +3969,7 @@ void partyCancel() { xScreen = ppFrom; sfxPlay(SFX_TAP); }
 
 void gymTap(int16_t x, int16_t y) {
   // ko10.11: flechas de pagina y la pagina de la liga (ko11.17: en la 1a, [<] = volver)
+  if (navHit(NAV_DOWN, x, y)) { sfxPlay(SFX_TAP); gRet = RET_MAIN; goBack(); return; }  // ko12.10.2: a la principal
   if (navHit(NAV_L, x, y)) { if (gymPage > 0) gymSwipe(1); else { sfxPlay(SFX_TAP); goBack(); } return; }
   if (navHit(NAV_R, x, y)) { if (gymPage < GY_PAGES - 1) gymSwipe(-1); return; }
   if (gymPage == 2) { leagueTap(x, y); return; }
@@ -3997,6 +4019,7 @@ static void gymDots() {
 static void gymFooter() {  // ko12.9.24: sin [탭: 뒤로] (la flecha < vuelve en la 1a pagina)
   drawNav(NAV_L, UI_INK);  // ko11.17: pagina anterior, o volver en la 1a
   if (gymPage < GY_PAGES - 1) drawNav(NAV_R, UI_INK);
+  drawNav(NAV_DOWN, UI_INK);  // ko12.10.2: ▼ = a la pantalla principal (en las 3 paginas)
   uiFlush();
 }
 

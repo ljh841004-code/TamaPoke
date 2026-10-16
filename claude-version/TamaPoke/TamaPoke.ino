@@ -37,6 +37,7 @@
 #include "sdcheck.h"    // ko12.8: SD 파일 점검
 #include "savebak.h"    // ko11.6: copia de la partida en la SD
 #include "story.h"      // ko11.21: modo historia (guiones en story_ko.cpp)
+#include "battle_size.h"  // ko12.10.2: alto de cada Pokemon en combate (도트 = 원작)
 #ifdef ESP_PLATFORM
 #include <nvs_flash.h>     // ko11.6: particion nvs2
 #include <esp_partition.h>
@@ -929,6 +930,7 @@ void perfReset() { perfRenderMax = perfStallMax = 0; perfFrames = 0; perfRenderS
 
 static bool petHoldAllowed();  // ko12.2
 bool mainNavAllowed();
+bool battleIntroBusy();  // ko12.10.2 (ui_extra.ino)
 void loop() {
   uint32_t now = millis();
   if (!bootLoopT0) bootLoopT0 = now ? now : 1;  // ko12.8.5
@@ -937,7 +939,7 @@ void loop() {
   centerPoll();     // ko11.31: el centro pokemon termina aunque no se mire
   // ko11.31.4: efectos (combate / ficha del Pokedex): trozos de 8 KB, ~20 ms por vuelta como mucho;
   // ko11.31.5: nada mientras se ve un efecto de la SD
-  if (!battleFxPlaying() && !dexFxPlaying()) fxPump(12);  // ko12.1.1: tampoco en la ficha
+  if (!battleFxPlaying() && !dexFxPlaying()) fxPump(battleIntroBusy() ? 1 : 12);  // ko12.1.1: tampoco en la ficha
   if (!battleScreenOn()) flushPipeStop();  // ko12.1: fuera del combate, un solo buffer otra vez
   // ko12.2: 3 min sin tocar nada en la pantalla principal -> se duerme sola (si no tiene hambre ni esta sucia)
   if (!pet.sleeping && petHoldAllowed() && mainNavAllowed() && (int32_t)(now - lastInteract) >= (int32_t)AUTO_SLEEP_MS) pet.autoSleepNow();
@@ -4677,8 +4679,9 @@ void keyboardTap(int16_t x, int16_t y) {
 // vez para x2-x3, dos para x4 o mas) y luego se pintan por tramos: las diagonales
 // y curvas salen lisas en vez de a escalones de 5 px. Sin memoria extra por bicho:
 // dos buffers de trabajo en PSRAM.
-#define SM_MAX 96  // lado maximo de la imagen de origen
-static uint8_t *gSmA = nullptr, *gSmB = nullptr;
+#define SM_MAX 128  // lado maximo de la imagen de origen (ko12.10.2: 96 -> 128, 갸라도스·칠색조 tambien lisos)
+#define SM_MAX8 64   // ko12.10.2: hasta este lado, una 3a pasada (x8) cuando se escala x6 o mas
+static uint8_t *gSmA = nullptr, *gSmB = nullptr, *gSmC = nullptr;
 bool gSmoothGfx = true;
 static void smEpx2(const uint8_t *src, int w, int h, uint8_t *dst) {
   int W = w * 2;
@@ -4750,10 +4753,14 @@ void smoothBlitQ(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, 
       }
     return;
   }
-  int k = s4 >= 16 ? 4 : 2, W = w * 2, H = h * 2, d = 4 * k;
+  // ko12.10.2: con "도트" del tamano del original algunos van a x6-x7: una pasada mas (x8) y los bordes
+  // curvos salen sin escalones
+  if (s4 >= 22 && w <= SM_MAX8 && h <= SM_MAX8 && !gSmC) gSmC = (uint8_t *)ps_malloc(SM_MAX8 * SM_MAX8 * 64);
+  int k = (s4 >= 22 && w <= SM_MAX8 && h <= SM_MAX8 && gSmC) ? 8 : s4 >= 16 ? 4 : 2, W = w * 2, H = h * 2, d = 4 * k;
   smEpx2(src, w, h, gSmA);
   const uint8_t *img = gSmA;
-  if (k == 4) { smEpx2(gSmA, W, H, gSmB); img = gSmB; W *= 2; H *= 2; }
+  if (k >= 4) { smEpx2(gSmA, W, H, gSmB); img = gSmB; W *= 2; H *= 2; }
+  if (k == 8) { smEpx2(gSmB, W, H, gSmC); img = gSmC; W *= 2; H *= 2; }
   for (int r = 0; r < H; r++) {
     int ya = y0 + r * s4 / d, yb = y0 + (r + 1) * s4 / d;
     if (yb <= ya) continue;
@@ -4770,6 +4777,128 @@ void smoothBlitQ(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, 
   }
 }
 #undef SB_FILL
+// ko12.10.2: dibujo liso de verdad para los sprites del combate en "도트" (que ahora van a x5-x7): el frame se
+// agranda una vez (EPX x8, o x4 si es grande), se reduce al tamano exacto mirando 4 puntos por pixel (color
+// medio + cuanto cubre) y se guarda; cada fotograma solo se copia al framebuffer, con el borde mezclado con el
+// fondo. Asi no se ven los cuadros del pixel art y cuesta menos que repetir el EPX en cada fotograma.
+// Dos huecos (rival / el tuyo); se rehace al cambiar de frame, de escala o de sprite
+struct SmAA {
+  const uint8_t *src = nullptr;
+  const uint16_t *pal = nullptr;
+  int s4 = 0, W = 0, H = 0;
+  uint16_t *col = nullptr;
+  uint8_t *a = nullptr;
+};
+static SmAA gSmAA[2];
+#define SMAA_MAXPX (480 * 480)
+int8_t gSmAASlot = -1;  // lo pone quien dibuja el combate; se consume al dibujar
+void smAAReset() { for (SmAA &c : gSmAA) c.src = nullptr; }  // al cargar otro sprite (puede caer en la misma memoria)
+static inline uint16_t smMix565(uint16_t f, uint16_t b, uint8_t a4) {  // a4 de 0 a 4
+  uint32_t fx = (f | ((uint32_t)f << 16)) & 0x07E0F81FUL, bx = (b | ((uint32_t)b << 16)) & 0x07E0F81FUL;
+  uint32_t m = ((fx * a4 + bx * (4 - a4)) >> 2) & 0x07E0F81FUL;
+  return (uint16_t)(m | (m >> 16));
+}
+static bool smoothBlitAA(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, int y0, int s4, uint8_t slot) {
+#ifdef HOST_HD
+  return false;
+#endif
+  uint16_t *fb = gfx->getFramebuffer();
+  if (!fb || slot > 1 || w <= 0 || h <= 0 || w > SM_MAX || h > SM_MAX) return false;
+  int W = w * s4 / 4, H = h * s4 / 4;
+  if (W <= 0 || H <= 0 || W * H > SMAA_MAXPX) return false;
+  SmAA &c = gSmAA[slot];
+  if (c.src != src || c.pal != pal || c.s4 != s4 || c.W != W || c.H != H) {
+    if (!c.col) {
+      c.col = (uint16_t *)ps_malloc(SMAA_MAXPX * 2);
+      c.a = (uint8_t *)ps_malloc(SMAA_MAXPX);
+    }
+    if (!gSmA) gSmA = (uint8_t *)ps_malloc(SM_MAX * SM_MAX * 4);
+    if (!gSmB) gSmB = (uint8_t *)ps_malloc(SM_MAX * SM_MAX * 16);
+    bool big = w > SM_MAX8 || h > SM_MAX8;
+    if (!big && !gSmC) gSmC = (uint8_t *)ps_malloc(SM_MAX8 * SM_MAX8 * 64);
+    if (!c.col || !c.a || !gSmA || !gSmB || (!big && !gSmC)) return false;
+    int k = big ? 4 : 8, IW = w * k, IH = h * k;
+    smEpx2(src, w, h, gSmA);
+    smEpx2(gSmA, w * 2, h * 2, gSmB);
+    const uint8_t *img = gSmB;
+    if (k == 8) { smEpx2(gSmB, w * 4, h * 4, gSmC); img = gSmC; }
+    // punto de muestra (2 por eje): (o + (2i+1)/4) * 4k/s4 en pixeles de img
+    for (int oy = 0; oy < H; oy++) {
+      int sy0 = (int)(((4 * oy + 1) * k) / s4), sy1 = (int)(((4 * oy + 3) * k) / s4);
+      if (sy0 >= IH) sy0 = IH - 1;
+      if (sy1 >= IH) sy1 = IH - 1;
+      const uint8_t *r0 = img + sy0 * IW, *r1 = img + sy1 * IW;
+      uint16_t *oc = c.col + oy * W;
+      uint8_t *oa = c.a + oy * W;
+      for (int ox = 0; ox < W; ox++) {
+        int sx0 = (int)(((4 * ox + 1) * k) / s4), sx1 = (int)(((4 * ox + 3) * k) / s4);
+        if (sx0 >= IW) sx0 = IW - 1;
+        if (sx1 >= IW) sx1 = IW - 1;
+        uint8_t v[4] = { r0[sx0], r0[sx1], r1[sx0], r1[sx1] };
+        uint16_t sr = 0, sg = 0, sb = 0;
+        uint8_t n = 0;
+        for (uint8_t q = 0; q < 4; q++)
+          if (v[q] != 0xFF) {
+            uint16_t p = pal[v[q]];
+            sr += p >> 11; sg += (p >> 5) & 63; sb += p & 31;
+            n++;
+          }
+        oa[ox] = n;
+        if (n) oc[ox] = (uint16_t)(((sr / n) << 11) | ((sg / n) << 5) | (sb / n));
+      }
+    }
+    // suavizado que respeta los bordes: 7 vecinos por eje (horizontal y luego vertical); solo se mezcla con
+    // los que se parecen al del centro, asi el contorno oscuro y los cambios de color fuertes no se emborronan,
+    // pero los escalones del sombreado (bloques de 5-7 px) se funden
+    if (s4 >= 12) {
+      static uint16_t *tmp = nullptr;
+      if (!tmp) tmp = (uint16_t *)ps_malloc(SMAA_MAXPX * 2);
+      if (tmp) {
+        for (int pass = 0; pass < 2; pass++) {
+          const uint16_t *in = pass ? tmp : c.col;
+          uint16_t *out = pass ? c.col : tmp;
+          int step = pass ? W : 1;
+          for (int oy = 0; oy < H; oy++)
+            for (int ox = 0; ox < W; ox++) {
+              int i = oy * W + ox;
+              uint16_t p = in[i];
+              if (!c.a[i]) { out[i] = p; continue; }
+              int pr = p >> 11, pg = (p >> 5) & 63, pb = p & 31;
+              int sr = pr, sg = pg, sb = pb, n = 1;
+              int pos = pass ? oy : ox, lim = pass ? H : W;
+              for (int d = -3; d <= 3; d++) {
+                if (!d || pos + d < 0 || pos + d >= lim) continue;
+                int j = i + d * step;
+                if (c.a[j] < 4) continue;
+                uint16_t q = in[j];
+                int dr = (q >> 11) - pr, dg = ((q >> 5) & 63) - pg, db = (q & 31) - pb;
+                if (dr * dr * 4 + dg * dg + db * db * 4 > 700) continue;  // muy distinto: borde
+                sr += q >> 11; sg += (q >> 5) & 63; sb += q & 31;
+                n++;
+              }
+              out[i] = (uint16_t)(((sr / n) << 11) | ((sg / n) << 5) | (sb / n));
+            }
+        }
+      }
+    }
+    c.src = src; c.pal = pal; c.s4 = s4; c.W = W; c.H = H;
+  }
+  for (int oy = 0; oy < H; oy++) {
+    int py = y0 + oy;
+    if (py < 0 || py >= LCD_HEIGHT) continue;
+    const uint16_t *oc = c.col + oy * W;
+    const uint8_t *oa = c.a + oy * W;
+    uint16_t *row = fb + py * LCD_WIDTH;
+    for (int ox = 0; ox < W; ox++) {
+      uint8_t a4 = oa[ox];
+      if (!a4) continue;
+      int px = gBlitFlipX ? x0 + W - 1 - ox : x0 + ox;
+      if (px < 0 || px >= LCD_WIDTH) continue;
+      row[px] = a4 == 4 ? oc[ox] : smMix565(oc[ox], row[px], a4);
+    }
+  }
+  return true;
+}
 void smoothBlit(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, int y0, int s, bool sil) {
   smoothBlitQ(src, w, h, pal, x0, y0, s * 4, sil);
 }
@@ -5819,8 +5948,8 @@ uint8_t pmdFrameAt(const PmdAct &a, uint32_t t, bool loop) {
 // dibuja una accion de un PmdMon concreto (m); drawPmdAct usa el global pmd
 // fitH: alto objetivo del lienzo IDLE en px (170 = el de siempre; ko9: el perfil
 // usa mas para que el retrato se vea grande)
-// ko12.10.1: un frame retocado para el proximo drawPmdActM (붐볼: cara redibujada). Se consume al dibujar
-const uint8_t *gPmdFrameOverride = nullptr;
+// ko12.10.2: escala (en cuartos) para el proximo drawPmdActM; 0 = la de siempre. Se consume al dibujar
+int gPmdForceS4 = 0;
 void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS,
                  uint16_t fitH) {
   const PmdAct &a = m.acts[actId];
@@ -5830,13 +5959,21 @@ void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
   if (sBase < 8) sBase = 8;
   if (sBase > maxS * 4) sBase = maxS * 4;
   int s = sBase;
-  while (s > 8 && a.h * s > (fitH > 170 ? fitH + 80 : 250) * 4) s--;  // acciones con frame grande (ataque)
+  if (gPmdForceS4) {  // ko12.10.2: escala fija del combate (mismo alto que el dibujo original)
+    s = gPmdForceS4;
+    gPmdForceS4 = 0;
+    while (s > 8 && a.h * s > 400 * 4) s--;
+  } else {
+    while (s > 8 && a.h * s > (fitH > 170 ? fitH + 80 : 250) * 4) s--;  // acciones con frame grande (ataque)
+  }
   uint8_t fi = pmdFrameAt(a, t, loop);
   const uint8_t *fr = a.data + (uint32_t)fi * a.w * a.h;
-  if (gPmdFrameOverride) { fr = gPmdFrameOverride; gPmdFrameOverride = nullptr; }
   // anclar por los pies (a.base), no por el alto del lienzo: asi las acciones
   // con padding distinto (Hurt, Eat...) quedan todas a la misma altura de suelo
   int x0 = cx - a.w * s / 8, y0 = groundY - (a.base ? a.base : a.h) * s / 4;
+  int8_t aa = gSmAASlot;
+  gSmAASlot = -1;
+  if (aa >= 0 && !sil && smoothBlitAA(fr, a.w, a.h, m.pal, x0, y0, s, (uint8_t)aa)) return;  // ko12.10.2
   smoothBlitQ(fr, a.w, a.h, m.pal, x0, y0, s, sil);  // ko11.10: liso
 }
 void drawPmdAct(uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS) {

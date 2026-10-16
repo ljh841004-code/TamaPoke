@@ -1072,6 +1072,13 @@ static void scenes(bool ko, const char *sfx) {
     openGyms(); gymPage = 0; render(); shot("50_gyms_p1");
     gymPage = 1; render(); shot("50b_gyms_p2");
     { uint8_t kb = pet.badges; pet.badges = 0xFF; gymPage = 0; render(); shot("50c_gyms_all8"); pet.badges = kb; }
+    for (uint8_t pg = 0; pg < 3; pg++) {  // ko12.10.2: ▼ en las 3 paginas = a la principal
+      closeAll(); trainMenuOpen = true; trainMenuPage = 1; openGyms(); gymPage = pg;
+      render();
+      gymTap(CX, 446);
+      navCheck("체육관 ▼: 기본 화면으로", xScreen == XS_NONE && !trainMenuOpen && !cardOpen);
+    }
+    closeAll(); openGyms(); gymPage = 2; render(); shot("50d_gyms_league_down");
     closeAll(); openDaily(); render(); shot("51_daily");
     closeAll(); trainMenuOpen = true; trainMenuPage = 1; render(); shot("52_battle_page"); trainMenuOpen = false;
     closeAll(); openRegionPick(); regionPage = 1; render(); shot("53_region_locked");
@@ -1218,6 +1225,17 @@ static void scenes(bool ko, const char *sfx) {
   // ko11.20: equipo contra entrenadores (ayudantes de la caja, cambio al estilo PokeRogue)
   {
     closeAll(); pet.energy = 80; pet.badges = 0;
+    {  // ko12.10.2: dos tipos largos (불꽃/비행, 에스퍼/비행) + 오늘 n/3 + [유리]/[불리] sin pisarse
+      box.wipe();
+      box.add(250, 31, false, true, gMockEpoch - 4000);
+      box.add(249, 31, true, true, gMockEpoch - 3000);
+      box.add(6, 31, false, true, gMockEpoch - 2000);
+      box.add(130, 31, false, true, gMockEpoch - 1000);
+      openGyms(); gymPage = 0; gymTap(GY_X + 10, GY_Y + 10);  // Brock (roca)
+      helperUse(box.at(1));
+      render(); shot("53z_party_pick_dual");
+      closeAll();
+    }
     box.wipe();
     box.add(7, 30, false, true, gMockEpoch - 3000);   // Squirtle: agua > roca
     box.add(4, 20, false, true, gMockEpoch - 2000);   // Charmander: fuego < roca
@@ -1347,6 +1365,24 @@ static void scenes(bool ko, const char *sfx) {
     txFmt(bvL1, sizeof(bvL1), X_WILD_AT, XT(X_REG_6), dexName(25));
     bPhase = BP_INTRO; bPhaseT = gMockMillis;
     render(); shot("45_wild_power_plant_pikachu");
+    if (getenv("SIZECMP")) {  // ko12.10.2: 도트 vs 원작, mismo Pokemon de los dos lados
+      int16_t sp0 = pet.speciesId;
+      extern uint8_t gBattleArt;
+      for (int d : { 150, 151, 249, 250, 25, 6, 9, 130, 143, 1, 3, 129, 74, 41, 248, 101 }) {
+        for (int art = 0; art < 2; art++) {
+          gBattleArt = art;
+          pet.speciesId = d; ensureMon();
+          foePmd.unload(); loadFoe(d, false);
+          Battler a = makeBattler(d, 40, 60, 60, 60);
+          bFoe = makeBattler(d, 40, 60, 60, 60);
+          bvSetup(a, bFoe, nullptr, false);
+          bPhase = BP_MENU; bPhaseT = gMockMillis; gMockMillis += 300;
+          render(); char nm[40]; snprintf(nm, sizeof(nm), "SZ_%03d_%s", d, art ? "orig" : "dot"); shot(nm);
+        }
+      }
+      gBattleArt = 0;
+      pet.speciesId = sp0; ensureMon();
+    }
     {  // ko12.10.1: 붐볼 (dot) en combate: el rival de frente y el tuyo de espaldas, ojos sin aplastar
       int16_t sp0 = pet.speciesId;
       pet.speciesId = 101; ensureMon();
@@ -1389,6 +1425,9 @@ static void scenes(bool ko, const char *sfx) {
     render(); shot("P8_box_rarity");
     for (uint8_t i = 0; i < box.count(); i++) if (box.at(i).dex == 150) boxSel = i;
     render(); shot("P8b_box_detail_legend");
+    box.add(249, 70, false, true, gMockEpoch);  // ko12.10.2: 에스퍼/비행 en el detalle
+    for (uint8_t i = 0; i < box.count(); i++) if (box.at(i).dex == 249) boxSel = i;
+    render(); shot("P8c_box_detail_dual");
     boxSel = -1;
     box.release(box.count() - 1); box.release(box.count() - 1);
     render();
@@ -1582,6 +1621,12 @@ static void scenes(bool ko, const char *sfx) {
     dexLog.learned(25, mv[0]); dexLog.learned(25, mv[2]);
   }
   render(); shot("13_dex_detail");
+  {  // ko12.10.2: dos tipos largos en la ficha (에스퍼/비행)
+    dexLog.seen(249, gMockEpoch); dexLog.caught(249, gMockEpoch);
+    galleryDetail = 249; galleryPmd.load(249, false);
+    render(); shot("13z_dex_detail_dual");
+    galleryDetail = 25; galleryPmd.load(25, false);
+  }
   {  // ko12.10: 상태 카드 [기술] 쪽 · 설명(장착/기억) · 기술머신 가방 · 도감 기술표
     galleryOpen = false; galleryDetail = 0;
     uint16_t keepSp = pet.speciesId; uint32_t keepExp = pet.exp;
@@ -2226,6 +2271,31 @@ int main(int argc, char **argv) {
   pet.balls = 5; pet.potions = 2;
   pet.bgAsked = 1;  // ko12.4.1: el aviso de elegir fondo tiene su propia captura
   ensureMon();
+  if (getenv("MEASURE")) {  // ko12.10.2: alto en pantalla de cada pokemon en combate (도트 vs 원작)
+    auto bbox = [](const PmdAct &a, int &top, int &bot, int &w) {
+      top = a.h; bot = -1; int l = a.w, r = -1;
+      for (uint8_t f = 0; f < a.frames; f++) {
+        const uint8_t *fr = a.data + (uint32_t)f * a.w * a.h;
+        for (int y = 0; y < a.h; y++) for (int x = 0; x < a.w; x++)
+          if (fr[y * a.w + x] != 0xFF) { if (y < top) top = y; if (y > bot) bot = y; if (x < l) l = x; if (x > r) r = x; }
+      }
+      w = r - l + 1;
+    };
+    static PmdMon pm, pr;
+    printf("dex,pmdH_idle,pmdCH_idle,pmdW,pmdH_ur,pmdCH_ur,prgH_idle,prgCH_idle,prgH_ur,prgCH_ur\n");
+    for (int d = 1; d <= 251; d++) {
+      pm.unload(); pr.unload();
+      pm.load(d, false); pr.load(d, false, 'r');
+      int t, b, w, t2, b2, w2, t3 = 0, b3 = -1, w3, t4 = 0, b4 = -1, w4;
+      bbox(pm.acts[PMD_IDLE], t, b, w);
+      if (pm.acts[PMD_IDLE_UR].frames) bbox(pm.acts[PMD_IDLE_UR], t2, b2, w2); else { t2 = 0; b2 = -1; }
+      if (pr.loaded && pr.acts[PMD_IDLE].frames) bbox(pr.acts[PMD_IDLE], t3, b3, w3);
+      if (pr.loaded && pr.acts[PMD_IDLE_UR].frames) bbox(pr.acts[PMD_IDLE_UR], t4, b4, w4);
+      printf("%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", d, pm.acts[PMD_IDLE].h, b - t + 1, w, pm.acts[PMD_IDLE_UR].h, b2 - t2 + 1,
+             pr.acts[PMD_IDLE].h, b3 - t3 + 1, pr.acts[PMD_IDLE_UR].h, b4 - t4 + 1);
+    }
+    return 0;
+  }
   if (const char *mk = getenv("MONKEY")) {  // ko12.9.8: solo la prueba del mono
     long n = atol(mk);
     for (uint32_t seed = getenv("MONKEY_SEED0") ? atoi(getenv("MONKEY_SEED0")) : 1; seed <= (uint32_t)(getenv("MONKEY_SEEDS") ? atoi(getenv("MONKEY_SEEDS")) : 1); seed++)

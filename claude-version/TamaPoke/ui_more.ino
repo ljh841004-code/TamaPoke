@@ -2559,16 +2559,28 @@ void renderPartyPick() {
     uint8_t ty = DEX_TBL[m.dex].ptype;
     char tys[32];
     dexTypesStr(m.dex, tys, sizeof(tys));  // ko12.10: dos tipos
-    snprintf(l, sizeof(l), "Lv%u  %s", m.lvl < pl || ppKind == PP_LINK ? m.lvl : pl, tys);  // ko12.9.16: tongsin = su nivel
+    unsigned lv = m.lvl < pl || ppKind == PP_LINK ? m.lvl : pl;  // ko12.9.16: tongsin = su nivel
+    // ko12.10.2: con dos tipos ("불꽃/비행") la linea chocaba con [유리]/[불리]: se mide y, si no cabe,
+    // primero se acorta el hueco, luego "오늘 n/3" pasa a "n/3" y al final queda solo el primer tipo
+    int lim = (ft >= 0 ? 282 : 350) - 126;
+    char us[24] = "";
+    if (ppKind != PP_LINK) snprintf(us, sizeof(us), XT(X_PT_USES_FMT), left, (unsigned)HELPER_USES_PER_DAY);
+    const char *gap = "  ";
+    snprintf(l, sizeof(l), "Lv%u  %s", lv, tys);
+    if (us[0] && textW(l, 1) + 8 + textW(us, 1) > lim) {
+      snprintf(l, sizeof(l), "Lv%u %s", lv, tys);
+      gap = " ";
+      if (textW(l, 1) + 6 + textW(us, 1) > lim) snprintf(us, sizeof(us), "%u/%u", left, (unsigned)HELPER_USES_PER_DAY);
+      if (textW(l, 1) + 6 + textW(us, 1) > lim) snprintf(l, sizeof(l), "Lv%u %s", lv, typeName(ty));
+    }
     setSize(1);
     gfx->setTextColor(orbColor(ty));
     setCur(126, y + 26);
     printT(l);
-    if (ppKind != PP_LINK) {  // ko12.9.16: el tongsin no gasta los usos del dia
-      snprintf(l, sizeof(l), XT(X_PT_USES_FMT), left, (unsigned)HELPER_USES_PER_DAY);
+    if (us[0]) {  // ko12.9.16: el tongsin no gasta los usos del dia
       gfx->setTextColor(left ? 0x8410 : UI_BAR_BAD);
-      setCur(126 + textW("Lv100  ", 1) + textW(tys, 1) + 6, y + 26);
-      printT(l);
+      setCur(126 + textW(l, 1) + (gap[1] ? 8 : 6), y + 26);
+      printT(us);
     }
     if (ft >= 0) {
       int8_t tm = typeMatchTT(ty, dexType2(m.dex), (uint8_t)ft, 0xFF);
