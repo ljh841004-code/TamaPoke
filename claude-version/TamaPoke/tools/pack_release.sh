@@ -1,5 +1,6 @@
 #!/bin/sh
 # 펌 배포 묶음 만들기 (ko12.10.1부터): 펌 파일 4개 + QR 설명서(manual.pdf) + A6 설명서
+# 설명서는 사용자 기능이 추가된 펌이나 요청받았을 때만. 오류 수정만이면 NO_MANUAL=1 (펌 파일 4개만)
 #
 #   tools/pack_release.sh <버전 ko..> <결과 폴더> <렌더 결과 shots> [fontsource/files]
 #     예: tools/pack_release.sh ko12.10.1 ~/rel test/render/build/shots ~/noto/package/files
@@ -27,6 +28,18 @@ grep -q "#define FW_VERSION \"1.17-$V\"" "$HERE/TamaPoke.ino" || { echo "FW_VERS
 for f in update.bin "tamapoke-ko-v1.17-$V-app-0xe000.bin" "tamapoke-ko-v1.17-$V.bin" "TamaPoke_v1.17-${V}_정리.txt"; do
   [ -f "$ROOT/$f" ] || { echo "없어요: $ROOT/$f"; exit 1; }
 done
+
+if [ -n "${NO_MANUAL:-}" ]; then
+  mkdir -p "$OUT"
+  D="$OUT/v.1.17_$V"
+  rm -rf "${D:?}"
+  mkdir -p "$D"
+  cp "$ROOT/update.bin" "$ROOT/tamapoke-ko-v1.17-$V-app-0xe000.bin" "$ROOT/tamapoke-ko-v1.17-$V.bin" \
+     "$ROOT/TamaPoke_v1.17-${V}_정리.txt" "$D/"
+  (cd "$OUT" && rm -f "TamaPoke_$V.zip" && zip -qr "TamaPoke_$V.zip" "v.1.17_$V")
+  unzip -l "$OUT/TamaPoke_$V.zip"
+  exit 0
+fi
 
 # 설명서: 손바닥 가이드(A7) -> A6
 "$ROOT/manual/pocket/build_pocket.sh" "$SHOTS" $FONTS

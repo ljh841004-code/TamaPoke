@@ -33,7 +33,7 @@
 
 ## 펌 배포 묶음 (ko12.10.1부터)
 
-펌을 만들 때마다 zip 하나에 **펌 파일 4개 + QR 설명서 `manual.pdf` + A6 설명서(인쇄용)**를 같이 넣어요:
+**사용자가 쓰는 기능이 추가된 펌**(또는 설명서를 요청받았을 때)만 zip에 **펌 파일 4개 + QR 설명서 `manual.pdf` + A6 설명서(인쇄용)**를 같이 넣어요. 오류 수정만 한 펌은 펌 파일 4개만:
 `TamaPoke/tools/pack_release.sh <버전> <결과 폴더> <렌더 shots> [fontsource/files]`. 설명서 표지 버전은 펌의 FW_VERSION에서 저절로 들어가요.
 와이파이 업데이트 화면(`…/fw`)에서 update.bin과 manual.pdf를 같이 고르면 QR 설명서도 새 버전으로 바뀌어요.
 
