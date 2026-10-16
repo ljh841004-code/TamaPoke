@@ -2166,6 +2166,7 @@ static void fameOpenSel(int16_t sel) {
   fmState = 0;
   const BoxMon &m = fame.at((uint8_t)fameSel);
   galleryPmd.load((uint8_t)m.dex, m.flags & BOXF_SHINY);
+  gallery3d = false;
   fameHelpUnload();
   FameRec fr = fameRecOf(m);
   if (fr.team && fr.help[0]) {  // ko11.20

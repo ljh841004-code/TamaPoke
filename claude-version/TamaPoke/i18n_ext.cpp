@@ -207,6 +207,7 @@ static const char *const XS[2][X_COUNT] = {
     "No manual.pdf on the SD card", "Or send it with the web installer",
     "Umbrella",
     "SD files: %s/sd", "SD files received: %u",
+    "ART: 3D",
   },
   // ---------------- KO ----------------
   {
@@ -409,6 +410,7 @@ static const char *const XS[2][X_COUNT] = {
     "SD카드에 manual.pdf가 없어요", "웹 설치 페이지로 보내도 돼요",
     "우산",
     "SD 파일 올리기: %s/sd", "SD 파일 %u개 받았어요",
+    "그림: 3D",
   },
 };
 

@@ -47,7 +47,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.10.6"
+#define FW_VERSION "1.17-ko12.10.7"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -120,6 +120,7 @@ enum : uint8_t { BUB_NONE = 0, BUB_DOTS, BUB_BORED, BUB_HUNGRY, BUB_DIRTY, BUB_S
 #define PET_MAXS 6      // ko11.10.1: con el dibujo liso el bicho se veia algo pequeno: x6 (antes x5)
 #define PET_FITH 176    //   alto objetivo del lienzo IDLE (antes 170): x5,5 con lienzo de 32
 PmdMon galleryPmd;  // sprite grande de la vista detalle de la galeria (PMD/TPK2, legal)
+bool gallery3d = false;  // ko12.10.7: galleryPmd tiene el "3D" de frente (fNNN.bin) de la ficha
 
 // galeria pokedex
 bool galleryOpen = false;
@@ -5286,7 +5287,11 @@ void renderDexDetail() {
   drawFit(head, 36, 300, disc ? d.accent : UI_INK, 3);
   uint32_t mvT = dexMvFx ? millis() - dexMvT0 : 0;
   if (dexMvFx && mvT > 1500) dexMvFx = 0;
-  if (galleryPmd.loaded) {
+  if (galleryPmd.loaded && gallery3d && galleryPmd.has(PMD_IDLE)) {
+    // ko12.10.7: "3D": un saltito al ensenar un movimiento
+    int hop = dexMvFx && mvT < 900 ? (mvT < 450 ? mvT : 900 - mvT) / 25 : 0;
+    draw3dAct(galleryPmd, PMD_IDLE, CX, 198 - hop, disc ? millis() : 0, !disc, 0);
+  } else if (galleryPmd.loaded) {
     // animado y a color si se conoce; silueta estatica si no (estilo "?")
     // ko11.31: ensenando un movimiento: hace su animacion de ataque
     uint8_t act = PMD_IDLE;
@@ -5602,7 +5607,9 @@ void galleryLoadPending() {
   int16_t dex = galleryLoadWant;
   galleryLoadWant = 0;
   if (!dex || dex != galleryDetail || !galleryOpen) return;
-  galleryPmd.load(dex, pet.isShinyRegistered(dex));
+  // ko12.10.7: la ficha con el "3D" de frente (grande y animado) si esta en la SD; si no, el PMD
+  gallery3d = galleryPmd.load(dex, pet.isShinyRegistered(dex), 'f');
+  if (!gallery3d) galleryPmd.load(dex, pet.isShinyRegistered(dex));
   if (dexLog.caughtCount(dex)) {  // ko11.31: los efectos de sus botones, poco a poco
     uint8_t mv[4];
     dexTopMoves(dex, mv);
@@ -6102,6 +6109,30 @@ void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
   gSmAASlot = -1;
   if (aa >= 0 && !sil && smoothBlitAA(fr, a.w, a.h, m.pal, x0, y0, s, (uint8_t)aa)) return;  // ko12.10.2
   smoothBlitQ(fr, a.w, a.h, m.pal, x0, y0, s, sil);  // ko11.10: liso
+}
+// ko12.10.7: sprite "3D" (fNNN/bNNN.bin): ya viene a su tamano: 1:1 directo al framebuffer (rapido).
+// white 0..16 = mezcla con blanco (destello al recibir el golpe)
+void draw3dAct(const PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool sil, uint8_t white) {
+  const PmdAct &a = m.acts[actId];
+  uint16_t *fb = gfx->getFramebuffer();
+  if (!a.frames || !fb) return;
+  const uint8_t *fr = a.data + (uint32_t)pmdFrameAt(a, t, true) * a.w * a.h;
+  int x0 = cx - a.w / 2, y0 = groundY - (a.base ? a.base : a.h);
+  int c0 = x0 < 0 ? -x0 : 0, c1 = x0 + a.w > LCD_WIDTH ? LCD_WIDTH - x0 : a.w;
+  uint16_t pal[256];
+  for (int i = 0; i < m.palCount; i++) {
+    uint16_t c = sil ? INK_K : m.pal[i];
+    if (white && !sil) c = uiPack((uiSpread(c) * (16 - white) + uiSpread(0xFFFF) * white) >> 4);
+    pal[i] = c;
+  }
+  for (int r = 0; r < a.h; r++) {
+    int y = y0 + r;
+    if (y < 0 || y >= LCD_HEIGHT) continue;
+    const uint8_t *s = fr + r * a.w;
+    uint16_t *d = fb + y * LCD_WIDTH + x0;
+    for (int c = c0; c < c1; c++)
+      if (s[c] != 0xFF) d[c] = pal[s[c]];
+  }
 }
 void drawPmdAct(uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS) {
   drawPmdActM(pmd, actId, cx, groundY, t, loop, sil, maxS, 170);

@@ -529,7 +529,8 @@ uint8_t battleArt() {
   if (gBattleArt == 255) {
     Preferences p;
     p.begin("tamapoke", true);
-    gBattleArt = p.getUChar("bart", 0) ? 1 : 0;
+    gBattleArt = p.getUChar("bart", 0);
+    if (gBattleArt > 2) gBattleArt = 0;
     p.end();
   }
   return gBattleArt;
@@ -537,33 +538,42 @@ uint8_t battleArt() {
 static int16_t prgMeDex = 0;  // ko12.9.26: la especie que tiene prgMe (antes se comparaba con bvMeDex, que en el
 static bool prgMeShiny = false;  // cambio del equipo ya era el nuevo: seguia el sprite del anterior en "원작")
 static bool prgAlways(int16_t dex) { return dex == 101; }
+// ko12.10.7: "3D" (battleArt 2): fNNN.bin (de frente) / bNNN.bin (de espaldas), ya a su tamano. Si falta: el
+// original (rNNN.bin) y si tampoco, el PMD
+bool prgFoe3d = false, prgMe3d = false;
+static uint8_t prgMeArt = 0xFF;
 static void prgLoadFor(int16_t meDex, int16_t foeDex, bool foeShiny) {
   prgFoeDex = foeDex;
   prgFoeShiny = foeShiny;
   // ko12.10.2: con "도트" se usa el dibujo original para los que el PMD dibuja mal (붐볼: rueda y los ojos
   // salen aplastados); el resto, PMD (ni se leen los originales: menos SD y RAM)
-  bool all = battleArt();
-  if (all || prgAlways(foeDex)) prgFoe.load((uint8_t)foeDex, foeShiny, 'r');  // ~100 KB de la SD, una vez por combate
+  uint8_t art = battleArt();
+  prgFoe3d = art == 2 && prgFoe.load((uint8_t)foeDex, foeShiny, 'f');
+  if (prgFoe3d) {
+  } else if (art || prgAlways(foeDex)) prgFoe.load((uint8_t)foeDex, foeShiny, 'r');  // ~100 KB de la SD, una vez por combate
   else prgFoe.unload();
-  if (!all && !prgAlways(meDex)) { prgMe.unload(); prgMeDex = 0; return; }
+  if (!art && !prgAlways(meDex)) { prgMe.unload(); prgMeDex = 0; prgMe3d = false; return; }
   bool meShiny = pet.shiny && meDex == pet.speciesId;
-  if (!prgMe.loaded || prgMeDex != meDex || prgMeShiny != meShiny) {
-    prgMe.load((uint8_t)meDex, meShiny, 'r');
+  if (!prgMe.loaded || prgMeDex != meDex || prgMeShiny != meShiny || prgMeArt != art) {
+    prgMe3d = art == 2 && prgMe.load((uint8_t)meDex, meShiny, 'b');
+    if (!prgMe3d) prgMe.load((uint8_t)meDex, meShiny, 'r');
     prgMeDex = meDex;
     prgMeShiny = meShiny;
+    prgMeArt = art;
   }
 }
+static const char *battleArtLabel(uint8_t art) { return XT(art == 2 ? X_BART_3D : art ? X_BART_PRG : X_BART_PMD); }
+static uint16_t battleArtBg(uint8_t art) { return art == 2 ? C565(0x10, 0x8a, 0x9a) : art ? C565(0x6a, 0x4c, 0xf0) : UI_WHITE; }
 #define BART_X 163
 #define BART_Y 16
 #define BART_W 140
 #define BART_H 30
 static void drawBattleArtChip() {
-  bool prg = battleArt();
-  drawBtn(BART_X, BART_Y, BART_W, BART_H, prg ? C565(0x6a, 0x4c, 0xf0) : UI_WHITE, prg ? UI_WHITE : UI_INK,
-          XT(prg ? X_BART_PRG : X_BART_PMD));
+  uint8_t art = battleArt();
+  drawBtn(BART_X, BART_Y, BART_W, BART_H, battleArtBg(art), art ? UI_WHITE : UI_INK, battleArtLabel(art));
 }
 static void battleArtToggle() {
-  gBattleArt = battleArt() ? 0 : 1;
+  gBattleArt = (battleArt() + 1) % 3;  // 도트 -> 원작 -> 3D
   Preferences p;
   p.begin("tamapoke", false);
   p.putUChar("bart", gBattleArt);
@@ -2449,7 +2459,8 @@ void drawBattlers() {
   } else
 #endif
   if (!foeHide && !foeGone && prgFoe.loaded && prgFoe.has(PMD_IDLE)) {  // ko11.16: estilo juego, de frente
-    drawPrgBattler(prgFoe, PMD_IDLE, foeX + 14, foeG, now, foeSil, 12, 124);  // x3 (x2 si es grande)
+    if (prgFoe3d) draw3dAct(prgFoe, PMD_IDLE, foeX + 14 + (foeAct == PMD_HURT ? ((now / 40) & 1 ? 4 : -4) : 0), foeG, now, foeSil, foeAct == PMD_HURT ? 9 : 0);  // ko12.10.7
+    else drawPrgBattler(prgFoe, PMD_IDLE, foeX + 14, foeG, now, foeSil, 12, 124);  // x3 (x2 si es grande)
   } else if (!foeHide && !foeGone) {
     if (foePmd.loaded) {
       if (!foePmd.has(foeAct)) foeAct = PMD_IDLE;
@@ -2472,7 +2483,8 @@ void drawBattlers() {
   } else
 #endif
   if (!meHide && !meGone && prgMe.loaded && prgMe.has(PMD_IDLE_UR)) {  // ko11.16: de espaldas
-    drawPrgBattler(prgMe, PMD_IDLE_UR, meX, meG, now, meSil, 12, 176);
+    if (prgMe3d) draw3dAct(prgMe, PMD_IDLE_UR, meX + (meAct == PMD_HURT ? ((now / 40) & 1 ? 4 : -4) : 0), meG, now, meSil, meAct == PMD_HURT ? 9 : 0);  // ko12.10.7
+    else drawPrgBattler(prgMe, PMD_IDLE_UR, meX, meG, now, meSil, 12, 176);
   } else if (!meHide && !meGone) {
     PmdMon &mm = (pCur || !pSlot0Pet) ? helperPmd : pmd;  // ko11.20: el ayudante que lucha ahora
     if (mm.loaded) {
@@ -3745,9 +3757,8 @@ void renderRegionPick() {
     }
   }
   // ko11.16.1: el estilo de los sprites de combate tambien aqui (antes de empezar)
-  bool prg = battleArt();
-  drawBtn(RG_ART_X, RG_BACK_Y, RG_ART_W, 44, prg ? C565(0x6a, 0x4c, 0xf0) : UI_WHITE, prg ? UI_WHITE : UI_INK,
-          XT(prg ? X_BART_PRG : X_BART_PMD));
+  uint8_t art = battleArt();
+  drawBtn(RG_ART_X, RG_BACK_Y, RG_ART_W, 44, battleArtBg(art), art ? UI_WHITE : UI_INK, battleArtLabel(art));
   drawBtn(RG_CTR_X, RG_BACK_Y, RG_ART_W, 44, C565(0xf0, 0x60, 0x80), UI_WHITE, XT(X_CENTER));  // ko11.31
   {  // ko12.9.23: 부르는 구슬 (2 toques: el 1o arma, el 2o lo usa)
     char l[24];

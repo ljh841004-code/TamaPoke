@@ -828,7 +828,10 @@ static void scenes(bool ko, const char *sfx) {
     bPhase = BP_MENU; txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
   }
   battleArtTap(BART_X + 10, BART_Y + 10); render(); shot("08q_battle_art_prg");  // ko11.16: PMD <-> PokeRogue
+  battleArtTap(BART_X + 10, BART_Y + 10); render(); shot("08q3_battle_art_3d");  // ko12.10.7: 3D
+  navCheck("ko12.10.7: 3D (si estan los fNNN/bNNN de la SD)", gBattleArt == 2);
   battleArtTap(BART_X + 10, BART_Y + 10);
+  navCheck("ko12.10.7: 3D -> 도트", gBattleArt == 0);
   {  // ko11.31: [싸운다] -> los 4 movimientos; estados junto a las cajas de vida
     onTap(BM_X + 20, BM_Y1 + 20);
     navCheck("batalla: [싸운다] abre los movimientos", bMoveMenu);
@@ -1404,7 +1407,7 @@ static void scenes(bool ko, const char *sfx) {
       extern uint8_t gBattleArt;
       for (int d : { 150, 151, 249, 250, 25, 6, 9, 130, 143, 1, 3, 129, 74, 41, 248, 101 }) {
         if (getenv("SZONLY") && d != atoi(getenv("SZONLY"))) continue;
-        for (int art = 0; art < 2; art++) {
+        for (int art = 0; art < 3; art++) {
           gBattleArt = art;
           pet.speciesId = d; ensureMon();
           foePmd.unload(); loadFoe(d, false);
@@ -1412,7 +1415,7 @@ static void scenes(bool ko, const char *sfx) {
           bFoe = makeBattler(d, 40, 60, 60, 60);
           bvSetup(a, bFoe, nullptr, false);
           bPhase = BP_MENU; bPhaseT = gMockMillis; gMockMillis += 300;
-          render(); char nm[40]; snprintf(nm, sizeof(nm), "SZ_%03d_%s", d, art ? "orig" : "dot"); shot(nm);
+          render(); char nm[40]; snprintf(nm, sizeof(nm), "SZ_%03d_%s", d, art == 2 ? "3d" : art ? "orig" : "dot"); shot(nm);
         }
       }
       gBattleArt = 0;
@@ -1661,6 +1664,19 @@ static void scenes(bool ko, const char *sfx) {
     galleryDetail = 249; galleryPmd.load(249, false);
     render(); shot("13z_dex_detail_dual");
     galleryDetail = 25; galleryPmd.load(25, false);
+  }
+  {  // ko12.10.7: la ficha con el "3D" de frente (si estan los fNNN.bin): grande y animado; silueta si no se conoce
+    extern bool gallery3d;
+    for (int d : { 25, 249, 6, 143, 150 }) {
+      dexLog.seen(d, gMockEpoch);
+      galleryDetail = d; gallery3d = galleryPmd.load(d, false, 'f');
+      gMockMillis += 400; render();
+      char nm[40]; snprintf(nm, sizeof(nm), "13d3_dex_3d_%03d", d); shot(nm);
+    }
+    galleryDetail = 7; gallery3d = galleryPmd.load(7, false, 'f');
+    render(); shot("13d3_dex_3d_unknown");
+    navCheck("ko12.10.7: ficha 3D cargada (si esta en la SD)", gallery3d || !galleryPmd.loaded);
+    galleryDetail = 25; galleryPmd.load(25, false); gallery3d = false;
   }
   {  // ko12.10: 상태 카드 [기술] 쪽 · 설명(장착/기억) · 기술머신 가방 · 도감 기술표
     galleryOpen = false; galleryDetail = 0;
