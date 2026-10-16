@@ -2340,6 +2340,52 @@ int main(int argc, char **argv) {
     }
     return 0;
   }
+  if (getenv("DEXJSON")) {  // ko12.10.6: datos de las 251 especies para el libro "몬 도감" (manual/dex)
+    FILE *o = fopen(getenv("DEXJSON"), "w");
+    auto js = [&](const char *t) { fputc('"', o); for (; *t; t++) { if (*t == '"' || *t == '\\') fputc('\\', o); fputc(*t, o); } fputc('"', o); };
+    fprintf(o, "[\n");
+    for (int d = 1; d <= DEX_COUNT; d++) {
+      const DexEntry &e = DEX_TBL[d];
+      fprintf(o, "%s{\"no\":%d,\"name\":", d > 1 ? ",\n" : "", d); js(dexName(d));
+      fprintf(o, ",\"t1\":"); js(typeName(e.ptype));
+      fprintf(o, ",\"t2\":"); js(dexType2(d) != 0xFF && dexType2(d) != e.ptype ? typeName(dexType2(d)) : "");
+      fprintf(o, ",\"rarity\":%d,\"st\":[%d,%d,%d,%d],\"prevo\":%d,\"evoLv\":%d", e.rarity, e.bHp, e.bAtk, e.bDef, e.bSpe, dexPrevo(d), evoLevel(d));
+      int16_t op[8]; int n = dexEvoOptions(d, op);
+      fprintf(o, ",\"evo\":["); for (int i = 0; i < n; i++) fprintf(o, "%s%d", i ? "," : "", op[i]); fprintf(o, "]");
+      WildHint h[6]; int16_t via = 0; uint8_t lv = 0; int nh = wildHints(d, h, 6, &via, &lv);
+      fprintf(o, ",\"via\":%d,\"minLv\":%d,\"where\":[", via, lv);
+      for (int i = 0; i < nh; i++) {
+        char reg[48];
+        if (h[i].region == 0xFF) snprintf(reg, sizeof reg, "%s", XT(X_HINT_ANYWHERE));
+        else snprintf(reg, sizeof reg, "%s", XT((XId)(X_REG_0 + h[i].region)));
+        uint8_t bn = h[i].region == 0xFF ? 0 : regionBadgesNeeded(h[i].region);
+        char tm[32] = ""; int k = 0;
+        if (h[i].slots != WS_ANY) { static const uint8_t S[3] = { WS_MORNING, WS_DAY, WS_NIGHT };
+          for (int j = 0; j < 3; j++) if (h[i].slots & S[j]) k += snprintf(tm + k, sizeof(tm) - k, "%s%s", k ? "/" : "", XT((XId)(X_HINT_MORNING + j))); }
+        const char *wx = h[i].wx == 0xFE ? XT(X_HINT_WET) : h[i].wx == 0xFD ? XT(X_HINT_DRY) : "";
+        fprintf(o, "%s{\"reg\":", i ? "," : ""); js(reg); fprintf(o, ",\"badges\":%d,\"time\":", bn); js(tm);
+        fprintf(o, ",\"wx\":"); js(wx); fprintf(o, ",\"rare\":%d}", h[i].rare ? 1 : 0);
+      }
+      fprintf(o, "],\"moves\":[");
+      uint8_t L[64], M[64]; int km = moveLearnset(d, L, M, 64);
+      for (int i = 0; i < km; i++) { const MoveDef &md = moveDef(M[i]); fprintf(o, "%s[%d,", i ? "," : "", L[i]); js(moveNameKo(M[i])); fprintf(o, ","); js(typeName(md.type)); fprintf(o, ",%d]", md.pow); }
+      int tm = 0; for (int i = 0; i < TM_COUNT; i++) tm += tmCompatible(d, i) ? 1 : 0;
+      fprintf(o, "],\"tm\":%d,\"def\":{", tm);
+      uint8_t t2 = dexType2(d) != 0xFF ? dexType2(d) : e.ptype;
+      for (int a = 0; a < PT_BATTLE_N; a++) { fprintf(o, "%s", a ? "," : ""); js(typeName(a)); fprintf(o, ":%d", typeEffQ(a, e.ptype, t2)); }
+      fprintf(o, "}}");
+    }
+    fprintf(o, "\n]\n"); fclose(o);
+    // tabla de tipos (mitades: 0, 1, 2, 4) para la pagina de afinidades
+    std::string tp = std::string(getenv("DEXJSON")) + ".types.json";
+    o = fopen(tp.c_str(), "w");
+    fprintf(o, "{\"names\":[");
+    for (int a = 0; a < PT_BATTLE_N; a++) { fprintf(o, "%s", a ? "," : ""); js(typeName(a)); }
+    fprintf(o, "],\"eff\":[");
+    for (int a = 0; a < PT_BATTLE_N; a++) { fprintf(o, "%s[", a ? "," : ""); for (int d = 0; d < PT_BATTLE_N; d++) fprintf(o, "%s%d", d ? "," : "", typeEff(a, d)); fprintf(o, "]"); }
+    fprintf(o, "]}\n"); fclose(o);
+    return 0;
+  }
   if (getenv("PERFBAT")) {  // ko12.10.3: cuanto cuesta cada fotograma del combate (perfil en el PC)
     extern uint8_t gBattleArt;
     gBattleArt = atoi(getenv("PERFBAT")) == 2 ? 1 : 0;

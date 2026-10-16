@@ -48,3 +48,13 @@ python3 a6/make_a6.py                                         # 그다음 A6
 
 `a6/` 에 생기는 파일: `인쇄용_A6_전체_60쪽.pdf`(인쇄소에 올리는 파일: CMYK 300dpi, 글꼴 없음, 잉크 240% 이하, 도련 3mm),
 `인쇄용_A6_본문_56쪽.pdf` + `인쇄용_A6_표지_펼침.pdf`(표지·본문 따로 올릴 때), 확인용 `TamaPoke_사용설명서_A6.pdf`, 주문 옵션 메모 `인쇄소_사양_A6.txt`.
+
+## 몬 도감 (dex/, A6 무선 제본 136쪽)
+
+251마리 한 권 (2마리/쪽): 능력치 · 진화 조건 · 만나는 장소 · 대표 기술 · 약점 + 타입 상성표. 값은 모두 펌웨어에서 뽑아요.
+
+1. 데이터: `cd TamaPoke && DEXJSON=<dex.json> bash test/render/run.sh <SD>` (dex.json + dex.json.types.json)
+2. 그림: 공식 일러스트 oa1.png … oa251.png 를 한 폴더에 (약 380px로 줄여서). 그림은 저장소에 올리지 않아요 (개인 소장용)
+3. `dex/build.sh <dex.json> <그림 폴더> <펌 버전> [fontsource/files]`
+   -> 다마포케_몬도감_A6_보기용.pdf, 인쇄용_몬도감_본문_136쪽.pdf, 인쇄용_몬도감_표지_책등6~9mm.pdf (0.5mm 단위),
+      주문안내_몬도감_인쇄소.pdf. 넘치는 칸이 있으면 멈춰요 (check.js)

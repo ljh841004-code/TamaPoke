@@ -1,0 +1,7 @@
+*.pdf
+*.pdf.tmp
+dex.html
+cover_*.html
+_check.html
+주문서_몬도감.html
+__pycache__/
