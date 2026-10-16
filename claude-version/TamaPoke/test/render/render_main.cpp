@@ -1367,6 +1367,33 @@ static void scenes(bool ko, const char *sfx) {
     txFmt(bvL1, sizeof(bvL1), X_WILD_AT, XT(X_REG_6), dexName(25));
     bPhase = BP_INTRO; bPhaseT = gMockMillis;
     render(); shot("45_wild_power_plant_pikachu");
+    if (getenv("HPSTYLE")) {  // ko12.10.6: 미리보기 de los paneles de vida
+      int16_t sp0 = pet.speciesId;
+      pet.speciesId = 151; ensureMon();
+      foePmd.unload(); loadFoe(6, false);
+      Battler me = makeBattler(151, 37, 60, 60, 60);
+      bFoe = makeBattler(6, 40, 60, 60, 60);
+      bvSetup(me, bFoe, nullptr, false);
+      struct V { const char *nm; uint8_t st; float foeHp, foeTgt, meHp, meTgt; uint32_t ms; } vs[] = {
+        { "HP0_now", 0, 199, 199, 221, 221, 0 },
+        { "HP1_fill", 1, 199, 199, 221, 221, 0 },
+        { "HP2_border", 2, 199, 199, 221, 221, 0 },
+        { "HP3_fill_hit", 1, 170, 96, 221, 221, 0 },
+        { "HP4_fill_danger", 1, 199, 199, 38, 38, 450 },
+      };
+      for (const V &v : vs) {
+        gHpStyle = v.st;
+        bvFoeMax = 248; bvMeMax = 242;
+        bvFoeHp = v.foeHp; bvFoeTgt = v.foeTgt; bvMeHp = v.meHp; bvMeTgt = v.meTgt;
+        bPhase = BP_MENU; bPhaseT = gMockMillis;
+        gMockMillis = (gMockMillis / 900 + 1) * 900 + v.ms;
+        render();
+        bvFoeHp = v.foeHp; bvFoeTgt = v.foeTgt; bvMeHp = v.meHp; bvMeTgt = v.meTgt;  // la animacion no las mueve
+        render(); shot(v.nm);
+      }
+      gHpStyle = 0;
+      pet.speciesId = sp0; ensureMon();
+    }
     if (getenv("SIZECMP")) {  // ko12.10.2: 도트 vs 원작, mismo Pokemon de los dos lados
       int16_t sp0 = pet.speciesId;
       extern uint8_t gBattleArt;

@@ -1115,58 +1115,122 @@ void drawBattleBg() {
 #define UI_GEN2_INK C565(0x98, 0x68, 0x00)
 static uint16_t nameInkFor(int16_t dex) { return dex > 151 ? UI_GEN2_INK : UI_INK; }
 
+// ko12.10.6 (미리보기): estilo del panel de vida. 0 = de siempre (barra en su fila); 1 = el panel entero es la
+// barra (relleno claro) y en la fila de la barra va el numero de la pokedex; 2 = barra gruesa en el borde de abajo
+uint8_t gHpStyle = 0;
+int16_t gHpBoxDex = 0;    // lo pone quien dibuja: numero de pokedex del panel
+float gHpBoxTgt = -1;     // vida a la que va (la barra ya esta ahi; de hp a tgt queda el rastro del golpe)
+static void hpRarityTab(int x, int y, uint8_t rk) {
+  const char *rn = XT(rk == 2 ? X_RARITY_LEGEND : X_RARITY_RARE);
+  setSize(1);
+  int rw = textW(rn, 1) + 26, rx = x + 12, ry = y - 13;
+  uint16_t rc = rk == 2 ? C565(0xff, 0xc0, 0x20) : C565(0xa0, 0x70, 0xff);
+  gfx->fillRoundRect(rx, ry, rw, 19, 9, rc);
+  gfx->drawRoundRect(rx, ry, rw, 19, 9, rk == 2 ? C565(0xb0, 0x70, 0x10) : C565(0x60, 0x38, 0xc0));
+  int sx = rx + 10, sy = ry + 9;  // estrella de 4 puntas
+  uint16_t sc = rk == 2 ? C565(0x80, 0x48, 0x00) : UI_WHITE;
+  gfx->fillTriangle(sx - 2, sy, sx + 2, sy, sx, sy - 6, sc);
+  gfx->fillTriangle(sx - 2, sy, sx + 2, sy, sx, sy + 6, sc);
+  gfx->fillTriangle(sx, sy - 2, sx, sy + 2, sx - 6, sy, sc);
+  gfx->fillTriangle(sx, sy - 2, sx, sy + 2, sx + 6, sy, sc);
+  gfx->setTextColor(rk == 2 ? C565(0x50, 0x30, 0x00) : UI_WHITE);
+  setCur(rx + 19, ry);
+  printT(rn);
+}
 void drawHpBox(int x, int y, int w, const char *name, uint16_t lvl, float hp, uint16_t maxHp, bool showNum,
                uint16_t nameInk, int8_t ptype, uint8_t rk, int8_t ptype2) {
+  const uint8_t st = gHpStyle;
   int ph = showNum ? 58 : 46;
+  if (st == 2) ph += 9;
+  float tgt = (st && gHpBoxTgt >= 0) ? gHpBoxTgt : hp;  // el estilo de siempre: la barra baja con hp
+  float f = maxHp ? tgt / maxHp : 0, fTrail = maxHp ? hp / maxHp : 0;
+  if (f < 0) f = 0;
+  if (f > 1) f = 1;
+  if (fTrail < f) fTrail = f;
+  if (fTrail > 1) fTrail = 1;
+  uint16_t col = f > 0.5f ? UI_BAR_OK : f > 0.2f ? UI_BAR_WARN : UI_BAR_BAD;
   if (rk) {  // ko12.9.23: raro (violeta) / legendario (dorado): marco de color alrededor del panel
     uint16_t c = rk == 2 ? C565(0xff, 0xc0, 0x20) : C565(0xa0, 0x70, 0xff);
     gfx->fillRoundRect(x - 3, y - 3, w + 6, ph + 6, 13, c);
   }
-  uiPanel(x, y, w, ph, 10, UI_WHITE, UI_INK);  // ko11.12
-  if (rk) {  // ko12.9.23: pestana "희귀" / "전설" con estrella, encima del borde de arriba
-    const char *rn = XT(rk == 2 ? X_RARITY_LEGEND : X_RARITY_RARE);
-    setSize(1);
-    int rw = textW(rn, 1) + 26, rx = x + 12, ry = y - 13;
-    uint16_t rc = rk == 2 ? C565(0xff, 0xc0, 0x20) : C565(0xa0, 0x70, 0xff);
-    gfx->fillRoundRect(rx, ry, rw, 19, 9, rc);
-    gfx->drawRoundRect(rx, ry, rw, 19, 9, rk == 2 ? C565(0xb0, 0x70, 0x10) : C565(0x60, 0x38, 0xc0));
-    int sx = rx + 10, sy = ry + 9;  // estrella de 4 puntas
-    uint16_t sc = rk == 2 ? C565(0x80, 0x48, 0x00) : UI_WHITE;
-    gfx->fillTriangle(sx - 2, sy, sx + 2, sy, sx, sy - 6, sc);
-    gfx->fillTriangle(sx - 2, sy, sx + 2, sy, sx, sy + 6, sc);
-    gfx->fillTriangle(sx, sy - 2, sx, sy + 2, sx - 6, sy, sc);
-    gfx->fillTriangle(sx, sy - 2, sx, sy + 2, sx + 6, sy, sc);
-    gfx->setTextColor(rk == 2 ? C565(0x50, 0x30, 0x00) : UI_WHITE);
-    setCur(rx + 19, ry);
-    printT(rn);
+  if (st == 1) {
+    // el panel es la barra: vacio gris claro, lleno del color de la vida muy aclarado, el rastro del golpe en
+    // naranja claro; una linea mas oscura marca donde acaba
+    uint16_t empty = C565(0xe4, 0xe4, 0xe4), fill = uiLerp(col, UI_WHITE, 9, 16);
+    uiPanel(x, y, w, ph, 10, empty, UI_INK);
+    int iw = w - 2, fw = (int)(iw * f + 0.5f), tw = (int)(iw * fTrail + 0.5f);
+    // relleno con el lado izquierdo redondo y el derecho recto (redondo solo si llega al final)
+    auto bar = [&](int bw, uint16_t c) {
+      if (bw <= 0) return;
+      if (bw >= iw - 9) { gfx->fillRoundRect(x + 1, y + 1, iw, ph - 2, 9, c); return; }
+      gfx->fillRoundRect(x + 1, y + 1, bw < 18 ? bw : 18, ph - 2, bw < 18 ? bw / 2 : 9, c);
+      if (bw > 9) gfx->fillRect(x + 10, y + 1, bw - 9, ph - 2, c);
+    };
+    if (tw > fw) bar(tw, C565(0xff, 0xc0, 0x80));
+    if (fw > 0) {
+      bar(fw, fill);
+      gfx->drawFastHLine(x + 9, y + 2, fw > 18 ? fw - 16 : 1, uiLerp(fill, UI_WHITE, 10, 16));
+      if (fw < iw - 2) gfx->drawFastVLine(x + 1 + fw, y + 2, ph - 4, uiLerp(col, UI_INK, 2, 16));
+    }
+    bool danger = f > 0 && f <= 0.2f && ((millis() / 450) & 1);
+    gfx->drawRoundRect(x, y, w, ph, 10, danger ? UI_BAR_BAD : UI_INK);
+    if (danger) gfx->drawRoundRect(x + 1, y + 1, w - 2, ph - 2, 9, UI_BAR_BAD);
+  } else {
+    uiPanel(x, y, w, ph, 10, UI_WHITE, UI_INK);  // ko11.12
   }
+  if (rk) hpRarityTab(x, y, rk);
   char lv[12];
   snprintf(lv, sizeof(lv), "Lv%u", lvl);
   setSize(1);
   int lw = textW(lv, 1);
-  gfx->setTextColor(UI_INK);
-  setCur(x + w - lw - 8, y + 7);
-  printT(lv);
   // nombre (encoge si hace falta)
   uint8_t sz = 2;
   setSize(sz);
-  if (textW(name, sz) > w - lw - 22) { sz = 1; setSize(1); }
-  gfx->setTextColor(nameInk);
-  setCur(x + 8, y + 5);
-  printT(name);
+  if (textW(name, sz) > w - lw - 22) sz = 1;
+  if (st == 1) {  // sobre el relleno: con borde blanco para que se lea siempre
+    printOutlined(x + w - lw - 8, y + 7, lv, 1, UI_INK, UI_WHITE, 1);
+    printOutlined(x + 8, y + 5, name, sz, nameInk, UI_WHITE, 1);
+  } else {
+    setSize(1);
+    gfx->setTextColor(UI_INK);
+    setCur(x + w - lw - 8, y + 7);
+    printT(lv);
+    setSize(sz);
+    gfx->setTextColor(nameInk);
+    setCur(x + 8, y + 5);
+    printT(name);
+  }
   gfx->setTextColor(UI_INK);
-  int bx = x + 8, by = y + 28, bw = w - 16;
-  float f = maxHp ? hp / maxHp : 0;
-  if (f < 0) f = 0;
-  if (f > 1) f = 1;
-  uint16_t col = f > 0.5f ? UI_BAR_OK : f > 0.2f ? UI_BAR_WARN : UI_BAR_BAD;
-  uiGauge(bx, by, bw, 11, (int)(f * 1000), col, UI_TRACK);  // ko11.12
+  int bx = x + 8, bw = w - 16;
+  if (st == 0) {
+    uiGauge(bx, y + 28, bw, 11, (int)(f * 1000), col, UI_TRACK);  // ko11.12
+  } else {
+    char no[12];
+    if (gHpBoxDex >= 1 && gHpBoxDex <= DEX_COUNT) {
+      snprintf(no, sizeof(no), "No.%03d", gHpBoxDex);
+      if (st == 1) printOutlined(bx, y + 25, no, 1, C565(0x50, 0x50, 0x60), UI_WHITE, 1);
+      else {
+        setSize(1);
+        gfx->setTextColor(C565(0x70, 0x70, 0x80));
+        setCur(bx, y + 25);
+        printT(no);
+      }
+    }
+    if (st == 2) {  // barra gruesa abajo, dentro del borde
+      int gy = y + ph - 9;
+      uiGauge(x + 6, gy, w - 12, 7, (int)(f * 1000), col, UI_TRACK);
+    }
+  }
   if (showNum) {
     char hs[16];
     snprintf(hs, sizeof(hs), "%u/%u", (unsigned)(hp + 0.5f), maxHp);
     setSize(1);
-    setCur(x + w - textW(hs, 1) - 8, y + 43);
-    printT(hs);
+    if (st == 1) printOutlined(x + w - textW(hs, 1) - 8, y + 43, hs, 1, UI_INK, UI_WHITE, 1);
+    else {
+      gfx->setTextColor(UI_INK);
+      setCur(x + w - textW(hs, 1) - 8, y + 43);
+      printT(hs);
+    }
   }
   int tx = bx;
   for (int k = 0; k < 2; k++) {  // ko12.9.22: el tipo, abajo a la izquierda (ko12.10: y el segundo)
@@ -1183,6 +1247,8 @@ void drawHpBox(int x, int y, int w, const char *name, uint16_t lvl, float hp, ui
     printT(tn);
     tx += tw + 3;
   }
+  gHpBoxDex = 0;
+  gHpBoxTgt = -1;
 }
 
 // ======================================================================
@@ -3187,7 +3253,9 @@ static void renderBattleViewImpl() {
   updateShake(now);
   drawBattleBg();
   drawBattlers();
+  gHpBoxDex = bvFoeDex; gHpBoxTgt = bvFoeTgt;
   drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true, nameInkFor(bvFoeDex), bvFoeDex >= 1 && bvFoeDex <= DEX_COUNT ? (int8_t)DEX_TBL[bvFoeDex].ptype : -1, rarityKind(bvFoeDex), (int8_t)dexType2(bvFoeDex));  // ko9: rival con numeros
+  gHpBoxDex = bvMeDex; gHpBoxTgt = bvMeTgt;
   drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true, nameInkFor(bvMeDex), bvMeDex >= 1 && bvMeDex <= DEX_COUNT ? (int8_t)DEX_TBL[bvMeDex].ptype : -1, rarityKind(bvMeDex), (int8_t)dexType2(bvMeDex));
   if (!bvFoeFainted) drawStatusBadge(206, 112, bFoe);  // ko11.31
   if (!bvMeFainted) drawStatusBadge(350, 150, bMe);
