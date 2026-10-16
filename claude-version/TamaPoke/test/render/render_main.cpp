@@ -1347,6 +1347,19 @@ static void scenes(bool ko, const char *sfx) {
     txFmt(bvL1, sizeof(bvL1), X_WILD_AT, XT(X_REG_6), dexName(25));
     bPhase = BP_INTRO; bPhaseT = gMockMillis;
     render(); shot("45_wild_power_plant_pikachu");
+    {  // ko12.10.1: 붐볼 (dot) en combate: el rival de frente y el tuyo de espaldas, ojos sin aplastar
+      int16_t sp0 = pet.speciesId;
+      pet.speciesId = 101; ensureMon();
+      foePmd.unload();
+      Battler me101 = makeBattler(101, 30, 60, 60, 60);
+      bFoe = makeBattler(101, 30, 60, 60, 60);
+      bvSetup(me101, bFoe, nullptr, false);
+      bPhase = BP_MENU; bPhaseT = gMockMillis;
+      for (int i = 0; i < 4; i++) { gMockMillis += 230; render(); char nm[40]; snprintf(nm, sizeof(nm), "45e_electrode_dot_%d", i); shot(nm); }
+      foePmd.unload();
+      pet.speciesId = sp0; ensureMon();
+      bvSetup(bMe, bFoe, nullptr, false);
+    }
     foePmd.unload();
     bFoe = makeBattler(243, 45, 90, 80, 110); bGroup = WG_RARE;
     bvSetup(bMe, bFoe, nullptr, false);

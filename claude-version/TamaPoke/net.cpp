@@ -448,6 +448,8 @@ static void pageFw() {
          "<small>포켓몬과 저장 데이터는 그대로예요. 다 받고 검사가 끝난 뒤에만 바뀌고, "
          "도중에 끊기면 지금 펌웨어 그대로예요. 끝날 때까지(약 1분) 이 화면을 두세요.</small></p>"
          "<input id=f type=file accept='.bin'>"
+         "<p><b>설명서 manual.pdf</b> (있으면 같이 고르기)<br><small>QR로 여는 설명서도 새 버전으로 바뀌어요</small></p>"
+         "<input id=g type=file accept='.pdf'>"
          "<button id=b onclick='up()'>올리기 / Upload</button>"
          "<div class=bar><div id=p></div></div><p id=m></p>"
          "<p><small>");
@@ -456,9 +458,18 @@ static void pageFw() {
   h += F("0x0 통합 이미지(저장이 지워지는 파일)는 받지 않아요.</small></p>");
   if (gPortal) h += F("<p><a href=/>WiFi 설정으로</a></p>");
   h += F("</div><script>"
-         "function up(){var f=document.getElementById('f').files[0];if(!f){alert('update.bin을 골라 주세요');return}"
+         "function up(){var f=document.getElementById('f').files[0],g=document.getElementById('g').files[0];"
+         "if(!f&&!g){alert('update.bin을 골라 주세요');return}"
          "var b=document.getElementById('b'),p=document.getElementById('p'),m=document.getElementById('m');"
-         "b.disabled=true;m.textContent='보내는 중...';var d=new FormData();d.append('fw',f,f.name);"
+         "b.disabled=true;if(!g){fw(f);return}m.textContent='설명서 보내는 중...';"
+         "var e=new FormData();e.append('f',g,'manual.pdf');var y=new XMLHttpRequest();"
+         "y.open('POST','/sd?p=manual.pdf');"
+         "y.upload.onprogress=function(e){if(e.lengthComputable)p.style.width=Math.floor(e.loaded*100/e.total)+'%'};"
+         "y.onload=function(){var ok=y.status==200;m.textContent=ok?'설명서 완료':'설명서 실패: '+y.responseText;"
+         "if(f){p.style.width='0';setTimeout(function(){fw(f)},400)}else b.disabled=false};"
+         "y.onerror=function(){m.textContent='연결이 끊겼어요. 다시 해 주세요.';b.disabled=false};y.send(e)}"
+         "function fw(f){var b=document.getElementById('b'),p=document.getElementById('p'),m=document.getElementById('m');"
+         "m.textContent='펌웨어 보내는 중...';var d=new FormData();d.append('fw',f,f.name);"
          "var x=new XMLHttpRequest();x.open('POST','/fw');"
          "x.upload.onprogress=function(e){if(e.lengthComputable){var q=Math.floor(e.loaded*100/e.total);"
          "p.style.width=q+'%';m.textContent=q+'%'+(q>=100?' - 검사 중...':'')}};"
@@ -674,6 +685,8 @@ static void pageSdUpload() {
     gSdGot = 0;
     String rel = gWeb->hasArg("p") ? gWeb->arg("p") : u.filename;
     if (!netSdPath(rel.c_str(), gSdPath, sizeof(gSdPath))) { gSdRes = 2; return; }
+    // el 설명서 (QR) va a la raiz, donde se busca primero: asi el nuevo siempre gana
+    if (!strcmp(gSdPath, NET_MANUAL_PATH2)) strcpy(gSdPath, NET_MANUAL_PATH);
     if (!sdReady) { gSdRes = 3; return; }
     gSdPaused = audioPauseForUpload();
     if (!gSdPaused) { audioResumeAfterUpload(); gSdRes = 4; return; }
@@ -715,6 +728,7 @@ static void pageSdUpload() {
       if (SD_MMC.exists(gSdPath)) SD_MMC.remove(gSdPath);
       ok = l && SD_MMC.rename(gSdTmp, gSdPath);
       if (!ok) SD_MMC.remove(gSdTmp);
+      if (ok && !strcmp(gSdPath, NET_MANUAL_PATH) && SD_MMC.exists(NET_MANUAL_PATH2)) SD_MMC.remove(NET_MANUAL_PATH2);
     }
     sdUpEnd(ok ? 1 : 5);
     if (ok) {

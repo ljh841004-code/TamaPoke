@@ -2101,6 +2101,17 @@ void updateShake(uint32_t now) {
 // ko12.9.27: los de bola (찌리리공, 붐볼): en su fila abajo-izquierda del PMD la cara sale de lado y los ojos
 // parecen aplastados. De frente, como antes de los combates mirandose
 static bool pmdDlOdd(int16_t dex) { return dex == 100 || dex == 101; }
+// ko12.10.1: 붐볼 (dot): su Idle/Attack del PMD es la bola rodando y en medio del giro los ojos salen
+// aplastados. En combate se queda en el frame de frente (el 2o del Idle) y solo flota un poco
+static bool pmdSteady(const PmdMon &m, int16_t dex, uint8_t &act, uint32_t &t, int &gy) {
+  if (dex != 101 || (act != PMD_IDLE && act != PMD_ATTACK)) return false;
+  const PmdAct &a = m.acts[PMD_IDLE];
+  if (a.frames < 2) return false;
+  act = PMD_IDLE;
+  t = a.ms[0];  // inicio del frame 1
+  gy += (int)lroundf(2.5f * sinf(millis() / 260.0f));
+  return true;
+}
 static uint8_t battleFacing(const PmdMon &m, uint8_t act, bool mine) {
   uint8_t d = act == PMD_IDLE ? PMD_IDLE_UR : act == PMD_ATTACK ? PMD_ATTACK_UR : act == PMD_HURT ? PMD_HURT_UR : 0xFF;
   if (d == 0xFF) return act;
@@ -2309,7 +2320,10 @@ void drawBattlers() {
     if (foePmd.loaded) {
       if (!foePmd.has(foeAct)) foeAct = PMD_IDLE;
       if (!pmdDlOdd(bvFoeDex)) foeAct = battleFacing(foePmd, foeAct, false);
-      drawPmdActM(foePmd, foeAct, foeX, foeG, now, true, foeSil, 4, 170);  // ko11.10.1: x4 (antes x3)
+      uint32_t ft = now;
+      int fg = foeG;
+      pmdSteady(foePmd, bvFoeDex, foeAct, ft, fg);
+      drawPmdActM(foePmd, foeAct, foeX, fg, ft, true, foeSil, 4, 170);  // ko11.10.1: x4 (antes x3)
     } else {
       const uint8_t *th = thumbs.get(bvFoeDex);
       if (th) drawThumb(th, foeX - GAL_CELL / 2, foeG - GAL_CELL, 2, foeSil);

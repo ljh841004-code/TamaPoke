@@ -398,6 +398,8 @@ bool sdSerialCommand(const String &line) {
     f.close();
     Serial.setTimeout(1000);
     sdDirty = (remaining == 0);
+    // ko12.10: un 설명서 nuevo en /mons/ gana a uno viejo de la raiz (que se busca primero)
+    if (remaining == 0 && path == "/mons/manual.pdf" && SD_MMC.exists("/manual.pdf")) SD_MMC.remove("/manual.pdf");
     Serial.println(remaining == 0 ? "DONE" : "ERR");
     return true;
   } else if (line == "SDINFO") {  // diagnostico remoto de "no me reconoce la SD"
