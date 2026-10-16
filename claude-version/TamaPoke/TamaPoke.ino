@@ -4824,6 +4824,7 @@ struct SmAA {
   const uint8_t *src = nullptr;
   const uint16_t *pal = nullptr;
   int s4 = 0, W = 0, H = 0;
+  int FW = 0, FH = 0, cx = 0, cy = 0;  // ko12.10.6: tamano entero y recorte (solo lo visible del frame)
   uint16_t *col = nullptr;  // W*H colores y detras W*H alfas (0..4), en un solo bloque
   uint8_t *a = nullptr;
   uint32_t used = 0;
@@ -4832,10 +4833,11 @@ struct SmAA {
 // ko12.10.3: cache de frames ya hechos (antes 1 por lado: cada cambio de frame de la animacion lo rehacia,
 // 20-60 ms en el ESP32, y la animacion y los efectos iban a saltos). Tras la primera vuelta de la animacion
 // cada fotograma solo copia. Hasta SMAA_SLOTS frames / SMAA_BUDGET bytes; sale el que hace mas que no se usa
-#define SMAA_SLOTS 40
+#define SMAA_SLOTS 64  // ko12.10.6: 40 -> 64 (reposo + ataque + golpe de los dos lados)
 #define SMAA_BUDGET (2600UL * 1024UL)
 static SmAA gSmAA[SMAA_SLOTS];
 static uint32_t gSmAAUse = 0, gSmAABytes = 0;
+uint32_t gSmAABuilds = 0;  // ko12.10.6: frames hechos (para medir en el PC)
 #define SMAA_MAXPX (480 * 480)
 int8_t gSmAASlot = -1;  // lo pone quien dibuja el combate; se consume al dibujar
 void SmAA::release() {
@@ -4843,6 +4845,12 @@ void SmAA::release() {
   *this = SmAA();
 }
 void smAAReset() { for (SmAA &c : gSmAA) c.release(); }  // al cargar otro sprite (puede caer en la misma memoria)
+// ko12.10.6: ya esta hecho este frame (con cualquier escala)?
+bool smAACached(const uint8_t *src, const uint16_t *pal) {
+  for (const SmAA &e : gSmAA)
+    if (e.col && e.src == src && e.pal == pal) return true;
+  return false;
+}
 static inline uint16_t smMix565(uint16_t f, uint16_t b, uint8_t a4) {  // a4 de 0 a 4
   uint32_t fx = (f | ((uint32_t)f << 16)) & 0x07E0F81FUL, bx = (b | ((uint32_t)b << 16)) & 0x07E0F81FUL;
   uint32_t m = ((fx * a4 + bx * (4 - a4)) >> 2) & 0x07E0F81FUL;
@@ -4855,13 +4863,33 @@ static bool smoothBlitAA(const uint8_t *src, int w, int h, const uint16_t *pal, 
   uint16_t *fb = gfx->getFramebuffer();
   (void)slot;
   if (!fb || w <= 0 || h <= 0 || w > SM_MAX || h > SM_MAX) return false;
-  int W = w * s4 / 4, H = h * s4 / 4;
-  if (W <= 0 || H <= 0 || W * H > SMAA_MAXPX) return false;
+  const int FW = w * s4 / 4, FH = h * s4 / 4;
+  if (FW <= 0 || FH <= 0 || FW * FH > SMAA_MAXPX) return false;
   SmAA *hit = nullptr;
   for (SmAA &e : gSmAA)
-    if (e.col && e.src == src && e.pal == pal && e.s4 == s4 && e.W == W && e.H == H) { hit = &e; break; }
+    if (e.col && e.src == src && e.pal == pal && e.s4 == s4 && e.FW == FW && e.FH == FH) { hit = &e; break; }
   bool build = !hit;
-  if (!hit) {
+  int W, H, cx, cy;
+  if (hit) {
+    W = hit->W; H = hit->H; cx = hit->cx; cy = hit->cy;
+  } else {
+    // ko12.10.6: solo la caja de lo visible (+1 px de borde): los lienzos de ataque son 3-5 veces mas grandes
+    // que el bicho y antes no cabian todos los frames en la cache (se rehacian en cada ataque y se trababa)
+    int bx0 = w, by0 = h, bx1 = -1, by1 = -1;
+    for (int y = 0; y < h; y++) {
+      const uint8_t *row = src + y * w;
+      for (int x = 0; x < w; x++)
+        if (row[x] != 0xFF) { if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; by1 = y; }
+    }
+    if (bx1 < 0) return true;  // frame vacio
+    cx = bx0 * s4 / 4 - 1; cy = by0 * s4 / 4 - 1;
+    if (cx < 0) cx = 0;
+    if (cy < 0) cy = 0;
+    int ex = ((bx1 + 1) * s4 + 3) / 4 + 1, ey = ((by1 + 1) * s4 + 3) / 4 + 1;
+    if (ex > FW) ex = FW;
+    if (ey > FH) ey = FH;
+    W = ex - cx; H = ey - cy;
+    if (W <= 0 || H <= 0) return true;
     uint32_t need = (uint32_t)W * H * 3 + (uint32_t)H * 4;  // colores + alfas + limites de cada fila
     for (;;) {  // sitio: uno libre, o fuera los que hace mas que no se usan hasta que quepa
       SmAA *fr = nullptr, *old = nullptr;
@@ -4876,7 +4904,8 @@ static bool smoothBlitAA(const uint8_t *src, int w, int h, const uint16_t *pal, 
     hit->col = (uint16_t *)ps_malloc(need);
     if (!hit->col) return false;
     hit->a = (uint8_t *)(hit->col + W * H);
-    hit->W = W; hit->H = H;
+    gSmAABuilds++;
+    hit->W = W; hit->H = H; hit->cx = cx; hit->cy = cy; hit->FW = FW; hit->FH = FH;
     gSmAABytes += need;
   }
   SmAA &c = *hit;
@@ -4894,14 +4923,14 @@ static bool smoothBlitAA(const uint8_t *src, int w, int h, const uint16_t *pal, 
     if (k == 8) { smEpx2(gSmB, w * 4, h * 4, gSmC); img = gSmC; }
     // punto de muestra (2 por eje): (o + (2i+1)/4) * 4k/s4 en pixeles de img
     for (int oy = 0; oy < H; oy++) {
-      int sy0 = (int)(((4 * oy + 1) * k) / s4), sy1 = (int)(((4 * oy + 3) * k) / s4);
+      int sy0 = (int)(((4 * (oy + cy) + 1) * k) / s4), sy1 = (int)(((4 * (oy + cy) + 3) * k) / s4);
       if (sy0 >= IH) sy0 = IH - 1;
       if (sy1 >= IH) sy1 = IH - 1;
       const uint8_t *r0 = img + sy0 * IW, *r1 = img + sy1 * IW;
       uint16_t *oc = c.col + oy * W;
       uint8_t *oa = c.a + oy * W;
       for (int ox = 0; ox < W; ox++) {
-        int sx0 = (int)(((4 * ox + 1) * k) / s4), sx1 = (int)(((4 * ox + 3) * k) / s4);
+        int sx0 = (int)(((4 * (ox + cx) + 1) * k) / s4), sx1 = (int)(((4 * (ox + cx) + 3) * k) / s4);
         if (sx0 >= IW) sx0 = IW - 1;
         if (sx1 >= IW) sx1 = IW - 1;
         uint8_t v[4] = { r0[sx0], r0[sx1], r1[sx0], r1[sx1] };
@@ -4961,27 +4990,28 @@ static bool smoothBlitAA(const uint8_t *src, int w, int h, const uint16_t *pal, 
       rl[oy] = (int16_t)l;
       rr[oy] = (int16_t)r;
     }
-    c.src = src; c.pal = pal; c.s4 = s4; c.W = W; c.H = H;
+    c.src = src; c.pal = pal; c.s4 = s4;
   }
+  const int X0 = x0 + cx;  // ko12.10.6: el recorte empieza en (cx, cy) del frame entero
   for (int oy = 0; oy < H; oy++) {
-    int py = y0 + oy;
+    int py = y0 + cy + oy;
     if (py < 0 || py >= LCD_HEIGHT) continue;
     const uint16_t *oc = c.col + oy * W;
     const uint8_t *oa = c.a + oy * W;
     uint16_t *row = fb + py * LCD_WIDTH;
     const int16_t *rl = (const int16_t *)(c.a + W * H), *rr = rl + H;
     int l = rl[oy], r = rr[oy];
-    if (!gBlitFlipX && x0 + l >= 0 && x0 + r < LCD_WIDTH) {  // lo normal: tramos opacos de golpe
+    if (!gBlitFlipX && X0 + l >= 0 && X0 + r < LCD_WIDTH) {  // lo normal: tramos opacos de golpe
       for (int ox = l; ox <= r;) {
         uint8_t a4 = oa[ox];
         if (a4 == 4) {
           int j = ox + 1;
           while (j <= r && oa[j] == 4) j++;
-          memcpy(row + x0 + ox, oc + ox, (size_t)(j - ox) * 2);
+          memcpy(row + X0 + ox, oc + ox, (size_t)(j - ox) * 2);
           ox = j;
           continue;
         }
-        if (a4) row[x0 + ox] = smMix565(oc[ox], row[x0 + ox], a4);
+        if (a4) row[X0 + ox] = smMix565(oc[ox], row[X0 + ox], a4);
         ox++;
       }
       continue;
@@ -4989,7 +5019,7 @@ static bool smoothBlitAA(const uint8_t *src, int w, int h, const uint16_t *pal, 
     for (int ox = l; ox <= r; ox++) {
       uint8_t a4 = oa[ox];
       if (!a4) continue;
-      int px = gBlitFlipX ? x0 + W - 1 - ox : x0 + ox;
+      int px = gBlitFlipX ? x0 + FW - 1 - (cx + ox) : X0 + ox;
       if (px < 0 || px >= LCD_WIDTH) continue;
       row[px] = a4 == 4 ? oc[ox] : smMix565(oc[ox], row[px], a4);
     }

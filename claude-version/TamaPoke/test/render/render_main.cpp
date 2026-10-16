@@ -2295,6 +2295,19 @@ int main(int argc, char **argv) {
   pet.balls = 5; pet.potions = 2;
   pet.bgAsked = 1;  // ko12.4.1: el aviso de elegir fondo tiene su propia captura
   ensureMon();
+  if (getenv("SMCYC")) {  // ko12.10.6: cuantas veces se rehace el liso en ciclos reposo/ataque (debe ser solo la 1a vez)
+    extern uint32_t gSmAABuilds;
+    pet.speciesId = 151; ensureMon(); foePmd.unload(); loadFoe(6, false);
+    for (int cyc = 0; cyc < 4; cyc++) for (int ph = 0; ph < 2; ph++) {
+      for (int t = 0; t < 1000; t += 33) {
+        uint8_t ma = ph ? PMD_ATTACK_UR : PMD_IDLE_UR, fa = ph ? PMD_ATTACK_DL : PMD_IDLE_DL;
+        battleDotScale(foePmd, 6, false); drawPmdActM(foePmd, fa, 316, 156, t, true, false, 4, 170);
+        battleDotScale(pmd, 151, true); drawPmdActM(pmd, ma, 140, 250, t, true, false, 4, 170);
+      }
+      printf("SMCYC cyc%d ph%d builds %u\n", cyc, ph, (unsigned)gSmAABuilds);
+    }
+    return 0;
+  }
   if (getenv("PERFBAT")) {  // ko12.10.3: cuanto cuesta cada fotograma del combate (perfil en el PC)
     extern uint8_t gBattleArt;
     gBattleArt = atoi(getenv("PERFBAT")) == 2 ? 1 : 0;

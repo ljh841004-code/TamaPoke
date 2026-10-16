@@ -2119,6 +2119,7 @@ static bool pmdDlOdd(int16_t dex) { return dex == 100 || dex == 101; }
 extern int gPmdForceS4;
 extern int8_t gSmAASlot;
 void smAAReset();
+bool smAACached(const uint8_t *src, const uint16_t *pal);
 static int pmdVisH(const PmdAct &a) {
   if (!a.frames || !a.data) return 0;
   int top = a.h, bot = -1;
@@ -2155,6 +2156,31 @@ static uint8_t battleFacing(const PmdMon &m, uint8_t act, bool mine) {
   if (d == 0xFF) return act;
   if (!mine) d += PMD_IDLE_DL - PMD_IDLE_UR;
   return m.has(d) ? d : act;
+}
+
+// ko12.10.6: mientras el menu espera, deja hechos (uno por fotograma) los frames lisos de ataque y golpe de los
+// dos lados: el primer ataque ya no se traba haciendolos (20-40 ms cada uno en el ESP32). Se "dibuja" debajo
+// de la pantalla: solo se guarda en la cache
+static void battleWarmOne(PmdMon &mine) {
+  struct Side { PmdMon *m; int16_t dex; bool me; } sides[2] = { { &foePmd, bvFoeDex, false }, { &mine, bvMeDex, true } };
+  for (const Side &sd : sides) {
+    if (!sd.m->loaded) continue;
+    if (sd.me ? (prgMe.loaded && prgMe.has(PMD_IDLE_UR)) : (prgFoe.loaded && prgFoe.has(PMD_IDLE))) continue;
+    for (uint8_t base : { (uint8_t)PMD_ATTACK, (uint8_t)PMD_HURT }) {
+      uint8_t act = (!sd.me && pmdDlOdd(sd.dex)) ? base : battleFacing(*sd.m, base, sd.me);
+      if (!sd.m->has(act)) continue;
+      const PmdAct &a = sd.m->acts[act];
+      uint32_t t = 0;
+      for (uint8_t i = 0; i < a.frames; i++) {
+        if (!smAACached(a.data + (uint32_t)i * a.w * a.h, sd.m->pal)) {
+          battleDotScale(*sd.m, sd.dex, sd.me);
+          drawPmdActM(*sd.m, act, 0, LCD_HEIGHT + 400, t + 1, false, false, 4, 170);
+          return;
+        }
+        t += a.ms[i];
+      }
+    }
+  }
 }
 
 // ko11.16: sprite de combate estilo juego: escala fija en cuartos (s4) para que se
@@ -2393,6 +2419,7 @@ void drawBattlers() {
       if (th) drawThumb(th, meX - GAL_CELL / 2, meG - GAL_CELL, 3, meSil);
     }
   }
+  if (bPhase == BP_MENU) battleWarmOne(pCur || !pSlot0Pet ? helperPmd : pmd);  // ko12.10.6
   // fork KO (ko7): efecto del ataque encima de los dos
   if (bPhase == BP_PLAY && bqI < bqN) {
     const BEvent &e = bq[bqI];
