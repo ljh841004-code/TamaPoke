@@ -157,9 +157,11 @@ void drawFightPanelV2(const uint8_t mv[4], const uint8_t pp[4], const uint8_t ma
 
 // ---------------------------------------------------------------- 기술 설명 창
 // buttons: 0 = [닫기]만, 1 = [장착하기][닫기], 2 = [가르치기][닫기]
+#define MVI_PY 88
+#define MVI_PH 304
 void drawMoveInfoV2(uint8_t id, uint8_t buttons) {
   const Mv2Def &d = MV2[id];
-  const int px = 52, py = 92, pw = 362, ph = 300;
+  const int px = 52, py = MVI_PY, pw = 362, ph = MVI_PH;  // ko12.10.2: mas alta (descripcion en letra grande)
   uint16_t c = mv2Col(d.type);
   gfx->fillRoundRect(px + 4, py + 6, pw, ph, 26, lerp565(UI_INK, UI_BG_DAY, 10, 16));  // 그림자
   uiPanel(px, py, pw, ph, 26, UI_WHITE, UI_INK);
@@ -191,20 +193,25 @@ void drawMoveInfoV2(uint8_t id, uint8_t buttons) {
     drawFitIn(lab[k], bx, y + 4, 100, 0x8410, 1);
     drawFitIn(val[k], bx, y + 22, 100, UI_INK, 2);
   }
-  // 설명
-  y += 62;
-  char L[3][120];
-  int n = mvWrap(MV2_DESC[id], pw - 50, 1, L, 3);
+  // 설명: ko12.10.2: cabe en 3 lineas grandes -> letra grande; si no, pequena (hasta 4)
+  y += 56;
+  char L[8][120];
+  int n = mvWrap(MV2_DESC[id], pw - 46, 2, L, 8);
+  uint8_t sz = 2;
+  int lh = 25;
+  if (n > 3) { n = mvWrap(MV2_DESC[id], pw - 46, 1, L, 4); sz = 1; lh = 19; }
   gfx->setTextColor(UI_INK);
-  setSize(1);
-  for (int i = 0; i < n; i++) { setCur(px + 25, y + i * 22); printT(L[i]); }
+  setSize(sz);
+  for (int i = 0; i < n; i++) { setCur(px + 23, y + i * lh); printT(L[i]); }
   // 버튼
   int by = py + ph - 52;
   if (buttons) {
     char rm[32];
     snprintf(rm, sizeof(rm), LK("기억 (사탕 %u)", "Recall (%u candy)"), (unsigned)MOVE_REMIND_CANDY);
-    const char *lb = buttons == 1 ? LK("장착하기", "Equip") : buttons == 2 ? LK("가르치기", "Teach") : rm;
-    uint16_t bc = buttons == 1 ? UI_BAR_OK : buttons == 2 ? C565(0x6a, 0x4c, 0xf0) : C565(0xe8, 0x90, 0x30);
+    const char *lb = buttons == 1 ? LK("장착하기", "Equip") : buttons == 2 ? LK("가르치기", "Teach")
+                   : buttons == 4 ? LK("바꾸기", "Change") : rm;
+    uint16_t bc = buttons == 1 ? UI_BAR_OK : buttons == 2 ? C565(0x6a, 0x4c, 0xf0) : buttons == 4 ? C565(0x3a, 0x8a, 0xd8)
+                : C565(0xe8, 0x90, 0x30);
     drawBtn(px + 34, by, 140, 40, bc, UI_WHITE, lb);
     drawBtn(px + pw - 174, by, 140, 40, UI_TRACK, UI_INK, LK("닫기", "Close"));
   } else {
@@ -633,7 +640,7 @@ void drawMoveFx2(uint8_t fam, int x0, int y0, int x1, int y1, uint32_t t, uint16
 //   - premios de MT: medallas (MT del gimnasio + MO), revanchas, liga, reto del dia, expediciones, salvajes
 // ======================================================================
 uint8_t mvInfoId = 0;      // ficha abierta (0 = ninguna)
-uint8_t mvInfoBtns = 0;    // 0 cerrar, 1 equipar, 2 ensenar (MT), 3 recordar
+uint8_t mvInfoBtns = 0;    // 0 cerrar, 1 equipar, 2 ensenar (MT), 3 recordar, 4 cambiar (ko12.10.2)
 uint8_t mvInfoTm = 0;      // la MT de la ficha (si mvInfoBtns == 2)
 uint8_t mvcFilt = 0, mvcPage = 0;  // ficha [기술]: pestana y pagina
 uint8_t mvEquipId = 0;     // eligiendo casilla para este (0 = no)
@@ -643,7 +650,7 @@ int16_t dexLsDex = 0;      // [기술표] abierto de esta especie (0 = no)
 uint8_t dexLsTab = 0, dexLsPage = 0;
 
 static bool mvInfoBtnHit(int16_t x, int16_t y, bool left) {
-  const int px = 52, py = 92, pw = 362, ph = 300, by = py + ph - 52;
+  const int px = 52, py = MVI_PY, pw = 362, ph = MVI_PH, by = py + ph - 52;
   if (!mvInfoBtns) return !left && inRect(x, y, px + pw / 2 - 75, by, 150, 40);
   return left ? inRect(x, y, px + 34, by, 140, 40) : inRect(x, y, px + pw - 174, by, 140, 40);
 }
@@ -664,127 +671,205 @@ static uint8_t mvcList(uint8_t *out, bool *rem, uint8_t max) {
     if (pet.moveCanRemind((uint8_t)id) && (!mvcFilt || MV2[id].cls == mvcFilt - 1)) { out[n] = (uint8_t)id; rem[n++] = true; }
   return n;
 }
-#define MVC_ROWS 3
-#define MVC_LIST_Y 222
-#define MVC_ROW_H 36
-#define MVC_NAV_Y 334
+// ko12.10.2: la ficha [기술] reorganizada (antes: 4 casillas pequenas + pestanas + lista de 3 en una pantalla,
+// todo en letra pequena). Ahora:
+//   - pagina: los 4 que lleva, uno por fila y grandes (nombre, tipo, PP), + [기술 바꾸기] y [기술머신 N]
+//   - tocar una fila = su ficha con [바꾸기]; [바꾸기] o [기술 바꾸기] abren la lista a pantalla entera
+//     (pestanas, 5 por pagina, letra grande); elegir uno lo pone en esa casilla (o pide la casilla)
+bool mvPickOpen = false;
+int8_t mvPickSlot = -1;   // casilla a cambiar desde la lista (-1 = aun no)
+#define MVC_ROW_Y 70
+#define MVC_ROW_H 50
+#define MVC_ROW_GAP 6
+#define MVC_BTN_Y 296
+#define MVP_ROWS 5
+#define MVP_LIST_Y 100
+#define MVP_ROW_H 46
+#define MVP_NAV_Y 340
+// nombre a la izquierda en letra grande (si no cabe, drawFitIn lo encoge)
+static void mvNameLeft(const char *nm, int x, int y, int w, uint16_t col) {
+  if (textW(nm, 2) <= w) { gfx->setTextColor(col); setSize(2); setCur(x, y); printT(nm); }
+  else drawFitIn(nm, x, y, w, col, 2);
+}
+static void mvcRow(int y, uint8_t i, bool hl) {
+  uint8_t id = pet.mv[i];
+  if (hl) gfx->fillRoundRect(60, y - 4, 346, MVC_ROW_H + 8, 16, C565(0xff, 0xc8, 0x40));
+  if (!id) {
+    uiButton(64, y, 338, MVC_ROW_H, 14, UI_TRACK, UI_INK);
+    drawFitIn(LK("(비어 있음)", "(empty)"), 64, y + 14, 338, 0x8410, 2);
+    return;
+  }
+  uint16_t c = mv2Col(MV2[id].type);
+  uiButton(64, y, 338, MVC_ROW_H, 14, c, UI_INK);
+  mv2ClassIcon(88, y + MVC_ROW_H / 2, MV2[id].cls, 9);
+  mvNameLeft(MV2_KO[id], 106, y + 4, 196, UI_WHITE);
+  gfx->setTextColor(UI_WHITE);
+  setSize(1);
+  setCur(106, y + 31);
+  printT(mv2TypeName(MV2[id].type));
+  char p[12];
+  snprintf(p, sizeof(p), "%u/%u", pet.pp[i], movePP(id));
+  setSize(2);
+  setCur(392 - textW(p, 2), y + 13);
+  printT(p);
+}
 void renderCardMoves() {
+  char t[48];
+  uint8_t nk = 0, nr = 0;
+  for (uint16_t id = 1; id < MOVE_N; id++) { if (pet.moveKnown((uint8_t)id)) nk++; else if (pet.moveCanRemind((uint8_t)id)) nr++; }
+  if (mvEquipId) {
+    snprintf(t, sizeof(t), LK("어디에 넣을까요?", "Which slot?"));
+    drawFit(t, 30, 300, C565(0xd8, 0x50, 0x30), 2);
+  } else {
+    drawFit(LK("기술", "Moves"), 30, 200, UI_INK, 2);
+  }
+  for (uint8_t i = 0; i < 4; i++) mvcRow(MVC_ROW_Y + i * (MVC_ROW_H + MVC_ROW_GAP), i, mvEquipId != 0);
+  if (mvEquipId) {
+    txFmtRaw(t, sizeof(t), LK("새 기술: {1}", "New: {1}"), moveNameId(mvEquipId), nullptr);
+    drawFit(t, MVC_BTN_Y + 10, 330, UI_INK, 2);
+    drawFit(LK("다른 곳을 누르면 취소", "Tap elsewhere to cancel"), MVC_BTN_Y + 42, 300, 0x8410, 1);
+    return;
+  }
+  drawBtn(64, MVC_BTN_Y, 166, 46, C565(0x3a, 0x8a, 0xd8), UI_WHITE, LK("기술 바꾸기", "Change"));
+  snprintf(t, sizeof(t), LK("기술머신 %u", "TMs %u"), pet.tmCount());
+  drawBtn(236, MVC_BTN_Y, 166, 46, pet.tmCount() ? C565(0x6a, 0x4c, 0xf0) : UI_TRACK, pet.tmCount() ? UI_WHITE : UI_INK, t);
+  if (nr) snprintf(t, sizeof(t), LK("배운 기술 %u개, 사탕으로 기억 %u개", "Known %u, recallable %u"), nk, nr);
+  else snprintf(t, sizeof(t), LK("배운 기술 %u개", "%u moves known"), nk);
+  drawFit(t, MVC_BTN_Y + 52, 300, 0x8410, 1);
+  // la ficha del movimiento la pinta renderCard al final (encima de los puntos de pagina)
+}
+
+static void mvPickOpenFor(int8_t slot) {
+  mvPickOpen = true;
+  mvPickSlot = slot;
+  mvcPage = 0;
+  sfxPlay(SFX_TAP);
+}
+// lista para cambiar (pantalla entera, como la bolsa de MT)
+void renderMovePick() {
   char t[48];
   uint8_t list[MOVE_N];
   bool rem[MOVE_N];
   uint8_t n = mvcList(list, rem, sizeof(list));
-  uint8_t nk = 0, nr = 0;
-  for (uint16_t id = 1; id < MOVE_N; id++) { if (pet.moveKnown((uint8_t)id)) nk++; else if (pet.moveCanRemind((uint8_t)id)) nr++; }
-  drawFit(LK("기술", "Moves"), 30, 200, UI_INK, 2);
-  if (mvEquipId) snprintf(t, sizeof(t), "%s", LK("바꿀 칸을 누르세요", "Tap a slot to replace"));
-  else if (nr) snprintf(t, sizeof(t), LK("배운 기술 %u, 기억 가능 %u", "Known %u, recallable %u"), nk, nr);
-  else snprintf(t, sizeof(t), LK("배운 기술 %u개", "%u moves known"), nk);
-  drawFit(t, 58, 300, mvEquipId ? C565(0xd8, 0x50, 0x30) : 0x8410, 1);
-  for (uint8_t i = 0; i < 4; i++) {
-    int x = i & 1 ? 237 : 83, y = i & 2 ? 132 : 84;
-    uint8_t id = pet.mv[i];
-    if (mvEquipId) gfx->fillRoundRect(x - 3, y - 3, 152, 48, 14, C565(0xff, 0xc8, 0x40));
-    if (!id) { uiButton(x, y, 146, 42, 12, UI_TRACK, UI_INK); continue; }
-    uint16_t c = mv2Col(MV2[id].type);
-    uiButton(x, y, 146, 42, 12, c, UI_INK);
-    drawFitIn(MV2_KO[id], x + 6, y + 3, 112, UI_WHITE, 1);
-    char p[12];
-    snprintf(p, sizeof(p), "%u/%u", pet.pp[i], movePP(id));
-    gfx->setTextColor(UI_WHITE);
-    setSize(1);
-    setCur(x + 8, y + 21);
-    printT(mv2TypeName(MV2[id].type));
-    setCur(x + 138 - textW(p, 1), y + 21);
-    printT(p);
-    mv2ClassIcon(x + 133, y + 12, MV2[id].cls, 5);
-  }
-  const char *TAB[4] = { LK("전체", "All"), LK("물리", "Phys."), LK("특수", "Spec."), LK("변화", "Status") };
+  if (mvPickSlot >= 0 && pet.mv[mvPickSlot])
+    txFmtRaw(t, sizeof(t), LK("{1} 대신", "Replace {1}"), moveNameId(pet.mv[mvPickSlot]), nullptr);
+  else snprintf(t, sizeof(t), "%s", LK("배운 기술", "Known moves"));
+  drawFit(t, 30, 300, UI_INK, 2);
+  const char *TAB[4] = { LK("전체", "All"), LK("물리", "Phys"), LK("특수", "Spec"), LK("변화", "Stat") };
   for (uint8_t k = 0; k < 4; k++) {
-    int x = 75 + k * 80;
+    int x = 73 + k * 81;
     bool on = k == mvcFilt;
-    uiButton(x, 184, 74, 32, 16, on ? UI_INK : UI_WHITE, UI_INK);
-    drawFitIn(TAB[k], x, 189, 74, on ? UI_WHITE : UI_INK, 1);
+    uiButton(x, 58, 75, 34, 17, on ? UI_INK : UI_WHITE, UI_INK);
+    drawFitIn(TAB[k], x, 63, 75, on ? UI_WHITE : UI_INK, 2);
   }
-  uint8_t pages = n ? (n + MVC_ROWS - 1) / MVC_ROWS : 1;
+  uint8_t pages = n ? (n + MVP_ROWS - 1) / MVP_ROWS : 1;
   if (mvcPage >= pages) mvcPage = pages - 1;
-  for (uint8_t r = 0; r < MVC_ROWS; r++) {
-    uint8_t k = mvcPage * MVC_ROWS + r;
+  if (!n) drawFit(LK("이 종류의 기술이 없어요", "None of this kind"), MVP_LIST_Y + 60, 300, 0x8410, 2);
+  for (uint8_t r = 0; r < MVP_ROWS; r++) {
+    uint8_t k = mvcPage * MVP_ROWS + r;
     if (k >= n) break;
     uint8_t id = list[k];
-    int y = MVC_LIST_Y + r * MVC_ROW_H;
+    int y = MVP_LIST_Y + r * MVP_ROW_H;
     bool eqd = movesHas(pet.mv, id);
-    uiButton(66, y, 334, 33, 10, eqd ? C565(0xff, 0xf4, 0xd6) : rem[k] ? C565(0xee, 0xea, 0xe2) : UI_WHITE, UI_INK);
-    gfx->fillRoundRect(68, y + 2, 10, 29, 5, mv2Col(MV2[id].type));
-    mv2ClassIcon(94, y + 16, MV2[id].cls, 7);
-    drawFitIn(MV2_KO[id], 108, y + 4, 150, rem[k] ? 0x8410 : UI_INK, 2);
-    char s2[24];
-    if (rem[k]) snprintf(s2, sizeof(s2), LK("사탕 %u", "%u candy"), (unsigned)MOVE_REMIND_CANDY);
-    else if (MV2[id].pow) snprintf(s2, sizeof(s2), LK("위력 %u", "Pow %u"), MV2[id].pow);
-    else snprintf(s2, sizeof(s2), "%s", LK("변화", "Status"));
-    gfx->setTextColor(rem[k] ? C565(0xd0, 0x70, 0x20) : 0x8410);
-    setSize(1);
-    setCur((eqd ? 340 : 394) - textW(s2, 1), y + 7);
-    printT(s2);
-    if (eqd) { uiButton(344, y + 5, 50, 22, 11, UI_BAR_OK, UI_INK); drawFitIn(LK("장착", "On"), 344, y + 6, 50, UI_WHITE, 1); }
+    uiButton(58, y, 350, MVP_ROW_H - 4, 12, eqd ? C565(0xff, 0xf4, 0xd6) : rem[k] ? C565(0xee, 0xea, 0xe2) : UI_WHITE, UI_INK);
+    gfx->fillRoundRect(61, y + 3, 10, MVP_ROW_H - 10, 5, mv2Col(MV2[id].type));
+    mv2ClassIcon(88, y + (MVP_ROW_H - 4) / 2, MV2[id].cls, 8);
+    mvNameLeft(MV2_KO[id], 106, y + 8, 186, rem[k] ? 0x8410 : UI_INK);
+    char s2[16];
+    uint16_t sc = 0x8410;
+    if (eqd) { s2[0] = 0; }
+    else if (rem[k]) { snprintf(s2, sizeof(s2), LK("사탕%u", "%uc"), (unsigned)MOVE_REMIND_CANDY); sc = C565(0xd0, 0x70, 0x20); }
+    else if (MV2[id].pow) snprintf(s2, sizeof(s2), "%u", MV2[id].pow);
+    else snprintf(s2, sizeof(s2), "-");
+    if (eqd) { uiButton(334, y + 8, 64, 26, 13, UI_BAR_OK, UI_INK); drawFitIn(LK("장착", "On"), 334, y + 10, 64, UI_WHITE, 1); }
+    else {
+      gfx->setTextColor(sc);
+      setSize(2);
+      setCur(396 - textW(s2, 2), y + 9);
+      printT(s2);
+    }
   }
-  drawBtn(96, MVC_NAV_Y, 56, 32, mvcPage ? UI_WHITE : UI_TRACK, UI_INK, "<");
-  drawBtn(314, MVC_NAV_Y, 56, 32, mvcPage + 1 < pages ? UI_WHITE : UI_TRACK, UI_INK, ">");
-  snprintf(t, sizeof(t), LK("기술머신 %u", "TMs %u"), pet.tmCount());
-  drawBtn(160, MVC_NAV_Y, 146, 32, pet.tmCount() ? C565(0x6a, 0x4c, 0xf0) : UI_TRACK, pet.tmCount() ? UI_WHITE : UI_INK, t);
-  if (pages > 1) {
-    snprintf(t, sizeof(t), "%u/%u", mvcPage + 1, pages);
-    gfx->setTextColor(0x8410);
-    setSize(1);
-    setCur(CX + 70, 36);
-    printT(t);
+  drawBtn(96, MVP_NAV_Y, 60, 36, mvcPage ? UI_WHITE : UI_TRACK, UI_INK, "<");
+  drawBtn(310, MVP_NAV_Y, 60, 36, mvcPage + 1 < pages ? UI_WHITE : UI_TRACK, UI_INK, ">");
+  snprintf(t, sizeof(t), "%u/%u", mvcPage + 1, pages);
+  drawFit(t, MVP_NAV_Y + 8, 120, UI_INK, 2);
+  drawFit(LK("오른쪽 숫자 = 위력", "Number = power"), MVP_NAV_Y + 44, 260, 0x8410, 1);
+  drawNav(NAV_L, UI_INK);
+  mvInfoDraw();
+}
+
+// el movimiento elegido va a la casilla de la lista (si la hay) o se pide la casilla en la pagina
+static void mvPickChoose(uint8_t id) {
+  if (mvPickSlot >= 0) {
+    if (pet.moveEquip((uint8_t)mvPickSlot, id)) { sfxPlay(SFX_MEDAL); pet.saveNow(); }
+    else sfxPlay(SFX_DENY);
+    mvEquipId = 0;
+  } else {
+    mvEquipId = id;
+    sfxPlay(SFX_TAP);
   }
-  // la ficha del movimiento la pinta renderCard al final (encima de los puntos de pagina)
+  mvPickOpen = false;
+  mvPickSlot = -1;
+}
+
+bool movePickTap(int16_t x, int16_t y) {
+  if (mvInfoId) {
+    uint8_t id = mvInfoId, b = mvInfoBtns;
+    mvInfoId = 0;
+    if (b && mvInfoBtnHit(x, y, true)) {
+      if (b == 1) mvPickChoose(id);
+      else if (b == 3) {
+        if (pet.moveRemind(id)) mvPickChoose(id);
+        else { sfxPlay(SFX_DENY); showToast(LK("사탕이 모자라요", "Not enough candy")); }
+      }
+    } else sfxPlay(SFX_TAP);
+    return true;
+  }
+  if (navHit(NAV_L, x, y)) { mvPickOpen = false; mvPickSlot = -1; sfxPlay(SFX_TAP); return true; }
+  for (uint8_t k = 0; k < 4; k++)
+    if (inRect(x, y, 73 + k * 81, 52, 75, 44)) { mvcFilt = k; mvcPage = 0; sfxPlay(SFX_TAP); return true; }
+  uint8_t list[MOVE_N];
+  bool rem[MOVE_N];
+  uint8_t n = mvcList(list, rem, sizeof(list));
+  uint8_t pages = n ? (n + MVP_ROWS - 1) / MVP_ROWS : 1;
+  for (uint8_t r = 0; r < MVP_ROWS; r++) {
+    uint8_t k = mvcPage * MVP_ROWS + r;
+    if (k >= n || !inRect(x, y, 58, MVP_LIST_Y + r * MVP_ROW_H, 350, MVP_ROW_H)) continue;
+    uint8_t id = list[k];
+    mvInfoOpen(id, rem[k] ? 3 : movesHas(pet.mv, id) ? 0 : 1);
+    return true;
+  }
+  if (inRect(x, y, 86, MVP_NAV_Y - 6, 80, 50)) { if (mvcPage) { mvcPage--; sfxPlay(SFX_TAP); } return true; }
+  if (inRect(x, y, 300, MVP_NAV_Y - 6, 80, 50)) { if (mvcPage + 1 < pages) { mvcPage++; sfxPlay(SFX_TAP); } return true; }
+  return true;  // la lista tapa toda la pantalla
 }
 
 // toque en la ficha [기술] (true = lo uso)
 bool cardMovesTap(int16_t x, int16_t y) {
   if (mvInfoId) {
-    if (mvInfoBtnHit(x, y, true) && mvInfoBtns) {
-      uint8_t id = mvInfoId;
-      if (mvInfoBtns == 1) { mvEquipId = id; sfxPlay(SFX_TAP); }
-      else if (mvInfoBtns == 3) {
-        if (pet.moveRemind(id)) { sfxPlay(SFX_MEDAL); mvEquipId = id; }
-        else { sfxPlay(SFX_DENY); showToast(LK("사탕이 모자라요", "Not enough candy")); }
-      }
-      mvInfoId = 0;
-    } else {
-      mvInfoId = 0;
-      sfxPlay(SFX_TAP);
-    }
+    uint8_t id = mvInfoId, b = mvInfoBtns;
+    mvInfoId = 0;
+    if (b == 4 && mvInfoBtnHit(x, y, true)) {  // [바꾸기] de una casilla
+      int8_t slot = -1;
+      for (uint8_t i = 0; i < 4; i++) if (pet.mv[i] == id) slot = (int8_t)i;
+      mvPickOpenFor(slot);
+    } else sfxPlay(SFX_TAP);
     return true;
   }
   for (uint8_t i = 0; i < 4; i++) {
-    int bx = i & 1 ? 237 : 83, by = i & 2 ? 132 : 84;
-    if (!inRect(x, y, bx - 4, by - 4, 154, 50)) continue;
+    int ry = MVC_ROW_Y + i * (MVC_ROW_H + MVC_ROW_GAP);
+    if (!inRect(x, y, 60, ry - 3, 346, MVC_ROW_H + 6)) continue;
     if (mvEquipId) {
       if (pet.moveEquip(i, mvEquipId)) { sfxPlay(SFX_MEDAL); pet.saveNow(); }
       else sfxPlay(SFX_DENY);
       mvEquipId = 0;
-    } else if (pet.mv[i]) mvInfoOpen(pet.mv[i], 0);
+    } else if (pet.mv[i]) mvInfoOpen(pet.mv[i], 4);
+    else mvPickOpenFor((int8_t)i);  // casilla vacia: elegir que poner
     return true;
   }
   if (mvEquipId) { mvEquipId = 0; sfxPlay(SFX_TAP); return true; }  // fuera: cancelar
-  for (uint8_t k = 0; k < 4; k++)
-    if (inRect(x, y, 75 + k * 80, 180, 74, 40)) { mvcFilt = k; mvcPage = 0; sfxPlay(SFX_TAP); return true; }
-  uint8_t list[MOVE_N];
-  bool rem[MOVE_N];
-  uint8_t n = mvcList(list, rem, sizeof(list));
-  uint8_t pages = n ? (n + MVC_ROWS - 1) / MVC_ROWS : 1;
-  for (uint8_t r = 0; r < MVC_ROWS; r++) {
-    uint8_t k = mvcPage * MVC_ROWS + r;
-    if (k >= n || !inRect(x, y, 66, MVC_LIST_Y + r * MVC_ROW_H, 334, MVC_ROW_H)) continue;
-    uint8_t id = list[k];
-    mvInfoOpen(id, rem[k] ? 3 : movesHas(pet.mv, id) ? 0 : 1);
-    return true;
-  }
-  if (inRect(x, y, 90, MVC_NAV_Y - 4, 66, 44)) { if (mvcPage) { mvcPage--; sfxPlay(SFX_TAP); } return true; }
-  if (inRect(x, y, 310, MVC_NAV_Y - 4, 66, 44)) { if (mvcPage + 1 < pages) { mvcPage++; sfxPlay(SFX_TAP); } return true; }
-  if (inRect(x, y, 156, MVC_NAV_Y - 4, 154, 44)) {
+  if (inRect(x, y, 60, MVC_BTN_Y - 4, 174, 54)) { mvPickOpenFor(-1); return true; }
+  if (inRect(x, y, 232, MVC_BTN_Y - 4, 174, 54)) {
     if (!pet.tmCount()) { sfxPlay(SFX_DENY); showToast(LK("기술머신이 없어요", "No TMs yet")); return true; }
     tmBagOpen = true;
     tmBagPage = 0;
@@ -809,6 +894,8 @@ bool tmBagTap(int16_t x, int16_t y) {
         showToast(t);
         sfxPlay(SFX_MEDAL);
         pet.saveNow();
+        // ko12.10.2: 4개가 다 차 있으면 바로 어느 칸에 넣을지 (전엔 기본 화면에서 다시 물어봤어요)
+        if (!movesHas(pet.mv, id)) { tmBagOpen = false; mvEquipId = id; }
       } else {
         sfxPlay(SFX_DENY);
         showToast(pet.moveKnown(id) ? LK("이미 알고 있어요", "Already known") : LK("배울 수 없어요", "Can't learn it"));

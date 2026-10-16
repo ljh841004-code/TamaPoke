@@ -280,6 +280,7 @@ public:
   bool moveKnown(uint8_t id) const { return id && (mvKnown[id / 8] >> (id % 8)) & 1; }
   void moveKnowAdd(uint8_t id) { if (id) mvKnown[id / 8] |= (uint8_t)(1 << (id % 8)); }
   void moveQueuePop();
+  void moveDropOffer(uint8_t id);  // ko12.10.2
   void moveLevelUp(uint16_t from, uint16_t to);  // lo que aprende al pasar de nivel "from" a "to"
   bool moveEquip(uint8_t slot, uint8_t id);      // pone uno que ya sabe en esa casilla (0..3)
   bool moveCanRemind(uint8_t id) const;          // de su lista a su nivel o menos y aun no lo sabe

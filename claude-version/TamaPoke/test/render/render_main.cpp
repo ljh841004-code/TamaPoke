@@ -429,6 +429,7 @@ static void scenes(bool ko, const char *sfx) {
     closeAll(); tick(3000);
     while (moveCount(pet.mv) < 4) { uint8_t x = pet.moveRandomNew(); if (!x) break; pet.moveOfferNew(x); }
     pet.moveLearned = 0;
+    memset(pet.moveQ, 0, sizeof(pet.moveQ));  // ko12.10.2: sin ofertas en cola de antes
     uint8_t nw = pet.moveRandomNew();
     pet.moveOffer = nw; moveLearnLoop();
     navCheck("movimientos: oferta con 4 -> dialogo", choiceKind == 3);
@@ -1641,12 +1642,32 @@ static void scenes(bool ko, const char *sfx) {
     pet.addCandy(6, 5);
     cardOpen = true; cardPage = CARD_PAGE_MOVES; mvcFilt = 0; mvcPage = 0;
     render(); shot("P3_card_moves");
+    mvInfoOpen(pet.mv[0], 4, 0); render(); shot("P3c_slot_info_change");  // ko12.10.2: fila -> ficha [바꾸기]
+    cardMovesTap(120, 88 + 304 - 52 + 10);  // [바꾸기]
+    navCheck("기술: [바꾸기] = 목록 (그 칸)", mvPickOpen && mvPickSlot == 0);
+    render(); shot("P3_card_moves_pick");
     mvcPage = 1; render(); shot("P3a_card_moves_p2");
     mvcPage = 0; mvcFilt = 3; render(); shot("P3b_card_moves_status");
-    mvcFilt = 0; mvInfoOpen(82, 1, 0); render(); shot("P4_move_info_equip");
-    mvInfoId = 0; mvEquipId = 82; render(); shot("P4b_equip_pick"); mvEquipId = 0;
+    uint8_t kid = 0;
+    for (uint16_t q = 1; q < MOVE_N && !kid; q++) if (pet.moveKnown((uint8_t)q) && !movesHas(pet.mv, (uint8_t)q)) kid = (uint8_t)q;
+    mvcFilt = 0; mvInfoOpen(kid, 1, 0); render(); shot("P4_move_info_equip");
+    movePickTap(120, 88 + 304 - 52 + 10);  // [장착하기] -> casilla 0
+    navCheck("기술: 목록에서 고르면 그 칸에 들어감", kid && pet.mv[0] == kid && !mvPickOpen);
+    mvEquipId = 34; pet.moveKnowAdd(34); render(); shot("P4b_equip_pick"); mvEquipId = 0;
+    mvPickOpen = true; mvPickSlot = -1;
     for (uint8_t i = 0; i < n; i++) if (pet.moveCanRemind(ls[i])) { mvInfoOpen(ls[i], 3, 0); break; }
-    render(); shot("P4c_move_remind"); mvInfoId = 0;
+    render(); shot("P4c_move_remind"); mvInfoId = 0; mvPickOpen = false;
+    {  // ko12.10.2: MT con las 4 casillas llenas: casilla al momento y sin oferta luego en la principal
+      uint8_t tmid = tmMove(37);
+      pet.moveOffer = 0; memset(pet.moveQ, 0, sizeof(pet.moveQ));
+      tmBagOpen = true; mvInfoOpen(tmid, 2, 37);
+      tmBagTap(120, 88 + 304 - 52 + 10);
+      navCheck("기술머신: 4칸이 차면 바로 칸 고르기, 기본 화면 제안 없음", !tmBagOpen && mvEquipId == tmid && pet.moveOffer == 0);
+      render(); shot("P6c_tm_slot_pick");
+      cardMovesTap(200, 70 + 2 * 56 + 20);
+      navCheck("기술머신: 고른 칸에 들어감", pet.mv[2] == tmid && mvEquipId == 0 && pet.moveOffer == 0);
+      pet.tmGive(37);
+    }
     tmBagOpen = true; tmBagPage = 0; render(); shot("P6_tm_bag");
     mvInfoOpen(tmMove(37), 2, 37); render(); shot("P6b_tm_teach"); mvInfoId = 0;
     tmBagOpen = false; cardOpen = false; cardPage = 0;
@@ -1656,7 +1677,8 @@ static void scenes(bool ko, const char *sfx) {
     dexLsDex = 6; dexLsTab = 0; dexLsPage = 0; render(); shot("P5a_dex_moves_level");
     dexLsPage = 1; render(); shot("P5b_dex_moves_level2");
     dexLsTab = 1; dexLsPage = 0; render(); shot("P5c_dex_moves_tm");
-    dexLsDex = 0; galleryOpen = false; galleryDetail = 0;
+    dexLsDex = 0;
+    galleryOpen = true; galleryDetail = 25; galleryPmd.load(25, false);  // ko12.10.2: lo de despues sigue en la ficha de Pikachu
     pet.speciesId = keepSp; pet.exp = keepExp;
     memset(pet.tmBag, 0, sizeof(pet.tmBag));
   }
@@ -1686,11 +1708,11 @@ static void scenes(bool ko, const char *sfx) {
   }
   {  // ko12.9.23: ya descubierto: [출현 장소] ensena donde sale; dos toques seguidos en el boton no salen de la pokedex
     tick(700);
-    onTap(CX, DEXW_Y + DEXW_H / 2);
+    onTap(CX - DEXLS_W / 2 - 4, DEXW_Y + DEXW_H / 2);  // ko12.10: [출현 장소] a la izquierda de [기술표]
     navCheck("pokedex: [출현 장소] -> donde sale", dexHintView && galleryDetail == 25);
     render(); shot("13h_dex_where");
     tick(120);
-    onTap(CX, DEXW_Y + DEXW_H / 2);
+    onTap(CX - DEXLS_W / 2 - 4, DEXW_Y + DEXW_H / 2);
     navCheck("pokedex: [정보 보기] -> los datos (sin salir)", !dexHintView && galleryDetail == 25 && galleryOpen);
     tick(700);
   }

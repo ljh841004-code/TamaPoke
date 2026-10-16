@@ -962,8 +962,18 @@ void Pet::moveQueuePop() {
     uint8_t id = moveQ[0];
     memmove(moveQ, moveQ + 1, sizeof(moveQ) - 1);
     moveQ[sizeof(moveQ) - 1] = 0;
-    if (!movesHas(mv, id)) moveOfferNew(id);
+    if (!movesHas(mv, id) && !moveKnown(id)) moveOfferNew(id);  // ko12.10.2: ya lo sabe (ficha/MT): no preguntar
   }
+}
+// ko12.10.2: lo acaba de poner / recordar / aprender en la ficha [기술]: si estaba ofrecido o en la cola, fuera
+// (antes, tras ensenar una MT en la ficha, la pantalla principal volvia a preguntar si lo queria aprender)
+void Pet::moveDropOffer(uint8_t id) {
+  if (!id) return;
+  uint8_t k = 0;
+  for (uint8_t i = 0; i < sizeof(moveQ); i++) if (moveQ[i] != id) moveQ[k++] = moveQ[i];
+  while (k < sizeof(moveQ)) moveQ[k++] = 0;
+  if (moveOffer == id) { moveOffer = 0; moveQueuePop(); }
+  pendingSave = true;
 }
 void Pet::moveOfferNew(uint8_t id) {
   if (!id || movesHas(mv, id)) return;
@@ -1051,6 +1061,7 @@ bool Pet::moveEquip(uint8_t slot, uint8_t id) {
   if (mv[slot]) moveKnowAdd(mv[slot]);
   mv[slot] = id;
   pp[slot] = movePP(id);  // como en el centro: con los PP llenos al cambiarlo
+  moveDropOffer(id);
   pendingSave = true;
   return true;
 }
@@ -1065,6 +1076,7 @@ bool Pet::moveRemind(uint8_t id) {
   if (!moveCanRemind(id) || candyOf(speciesId) < MOVE_REMIND_CANDY) return false;
   candy[DEX_FAM[speciesId]] -= MOVE_REMIND_CANDY;
   moveKnowAdd(id);
+  moveDropOffer(id);
   pendingSave = true;
   return true;
 }
@@ -1074,7 +1086,10 @@ bool Pet::tmTeach(uint8_t tm) {
   if (!tmCompatible(speciesId, tm) || moveKnown(id)) return false;
   if (tm < TM_HM_FIRST) tmBag[tm]--;  // las MO no se gastan
   moveKnowAdd(id);
-  moveOfferNew(id);
+  moveDropOffer(id);
+  // ko12.10.2: con hueco se pone ya; si no, la ficha pide la casilla al momento (sin oferta para luego)
+  for (uint8_t i = 0; i < 4; i++)
+    if (!mv[i]) { mv[i] = id; pp[i] = movePP(id); break; }
   pendingSave = true;
   return true;
 }

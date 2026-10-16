@@ -180,6 +180,9 @@ uint8_t cardPage = 0;         // 0 perfil, 1 stats+medallas
 #define CARD_PAGES 7          // ko10.4: + pagina de caramelos. ko12.5: + vida (caracter, educacion, rutina). ko12.10: + [기술]
 #define CARD_PAGE_MOVES 6     // ko12.10: la de los movimientos (ui_moves.ino)
 extern bool tmBagOpen;        // ko12.10 (ui_moves.ino)
+extern bool mvPickOpen;       // ko12.10.2 (ui_moves.ino)
+bool movePickTap(int16_t x, int16_t y);
+void renderMovePick();
 extern int16_t dexLsDex;
 extern uint8_t dexLsTab, dexLsPage;
 extern uint8_t mvInfoId, mvEquipId;
@@ -1876,6 +1879,7 @@ void onTap(int16_t x, int16_t y) {
   if (cardOpen) {
     // ko12.10: la bolsa de MT y la ficha de un movimiento van antes que las flechas
     if (tmBagOpen) { tmBagTap(x, y); return; }
+    if (mvPickOpen) { movePickTap(x, y); return; }  // ko12.10.2: lista para cambiar un movimiento
     if (cardPage == CARD_PAGE_MOVES && (mvInfoId || mvEquipId) && !navHit(NAV_DOWN, x, y)) { cardMovesTap(x, y); return; }
     // ko10.8: flechas (antes de todo lo demas: tocar fuera cierra la ficha)
     if (navHit(NAV_L, x, y) || navHit(NAV_R, x, y)) cardMsgUntil = 0;  // ko11.27
@@ -4477,9 +4481,10 @@ void renderCard() {
   else if (cardPage == 3) renderCardProgress();
   else if (cardPage == 4) renderCardCandy();
   else if (cardPage == 5) renderCardLife();  // ko12.5
-  if (cardPage != CARD_PAGE_MOVES) { tmBagOpen = false; mvInfoId = 0; mvEquipId = 0; }  // ko12.10: al salir de [기술]
+  if (cardPage != CARD_PAGE_MOVES) { tmBagOpen = false; mvPickOpen = false; mvInfoId = 0; mvEquipId = 0; }  // ko12.10: al salir de [기술]
   else {  // ko12.10: [기술] (y la bolsa de MT, a pantalla entera)
     if (tmBagOpen) { renderTmBag(); uiFlush(); return; }
+    if (mvPickOpen) { renderMovePick(); uiFlush(); return; }  // ko12.10.2
     renderCardMoves();
   }
 
