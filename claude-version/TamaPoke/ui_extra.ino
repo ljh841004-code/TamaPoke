@@ -2129,13 +2129,16 @@ static int pmdVisH(const PmdAct &a) {
   }
   return bot >= top ? bot - top + 1 : 0;
 }
+#define DOT_S4_MAX 18
 static void battleDotScale(const PmdMon &m, int16_t dex, bool mine) {
   if (dex < 1 || dex > 251) return;
   uint8_t tgt = mine ? BATTLE_H_ME[dex] : BATTLE_H_FOE[dex];
   int h = pmdVisH(m.acts[mine && m.has(PMD_IDLE_UR) ? PMD_IDLE_UR : PMD_IDLE]);
   if (!tgt || h <= 0) return;
   int s4 = (tgt * 4 + h / 2) / h;
-  gPmdForceS4 = s4 < 8 ? 8 : s4 > 28 ? 28 : s4;
+  // ko12.10.4: tope x4,5 (antes x7). Los sprites del PMD miden 20-30 px: a x6-x7 el contorno se volvia
+  // manchas gordas y el dibujo parecia otro. Los pequenos (뮤, 뮤츠...) siguen mas grandes que antes de ko12.10.2
+  gPmdForceS4 = s4 < 8 ? 8 : s4 > DOT_S4_MAX ? DOT_S4_MAX : s4;
   gSmAASlot = mine ? 1 : 0;
 }
 static bool pmdSteady(const PmdMon &m, int16_t dex, uint8_t &act, uint32_t &t, int &gy) {

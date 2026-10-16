@@ -1371,6 +1371,7 @@ static void scenes(bool ko, const char *sfx) {
       int16_t sp0 = pet.speciesId;
       extern uint8_t gBattleArt;
       for (int d : { 150, 151, 249, 250, 25, 6, 9, 130, 143, 1, 3, 129, 74, 41, 248, 101 }) {
+        if (getenv("SZONLY") && d != atoi(getenv("SZONLY"))) continue;
         for (int art = 0; art < 2; art++) {
           gBattleArt = art;
           pet.speciesId = d; ensureMon();
