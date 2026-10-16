@@ -2102,7 +2102,25 @@ void updateShake(uint32_t now) {
 // parecen aplastados. De frente, como antes de los combates mirandose
 static bool pmdDlOdd(int16_t dex) { return dex == 100 || dex == 101; }
 // ko12.10.1: 붐볼 (dot): su Idle/Attack del PMD es la bola rodando y en medio del giro los ojos salen
-// aplastados. En combate se queda en el frame de frente (el 2o del Idle) y solo flota un poco
+// aplastados; y aun de frente los ojos son 2-3 pixeles en diagonal. En combate se queda en el frame
+// de frente (el 2o del Idle), con la cara redibujada (ojos enfadados con brillo + sonrisa ancha, como
+// en el original), y solo flota un poco
+extern const uint8_t *gPmdFrameOverride;
+static const char EL_FACE[9][15] = {  // x 5..18, y 10..18 del lienzo 24x32; indices de la paleta, '.' = igual
+  "3033333333330.", "3003333333300.", "3030333333030.", "330003333000..", "330333333330..",
+  "333000000003..", "..0333333330..", "...00000000...", "....555555....",
+};
+static uint8_t elFaceBuf[24 * 32];
+static const uint8_t *electrodeFace(const PmdAct &a, uint8_t fi) {
+  if (a.w != 24 || a.h != 32 || fi >= a.frames) return nullptr;
+  const uint8_t *fr = a.data + (uint32_t)fi * 24 * 32;
+  if (fr[13 * 24 + 3] != 0 || fr[4 * 24 + 12] != 0) return nullptr;  // no es el sprite que conocemos
+  memcpy(elFaceBuf, fr, sizeof(elFaceBuf));
+  for (int y = 0; y < 9; y++)
+    for (int x = 0; x < 14; x++)
+      if (EL_FACE[y][x] != '.') elFaceBuf[(10 + y) * 24 + 5 + x] = (uint8_t)(EL_FACE[y][x] - '0');
+  return elFaceBuf;
+}
 static bool pmdSteady(const PmdMon &m, int16_t dex, uint8_t &act, uint32_t &t, int &gy) {
   if (dex != 101 || (act != PMD_IDLE && act != PMD_ATTACK)) return false;
   const PmdAct &a = m.acts[PMD_IDLE];
@@ -2110,6 +2128,7 @@ static bool pmdSteady(const PmdMon &m, int16_t dex, uint8_t &act, uint32_t &t, i
   act = PMD_IDLE;
   t = a.ms[0];  // inicio del frame 1
   gy += (int)lroundf(2.5f * sinf(millis() / 260.0f));
+  gPmdFrameOverride = electrodeFace(a, 1);
   return true;
 }
 static uint8_t battleFacing(const PmdMon &m, uint8_t act, bool mine) {

@@ -46,7 +46,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.10"
+#define FW_VERSION "1.17-ko12.10.1"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -5819,6 +5819,8 @@ uint8_t pmdFrameAt(const PmdAct &a, uint32_t t, bool loop) {
 // dibuja una accion de un PmdMon concreto (m); drawPmdAct usa el global pmd
 // fitH: alto objetivo del lienzo IDLE en px (170 = el de siempre; ko9: el perfil
 // usa mas para que el retrato se vea grande)
+// ko12.10.1: un frame retocado para el proximo drawPmdActM (붐볼: cara redibujada). Se consume al dibujar
+const uint8_t *gPmdFrameOverride = nullptr;
 void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS,
                  uint16_t fitH) {
   const PmdAct &a = m.acts[actId];
@@ -5831,6 +5833,7 @@ void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
   while (s > 8 && a.h * s > (fitH > 170 ? fitH + 80 : 250) * 4) s--;  // acciones con frame grande (ataque)
   uint8_t fi = pmdFrameAt(a, t, loop);
   const uint8_t *fr = a.data + (uint32_t)fi * a.w * a.h;
+  if (gPmdFrameOverride) { fr = gPmdFrameOverride; gPmdFrameOverride = nullptr; }
   // anclar por los pies (a.base), no por el alto del lienzo: asi las acciones
   // con padding distinto (Hurt, Eat...) quedan todas a la misma altura de suelo
   int x0 = cx - a.w * s / 8, y0 = groundY - (a.base ? a.base : a.h) * s / 4;
