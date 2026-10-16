@@ -197,6 +197,7 @@ public:
   uint32_t dailyDoneDay = 0;   // dia (epoch/86400) del ultimo reto superado
   uint16_t dailyClears = 0;    // retos del dia superados en total
   // ko10.11: revanchas de gimnasio (ya con la medalla) y liga
+  uint16_t champTmDay = 0;    // ko12.10.5: dia (epoch/86400, 16 bits) de la ultima MT del campeon
   uint16_t gymDay[8] = { 0 };  // dia (epoch/86400, 16 bits) del ultimo premio de revancha
   uint8_t gymWins[8] = { 0 };  // revanchas ganadas por gimnasio (las estrellas)
   uint16_t champWins = 0;      // veces campeon de la liga

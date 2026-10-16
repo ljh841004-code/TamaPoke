@@ -4477,7 +4477,10 @@ void finishBattle(bool won, bool fled, bool caught) {
       pet.giveItems(3, 3);  // ko11.1: antes +5/+5
       pet.addCandy(pet.speciesId, 10);
       if ((uint32_t)random(100) < LURE_CHAMP_PCT) lureDrop();  // ko12.9.11
-      tmDrop(tmRandom());  // ko12.10: y una MT
+      if (pet.lastSeenEpoch && pet.champTmDay != todayDay16()) {  // ko12.10.5: la MT, solo la 1a victoria del dia
+        pet.champTmDay = todayDay16();
+        tmDrop(tmRandom());
+      }
       // ko11.20: una ficha por Pokemon; con ayudantes que llegaron a luchar = en equipo
       bool teamWin = pUsed & (uint8_t)~1u;
       int ci = fameCardOfPet();
