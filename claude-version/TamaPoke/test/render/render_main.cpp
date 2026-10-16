@@ -1380,6 +1380,11 @@ static void scenes(bool ko, const char *sfx) {
         { "HP2_border", 2, 199, 199, 221, 221, 0 },
         { "HP3_fill_hit", 1, 170, 96, 221, 221, 0 },
         { "HP4_fill_danger", 1, 199, 199, 38, 38, 450 },
+        { "HP5_combo_a", 1, 199, 199, 221, 221, 0 },
+        { "HP5_combo_b", 1, 150, 60, 221, 221, 0 },
+        { "HP5_combo_c", 1, 60, 60, 120, 40, 0 },
+        { "HP5_combo_d", 1, 60, 60, 40, 40, 450 },
+        { "HP5_combo_e", 1, 60, 60, 40, 40, 0 },
       };
       for (const V &v : vs) {
         gHpStyle = v.st;

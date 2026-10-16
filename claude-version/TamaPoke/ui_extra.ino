@@ -1156,7 +1156,7 @@ void drawHpBox(int x, int y, int w, const char *name, uint16_t lvl, float hp, ui
   if (st == 1) {
     // el panel es la barra: vacio gris claro, lleno del color de la vida muy aclarado, el rastro del golpe en
     // naranja claro; una linea mas oscura marca donde acaba
-    uint16_t empty = C565(0xe4, 0xe4, 0xe4), fill = uiLerp(col, UI_WHITE, 9, 16);
+    uint16_t empty = C565(0xe4, 0xe4, 0xe4), fill = uiLerp(col, UI_WHITE, f > 0.5f ? 9 : 6, 16);  // el amarillo claro casi no se veia
     uiPanel(x, y, w, ph, 10, empty, UI_INK);
     int iw = w - 2, fw = (int)(iw * f + 0.5f), tw = (int)(iw * fTrail + 0.5f);
     // relleno con el lado izquierdo redondo y el derecho recto (redondo solo si llega al final)
