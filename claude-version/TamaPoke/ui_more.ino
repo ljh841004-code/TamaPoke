@@ -1573,12 +1573,14 @@ void updateTap(int16_t x, int16_t y) {
 // ko8: [nuevo comienzo]. Borra la partida entera (mascota, pokedex, caja,
 // medallas, records) y conserva WiFi, sonido e idioma. Para que no se haga
 // sin querer: pantalla propia y un boton que hay que mantener 3 s.
+// ko12.10.9: en vez de mantener 3 s (el tactil "soltaba" un instante y no se llegaba nunca), el boton
+// abre una ventana que lo pregunta otra vez: [새로 시작] / [취소]
 // ======================================================================
 #define RST_BTN_Y 286
 #define RST_BTN_R 66
-#define RST_HOLD_MS 3000UL
-bool rstHint = false;
+bool rstHint = false;  // ko12.10.9: la ventana "정말 처음부터 시작할까요?"
 bool rstDone = false;
+#define RST_ASK_Y 288  // botones de la ventana
 
 void openReset() {
   retMark();
@@ -1623,30 +1625,30 @@ void renderReset() {
   drawFit(XT(X_RESET_L1), 96, 340, UI_INK, 2);
   drawFit(XT(X_RESET_L2), 124, 340, UI_BAR_BAD, 2);
   drawFit(XT(X_RESET_L3), 160, 340, UI_INK, 2);
-  // progreso de la pulsacion (dedo apoyado dentro del boton)
-  float p = 0;
-  if (wasPressed && rstInButton(tX0, tY0) && rstInButton(tXl, tYl)) {
-    p = (float)(millis() - tStart) / RST_HOLD_MS;
-    if (p >= 1.0f) { doResetGame(); return; }
-  }
   gfx->fillCircle(CX, RST_BTN_Y, RST_BTN_R + 12, UI_TRACK);
-  // anillo que se llena en el sentido de las agujas del reloj
-  int segs = (int)(p * 60);
-  for (int i = 0; i < segs; i++) {
-    float a = -1.5708f + i * 6.2832f / 60;
-    gfx->fillCircle(CX + (int)(cosf(a) * (RST_BTN_R + 6)), RST_BTN_Y + (int)(sinf(a) * (RST_BTN_R + 6)), 6,
-                    UI_BAR_BAD);
-  }
-  gfx->fillCircle(CX, RST_BTN_Y, RST_BTN_R, p > 0 ? C565(0xb8, 0x28, 0x20) : UI_BAR_BAD);
+  gfx->fillCircle(CX, RST_BTN_Y, RST_BTN_R, UI_BAR_BAD);
   drawFit(XT(X_RESET_HOLD), RST_BTN_Y - 12, 2 * RST_BTN_R - 10, UI_WHITE, 2);
-  if (rstHint) drawFit(XT(X_RESET_HINT), 196, 340, UI_INK, 2);
   drawBtn(163, 372, 140, 40, UI_WHITE, UI_INK, XT(X_UPD_CANCEL));
   drawNav(NAV_L, UI_INK);  // ko11.17: volver a la hora
+  if (rstHint) {  // ko12.10.9: la pregunta otra vez
+    uiPanel(48, 130, 370, 216, 22, UI_WHITE, UI_INK);
+    drawFit(XT(X_RESET_HINT), 172, 330, UI_INK, 2);
+    drawFit(XT(X_RESET_L2), 212, 330, UI_BAR_BAD, 2);
+    drawFit(XT(X_RESET_L3), 246, 330, 0x8410, 1);
+    drawBtn(78, RST_ASK_Y, 150, 44, UI_BAR_BAD, UI_WHITE, XT(X_RESET_HOLD));
+    drawBtn(238, RST_ASK_Y, 150, 44, UI_TRACK, UI_INK, XT(X_UPD_CANCEL));
+  }
   uiFlush();
 }
 
 void resetTap(int16_t x, int16_t y) {
-  if (rstInButton(x, y)) { rstHint = true; sfxPlay(SFX_DENY); return; }  // toque corto: no basta
+  if (rstHint) {  // ko12.10.9: ventana: [새로 시작] borra; lo demas cierra la ventana
+    if (inRect(x, y, 78, RST_ASK_Y - 6, 150, 56)) { doResetGame(); return; }
+    rstHint = false;
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  if (rstInButton(x, y)) { rstHint = true; sfxPlay(SFX_TAP); return; }
   if (y >= 364 || y < 72 || navHit(NAV_L, x, y)) {  // cancelar -> vuelve a la hora
     sfxPlay(SFX_TAP);
     goBack();

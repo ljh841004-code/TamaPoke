@@ -1917,6 +1917,12 @@ static void scenes(bool ko, const char *sfx) {
   backupTap(300, 340); crashCount = 0;
   bakInfo(bakSlots); bakAsk = true; bakAskSlot = 1; render(); shot("18e_backup_boot_ask"); bakAsk = false;
   closeAll(); openReset(); render(); shot("23_reset");
+  {  // ko12.10.9: el boton pregunta otra vez (antes mantener 3 s); [취소] cierra sin borrar
+    resetTap(CX, RST_BTN_Y); render(); shot("23b_reset_ask");
+    navCheck("ko12.10.9: [새로 시작] abre la pregunta", rstHint && !rstDone);
+    resetTap(300, RST_ASK_Y + 20);
+    navCheck("ko12.10.9: [취소] cierra sin borrar", !rstHint && !rstDone && xScreen == XS_RESET);
+  }
   closeAll(); openUpdate(); render(); shot("19_update");
   updState = UPD_NONE; xScreen = XS_UPD; render(); shot("22_update_nofile");
   closeAll(); galleryOpen = true; galleryDetail = 0; galleryDirty = true; render(); shot("20_dex_grid_hint");
