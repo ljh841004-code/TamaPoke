@@ -75,7 +75,8 @@ bool PmdMon::load(uint8_t dexNum, bool shiny, char kind) {
     SdCardLock lock;
     f.close();
   }
-  if (!ok || memcmp(blob, "TPK2", 4) != 0) {
+  bool rle = ok && memcmp(blob, "TPK3", 4) == 0;  // ko12.10.11
+  if (!ok || (!rle && memcmp(blob, "TPK2", 4) != 0)) {
     if (blob) { free(blob); blob = nullptr; }
     return false;
   }
@@ -103,6 +104,12 @@ bool PmdMon::load(uint8_t dexNum, bool shiny, char kind) {
       if (nf > 24) { unload(); return false; }
       // valida que ms[] y los datos del frame caben en el blob (archivo truncado)
       uint32_t bytes = (uint32_t)nf * 2 + (uint32_t)w * h * nf;
+      if (rle) {  // ko12.10.11: ms[] + offs[nf+1] + datos comprimidos (offs[nf] = su tamano)
+        uint32_t tot;
+        if (p + (uint32_t)nf * 2 + 4 * ((uint32_t)nf + 1) > end) { unload(); return false; }
+        memcpy(&tot, p + nf * 2 + 4 * nf, 4);
+        bytes = (uint32_t)nf * 2 + 4 * ((uint32_t)nf + 1) + tot;
+      }
       if (w == 0 || h == 0 || nf == 0 || p + bytes > end) { unload(); return false; }
       if (id >= PMD_NACTS) { p += bytes; continue; }
       PmdAct &a = acts[id];
@@ -114,6 +121,32 @@ bool PmdMon::load(uint8_t dexNum, bool shiny, char kind) {
         if (a.ms[k] == 0) a.ms[k] = 100;  // nunca 0: pmdFrameAt() giraria sin avanzar
         p += 2;
       }
+      if (rle) {
+        a.offs = p;
+        a.data = p + 4 * ((uint32_t)nf + 1);
+        p += bytes - (uint32_t)nf * 2;
+        // filas: la mas baja con algo (comprobando que cada fila se puede leer entera)
+        uint8_t base = 1;
+        for (uint8_t f = 0; f < nf; f++) {
+          const uint8_t *q = a.frameRle(f);
+          for (int r = 0; r < h; r++) {
+            bool any = false;
+            for (int x = 0; x < w;) {
+              if (q + 2 > end) { unload(); return false; }
+              x += q[0];
+              uint8_t n = q[1];
+              q += 2 + n;
+              if (n) any = true;
+              x += n;
+              if (x > w || q > end) { unload(); return false; }
+            }
+            if (any && r + 1 > base) base = r + 1;
+          }
+        }
+        a.base = base;
+        continue;
+      }
+      a.offs = nullptr;
       a.data = p;
       p += (uint32_t)w * h * nf;
       // fila mas baja con contenido en cualquier frame: anclar por los pies
@@ -143,6 +176,7 @@ void PmdMon::unload() {
   for (auto &a : acts) {
     a.w = a.h = a.frames = a.base = 0;
     a.data = nullptr;
+    a.offs = nullptr;
   }
   loaded = false;
 }

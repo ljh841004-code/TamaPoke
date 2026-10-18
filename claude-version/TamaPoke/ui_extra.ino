@@ -2264,6 +2264,7 @@ static void battleWarmOne(PmdMon &mine) {
 static void drawPrgBattler(PmdMon &m, uint8_t act, int cx, int groundY, uint32_t t, bool sil, int s4, int maxH) {
   const PmdAct &a = m.acts[act];
   if (!a.frames) return;
+  if (a.offs) { draw3dAct(m, act, cx, groundY, t, sil, 0); return; }  // ko12.10.11: TPK3
   // ko11.16.1: escala ENTERA (x3, x2, x1) y sin suavizado EPX: el EPX trata el
   // transparente como un color y se comia el contorno negro de 1 px en curvas y
   // diagonales (los de PokeRogue salian palidos y sin borde); con x2,25 ademas los

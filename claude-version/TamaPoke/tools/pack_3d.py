@@ -2,7 +2,7 @@
 """ko12.10.7: sprites de combate "3D" (modelos 3D renderizados, como los juegos de 3DS).
 
 Lee los GIF animados (frente / espalda, normal / shiny) de una carpeta y los
-empaqueta en el formato TPK2 de pack_prg.py, YA ESCALADOS al tamano de la
+empaqueta en TPK3 (TPK2 de pack_prg.py con los frames comprimidos por filas), YA ESCALADOS al tamano de la
 pantalla (el firmware los pinta 1:1, sin ampliar):
   fNNN.bin / fsNNN.bin  accion 0  = frente (rival y ficha de la pokedex)
   bNNN.bin / bsNNN.bin  accion 16 = espalda (el tuyo)
@@ -91,6 +91,26 @@ def act_of(src, tag, num):
     return aid, fr, ms
 
 
+def rle(idx):
+    """ko12.10.11 (TPK3): por fila, tramos [salto transparente, n, n indices] hasta llegar a w
+    (el ultimo puede ser [salto, 0]). Asi el ~55% transparente no ocupa (ficheros a menos de la mitad)"""
+    out = bytearray()
+    h, w = idx.shape
+    for r in range(h):
+        row = idx[r].tolist()
+        x = 0
+        while x < w:
+            k = x
+            while k < w and row[k] == 0xFF and k - x < 255:
+                k += 1
+            m = k
+            while m < w and row[m] != 0xFF and m - k < 255:
+                m += 1
+            out += bytes((k - x, m - k)) + bytes(row[k:m])
+            x = m
+    return bytes(out)
+
+
 def write(path, acts):
     # paleta comun de 255 colores para todos los frames (sin tramado: el tramado parpadea al animar)
     px = np.concatenate([np.asarray(f).reshape(-1, 4) for _, fr, _ in acts for f in fr])
@@ -104,7 +124,7 @@ def write(path, acts):
     q = Image.fromarray(pad.reshape(side, side, 3)).quantize(255, method=Image.Quantize.MEDIANCUT)
     pal = np.array(q.getpalette()[:255 * 3], np.uint8).reshape(-1, 3)
     with open(path, 'wb') as f:
-        f.write(b'TPK2')
+        f.write(b'TPK3')
         f.write(struct.pack('<BH', len(acts), len(pal)))
         for r, g, b in pal:
             f.write(struct.pack('<H', rgb565(int(r), int(g), int(b))))
@@ -113,11 +133,20 @@ def write(path, acts):
             assert w <= 255 and h <= 255 and len(frames) <= MAX_FRAMES
             f.write(struct.pack('<4B', aid, w, h, len(frames)))
             f.write(struct.pack(f'<{len(frames)}H', *ms))
+            blobs = []
             for fr in frames:
                 a = np.asarray(fr)
                 idx = np.asarray(fr.convert('RGB').quantize(palette=q, dither=Image.Dither.NONE), np.uint8).copy()
                 idx[a[:, :, 3] < ALPHA_T] = 0xFF
-                f.write(idx.tobytes())
+                blobs.append(rle(idx))
+            offs, o = [], 0
+            for b in blobs:
+                offs.append(o)
+                o += len(b)
+            offs.append(o)
+            f.write(struct.pack(f'<{len(offs)}I', *offs))
+            for b in blobs:
+                f.write(b)
     return os.path.getsize(path)
 
 

@@ -34,6 +34,14 @@ struct PmdAct {
   uint8_t base = 0;  // fila+1 del pixel mas bajo (anclar por los pies, no el lienzo)
   uint16_t ms[24];
   const uint8_t *data = nullptr;  // frames * w * h en el blob
+  // ko12.10.11: TPK3 (los "3D"): cada frame comprimido por filas: [salto, n, n bytes]... hasta w.
+  // offs = nf+1 desplazamientos (uint32, sin alinear) desde 'data'; nullptr = sin comprimir (TPK2)
+  const uint8_t *offs = nullptr;
+  const uint8_t *frameRle(uint8_t f) const {
+    uint32_t o;
+    memcpy(&o, offs + 4 * f, 4);
+    return data + o;
+  }
 };
 
 // sprite PMD multi-accion cargado de la SD a PSRAM

@@ -6092,6 +6092,7 @@ void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
                  uint16_t fitH) {
   const PmdAct &a = m.acts[actId];
   if (!a.frames) return;
+  if (a.offs) { draw3dAct(m, actId, cx, groundY, t, sil, 0); return; }  // ko12.10.11: TPK3 (ya a su tamano)
   // ko11.10.1: escala en cuartos (fitH 185 con lienzo de 32 -> x5,75 con tope maxS)
   int sBase = m.acts[PMD_IDLE].h ? fitH * 4 / m.acts[PMD_IDLE].h : 20;
   if (sBase < 8) sBase = 8;
@@ -6128,6 +6129,25 @@ void draw3dAct(const PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, 
     uint16_t c = sil ? INK_K : m.pal[i];
     if (white && !sil) c = uiPack((uiSpread(c) * (16 - white) + uiSpread(0xFFFF) * white) >> 4);
     pal[i] = c;
+  }
+  if (a.offs) {  // ko12.10.11: TPK3, filas comprimidas [salto, n, n colores]
+    const uint8_t *q = a.frameRle(pmdFrameAt(a, t, true));
+    for (int r = 0; r < a.h; r++) {
+      int y = y0 + r;
+      bool vis = y >= 0 && y < LCD_HEIGHT;
+      uint16_t *d = fb + (vis ? y : 0) * LCD_WIDTH + x0;
+      for (int x = 0; x < a.w;) {
+        x += q[0];
+        uint8_t n = q[1];
+        q += 2;
+        if (vis)
+          for (int k = 0; k < n; k++)
+            if (x + k >= c0 && x + k < c1) d[x + k] = pal[q[k]];
+        q += n;
+        x += n;
+      }
+    }
+    return;
   }
   for (int r = 0; r < a.h; r++) {
     int y = y0 + r;
