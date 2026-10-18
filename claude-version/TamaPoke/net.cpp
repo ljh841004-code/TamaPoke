@@ -139,6 +139,9 @@ void netBegin() {
   uint8_t mac[6] = { 0 };
   esp_read_mac(mac, ESP_MAC_WIFI_STA);  // sin arrancar la radio
   snprintf(gApName, sizeof(gApName), "TamaPoke-%02X%02X", mac[4], mac[5]);
+  // ko12.10.9: las redes ya van en nuestras Preferences: que el WiFi no guarde la ultima en su NVS (con ella,
+  // al abrir el portal la parte STA se ponia a reconectar sola y el AP no salia en el movil)
+  WiFi.persistent(false);
 }
 
 void netSafeMode() { gAuto = false; }
@@ -190,6 +193,7 @@ static void beginCand(int i) {
   const NetCand &c = gCand[i];
   strcpy(gSsid, gCandSsid[i]);
   WiFi.disconnect(false, false);
+  WiFi.setAutoReconnect(true);  // ko12.10.9: el portal lo apaga
   if (c.saved >= 0 && gSavedPass[c.saved][0]) WiFi.begin(gSsid, gSavedPass[c.saved]);
   else WiFi.begin(gSsid);
 }
@@ -756,9 +760,14 @@ static void pageSdDone() {
 void netStartPortal() {
   if (gPortal || linkActive()) return;
   netStopLanFw();
-  if (gState == NET_CONNECTING || gState == NET_NTP) radioOff();
+  // ko12.10.9: radio siempre de cero. En un aparato que ya se conecto a casa (red guardada, sincronizacion
+  // automatica o buscando WiFi), la parte STA seguia buscando/reconectando y saltaba de canal: el AP del
+  // portal no aparecia en el movil (en uno nuevo, sin redes, si)
+  radioOff();
+  WiFi.setAutoReconnect(false);
   WiFi.mode(WIFI_AP_STA);
-  WiFi.softAP(gApName, NET_AP_PASS);
+  WiFi.disconnect(false, true);  // olvida la red STA que el WiFi guardo por su cuenta (versiones anteriores)
+  WiFi.softAP(gApName, NET_AP_PASS, 1);
   // ko11.6.1: el movil esta al lado: potencia baja. A tope (20 dBm) los picos de
   // corriente de la radio (balizas cada 100 ms) hacian parpadear la pantalla
   // alimentada solo por USB (sin bateria)
