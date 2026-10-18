@@ -540,7 +540,9 @@ static bool prgMeShiny = false;  // cambio del equipo ya era el nuevo: seguia el
 static bool prgAlways(int16_t dex) { return dex == 101; }
 // ko12.10.7: "3D" (battleArt 2): fNNN.bin (de frente) / bNNN.bin (de espaldas), ya a su tamano. Si falta: el
 // original (rNNN.bin) y si tampoco, el PMD
-bool prgFoe3d = false, prgMe3d = false;
+char prgFoeKind = 0, prgMeKind = 0;  // ko12.10.14: el fichero que se cargo ('f'/'b' = 3D, 'r' = original)
+#define prgFoe3d (prgFoeKind == 'f')
+#define prgMe3d (prgMeKind == 'b')
 static uint8_t prgMeArt = 0xFF;
 static void prgLoadFor(int16_t meDex, int16_t foeDex, bool foeShiny) {
   prgFoeDex = foeDex;
@@ -548,15 +550,14 @@ static void prgLoadFor(int16_t meDex, int16_t foeDex, bool foeShiny) {
   // ko12.10.2: con "도트" se usa el dibujo original para los que el PMD dibuja mal (붐볼: rueda y los ojos
   // salen aplastados); el resto, PMD (ni se leen los originales: menos SD y RAM)
   uint8_t art = battleArt();
-  prgFoe3d = art == 2 && prgFoe.load((uint8_t)foeDex, foeShiny, 'f');
-  if (prgFoe3d) {
-  } else if (art || prgAlways(foeDex)) prgFoe.load((uint8_t)foeDex, foeShiny, 'r');  // ~100 KB de la SD, una vez por combate
-  else prgFoe.unload();
-  if (!art && !prgAlways(meDex)) { prgMe.unload(); prgMeDex = 0; prgMe3d = false; return; }
+  // ko12.10.14: en segundo plano; mientras llega no se dibuja ese lado (battlerWaiting)
+  if (art == 2) pmdLoadAsync(prgFoe, (uint8_t)foeDex, foeShiny, "fr", &prgFoeKind);
+  else if (art || prgAlways(foeDex)) pmdLoadAsync(prgFoe, (uint8_t)foeDex, foeShiny, "r", &prgFoeKind);  // ~100 KB
+  else { prgFoe.unload(); prgFoeKind = 0; }
+  if (!art && !prgAlways(meDex)) { prgMe.unload(); prgMeDex = 0; prgMeKind = 0; return; }
   bool meShiny = pet.shiny && meDex == pet.speciesId;
-  if (!prgMe.loaded || prgMeDex != meDex || prgMeShiny != meShiny || prgMeArt != art) {
-    prgMe3d = art == 2 && prgMe.load((uint8_t)meDex, meShiny, 'b');
-    if (!prgMe3d) prgMe.load((uint8_t)meDex, meShiny, 'r');
+  if (!(prgMe.loaded || pmdPending(&prgMe)) || prgMeDex != meDex || prgMeShiny != meShiny || prgMeArt != art) {
+    pmdLoadAsync(prgMe, (uint8_t)meDex, meShiny, art == 2 ? "br" : "r", &prgMeKind);
     prgMeDex = meDex;
     prgMeShiny = meShiny;
     prgMeArt = art;
@@ -592,12 +593,12 @@ int16_t foePmdDex = 0;       // que especie tiene cargada foePmd
 bool foePmdShiny = false;
 
 void loadFoe(int16_t dex, bool shiny) {
-  if (foePmd.loaded && foePmdDex == dex && foePmdShiny == shiny) return;
+  if ((foePmd.loaded || pmdPending(&foePmd)) && foePmdDex == dex && foePmdShiny == shiny) return;
   foePmd.unload();
   smAAReset();  // ko12.10.2
   foePmdDex = dex;
   foePmdShiny = shiny;
-  if (dex >= 1 && dex <= DEX_COUNT) foePmd.load(dex, shiny);
+  if (dex >= 1 && dex <= DEX_COUNT) pmdLoadAsync(foePmd, dex, shiny, "p");  // ko12.10.14: sin parar la pantalla
 }
 
 // fase de la batalla
@@ -2453,8 +2454,13 @@ void drawBattlers() {
       gfx->fillRect(sx - 1, sy - l, 3, 2 * l + 1, gold);
     }
   }
-  if (!foeGone && !foeSil) drawRarityAura(foeX, foeG, rarityKind(bvFoeDex), now);  // ko12.9.23
-  if (!meGone && !meSil) drawRarityAura(meX, meG, rarityKind(bvMeDex), now);
+  // ko12.10.14: el sprite aun llega de la SD (segundo plano): ese lado no se dibuja (ni el de antes, ni puntos)
+  bool foeWait = pmdPending(&foePmd) || pmdPending(&prgFoe);
+  bool meWait = pmdPending(&prgMe) || pmdPending(&helperPmd);
+  if (foeWait) foeHide = true;
+  if (meWait) meHide = true;
+  if (!foeGone && !foeSil && !foeWait) drawRarityAura(foeX, foeG, rarityKind(bvFoeDex), now);  // ko12.9.23
+  if (!meGone && !meSil && !meWait) drawRarityAura(meX, meG, rarityKind(bvMeDex), now);
 #ifdef HOST_HD
   // app HD: animaciones de los modelos 3D (el rival de frente, el tuyo de espaldas) si estan en mons/ani
   if (!foeHide && !foeGone && hdBattlerDraw(bvFoeDex, bvFoeShiny, false, foeX, foeG, foeSil, foeAct)) {
@@ -2954,12 +2960,12 @@ static void partyMeName() {
 static void partyLoadMe() {
   if (!pCur && pSlot0Pet) return;
   bool sh = (pShiny >> pCur) & 1;
-  if (helperPmd.loaded && helperPmdDex == bMe.dex && helperPmdShiny == sh) return;
+  if ((helperPmd.loaded || pmdPending(&helperPmd)) && helperPmdDex == bMe.dex && helperPmdShiny == sh) return;
   helperPmd.unload();
   helperPmdDex = bMe.dex;
   helperPmdShiny = sh;
   smAAReset();  // ko12.10.2
-  helperPmd.load((uint8_t)bMe.dex, sh);
+  pmdLoadAsync(helperPmd, (uint8_t)bMe.dex, sh, "p");  // ko12.10.14
 }
 // el mejor para salir contra el rival de ahora (-1 = mejor quedarse, si se puede)
 static int8_t partyBest(bool forced) {

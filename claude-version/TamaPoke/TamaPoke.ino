@@ -121,6 +121,7 @@ enum : uint8_t { BUB_NONE = 0, BUB_DOTS, BUB_BORED, BUB_HUNGRY, BUB_DIRTY, BUB_S
 #define PET_FITH 176    //   alto objetivo del lienzo IDLE (antes 170): x5,5 con lienzo de 32
 PmdMon galleryPmd;  // sprite grande de la vista detalle de la galeria (PMD/TPK2, legal)
 bool gallery3d = false;  // ko12.10.7: galleryPmd tiene el "3D" de frente (fNNN.bin) de la ficha
+char galleryKind = 0;    // ko12.10.14: lo que trajo la carga en segundo plano ('f' 3D, 'p' PMD; 0 = nada aun)
 // ko12.10.8: la ultima ficha tenia "3D": mientras se lee el siguiente no se ensena la miniatura de
 // puntos (se veia el dibujo de puntos y luego saltaba al 3D)
 static bool gDex3dSeen = false;
@@ -942,6 +943,7 @@ void loop() {
   uint32_t now = millis();
   if (!bootLoopT0) bootLoopT0 = now ? now : 1;  // ko12.8.5
   vibLoop(now);  // ko11.25
+  { void smAAReset(); if (pmdAsyncPoll()) smAAReset(); }  // ko12.10.14: sprites leidos en segundo plano
   moveLearnLoop();  // ko11.31
   centerPoll();     // ko11.31: el centro pokemon termina aunque no se mire
   // ko11.31.4: efectos (combate / ficha del Pokedex): trozos de 8 KB, ~20 ms por vuelta como mucho;
@@ -5290,6 +5292,11 @@ void renderDexDetail() {
   drawFit(head, 36, 300, disc ? d.accent : UI_INK, 3);
   uint32_t mvT = dexMvFx ? millis() - dexMvT0 : 0;
   if (dexMvFx && mvT > 1500) dexMvFx = 0;
+  if (galleryKind && galleryPmd.loaded) {  // ko12.10.14: llego la carga en segundo plano
+    gallery3d = galleryKind == 'f';
+    gDex3dSeen = gallery3d;
+    galleryKind = 0;  // ya aplicado (gallery3d se queda)
+  }
   if (galleryPmd.loaded && gallery3d && galleryPmd.has(PMD_IDLE)) {
     // ko12.10.7: "3D": un saltito al ensenar un movimiento
     int hop = dexMvFx && mvT < 900 ? (mvT < 450 ? mvT : 900 - mvT) / 25 : 0;
@@ -5611,9 +5618,9 @@ void galleryLoadPending() {
   galleryLoadWant = 0;
   if (!dex || dex != galleryDetail || !galleryOpen) return;
   // ko12.10.7: la ficha con el "3D" de frente (grande y animado) si esta en la SD; si no, el PMD
-  gallery3d = galleryPmd.load(dex, pet.isShinyRegistered(dex), 'f');
-  gDex3dSeen = gallery3d;
-  if (!gallery3d) galleryPmd.load(dex, pet.isShinyRegistered(dex));
+  // ko12.10.14: en segundo plano (la ficha no se para); hasta que llegue no se dibuja nada (o la miniatura)
+  gallery3d = false;
+  pmdLoadAsync(galleryPmd, dex, pet.isShinyRegistered(dex), "fp", &galleryKind);
   if (dexLog.caughtCount(dex)) {  // ko11.31: los efectos de sus botones, poco a poco
     uint8_t mv[4];
     dexTopMoves(dex, mv);

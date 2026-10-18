@@ -5,6 +5,7 @@
 #include "sd_lock.h"
 #include "audio.h"
 #include "pak.h"  // ko12.8
+#include <new>   // ko12.10.14: placement new (cola de cargas)
 
 SemaphoreHandle_t sdMutex = nullptr;
 
@@ -62,7 +63,7 @@ bool PmdMon::load(uint8_t dexNum, bool shiny, char kind) {
   // lee de la SD) sigue sonando mientras se cargan los sprites al empezar un combate
   bool ok = blob != nullptr;
   for (uint32_t off = 0; ok && off < size;) {
-    uint32_t n = size - off > 8192 ? 8192 : size - off;
+    uint32_t n = size - off > 16384 ? 16384 : size - off;  // ko12.10.14: 16 KB (menos esperas; ~6 ms de SD cada uno)
     {
       SdCardLock lock;
       ok = lock && f.read(blob + off, n) == n;
@@ -168,7 +169,9 @@ bool PmdMon::load(uint8_t dexNum, bool shiny, char kind) {
   return true;
 }
 
+static void pmdCancelFor(const PmdMon *dst);
 void PmdMon::unload() {
+  pmdCancelFor(this);  // ko12.10.14: lo que estaba llegando para este ya no vale
   if (blob) {
     free(blob);
     blob = nullptr;
@@ -459,4 +462,129 @@ bool sdSerialCommand(const String &line) {
     return true;
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// ko12.10.14: carga en segundo plano. Antes el bucle principal se paraba mientras leia el sprite
+// (cientos de KB a trozos de 8 KB esperando a la musica): al salir un Pokemon en combate la pantalla
+// se congelaba un momento (도트, 원작 y 3D) y la ficha 3D de la pokedex tardaba ~0,5 s
+// ---------------------------------------------------------------------------
+enum : uint8_t { PJ_FREE = 0, PJ_QUEUED, PJ_LOADING, PJ_DONE, PJ_SWAP };
+struct PmdJob {
+  PmdMon *dst = nullptr;
+  uint8_t dex = 0;
+  bool shiny = false;
+  char kinds[4] = { 0 };
+  char *gotOut = nullptr;
+  char got = 0;
+  volatile bool cancel = false;
+  volatile uint8_t st = PJ_FREE;
+  PmdMon tmp;
+};
+#define PMDJ_N 6
+static PmdJob *gJobs = nullptr;  // en PSRAM (cada uno lleva su PmdMon de paso)
+
+static void pmdCancelFor(const PmdMon *dst) {
+  if (!gJobs) return;
+  for (int i = 0; i < PMDJ_N; i++) {
+    PmdJob &j = gJobs[i];
+    if (j.dst != dst || j.st == PJ_FREE || j.st == PJ_SWAP) continue;
+    if (j.st == PJ_QUEUED) { j.st = PJ_FREE; continue; }
+    j.cancel = true;  // cargando o ya cargado: se tira al llegar
+  }
+}
+
+bool pmdPending(const PmdMon *dst) {
+  if (!gJobs) return false;
+  for (int i = 0; i < PMDJ_N; i++)
+    if (gJobs[i].dst == dst && gJobs[i].st != PJ_FREE && gJobs[i].st != PJ_SWAP && !gJobs[i].cancel) return true;
+  return false;
+}
+
+static void pmdRun(PmdJob &j) {
+  j.got = 0;
+  for (int k = 0; k < 3 && j.kinds[k] && !j.cancel; k++)
+    if (j.tmp.load(j.dex, j.shiny, j.kinds[k])) { j.got = j.kinds[k]; break; }
+}
+
+#ifdef ESP_PLATFORM
+static TaskHandle_t gPmdTask = nullptr;
+static void pmdWorker(void *) {
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(200));
+    for (int i = 0; i < PMDJ_N; i++) {
+      PmdJob &j = gJobs[i];
+      if (j.st != PJ_QUEUED) continue;
+      j.st = PJ_LOADING;
+      pmdRun(j);
+      __sync_synchronize();
+      j.st = PJ_DONE;
+    }
+  }
+}
+#endif
+
+void pmdLoadAsync(PmdMon &dst, uint8_t dexNum, bool shiny, const char *kinds, char *got) {
+  dst.unload();  // y cancela lo que hubiera pendiente para dst
+  if (got) *got = 0;
+  if (!gJobs) {
+    gJobs = (PmdJob *)ps_malloc(sizeof(PmdJob) * PMDJ_N);
+    if (!gJobs) gJobs = (PmdJob *)malloc(sizeof(PmdJob) * PMDJ_N);
+    if (!gJobs) {  // sin memoria: como antes
+      for (int k = 0; k < 3 && kinds[k]; k++) if (dst.load(dexNum, shiny, kinds[k])) { if (got) *got = kinds[k]; break; }
+      return;
+    }
+    for (int i = 0; i < PMDJ_N; i++) new (&gJobs[i]) PmdJob();
+  }
+#ifndef ESP_PLATFORM
+  // PC (tests y capturas): sin tareas, se carga al momento
+  for (int k = 0; k < 3 && kinds[k]; k++) if (dst.load(dexNum, shiny, kinds[k])) { if (got) *got = kinds[k]; break; }
+  return;
+#else
+  int f = -1;
+  for (int i = 0; i < PMDJ_N && f < 0; i++) if (gJobs[i].st == PJ_FREE) f = i;
+  if (f < 0) {  // cola llena (no deberia): como antes
+    for (int k = 0; k < 3 && kinds[k]; k++) if (dst.load(dexNum, shiny, kinds[k])) { if (got) *got = kinds[k]; break; }
+    return;
+  }
+  PmdJob &j = gJobs[f];
+  j.dst = &dst;
+  j.dex = dexNum;
+  j.shiny = shiny;
+  snprintf(j.kinds, sizeof(j.kinds), "%s", kinds);
+  j.gotOut = got;
+  j.got = 0;
+  j.cancel = false;
+  __sync_synchronize();
+  j.st = PJ_QUEUED;
+  if (!gPmdTask) xTaskCreatePinnedToCore(pmdWorker, "pmdld", 6144, nullptr, 1, &gPmdTask, 0);
+  if (gPmdTask) xTaskNotifyGive(gPmdTask);
+  else { j.st = PJ_LOADING; pmdRun(j); j.st = PJ_DONE; }  // sin tarea: aqui mismo
+#endif
+}
+
+uint8_t pmdAsyncPoll() {
+  if (!gJobs) return 0;
+  uint8_t n = 0;
+  for (int i = 0; i < PMDJ_N; i++) {
+    PmdJob &j = gJobs[i];
+    if (j.st != PJ_DONE) continue;
+    __sync_synchronize();
+    if (j.cancel || !j.got) {
+      j.tmp.unload();
+    } else {
+      j.st = PJ_SWAP;  // el unload de dst no debe cancelarse a si mismo
+      j.dst->unload();
+      *j.dst = j.tmp;  // se queda con el blob (y sus punteros)
+      j.tmp.blob = nullptr;
+      j.tmp.loaded = false;
+      for (auto &a : j.tmp.acts) { a.frames = 0; a.data = nullptr; a.offs = nullptr; }
+      if (j.gotOut) *j.gotOut = j.got;
+      n++;
+    }
+    j.dst = nullptr;
+    j.cancel = false;
+    j.st = PJ_FREE;
+  }
+  return n;
 }

@@ -58,6 +58,14 @@ struct PmdMon {
   bool has(uint8_t a) const { return loaded && a < PMD_NACTS && acts[a].frames > 0; }
 };
 
+// ko12.10.14: carga en segundo plano (otra tarea lee la SD; la pantalla sigue). kinds = los ficheros a
+// probar en orden ("fr": 3D y si no el original); got = el que se cargo (0 = ninguno), al terminar.
+// Mientras, pmdPending(&dst) es true y dst esta vacio. dst.unload() (o un load normal) cancela lo pendiente.
+// pmdAsyncPoll() en el bucle principal (coloca lo que ya llego).
+void pmdLoadAsync(PmdMon &dst, uint8_t dexNum, bool shiny, const char *kinds, char *got = nullptr);
+bool pmdPending(const PmdMon *dst);
+uint8_t pmdAsyncPoll();  // cuantos se colocaron (para vaciar caches de dibujo)
+
 // miniaturas de la galeria (thumbs.bin entero en PSRAM)
 struct SdThumbs {
   const char *path = "/mons/thumbs.bin";  // ko11.21: el mismo formato sirve para los retratos (story.bin)
