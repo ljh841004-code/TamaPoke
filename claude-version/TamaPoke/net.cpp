@@ -6,6 +6,7 @@
 #include <WebServer.h>
 #include <Update.h>
 #include "weather.h"  // ko12.9.24: wxClassOfWmo
+#include "kr_find.h"  // ko12.10.13: 시·군·구 -> coordenadas (sin internet)
 #include "sdupdate.h"  // ko12.9.2: UpdStream (misma clasificacion que la SD)
 #include <DNSServer.h>
 #include <Preferences.h>
@@ -23,9 +24,9 @@
 #define NET_NTP_MS 12000UL
 #define NET_SCAN_MS 9000UL
 #define NET_AUTO_EVERY_MS (24UL * 3600UL * 1000UL)
-#define NET_WX_EVERY_MS (2UL * 3600UL * 1000UL)    // ko12.9.24: con el tiempo real, cada 2 h
+#define NET_WX_EVERY_MS (1UL * 3600UL * 1000UL)    // ko12.10.13: con el tiempo real, cada hora (antes 2 h)
 #define NET_WX_MS 15000UL                         // tope para pedir el tiempo
-#define NET_WX_VALID_S (3UL * 3600UL)             // el tiempo real vale 3 h
+#define NET_WX_VALID_S (2UL * 3600UL)             // el tiempo real vale 2 h (ko12.10.13: antes 3)
 #define NET_BOOT_DELAY_MS 6000UL
 #define NET_PORTAL_MS (10UL * 60UL * 1000UL)  // el portal se cierra solo a los 10 min
 #define NET_AP_PASS "tamapoke"
@@ -51,6 +52,12 @@ static volatile int8_t gWxCls = -1;      // ultima clase recibida
 static uint32_t gWxAt = 0;               // hora local en que se recibio
 static float gLat = 0, gLon = 0;
 static uint32_t gLocAt = 0;              // hora local de la ultima ubicacion
+// ko12.10.13: ubicacion escrita en la web del WiFi ("수원", "강남구" o "37.26,127.03"). Vacia = por la IP
+// (que en Corea suele dar la ciudad del proveedor, no la tuya). gLocFound = lo que encontro el buscador
+static char gLocName[48] = "";
+static char gLocFound[48] = "";
+static volatile bool gLocNeedGeo = false;  // hay que buscar gLocName (otra vez)
+static volatile bool gLocGeoFail = false;  // se busco y no se encontro
 static volatile bool gWxTaskDone = true;
 static volatile int8_t gWxTaskCls = -1;
 static volatile bool gWxTaskLoc = false;
@@ -101,6 +108,9 @@ static void loadCfg() {
   gLat = p.getFloat("lat", 0);
   gLon = p.getFloat("lon", 0);
   gLocAt = p.getUInt("locat", 0);
+  p.getString("locn", gLocName, sizeof(gLocName));  // ko12.10.13
+  p.getString("locf", gLocFound, sizeof(gLocFound));
+  gLocNeedGeo = gLocName[0] && !gLocFound[0];
   p.end();
   if (gTz < -720 || gTz > 840) gTz = 540;
 }
@@ -131,7 +141,43 @@ static void saveCfg() {
   p.putFloat("lat", gLat);
   p.putFloat("lon", gLon);
   p.putUInt("locat", gLocAt);
+  p.putString("locn", gLocName);  // ko12.10.13
+  p.putString("locf", gLocFound);
   p.end();
+}
+// ko12.10.13: "37.26,127.03" -> coordenadas (true); si no, es un nombre para el buscador
+static bool locParseLatLon(const char *t, float *la, float *lo) {
+  char *e;
+  float a = strtof(t, &e);
+  if (e == t) return false;
+  while (*e == ' ' || *e == ',') e++;
+  char *e2;
+  float b = strtof(e, &e2);
+  if (e2 == e) return false;
+  while (*e2 == ' ') e2++;
+  if (*e2 || a < -90 || a > 90 || b < -180 || b > 180) return false;
+  *la = a; *lo = b;
+  return true;
+}
+static void netSetLocName(const String &w) {
+  String t = w;
+  t.trim();
+  if (t == gLocName) return;
+  snprintf(gLocName, sizeof(gLocName), "%s", t.c_str());
+  gLocFound[0] = 0;
+  gLocNeedGeo = false;
+  gLocGeoFail = false;
+  gLocAt = 0;  // la proxima vez se vuelve a buscar (por la IP si quedo vacia)
+  float la, lo;
+  if (gLocName[0] && locParseLatLon(gLocName, &la, &lo)) {
+    gLat = la; gLon = lo;
+    snprintf(gLocFound, sizeof(gLocFound), "%.2f, %.2f", la, lo);
+  } else if (gLocName[0] && krFind(gLocName, &la, &lo, gLocFound, sizeof(gLocFound))) {  // tabla del aparato
+    gLat = la; gLon = lo;
+  } else if (gLocName[0]) {  // fuera de la tabla: el buscador de Open-Meteo (con internet)
+    gLocNeedGeo = true;
+  }
+  gWxAt = 0;  // el tiempo de antes era de otro sitio
 }
 
 void netBegin() {
@@ -348,8 +394,18 @@ static void pageRoot() {
   // ko8: WiFi abiertas como ultimo recurso
   h += F("</select><label class=ck><input type=checkbox name=o value=1");
   if (gOpenOk) h += F(" checked");
-  h += F("> 비밀번호 없는 WiFi도 자동 연결 (시간만 받고 바로 끊어요)</label>"
-         "<button>저장하고 시간 맞추기 / Save</button></form>");
+  h += F("> 비밀번호 없는 WiFi도 자동 연결 (시간만 받고 바로 끊어요)</label>");
+  // ko12.10.13: el sitio del tiempo real
+  h += F("<label>날씨 위치 <small>시·군·구 이름 (예: 수원, 강남구) 또는 위도,경도</small></label>"
+         "<input name=w maxlength=40 placeholder='비우면 인터넷 주소로 자동' value=\"");
+  h += htmlEsc(gLocName);
+  h += F("\"><small>");
+  if (gLocName[0] && gLocFound[0]) h += "지금 날씨 위치: " + htmlEsc(gLocFound) + " (" + String(gLat, 2) + ", " + String(gLon, 2) + ")";
+  else if (gLocName[0] && gLocGeoFail) h += F("<b style='color:#e7352c'>이 이름으로 위치를 못 찾았어요. 시·구 이름만 (예: 수원) 또는 위도,경도로 넣어 주세요</b>");
+  else if (gLocName[0]) h += F("다음에 시간을 맞출 때 위치를 찾아요");
+  else if (gLat != 0 || gLon != 0) h += "지금은 인터넷 주소로 찾은 위치 (" + String(gLat, 2) + ", " + String(gLon, 2) + ")";
+  else h += F("아직 위치를 몰라요");
+  h += F("</small><button>저장하고 시간 맞추기 / Save</button></form>");
   // ko8: WiFi guardadas (hasta 5): se prueba la de mejor senal
   h += F("<h2>저장된 WiFi (최대 5개)</h2>");
   if (!gNSaved) h += F("<p><small>아직 없어요</small></p>");
@@ -376,6 +432,7 @@ static void pageSave() {
   // ko8: sin nombre solo se guardan los ajustes (zona horaria, WiFi abiertas)
   bool ok = s.length() ? netSetCreds(s.c_str(), p.c_str()) : true;
   gOpenOk = gWeb->hasArg("o");
+  if (gWeb->hasArg("w")) netSetLocName(gWeb->arg("w"));  // ko12.10.13
   if (z.length()) netSetTzMin((int16_t)z.toInt());
   else saveCfg();
   ok = ok && (gNSaved > 0 || gOpenOk);
@@ -956,9 +1013,64 @@ static bool jsonNum(const String &s, const char *key, int from, float *out) {
   *out = s.substring(k + 1).toFloat();
   return true;
 }
+static String urlEnc(const char *t) {
+  String o;
+  for (const uint8_t *q = (const uint8_t *)t; *q; q++) {
+    if (isalnum(*q) || *q == '-' || *q == '.' || *q == '_') o += (char)*q;
+    else { char b[4]; snprintf(b, sizeof(b), "%%%02X", *q); o += b; }
+  }
+  return o;
+}
+// ko12.10.13: nombre -> coordenadas con el buscador de Open-Meteo (Corea primero). Prueba el nombre entero,
+// luego la ultima palabra y sin el "시/군/구/동" del final ("수원시 영통구" -> "영통구" -> "영통")
+static bool geoFind(const char *name, float *la, float *lo, char *found, size_t fn) {
+  String cands[4];
+  int nc = 0;
+  String full = name;
+  full.trim();
+  cands[nc++] = full;
+  int sp = full.lastIndexOf(' ');
+  String last = sp >= 0 ? full.substring(sp + 1) : full;
+  if (last != full) cands[nc++] = last;
+  const char *SUF[] = { "시", "군", "구", "동", "읍", "면" };
+  for (const char *sf : SUF)
+    if (last.length() > 3 && last.endsWith(sf)) { cands[nc++] = last.substring(0, last.length() - strlen(sf)); break; }
+  if (sp >= 0) cands[nc++] = full.substring(0, full.indexOf(' '));
+  for (int i = 0; i < nc; i++) {
+    if (!cands[i].length()) continue;
+    for (int tls = 0; tls < 2; tls++) {
+      String url = String(tls ? "https" : "http") + "://geocoding-api.open-meteo.com/v1/search?count=1&language=ko&countryCode=KR&name=" +
+                   urlEnc(cands[i].c_str());
+      String j = httpGet(url.c_str(), 6000);
+      int r = j.indexOf("\"results\"");
+      if (r < 0) { if (j.length()) break; continue; }  // contesto sin resultados: siguiente nombre
+      if (!jsonNum(j, "\"latitude\"", r, la) || !jsonNum(j, "\"longitude\"", r, lo)) break;
+      int k = j.indexOf("\"name\":\"", r);
+      if (k >= 0) {
+        k += 8;
+        int e = j.indexOf('"', k);
+        snprintf(found, fn, "%s", j.substring(k, e > k ? e : k).c_str());
+      } else snprintf(found, fn, "%s", cands[i].c_str());
+      return true;
+    }
+  }
+  return false;
+}
 static void wxTask(void *) {
-  // ubicacion por la IP (una vez al dia; si falla se usa la de antes)
-  if (gWxTaskLoc) {
+  // ko12.10.13: la escrita en la web manda; si no, por la IP (una vez al dia; si falla se usa la de antes)
+  if (gLocName[0]) {
+    gWxTaskLoc = false;
+    if (gLocNeedGeo) {
+      float la, lo;
+      char fnd[48];
+      if (geoFind(gLocName, &la, &lo, fnd, sizeof(fnd))) {
+        gLat = la; gLon = lo;
+        snprintf(gLocFound, sizeof(gLocFound), "%s", fnd);
+        gLocNeedGeo = false;
+        gLocGeoFail = false;
+      } else gLocGeoFail = true;  // se sigue con la de antes y se reintenta la proxima vez
+    }
+  } else if (gWxTaskLoc) {
     String j = httpGet("http://ip-api.com/json/?fields=status,lat,lon", 6000);
     float la, lo;
     if (j.indexOf("success") >= 0 && jsonNum(j, "\"lat\"", 0, &la) && jsonNum(j, "\"lon\"", 0, &lo)) {
@@ -969,17 +1081,21 @@ static void wxTask(void *) {
   if (gLat != 0 || gLon != 0) {
     char url[160];
     // primero sin TLS (mas rapido y menos memoria); si no contesta, por https
-    snprintf(url, sizeof(url), "http://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f&current=weather_code",
+    // ko12.10.13: tambien la lluvia/nieve medida: con llovizna el codigo a veces es solo "nublado"
+    snprintf(url, sizeof(url), "http://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f&current=weather_code,precipitation,snowfall",
              gLat, gLon);
     String j = httpGet(url, 6000);
     if (j.indexOf("\"current\"") < 0) {
-      snprintf(url, sizeof(url), "https://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f&current=weather_code",
+      snprintf(url, sizeof(url), "https://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f&current=weather_code,precipitation,snowfall",
                gLat, gLon);
       j = httpGet(url, 7000);
     }
     int cur = j.indexOf("\"current\":");
     float c;
     if (cur >= 0 && jsonNum(j, "\"weather_code\"", cur, &c)) cls = wxClassOfWmo((int)c);
+    float pr = 0, sn = 0;
+    if (cls >= 0 && cls < 2 && cur >= 0 && jsonNum(j, "\"precipitation\"", cur, &pr) && pr >= 0.1f)
+      cls = (jsonNum(j, "\"snowfall\"", cur, &sn) && sn > 0) ? 3 : 2;
   }
   gWxTaskCls = cls;
   gWxTaskDone = true;

@@ -1308,3 +1308,19 @@ TEST(weather, tiempo_real_manda_sobre_el_inventado) {
   CHECK(wetFake > 0);  // habia lluvia inventada que el dato real quito
   CHECK_EQ((int)weatherWithReal(0, 2), (int)WX_CLEAR);  // sin reloj, despejado
 }
+
+// ko12.10.13: el sitio del tiempo real escrito a mano (tabla de 시·군·구, sin internet)
+#include "../kr_find.h"
+TEST(weather, sitio_por_nombre) {
+  float la, lo;
+  char f[96];
+  CHECK(krFind("수원시 영통구", &la, &lo, f, sizeof(f)));
+  CHECK(strstr(f, "영통구") != nullptr);
+  CHECK(la > 37.2f && la < 37.35f && lo > 127.0f && lo < 127.12f);
+  CHECK(krFind("강남구", &la, &lo, f, sizeof(f)) && strstr(f, "서울") != nullptr);
+  CHECK(krFind("부산 중구", &la, &lo, f, sizeof(f)) && strstr(f, "부산") != nullptr);
+  CHECK(krFind("광주", &la, &lo, f, sizeof(f)) && strstr(f, "광주광역시") != nullptr);
+  CHECK(krFind("경기 광주", &la, &lo, f, sizeof(f)) && strstr(f, "경기도 광주시") != nullptr);
+  CHECK(!krFind("Seoul", &la, &lo, f, sizeof(f)));
+  CHECK(!krFind("", &la, &lo, f, sizeof(f)));
+}
