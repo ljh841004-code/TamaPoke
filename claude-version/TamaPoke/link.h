@@ -44,7 +44,8 @@ struct __attribute__((packed)) LinkPet {
 // 4 (ko10.4): cada mensaje lleva la hora; el que la perdio la toma del otro
 // 7 (ko12.9.16): equipo de 3 y combate por turnos (cada uno elige; se intercambian las acciones)
 // 8 (ko12.10): movimientos originales de Cristal (otros ids) y dos tipos: no se mezcla con los de antes
-#define LINK_PROTO_VER 8
+// 9 (ko12.10.12): el intercambio es de un Pokemon de la caja (lo que viaja: el elegido), no del que crias
+#define LINK_PROTO_VER 9
 
 void linkStart(LinkMode mode, const LinkPet &mine);
 void linkStop();

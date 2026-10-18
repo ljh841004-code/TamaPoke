@@ -526,6 +526,47 @@ static void scenes(bool ko, const char *sfx) {
     linkEndAt = millis() + 3000; linkEndMsg = XT(X_TRADE_DONE); render(); shot("24e_link_end");
     linkEndAt = 0; linkEndMsg = nullptr; gStubLinkState = LS_OFF; gStubLinkMode = LINK_NONE; closeAll();
   }
+  {  // ko12.10.12: intercambio de la caja: solo los capturados, 3 al dia, el recibido no se vuelve a dar
+    extern LinkPet gLp; extern LinkState gStubLinkState; extern LinkMode gStubLinkMode;
+    uint8_t n0 = box.count();
+    box.add(25, 18, false, true, gMockEpoch, nullptr);   // capturado
+    box.add(16, 9, false, false, gMockEpoch, nullptr);   // ganado (no capturado)
+    pet.tradeDay = 0; pet.tradeDayN = 0;
+    closeAll(); openLinkMenu(); linkMenuTap(LM_BTN_X + 20, LM_TRADE_Y + 20);
+    navCheck("ko12.10.12: [교환] -> elegir de la caja", xScreen == XS_PARTY && ppKind == PP_TRADE);
+    ppBuildView();
+    bool onlyCaught = ppViewN > 0;
+    for (uint8_t k = 0; k < ppViewN; k++) if (!boxTradeable(box.at(ppView[k]))) onlyCaught = false;
+    navCheck("ko12.10.12: solo los capturados", onlyCaught);
+    render(); shot("24f_trade_pick");
+    int8_t pika = -1;
+    for (uint8_t k = 0; k < ppViewN; k++) if (box.at(ppView[k]).dex == 25 && box.at(ppView[k]).lvl == 18) pika = (int8_t)ppView[k];
+    ppPick[0] = pika; render(); shot("24g_trade_pick_sel");
+    partyStart(false);
+    navCheck("ko12.10.12: buscar pareja con el elegido", xScreen == XS_LINK && gTrdMon.dex == 25);
+    memset(&gLp, 0, sizeof(gLp));
+    gLp.t.dex = 64; gLp.t.geneAtk = gLp.t.geneDef = gLp.t.geneSpe = 100; gLp.lvl = 30;  // 윤겔라 (evoluciona)
+    gStubLinkState = LS_READY; gStubLinkMode = LINK_TRADE; render(); shot("24h_trade_box");
+    uint8_t nb = box.count();
+    bool ok = boxTradeCommit(gLp);
+    int got = -1;
+    for (uint8_t i = 0; i < box.count(); i++) if (box.at(i).dex == 65 && (box.at(i).flags & BOXF_TRADED)) got = i;
+    bool pikaLeft = false;
+    for (uint8_t i = 0; i < box.count(); i++) if (box.at(i).dex == 25 && box.at(i).lvl == 18) pikaLeft = true;
+    navCheck("ko12.10.12: cambio aplicado (sale el mio, entra el suyo evolucionado)", ok && got >= 0 && !pikaLeft && box.count() == nb);
+    navCheck("ko12.10.12: el recibido no se puede volver a dar", got >= 0 && !boxTradeable(box.at((uint8_t)got)));
+    navCheck("ko12.10.12: cuenta del dia", tradesLeftToday() == TRADE_PER_DAY - 1);
+    linkTradeApplied = true; linkEndAt = millis() + 3000; linkEndMsg = XT(X_TRADE_DONE); render(); shot("24i_trade_done");
+    linkEndAt = 0; linkEndMsg = nullptr; linkTradeApplied = false; gStubLinkState = LS_OFF; gStubLinkMode = LINK_NONE; closeAll();
+    pet.tradeDayN = TRADE_PER_DAY; pet.tradeDay = pet.candyDayKey();
+    closeAll(); openLinkMenu(); render(); shot("24j_trade_limit");
+    linkMenuTap(LM_BTN_X + 20, LM_TRADE_Y + 20);
+    navCheck("ko12.10.12: 3번 다 하면 막힘", xScreen == XS_LINKMENU);
+    pet.tradeDayN = 0;
+    while (box.count() > n0) box.release(box.count() - 1);
+    memset(&gLp, 0, sizeof(gLp)); gLp.t.dex = 133; gLp.lvl = 21; strcpy(gLp.t.nick, "EVE");
+    closeAll();
+  }
   closeAll(); cardOpen = true; cardPage = 0; openKeyboard(); nameBuf[0] = 0; nameLen = 0;
   for (uint8_t k : { CJI_K_B, CJI_K_B, CJI_K_I, CJI_K_DOT, CJI_K_O, CJI_K_I, CJI_K_N, CJI_K_N })
     cjiPress(kbCji, k);

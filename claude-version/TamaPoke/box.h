@@ -15,7 +15,8 @@
 
 enum : uint8_t { BOXF_SHINY = 1, BOXF_CAUGHT = 2, BOXF_RAISED = 4,
                  BOXF_TEAM = 8,     // ko11.20: salon de la liga: gano con ayudantes (sin la marca = solo)
-                 BOXF_PERFECT = 16 };  // ko11.21: criado con las 8 medallas (cinta: "crianza perfecta")  // CAUGHT: con pokeball (si no, ganado)
+                 BOXF_PERFECT = 16,
+                 BOXF_TRADED = 32 };  // ko12.10.12: llego por intercambio (no se puede volver a dar)  // ko11.21: criado con las 8 medallas (cinta: "crianza perfecta")  // CAUGHT: con pokeball (si no, ganado)
 // ko10.5: RAISED = criado hasta el final (despedida/soltado): corona en la caja
 
 struct __attribute__((packed)) BoxMon {

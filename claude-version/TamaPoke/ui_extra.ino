@@ -705,6 +705,7 @@ uint32_t lkIntroMs = 2500, lkMenuT = 0, lkGiveUpArm = 0;
 int8_t lkPick[2] = { -1, -1 };     // los 2 de la caja elegidos (indices)
 #define LK_CHOOSE_MS 45000UL   // sin elegir en 45 s: elige solo (el otro no espera para siempre)
 #define PP_LINK 0x40           // ppKind: la eleccion de equipo del tongsin
+#define PP_TRADE 0x41          // ko12.10.12: el Pokemon de la caja que se da en el intercambio
 static void lkChoose(uint8_t act);
 // eleccion antes del combate (pantalla XS_PARTY, ui_more.ino)
 uint8_t ppKind = 0, ppRegion = 0, ppN = 0, ppFrom = 0, ppPage = 0;
@@ -4056,7 +4057,30 @@ void lkPickOpen() {
   ppPage = 0;
   xScreen = XS_PARTY;
 }
+// ko12.10.12: intercambio = uno de la caja capturado con bola (no los que llegaron por intercambio),
+// TRADE_PER_DAY al dia, siempre uno por uno (sin regalos). El que crias ya no se cambia
+static BoxMon gTrdMon;  // el que doy (se busca otra vez en la caja al completar)
+bool boxTradeable(const BoxMon &m) { return (m.flags & BOXF_CAUGHT) && !(m.flags & BOXF_TRADED); }
+uint8_t tradesLeftToday() {
+  uint8_t used = pet.tradeDay == pet.candyDayKey() ? pet.tradeDayN : 0;
+  return used >= TRADE_PER_DAY ? 0 : (uint8_t)(TRADE_PER_DAY - used);
+}
+void trdPickOpen() {
+  ppKind = PP_TRADE;
+  ppN = 2;  // ppMaxHelpers() = 1
+  ppFrom = XS_LINKMENU;
+  for (uint8_t k = 0; k < TEAM_HELPERS; k++) ppPick[k] = -1;
+  ppPage = 0;
+  xScreen = XS_PARTY;
+}
+void trdBeginSearch(const BoxMon &m);
 void partyStart(bool solo) {
+  if (ppKind == PP_TRADE) {  // ko12.10.12
+    if (!solo && ppPick[0] >= 0 && ppPick[0] < box.count() && boxTradeable(box.at((uint8_t)ppPick[0])))
+      trdBeginSearch(box.at((uint8_t)ppPick[0]));
+    else sfxPlay(SFX_DENY);
+    return;
+  }
   if (ppKind == PP_LINK) {  // ko12.9.16: a buscar pareja con este equipo
     for (uint8_t k = 0; k < 2; k++) {
       lkPick[k] = !solo && ppPick[k] >= 0 && ppPick[k] < box.count() ? ppPick[k] : -1;
@@ -4872,12 +4896,71 @@ void lkBeginSearch() {
   xScreen = XS_LINK;
 }
 
+// ko12.10.12: empieza a buscar pareja ofreciendo ESTE de la caja
+void trdBeginSearch(const BoxMon &m) {
+  LinkPet lp;
+  memset(&lp, 0, sizeof(lp));
+  lp.t.dex = m.dex;
+  lp.t.shiny = (m.flags & BOXF_SHINY) ? 1 : 0;
+  lp.t.geneAtk = m.geneAtk; lp.t.geneDef = m.geneDef; lp.t.geneSpe = m.geneSpe;
+  Battler h = makeBoxBattler(m.dex, m.lvl, 0xFFFF, m.geneAtk, m.geneDef, m.geneSpe);
+  lp.lvl = h.lvl; lp.atk = h.atk; lp.def = h.def; lp.spe = h.spe;
+  LinkMon &t0 = lp.team[0];
+  t0.dex = m.dex; t0.lvl = h.lvl; t0.atk = h.atk; t0.def = h.def; t0.spe = h.spe;
+  memcpy(t0.mv, moveCount(m.mv) ? m.mv : h.mv, 4);
+  t0.shiny = lp.t.shiny;
+  lp.teamN = 1;
+  gTrdMon = m;
+  linkSetClock(clockEpoch(), gClockTrusted);
+  linkStart(LINK_TRADE, lp);
+  linkEndAt = 0;
+  linkEndMsg = nullptr;
+  linkBattleStarted = false;
+  linkTradeApplied = false;
+  xScreen = XS_LINK;
+}
+// ko12.10.12: los dos aceptaron: el mio sale de la caja y entra el suyo (marcado: no se puede volver a dar)
+static bool boxTradeCommit(const LinkPet &th) {
+  int16_t got = th.t.dex;
+  if (got < 1 || got > DEX_COUNT) return false;
+  int idx = -1;
+  for (uint8_t i = 0; i < box.count() && idx < 0; i++) {
+    const BoxMon &b = box.at(i);
+    if (b.dex == gTrdMon.dex && b.epoch == gTrdMon.epoch && b.lvl == gTrdMon.lvl && b.geneAtk == gTrdMon.geneAtk &&
+        b.geneDef == gTrdMon.geneDef && b.geneSpe == gTrdMon.geneSpe)
+      idx = i;
+  }
+  BoxMon out;
+  if (idx < 0 || !box.take((uint8_t)idx, out)) return false;
+  BoxMon nm;
+  memset(&nm, 0, sizeof(nm));
+  int16_t to = Pet::tradeTarget(got);  // los que evolucionan al intercambiarse (Kadabra, Machoke...)
+  nm.dex = to ? to : got;
+  nm.lvl = th.lvl < 1 ? 1 : th.lvl > LEVEL_MAX ? LEVEL_MAX : th.lvl;
+  nm.flags = (th.t.shiny ? BOXF_SHINY : 0) | BOXF_TRADED;
+  auto g = [](uint8_t v) -> uint8_t { return v < 90 ? 90 : v > CANDY_GENE_MAX ? CANDY_GENE_MAX : v; };
+  nm.geneAtk = g(th.t.geneAtk); nm.geneDef = g(th.t.geneDef); nm.geneSpe = g(th.t.geneSpe);
+  nm.epoch = pet.lastSeenEpoch;
+  if (!to && th.teamN && th.team[0].dex == got && moveCount(th.team[0].mv)) memcpy(nm.mv, th.team[0].mv, 4);
+  if (!box.put(nm)) { box.put(out); return false; }
+  dexLog.seen(got, nm.epoch);  // en la pokedex: visto (como los de la caja que no capturaste)
+  if (to) dexLog.seen(to, nm.epoch);
+  uint32_t d = pet.candyDayKey();
+  if (pet.tradeDay != d) { pet.tradeDay = d; pet.tradeDayN = 0; }
+  if (pet.tradeDayN < 255) pet.tradeDayN++;
+  pet.trades++;
+  pet.saveNow();
+  if (to) loadFoe(to, th.t.shiny);  // se ve ya evolucionado
+  return true;
+}
+
 void renderLinkMenu() {
   screenBase();
   drawFit(XT(X_LINK_TITLE), 44, 300, UI_INK, 3);
   bool ok = pet.canBattle() && !netBusy();
   drawBtn(LM_BTN_X, LM_BATTLE_Y, LM_BTN_W, LM_BTN_H, ok ? UI_BAR_BAD : UI_TRACK, UI_WHITE, XT(X_LINK_BATTLE));
-  drawBtn(LM_BTN_X, LM_TRADE_Y, LM_BTN_W, LM_BTN_H, ok ? 0x4C98 : UI_TRACK, UI_WHITE, XT(X_LINK_TRADE));
+  bool tok = !netBusy() && tradesLeftToday();  // ko12.10.12: el intercambio no depende del que crias
+  drawBtn(LM_BTN_X, LM_TRADE_Y, LM_BTN_W, LM_BTN_H, tok ? 0x4C98 : UI_TRACK, UI_WHITE, XT(X_LINK_TRADE));
   if (!pet.canBattle()) drawFit(XT(X_CANT_NOW), 104, 340, UI_BAR_BAD, 2);
   else if (netBusy()) drawFit(XT(X_ST_BUSY), 104, 340, UI_BAR_BAD, 2);
   else drawFit(XT(X_LINK_HINT), 104, 340, UI_INK, 2);
@@ -4895,6 +4978,13 @@ void linkMenuTap(int16_t x, int16_t y) {
   if (inRect(x, y, LM_BTN_X, LM_BATTLE_Y, LM_BTN_W, LM_BTN_H)) m = LINK_BATTLE;
   else if (inRect(x, y, LM_BTN_X, LM_TRADE_Y, LM_BTN_W, LM_BTN_H)) m = LINK_TRADE;
   if (m == LINK_NONE) return;
+  if (m == LINK_TRADE) {  // ko12.10.12: de la caja, 3 al dia
+    if (netBusy()) { sfxPlay(SFX_DENY); return; }
+    if (!tradesLeftToday()) { showToast(XT(X_TRD_LIMIT)); sfxPlay(SFX_DENY); return; }
+    sfxPlay(SFX_TAP);
+    trdPickOpen();
+    return;
+  }
   if (!pet.canBattle() || netBusy()) { sfxPlay(SFX_DENY); return; }
   if (m == LINK_BATTLE && pet.tooTiredToBattle()) { showToast(XT(X_TOO_TIRED)); sfxPlay(SFX_DENY); return; }
   sfxPlay(SFX_TAP);
@@ -5212,6 +5302,12 @@ void renderLinkTrade() {
   partnerName(pn, sizeof(pn));
   snprintf(l, sizeof(l), XT(X_PARTNER_FMT), pn, th.lvl);
   drawFit(l, 76, 340, DEX_TBL[th.t.dex >= 1 && th.t.dex <= DEX_COUNT ? th.t.dex : 0].accent, 2);
+  {  // ko12.10.12: el que doy yo
+    char mn[40];
+    snprintf(mn, sizeof(mn), "%s%s", (gTrdMon.flags & BOXF_SHINY) ? "*" : "", dexName(gTrdMon.dex));
+    snprintf(l, sizeof(l), XT(X_TRD_MINE_FMT), mn, (unsigned)gTrdMon.lvl);
+    drawFit(l, 104, 340, 0x8410, 1);
+  }
   // sprite del Pokemon que llegaria
   loadFoe(th.t.dex, th.t.shiny);
   if (foePmd.loaded) drawPmdActM(foePmd, PMD_IDLE, CX, 236, millis(), true, false, 4, 170);
@@ -5231,7 +5327,8 @@ void renderLinkTrade() {
 void renderLinkEnd() {
   screenBase();
   drawFit(XT(X_LINK_TITLE), 44, 300, UI_INK, 3);
-  if (pmd.loaded && linkTradeApplied) drawPmdAct(PMD_IDLE, CX, 270, millis(), true, false, 4);
+  // ko12.10.12: el que llego a la caja
+  if (linkTradeApplied && foePmd.loaded) drawPmdActM(foePmd, PMD_IDLE, CX, 270, millis(), true, false, 4, 170);
   drawFit(linkEndMsg ? linkEndMsg : "", 316, 360, linkTradeApplied ? UI_BAR_OK : UI_INK, 3);
 }
 
@@ -5267,8 +5364,8 @@ void updateLink() {
     if ((int32_t)(now - linkEndAt) >= 0) closeLink();
     return;
   }
-  // el Pokemon se durmio, evoluciono... mientras esperaba: se cancela
-  if (!pet.canBattle() && !linkTradeApplied) {
+  // el Pokemon se durmio, evoluciono... mientras esperaba: se cancela (ko12.10.12: el intercambio es de la caja)
+  if (linkMode() == LINK_BATTLE && !pet.canBattle() && !linkTradeApplied) {
     if (linkState() == LS_TRADE_WAIT || linkState() == LS_READY) linkTradeDecline();
     linkFinish(XT(X_CANT_NOW), 2500);
     return;
@@ -5276,11 +5373,9 @@ void updateLink() {
   LinkState st = linkState();
   TradePet got;
   if (linkTakeTrade(got)) {
-    if (pet.importTrade(got, linkPartner().lvl)) {
+    if (boxTradeCommit(linkPartner())) {  // ko12.10.12: a la caja (antes cambiaba el que crias)
       linkTradeApplied = true;
-      if (pet.evolving()) evoPmd.load(pet.prevSpeciesId, pet.shiny);
       sfxPlay(SFX_HATCH);
-      foePmd.unload();
       linkFinish(XT(X_TRADE_DONE), 3500);  // el enlace sigue 3 s confirmando al otro
     } else {
       linkFinish(XT(X_LINK_LOST), 2500);

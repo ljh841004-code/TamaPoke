@@ -1607,6 +1607,8 @@ void Pet::save() {
   prefs.putUShort("dclr", dailyClears);
   prefs.putBytes("gymd", gymDay, sizeof(gymDay));  // ko10.11
   prefs.putUShort("ctmd", champTmDay);  // ko12.10.5
+  prefs.putUInt("trdd", tradeDay);  // ko12.10.12
+  prefs.putUChar("trdn", tradeDayN);
   prefs.putBytes("gymw", gymWins, sizeof(gymWins));
   prefs.putUShort("chw", champWins);
   prefs.putUShort("chs", champStreak);  // ko11.6.1
@@ -1743,6 +1745,8 @@ void Pet::load(bool *migrated) {
   badges = prefs.getUChar("badge", 0);
   dailyDoneDay = prefs.getUInt("dday", 0);
   champTmDay = prefs.getUShort("ctmd", 0);
+  tradeDay = prefs.getUInt("trdd", 0);  // ko12.10.12
+  tradeDayN = prefs.getUChar("trdn", 0);
   dailyClears = prefs.getUShort("dclr", 0);
   if (prefs.getBytes("gymd", gymDay, sizeof(gymDay)) != sizeof(gymDay)) memset(gymDay, 0, sizeof(gymDay));
   if (prefs.getBytes("gymw", gymWins, sizeof(gymWins)) != sizeof(gymWins)) memset(gymWins, 0, sizeof(gymWins));

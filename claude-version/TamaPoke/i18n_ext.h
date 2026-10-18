@@ -195,6 +195,7 @@ enum XId : uint16_t {  // ko10.6: pasaron de 255
   X_DECO_UMBRELLA,  // ko12.9.27
   X_LAN_SD_FMT, X_LAN_SD_GOT_FMT,  // ko12.10: ficheros de la SD por WiFi (/sd)
   X_BART_3D,  // ko12.10.7
+  X_TRD_PICK_FMT, X_TRD_PICK_SUB, X_TRD_GO, X_TRD_NONE, X_TRD_LIMIT, X_TRD_MINE_FMT,  // ko12.10.12: de la caja
   X_COUNT
 };
 

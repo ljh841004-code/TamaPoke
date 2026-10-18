@@ -2511,9 +2511,13 @@ uint8_t ppMaxHelpers();
 static uint8_t ppPickN() { uint8_t n = 0; for (uint8_t k = 0; k < TEAM_HELPERS; k++) n += ppPick[k] >= 0; return n; }
 static bool ppPicked(int8_t bi) { for (uint8_t k = 0; k < TEAM_HELPERS; k++) if (ppPick[k] == bi) return true; return false; }
 // orden: en el gimnasio primero los que tienen ventaja; luego por nivel
+bool boxTradeable(const BoxMon &m);
+uint8_t tradesLeftToday();
+static bool ppNoUses() { return ppKind == PP_LINK || ppKind == PP_TRADE; }  // sin "오늘 n/3" por Pokemon
 static void ppBuildView() {
   ppViewN = 0;
-  for (uint8_t i = 0; i < box.count() && ppViewN < BOX_MAX; i++) ppView[ppViewN++] = i;
+  for (uint8_t i = 0; i < box.count() && ppViewN < BOX_MAX; i++)
+    if (ppKind != PP_TRADE || boxTradeable(box.at(i))) ppView[ppViewN++] = i;  // ko12.10.12: los capturados
   int ft = ppFoeType();
   for (uint8_t a = 0; a < ppViewN; a++)
     for (uint8_t b = a + 1; b < ppViewN; b++) {
@@ -2530,7 +2534,9 @@ void renderPartyPick() {
   ppBuildView();
   if (ppPage >= ppPages()) ppPage = ppPages() - 1;
   char t[48];
-  snprintf(t, sizeof(t), XT(X_PT_TITLE_FMT), ppPickN(), ppMaxHelpers());
+  if (ppKind == PP_TRADE) snprintf(t, sizeof(t), XT(X_TRD_PICK_FMT), (unsigned)tradesLeftToday(),
+                                    (unsigned)TRADE_PER_DAY);  // ko12.10.12
+  else snprintf(t, sizeof(t), XT(X_PT_TITLE_FMT), ppPickN(), ppMaxHelpers());
   drawFit(t, 30, 300, UI_INK, 2);
   int ft = ppFoeType();
   if (ft >= 0) {
@@ -2539,6 +2545,7 @@ void renderPartyPick() {
     drawBtn(CX - w / 2, 58, w, 28, orbColor((uint8_t)ft), UI_WHITE, t);
   } else {
     if (ppKind == PP_LINK) strncpy(t, XT(X_LK_PICK_SUB), sizeof(t) - 1), t[sizeof(t) - 1] = 0;  // ko12.9.16
+    else if (ppKind == PP_TRADE) strncpy(t, XT(X_TRD_PICK_SUB), sizeof(t) - 1), t[sizeof(t) - 1] = 0;
     else snprintf(t, sizeof(t), XT(X_PT_VS_N_FMT), ppN);
     drawFit(t, 64, 330, UI_INK, 1);
   }
@@ -2550,7 +2557,7 @@ void renderPartyPick() {
     const BoxMon &m = box.at(bi);
     int y = PP_ROW_Y + r * (PP_ROW_H + PP_ROW_GAP);
     bool sel = ppPicked((int8_t)bi);
-    uint8_t left = ppKind == PP_LINK ? 1 : helperUsesLeft(m);  // ko11.20: hoy le quedan
+    uint8_t left = ppNoUses() ? 1 : helperUsesLeft(m);  // ko11.20: hoy le quedan
     uiButton(73, y, 320, PP_ROW_H, 10, sel ? C565(0xe6, 0xf8, 0xdc) : left ? UI_WHITE : UI_TRACK, sel ? UI_BAR_OK : UI_INK);
     drawThumbAt(m.dex, 100, y + PP_ROW_H / 2, 1, false);
     char l[48];
@@ -2562,12 +2569,12 @@ void renderPartyPick() {
     uint8_t ty = DEX_TBL[m.dex].ptype;
     char tys[32];
     dexTypesStr(m.dex, tys, sizeof(tys));  // ko12.10: dos tipos
-    unsigned lv = m.lvl < pl || ppKind == PP_LINK ? m.lvl : pl;  // ko12.9.16: tongsin = su nivel
+    unsigned lv = m.lvl < pl || ppNoUses() ? m.lvl : pl;  // ko12.9.16: tongsin = su nivel
     // ko12.10.2: con dos tipos ("불꽃/비행") la linea chocaba con [유리]/[불리]: se mide y, si no cabe,
     // primero se acorta el hueco, luego "오늘 n/3" pasa a "n/3" y al final queda solo el primer tipo
     int lim = (ft >= 0 ? 282 : 350) - 126;
     char us[24] = "";
-    if (ppKind != PP_LINK) snprintf(us, sizeof(us), XT(X_PT_USES_FMT), left, (unsigned)HELPER_USES_PER_DAY);
+    if (!ppNoUses()) snprintf(us, sizeof(us), XT(X_PT_USES_FMT), left, (unsigned)HELPER_USES_PER_DAY);
     const char *gap = "  ";
     snprintf(l, sizeof(l), "Lv%u  %s", lv, tys);
     if (us[0] && textW(l, 1) + 8 + textW(us, 1) > lim) {
@@ -2600,15 +2607,27 @@ void renderPartyPick() {
     drawFit(pg, PP_NAV_Y + 8, 100, UI_INK, 2);
   }
   uint8_t n = ppPickN();
-  drawBtn(83, PP_BTN_Y, 110, 44, UI_TRACK, UI_INK, XT(X_PT_ALONE));
-  snprintf(t, sizeof(t), XT(X_PT_GO_FMT), n, ppMaxHelpers());
-  drawBtn(203, PP_BTN_Y, 180, 44, n ? UI_BAR_OK : C565(0x9a, 0xc8, 0x9a), UI_WHITE, t);
+  if (ppKind == PP_TRADE) {  // ko12.10.12: sin [혼자]; uno elegido -> buscar pareja
+    if (!ppViewN) drawFit(XT(X_TRD_NONE), 180, 330, UI_BAR_BAD, 2);
+    drawBtn(123, PP_BTN_Y, 220, 44, n ? 0x4C98 : UI_TRACK, UI_WHITE, XT(X_TRD_GO));
+  } else {
+    drawBtn(83, PP_BTN_Y, 110, 44, UI_TRACK, UI_INK, XT(X_PT_ALONE));
+    snprintf(t, sizeof(t), XT(X_PT_GO_FMT), n, ppMaxHelpers());
+    drawBtn(203, PP_BTN_Y, 180, 44, n ? UI_BAR_OK : C565(0x9a, 0xc8, 0x9a), UI_WHITE, t);
+  }
   drawNav(NAV_L, UI_INK);
   uiFlush();
 }
 
 void partyPickTap(int16_t x, int16_t y) {
   if (navHit(NAV_L, x, y)) { partyCancel(); return; }
+  if (ppKind == PP_TRADE && inRect(x, y, 123, PP_BTN_Y, 220, 44)) {  // ko12.10.12
+    if (!ppPickN()) { sfxPlay(SFX_DENY); return; }
+    sfxPlay(SFX_TAP);
+    partyStart(false);
+    return;
+  }
+  if (ppKind == PP_TRADE && y >= PP_BTN_Y) return;
   if (inRect(x, y, 83, PP_BTN_Y, 110, 44)) { sfxPlay(SFX_TAP); partyStart(true); return; }
   if (inRect(x, y, 203, PP_BTN_Y, 180, 44)) { sfxPlay(SFX_TAP); partyStart(ppPickN() == 0); return; }
   if (ppPages() > 1 && y >= PP_NAV_Y && y < PP_NAV_Y + 32) {
@@ -2623,7 +2642,7 @@ void partyPickTap(int16_t x, int16_t y) {
   int k = ppPage * PP_ROWS + r;
   if (k >= ppViewN) return;
   int8_t bi = (int8_t)ppView[k];
-  if (ppKind != PP_LINK && !ppPicked(bi) && !helperUsesLeft(box.at((uint8_t)bi))) { sfxPlay(SFX_DENY); return; }  // hoy ya no
+  if (!ppNoUses() && !ppPicked(bi) && !helperUsesLeft(box.at((uint8_t)bi))) { sfxPlay(SFX_DENY); return; }  // hoy ya no
   // ko12.2: hasta ppMaxHelpers() (los mismos que el rival). Quitar = los de detras avanzan; lleno = el mas viejo sale
   uint8_t mx = ppMaxHelpers(), n = ppPickN();
   int at = -1;

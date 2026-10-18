@@ -95,6 +95,7 @@ struct __attribute__((packed)) TradePet {
 // ko10: pokedex de gen 1 + gen 2 (dex.h: DEX_COUNT). Los bitmaps crecen de 19
 // a 32 bytes; los guardados viejos (19) se leen igual (el resto queda a 0).
 #define PET_DEX_MAX 251
+#define TRADE_PER_DAY 3  // ko12.10.12: intercambios (de la caja) al dia
 #define PET_DEX_BYTES ((PET_DEX_MAX + 7) / 8)
 // ko10.4: usos de los caramelos (de la familia del Pokemon que crias)
 enum : uint8_t { CU_EXP = 0, CU_GAUGE, CU_GENES, CU_SHINY, CU_EVO, CU_COUNT };
@@ -198,6 +199,8 @@ public:
   uint16_t dailyClears = 0;    // retos del dia superados en total
   // ko10.11: revanchas de gimnasio (ya con la medalla) y liga
   uint16_t champTmDay = 0;    // ko12.10.5: dia (epoch/86400, 16 bits) de la ultima MT del campeon
+  uint32_t tradeDay = 0;      // ko12.10.12: dia (candyDayKey) de los intercambios contados
+  uint8_t tradeDayN = 0;      //   ... y cuantos ese dia (tope TRADE_PER_DAY)
   uint16_t gymDay[8] = { 0 };  // dia (epoch/86400, 16 bits) del ultimo premio de revancha
   uint8_t gymWins[8] = { 0 };  // revanchas ganadas por gimnasio (las estrellas)
   uint16_t champWins = 0;      // veces campeon de la liga

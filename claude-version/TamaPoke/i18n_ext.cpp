@@ -21,7 +21,7 @@ static const char *const XS[2][X_COUNT] = {
     "LINK", "BATTLE", "TRADE", "Searching...", "Open LINK on the other one",
     "Partner: %s Lv.%u", "Trade Pokemon?", "Waiting for partner...", "Trade complete!", "Trade cancelled",
     "Connection lost",
-    "Not now (egg / asleep)", "Your Pokemon will leave!", "Partner said YES",
+    "Not now (egg / asleep)", "The one you give leaves your box!", "Partner said YES",
     "POTION %u", "BALL %u", "No potions left", "No Poke Balls left", "You threw a Poke Ball!",
     "Gotcha! {1} was caught!", "Oh no! {1} broke free!", "{1} recovered HP!",
     "Sent to the box", "The box is full", "GOTCHA!",
@@ -208,6 +208,8 @@ static const char *const XS[2][X_COUNT] = {
     "Umbrella",
     "SD files: %s/sd", "SD files received: %u",
     "ART: 3D",
+    "TRADE ONE (LEFT TODAY %u/%u)", "Only ones you caught (not received)", "FIND PARTNER",
+    "No caught Pokemon to trade", "3 trades done today", "You give: %s Lv.%u",
   },
   // ---------------- KO ----------------
   {
@@ -225,7 +227,7 @@ static const char *const XS[2][X_COUNT] = {
     "통신", "대전", "교환", "상대를 찾는 중...", "다른 기기도 통신을 여세요",
     "상대: %s Lv.%u", "포켓몬을 교환할까요?", "상대를 기다리는 중...", "교환 완료!", "교환 취소",
     "연결이 끊겼어요",
-    "지금은 안 돼요 (알/수면)", "지금 포켓몬이 떠나요!", "상대는 수락했어요",
+    "지금은 안 돼요 (알/수면)", "주는 몬은 보관함에서 떠나요!", "상대는 수락했어요",
     "물약 %u", "볼 %u", "물약이 없어요", "포켓볼이 없어요", "포켓볼을 던졌다!",
     "신난다! {1}{을} 잡았다!", "앗! {1}{이} 빠져나왔다!", "{1}의 체력이 회복됐다!",
     "보관함으로 보냈어요", "보관함이 가득 찼어요", "잡았다!",
@@ -411,6 +413,8 @@ static const char *const XS[2][X_COUNT] = {
     "우산",
     "SD 파일 올리기: %s/sd", "SD 파일 %u개 받았어요",
     "그림: 3D",
+    "교환할 몬 고르기 (오늘 남은 %u/%u)", "볼로 잡은 몬만 (받은 몬은 안 돼요)", "교환 상대 찾기",
+    "교환할 수 있는 몬이 없어요", "오늘은 3번 다 교환했어요", "주는 몬: %s Lv.%u",
   },
 };
 
