@@ -489,7 +489,7 @@ static int cmpItem(const void *a, const void *b) {
 // lista /mons y sus subcarpetas (un nivel: fx/), ordenada por nombre
 static BItem *listMons(uint32_t &n) {
   n = 0;
-  uint32_t cap = 2048;
+  uint32_t cap = 4096;  // ko12.10.9: con los 3D (fNNN/bNNN) hay ~2500 ficheros (antes 2048: se quedaban fuera)
   BItem *v = (BItem *)ps_malloc(sizeof(BItem) * cap);
   if (!v) return nullptr;
   uint32_t t0 = millis();
