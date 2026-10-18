@@ -1,4 +1,4 @@
-# TamaPoke KO (v1.17-ko12.10.11)
+# TamaPoke KO (v1.17-ko12.10.12)
 
 [socquique/TamaPoke](https://github.com/socquique/TamaPoke) v1.17을 바탕으로 기능을 더한 포크입니다.
 보드는 원본과 같은 **Waveshare ESP32-S3-Touch-AMOLED-1.75** (표준 또는 -G)입니다.
