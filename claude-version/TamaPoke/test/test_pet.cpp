@@ -2100,3 +2100,39 @@ TEST(orbs, porcentaje_nuevo_sesgado_a_bajo) {
   CHECK(top >= 1 && top <= 30);   // raro
   CHECK(lo >= 650);               // la mayoria 10-14 %
 }
+
+// ko12.10.15: la partida pasa a la NVS grande ("nvs2:tpgame"); los ajustes se quedan en "tamapoke"
+TEST(save, partida_pasa_a_la_nvs_grande) {
+  mockNvsReset();
+  setBigPart(nullptr);  // partida de antes, en la NVS de siempre
+  {
+    Pet p;
+    p.begin();
+    makePet(p, 4);
+    p.exp = expForLevel(16);
+    p.saveNow();
+  }
+  { Preferences x; x.begin("tamapoke", false); x.putUChar("lang", 3); x.putUChar("bri", 70); x.end(); }
+  size_t before = mockNvsEntries("tamapoke");
+  setBigPart("nvs2");
+  {
+    Pet q;
+    q.begin();
+    CHECK_EQ((int)q.speciesId, 4);
+    CHECK_EQ((int)q.level(), 16);
+    q.exp = expForLevel(20);
+    q.saveNow();
+    CHECK(!q.saveFailed());
+  }
+  CHECK(mockNvsEntries("tamapoke") < 4);  // solo los ajustes: sitio libre en la pequena
+  CHECK(before > 100);
+  { Preferences x; x.begin("tamapoke", true); CHECK_EQ((int)x.getUChar("lang", 0), 3); CHECK(!x.isKey("exp")); x.end(); }
+  {
+    Pet r;  // otro arranque: lee de la grande, no vuelve a traer nada
+    r.begin();
+    CHECK_EQ((int)r.level(), 20);
+    r.wipeGameKeepSettings();  // nuevo comienzo: los ajustes siguen
+  }
+  { Preferences x; x.begin("tamapoke", true); CHECK_EQ((int)x.getUChar("bri", 0), 70); x.end(); }
+  setBigPart(nullptr);
+}

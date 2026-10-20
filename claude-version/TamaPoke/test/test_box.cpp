@@ -222,7 +222,7 @@ TEST(items, giveItems_con_tope_y_sin_quitar) {
   CHECK_EQ(p.potions, (uint8_t)40);
 }
 
-// ko12.9.14: racha salvaje: cada 3 ball + pocion, cada 5 caramelos, cada 10 un "부르는 구슬"
+// ko12.9.14: racha salvaje: cada 3 ball + pocion, cada 5 caramelos (ko12.10.15: sin 부르는 구슬)
 TEST(items, racha_salvaje_premia_y_se_corta) {
   Pet p;
   freshPet(p, 4);
@@ -234,11 +234,11 @@ TEST(items, racha_salvaje_premia_y_se_corta) {
   CHECK_EQ(got[3], (uint8_t)Pet::WS_ITEMS);
   CHECK_EQ(got[5], (uint8_t)Pet::WS_CANDY);
   CHECK_EQ(got[6], (uint8_t)Pet::WS_ITEMS);
-  CHECK_EQ(got[10], (uint8_t)(Pet::WS_CANDY | Pet::WS_LURE));
+  CHECK_EQ(got[10], (uint8_t)Pet::WS_CANDY);
   CHECK_EQ(p.balls, (uint8_t)3);
   CHECK_EQ(p.potions, (uint8_t)3);
   CHECK_EQ(p.candyOf(p.speciesId), (uint16_t)(c0 + 2 * WSTREAK_CANDY_N));
-  CHECK_EQ(p.lureN, (uint8_t)1);
+  CHECK_EQ(p.lureN, (uint8_t)0);
   CHECK_EQ(p.wildStreak, (uint16_t)10);
   p.wildStreakLost();
   CHECK_EQ(p.wildStreak, (uint16_t)0);
@@ -246,7 +246,7 @@ TEST(items, racha_salvaje_premia_y_se_corta) {
   CHECK_EQ(p.wildStreakWin(), (uint8_t)0);  // vuelve a empezar
   p.lureN = LURE_MAX;
   p.wildStreak = 19;
-  CHECK_EQ(p.wildStreakWin() & Pet::WS_LURE, 0);  // bolsa llena: sin orbe
+  CHECK_EQ(p.wildStreakWin() & Pet::WS_LURE, 0);  // la racha ya no da orbes
   CHECK_EQ(p.lureN, (uint8_t)LURE_MAX);
 }
 

@@ -419,7 +419,7 @@ public:
   // ko11.1: premio de victoria salvaje por probabilidad; devuelve bits 1=bola 2=pocion
   uint8_t wildWinItems();
   // ko12.9.14: racha de salvajes ganados (o capturados). Cada 3: ball + pocion; cada 5: 2 caramelos
-  // suyos; cada 10: un "부르는 구슬". Perder o huir la deja a 0. Devuelve los bits WS_*
+  // suyos (ko12.10.15: ya sin 부르는 구슬). Perder o huir la deja a 0. Devuelve los bits WS_*
   uint8_t wildStreakWin();
 #define WSTREAK_ITEMS 3
 #define WSTREAK_CANDY 5
@@ -578,6 +578,7 @@ public:
   // ultima hora real persistida; sirve para resembrar un RTC que perdio la hora
   uint32_t savedEpoch() { return prefs.getUInt("seen", 0); }
   void flushSave();
+  bool saveFailed() const { return saveBad; }  // ko12.10.15: el ultimo guardado no se escribio
 
 private:
   Preferences prefs;
@@ -591,6 +592,7 @@ private:
   uint8_t mistakeCooldown = 0;
   uint8_t ticksSinceSave = 0;
   bool pendingSave = false;     // guardado periodico pendiente de volcar
+  bool saveBad = false;
   uint16_t evoDeclinedLv = 0;   // "mantener forma": no ofrecer evolucion hasta subir de nivel
   uint32_t farDeclinedAge = 0;  // "quedaros juntos": no ofrecer despedida hasta esta edad
   bool starterPick = false;     // primera partida: esperando que el jugador elija inicial

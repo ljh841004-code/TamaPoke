@@ -2204,6 +2204,8 @@ static void bakSetMsg(XId m) { bakMsg = (int16_t)m; bakMsgUntil = millis() + 300
 static bool bakDoBackup(bool manual = false) {
   if (!sdReady) { bakSetMsg(X_BAK_NOSD); return false; }
   pet.saveNow();  // lo ultimo tambien
+  // ko12.10.15: si no se pudo guardar, la copia saldria con lo viejo de la NVS y el nivel de ahora
+  if (pet.saveFailed()) { bakSetMsg(X_BAK_FAIL); return false; }
   uint32_t e = clockEpoch();
   bool ok = bakBackupNow(pet.speciesId, pet.level(), gClockTrusted ? e : 0, manual);
   bakLastT = millis() ? millis() : 1;

@@ -10,8 +10,19 @@ static_assert(PET_DEX_MAX == DEX_COUNT, "pet.h y dex.h no cuadran");
 // caramelo de genes (y la ficha del salon de la liga ya no lo reconocia: salia otra)
 static uint8_t clampGene(uint8_t g) { return g < 90 ? 90 : (g > CANDY_GENE_MAX ? CANDY_GENE_MAX : g); }
 
+// ko12.10.15: ajustes que otros modulos guardan en "tamapoke" de la NVS de siempre: se quedan alli
+static const char *const SETTINGS_KEYS[] = { "volBgm", "volCry", "volSfx", "lang", "bgmMask", "bri", "chg",
+                                             "vib", "vibLv", "snd", "pakpw", "bart" };
+
 void Pet::begin() {
-  prefs.begin("tamapoke", false);
+  // ko12.10.15: la partida va a la NVS grande ("tpgame"): en la de siempre (20 KB) ya no cabia y los
+  // guardados fallaban sin avisar (al reiniciar volvia a un nivel de hace dias, y las copias de la SD
+  // tambien, porque se hacen de la NVS). Si no se puede traer, sigue donde estaba
+  const char *bp = bigPart();
+  if (bp && !nvsMoveKeys("tamapoke", bp, "tpgame", SETTINGS_KEYS, sizeof(SETTINGS_KEYS) / sizeof(SETTINGS_KEYS[0])))
+    bp = nullptr;
+  if (bp) prefs.begin("tpgame", false, bp);
+  else prefs.begin("tamapoke", false);
   if (!prefs.getBool("init", false)) {
     prefs.putBool("init", true);
     bdayM = prefs.getUChar("bdm", 0);  // ko12.6: ajuste que sobrevive a [nuevo comienzo]
@@ -512,7 +523,7 @@ void Pet::flushSave() {
   if (!pendingSave) return;
   pendingSave = false;
   ticksSinceSave = 0;
-  prefs.putUChar("full", fullness);
+  saveBad = !prefs.putUChar("full", fullness);  // ko12.10.15: que no falle sin avisar
   prefs.putUChar("joy", joy);
   prefs.putUChar("ene", energy);
   prefs.putUChar("hyg", hygiene);
@@ -1581,7 +1592,7 @@ PetMood Pet::mood() const {
 void Pet::save() {
   ticksSinceSave = 0;
   pendingSave = false;
-  prefs.putUChar("full", fullness);
+  saveBad = !prefs.putUChar("full", fullness);  // ko12.10.15: que no falle sin avisar
   prefs.putUChar("joy", joy);
   prefs.putUChar("ene", energy);
   prefs.putUChar("hyg", hygiene);
@@ -2126,7 +2137,7 @@ uint8_t Pet::wildStreakWin() {
   uint8_t bits = 0;
   if (wildStreak % WSTREAK_ITEMS == 0) { giveItems(1, 1); bits |= WS_ITEMS; }
   if (wildStreak % WSTREAK_CANDY == 0) { addCandy(speciesId, WSTREAK_CANDY_N); bits |= WS_CANDY; }
-  if (wildStreak % WSTREAK_LURE == 0 && lureN < LURE_MAX) { lureN++; bits |= WS_LURE; }
+  // ko12.10.15: la racha ya no da 부르는 구슬 (con uno en uso, ganar 10 seguidos lo devolvia: no se gastaba nunca)
   pendingSave = true;
   return bits;
 }

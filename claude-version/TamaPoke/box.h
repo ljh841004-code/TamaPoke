@@ -34,6 +34,11 @@ struct __attribute__((packed)) BoxMon {
 // La primera vez que se abre la grande se traen ahi los datos de la de siempre.
 void setBigPart(const char *label);
 const char *bigPart();
+// ko12.10.15: la partida (Pet) pasa de "tamapoke" en la NVS de siempre (20 KB, llena con los ajustes,
+// la WiFi y la calibracion: los guardados fallaban sin avisar) a dstNs en dstPart. Solo si srcNs tiene
+// "init" (partida vieja entera): dst se vacia, se copia todo menos keep y, SOLO si se copio bien, se
+// borra del origen ("init" lo primero). false = fallo: el origen queda como estaba
+bool nvsMoveKeys(const char *srcNs, const char *dstPart, const char *dstNs, const char *const *keep, int nKeep);
 
 class Box {
 public:

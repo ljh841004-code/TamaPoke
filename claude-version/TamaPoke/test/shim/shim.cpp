@@ -182,3 +182,21 @@ size_t Preferences::getString(const char *k, char *buf, size_t maxLen) {
   buf[n < maxLen ? n : maxLen - 1] = 0;
   return strlen(buf);
 }
+
+// ko12.10.15: lo mismo que nvsMoveKeys (box.cpp) en la NVS simulada (la de siempre = sin prefijo)
+bool nvsMoveKeys(const char *srcNs, const char *dstPart, const char *dstNs, const char *const *keep, int nKeep) {
+  std::map<std::string, KV>::iterator si = gStore.find(srcNs);
+  if (si == gStore.end() || si->second.find("init") == si->second.end()) return true;
+  KV &dst = gStore[std::string(dstPart) + ":" + dstNs];
+  KV &src = gStore[srcNs];
+  dst.clear();
+  for (KV::iterator k = src.begin(); k != src.end();) {
+    bool kept = false;
+    for (int i = 0; i < nKeep; i++)
+      if (k->first == keep[i]) kept = true;
+    if (kept) { ++k; continue; }
+    dst[k->first] = k->second;
+    src.erase(k++);
+  }
+  return true;
+}

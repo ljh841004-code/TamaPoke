@@ -247,7 +247,7 @@ struct DayEvent { uint8_t kind; uint8_t ptype; bool moonNight;
 // ko12.9.11: "부르는 구슬" (lure): N combates salvajes con raros x2 y legendarios x3; los que aun no
 // has visto, x2 mas. Con la luna llena el legendario no pasa de x6 (las condiciones de lugar/hora/
 // tiempo/Lv40 siguen igual: solo sube la probabilidad)
-#define LURE_BATTLES 10
+#define LURE_BATTLES 5  // ko12.10.15: 10 -> 5
 #define LURE_RARE_MULT 2
 #define LURE_LEGEND_MULT 3
 #define LURE_NEW_MULT 2

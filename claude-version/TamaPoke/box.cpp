@@ -8,6 +8,84 @@ static const char *gBigPart = nullptr;
 void setBigPart(const char *label) { gBigPart = label; }
 const char *bigPart() { return gBigPart; }
 
+#ifdef ESP_PLATFORM
+#include <nvs.h>
+// ko12.10.15: ver box.h (en los tests: shim.cpp)
+static bool nvsCopyEntry(nvs_handle_t s, nvs_handle_t d, const nvs_entry_info_t &e) {
+  switch (e.type) {
+    case NVS_TYPE_U8:  { uint8_t v;  return nvs_get_u8(s, e.key, &v) == ESP_OK && nvs_set_u8(d, e.key, v) == ESP_OK; }
+    case NVS_TYPE_I8:  { int8_t v;   return nvs_get_i8(s, e.key, &v) == ESP_OK && nvs_set_i8(d, e.key, v) == ESP_OK; }
+    case NVS_TYPE_U16: { uint16_t v; return nvs_get_u16(s, e.key, &v) == ESP_OK && nvs_set_u16(d, e.key, v) == ESP_OK; }
+    case NVS_TYPE_I16: { int16_t v;  return nvs_get_i16(s, e.key, &v) == ESP_OK && nvs_set_i16(d, e.key, v) == ESP_OK; }
+    case NVS_TYPE_U32: { uint32_t v; return nvs_get_u32(s, e.key, &v) == ESP_OK && nvs_set_u32(d, e.key, v) == ESP_OK; }
+    case NVS_TYPE_I32: { int32_t v;  return nvs_get_i32(s, e.key, &v) == ESP_OK && nvs_set_i32(d, e.key, v) == ESP_OK; }
+    case NVS_TYPE_U64: { uint64_t v; return nvs_get_u64(s, e.key, &v) == ESP_OK && nvs_set_u64(d, e.key, v) == ESP_OK; }
+    case NVS_TYPE_I64: { int64_t v;  return nvs_get_i64(s, e.key, &v) == ESP_OK && nvs_set_i64(d, e.key, v) == ESP_OK; }
+    case NVS_TYPE_STR:
+    case NVS_TYPE_BLOB: {
+      bool str = e.type == NVS_TYPE_STR;
+      size_t len = 0;
+      if ((str ? nvs_get_str(s, e.key, nullptr, &len) : nvs_get_blob(s, e.key, nullptr, &len)) != ESP_OK) return false;
+      uint8_t *b = (uint8_t *)malloc(len ? len : 1);
+      if (!b) return false;
+      bool ok = (str ? nvs_get_str(s, e.key, (char *)b, &len) : nvs_get_blob(s, e.key, b, &len)) == ESP_OK &&
+                (str ? nvs_set_str(d, e.key, (const char *)b) : nvs_set_blob(d, e.key, b, len)) == ESP_OK;
+      free(b);
+      return ok;
+    }
+    default: return true;
+  }
+}
+
+static bool inKeep(const char *k, const char *const *keep, int n) {
+  for (int i = 0; i < n; i++)
+    if (!strcmp(k, keep[i])) return true;
+  return false;
+}
+
+bool nvsMoveKeys(const char *srcNs, const char *dstPart, const char *dstNs, const char *const *keep, int nKeep) {
+  nvs_handle_t s, d;
+  if (nvs_open(srcNs, NVS_READWRITE, &s) != ESP_OK) return true;  // no hay nada que traer
+  uint8_t init = 0;
+  if (nvs_get_u8(s, "init", &init) != ESP_OK) { nvs_close(s); return true; }  // ya se trajo (o partida nueva)
+  if (nvs_open_from_partition(dstPart, dstNs, NVS_READWRITE, &d) != ESP_OK) { nvs_close(s); return false; }
+  bool ok = nvs_erase_all(d) == ESP_OK;  // de un intento a medias
+  int n = 0;
+  nvs_iterator_t it = nullptr;
+  esp_err_t r = nvs_entry_find(NVS_DEFAULT_PART_NAME, srcNs, NVS_TYPE_ANY, &it);
+  while (ok && r == ESP_OK) {
+    nvs_entry_info_t e;
+    nvs_entry_info(it, &e);
+    if (!inKeep(e.key, keep, nKeep)) { ok = nvsCopyEntry(s, d, e); n++; }
+    r = nvs_entry_next(&it);
+  }
+  nvs_release_iterator(it);
+  ok = ok && nvs_commit(d) == ESP_OK;
+  nvs_close(d);
+  // la marca lo primero: si se corta aqui, la copia ya vale y no se vuelve a traer
+  ok = ok && nvs_erase_key(s, "init") == ESP_OK && nvs_commit(s) == ESP_OK;
+  if (ok) {  // el resto, para dejar sitio (si alguna no se borra no pasa nada: ya no se lee)
+    for (;;) {
+      char key[NVS_KEY_NAME_MAX_SIZE] = "";
+      it = nullptr;
+      r = nvs_entry_find(NVS_DEFAULT_PART_NAME, srcNs, NVS_TYPE_ANY, &it);
+      while (r == ESP_OK) {
+        nvs_entry_info_t e;
+        nvs_entry_info(it, &e);
+        if (!inKeep(e.key, keep, nKeep)) { strncpy(key, e.key, sizeof(key) - 1); break; }
+        r = nvs_entry_next(&it);
+      }
+      nvs_release_iterator(it);
+      if (!key[0] || nvs_erase_key(s, key) != ESP_OK) break;
+    }
+    nvs_commit(s);
+  }
+  nvs_close(s);
+  printf("NVS: partida -> %s/%s (%d claves) %s\n", dstPart, dstNs, n, ok ? "ok" : "FALLO");
+  return ok;
+}
+#endif
+
 void Box::begin() {
   memset(mons, 0, sizeof(mons));
   n = 0;

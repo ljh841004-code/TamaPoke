@@ -16,6 +16,7 @@ static const BakNs BAK_NS[] = {
   { "tpteam", true },  // ko11.20: ayudantes de las victorias en equipo
   { "tpmem", true },   // ko12.4: recuerdos del salon (cinta)
   { "tpstory", false },  // ko11.21: historia y expedicion
+  { "tpgame", true },    // ko12.10.15: la partida (antes en "tamapoke", que se queda con los ajustes)
 };
 
 static const char *partFor(bool big) { return (big && bigPart()) ? bigPart() : NVS_DEFAULT_PART_NAME; }
@@ -134,7 +135,7 @@ bool bakBackupNow(int16_t dex, uint16_t lvl, uint32_t epoch, bool manual) {
 }
 
 // restaurar: cada espacio se vacia una vez y se escribe con lo de la copia
-struct RestoreCtx { char erased[8][16]; uint8_t nErased; bool ok; };
+struct RestoreCtx { char erased[12][16]; uint8_t nErased; bool ok; };
 static const char *nsPart(const char *ns) {
   for (const BakNs &b : BAK_NS)
     if (!strcmp(b.ns, ns)) return partFor(b.big);
@@ -149,7 +150,7 @@ static bool restoreRec(void *vctx, const char *ns, const char *key, uint8_t type
   bool fresh = true;
   for (uint8_t i = 0; i < c->nErased; i++)
     if (!strcmp(c->erased[i], ns)) fresh = false;
-  if (fresh && c->nErased < 8) {
+  if (fresh && c->nErased < 12) {
     nvs_erase_all(h);
     strncpy(c->erased[c->nErased], ns, 15);
     c->erased[c->nErased++][15] = 0;
