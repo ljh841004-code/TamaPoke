@@ -60,6 +60,7 @@ public:
   bool put(const BoxMon &m);          // ko11.7: vuelve tal cual (de una expedicion)
   bool release(uint8_t i);            // lo suelta
   bool bumpLevel(uint8_t i, uint16_t cap = 100);  // ko11.20: +1 nivel (ayudante que gano)
+  uint8_t addExp(uint8_t i, uint32_t gx);  // ko12.10.15: EXP al de la caja (sin EXP guardada: desde el inicio de su nivel). Niveles subidos
   void markFlag(uint8_t i, uint8_t f);             // ko11.20: anade una marca (BOXF_TEAM)
   bool set(uint8_t i, const BoxMon &m);            // ko11.20: la ficha cambia (evoluciono, sube de nivel)
   void wipe();                        // fork KO (ko8): [nuevo comienzo]

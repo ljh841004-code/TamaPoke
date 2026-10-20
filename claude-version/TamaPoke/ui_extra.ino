@@ -4610,7 +4610,11 @@ void finishBattle(bool won, bool fled, bool caught) {
     bool wildExp = bKind == BK_WILD && !bLink && bExpDex;  // ko11
     pet.battleResult(bLink ? BATTLE_LINK : BATTLE_WILD, won, fled, caught, wildExp ? bExpDex : bFoe.dex,
                      wildExp ? bExpLvl : bFoe.lvl);
+    if (pet.expShare && pN > 1 && pBox[1] >= 0 && pet.shareExpOut &&  // ko12.10.15: la mitad para el que lucho
+        box.addExp((uint8_t)pBox[1], pet.shareExpOut))
+      snprintf(bPartyNote, sizeof(bPartyNote), XT(X_PT_LVUP_FMT), 1u);
     pet.expShare = false;  // ko12.10.15
+    pet.shareExpOut = 0;
     if (won && bKind == BK_WILD && !bLink) bItems = pet.wildWinItems();  // ko11.1: por probabilidad
     if (pCur == 0 && pSlot0Pet) bvMeLvl = pet.level();  // fork KO (ko7): la caja de vida ensena el nivel nuevo (ko11.20: si lucha el que crias)
     sfxPlay(pet.lastLvlUp ? SFX_LEVEL : won || caught ? SFX_MEDAL : SFX_BYE);  // ko7: subida de nivel

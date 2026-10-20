@@ -582,7 +582,8 @@ public:
   // ko12.10.15: sin ningun golpe (Magikarp, Abra...): en los salvajes lucha uno de la caja y este se
   // lleva la mitad de la EXP (학습장치). Esquema / transformacion no cuentan: con eso ya se defiende
   bool needsExpShare() const;
-  bool expShare = false;  // el combate de ahora va con 학습장치 (lo pone y lo quita la pantalla)  // ko12.10.15: el ultimo guardado no se escribio
+  bool expShare = false;  // el combate de ahora va con 학습장치 (lo pone y lo quita la pantalla)
+  uint32_t shareExpOut = 0;  // la otra mitad, para el que lucho (battleResult)  // ko12.10.15: el ultimo guardado no se escribio
 
 private:
   Preferences prefs;

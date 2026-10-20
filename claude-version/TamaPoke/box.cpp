@@ -228,6 +228,17 @@ bool Box::bumpLevel(uint8_t i, uint16_t cap) {
   return true;
 }
 
+uint8_t Box::addExp(uint8_t i, uint32_t gx) {
+  if (i >= n || !gx || mons[i].lvl >= LEVEL_MAX) return 0;
+  uint16_t to = levelForExp(expForLevel(mons[i].lvl) + gx);
+  if (to > LEVEL_MAX) to = LEVEL_MAX;
+  if (to <= mons[i].lvl) return 0;
+  uint8_t up = (uint8_t)(to - mons[i].lvl);
+  mons[i].lvl = to;
+  save();
+  return up;
+}
+
 bool Box::release(uint8_t i) {
   if (i >= n) return false;
   memmove(&mons[i], &mons[i + 1], sizeof(BoxMon) * (n - i - 1));

@@ -2160,7 +2160,22 @@ TEST(moves, magikarp_sin_golpes_usa_learning_device) {
   q.exp = e0;
   q.expShare = true;
   q.battleResult(BATTLE_WILD, true, false, false, 16, 5);
-  CHECK_EQ(q.exp - e0, (full + 1) / 2);
+  CHECK_EQ(q.exp - e0, (full + 1) / 2);  // 50:50, lo impar para el tuyo
+  CHECK_EQ(q.shareExpOut, full / 2);
+  CHECK_EQ((q.exp - e0) + q.shareExpOut, full);  // nada de mas ni de menos
+  q.expShare = false;
+  e0 = q.exp;
+  q.battleResult(BATTLE_WILD, true, false, false, 16, 5);  // sin 학습장치: todo para el tuyo
+  CHECK_EQ(q.exp - e0, full);
+  CHECK_EQ(q.shareExpOut, (uint32_t)0);
+  {  // la mitad del ayudante sube su nivel en la caja
+    Box b("tpbox", 60);
+    b.begin();
+    b.add(25, 10, false, true, 0);
+    CHECK_EQ((int)b.addExp(0, 0), 0);
+    CHECK_EQ((int)b.addExp(0, expForLevel(12) - expForLevel(10)), 2);
+    CHECK_EQ((int)b.at(0).lvl, 12);
+  }
   uint8_t sm[4] = { 166, 0, 0, 0 };  // esquema: ya se defiende
   memcpy(q.mv, sm, 4);
   CHECK(!q.needsExpShare());

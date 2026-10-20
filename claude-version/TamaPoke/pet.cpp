@@ -2031,7 +2031,11 @@ void Pet::battleResult(uint8_t kind, bool won, bool fled, bool caught,
     // fork KO (ko7): EXP del rival (en tongsin, la mitad: no se farmea)
     uint32_t gx = battleExp(foeDex, foeLvl);
     if (kind == BATTLE_LINK) gx /= 2;
-    if (expShare) gx = (gx + 1) / 2;  // ko12.10.15: lucho otro (학습장치): la mitad, como en el original
+    shareExpOut = 0;
+    if (expShare) {  // ko12.10.15: lucho otro (학습장치): 50:50, lo impar para el tuyo
+      shareExpOut = gx / 2;
+      gx -= shareExpOut;
+    }
     lastExpGain = gx;
     lastLvlUp = addExp(gx);
     if (kind == BATTLE_WILD && won) {
