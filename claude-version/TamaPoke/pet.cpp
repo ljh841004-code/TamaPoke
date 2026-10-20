@@ -1994,6 +1994,16 @@ void Pet::wipeGameKeepSettings() {
 
 static uint8_t addCap(uint8_t v, uint8_t d) { return (v + d > 100) ? 100 : v + d; }
 
+bool Pet::needsExpShare() const {
+  if (isEgg()) return false;
+  for (uint8_t i = 0; i < 4; i++) {
+    uint8_t id = mv[i];
+    if (!id) continue;
+    if (!moveIsStatus(id) || id == 166 || moveDef(id).fx == MX_TRANSFORM) return false;  // 166 = esquema
+  }
+  return true;
+}
+
 void Pet::battleResult(uint8_t kind, bool won, bool fled, bool caught,
                        int16_t foeDex, uint16_t foeLvl) {
   lastExpGain = 0;
@@ -2021,6 +2031,7 @@ void Pet::battleResult(uint8_t kind, bool won, bool fled, bool caught,
     // fork KO (ko7): EXP del rival (en tongsin, la mitad: no se farmea)
     uint32_t gx = battleExp(foeDex, foeLvl);
     if (kind == BATTLE_LINK) gx /= 2;
+    if (expShare) gx = (gx + 1) / 2;  // ko12.10.15: lucho otro (학습장치): la mitad, como en el original
     lastExpGain = gx;
     lastLvlUp = addExp(gx);
     if (kind == BATTLE_WILD && won) {

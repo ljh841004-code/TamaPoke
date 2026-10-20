@@ -210,6 +210,8 @@ static const char *const XS[2][X_COUNT] = {
     "ART: 3D",
     "TRADE ONE (LEFT TODAY %u/%u)", "Only ones you caught (not received)", "FIND PARTNER",
     "No caught Pokemon to trade", "3 trades done today", "You give: %s Lv.%u",
+    "Exp. Share: %s fights for you", "No attack move: using Struggle this time",
+    "No attack yet: Lv.%u %s", "No attack move",
   },
   // ---------------- KO ----------------
   {
@@ -415,6 +417,8 @@ static const char *const XS[2][X_COUNT] = {
     "그림: 3D",
     "교환할 몬 (오늘 남은 %u/%u)", "볼로 잡은 몬만 (받은 몬은 안 돼요)", "교환 상대 찾기",
     "교환할 수 있는 몬이 없어요", "오늘은 3번 다 교환했어요", "주는 몬: %s Lv.%u",
+    "학습장치: %s 대신 싸워요", "공격기가 없어요: 이번엔 발버둥으로 싸워요",
+    "아직 공격기 없음: Lv.%u %s", "공격기가 없어요",
   },
 };
 

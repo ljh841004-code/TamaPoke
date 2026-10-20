@@ -2136,3 +2136,32 @@ TEST(save, partida_pasa_a_la_nvs_grande) {
   { Preferences x; x.begin("tamapoke", true); CHECK_EQ((int)x.getUChar("bri", 0), 70); x.end(); }
   setBigPart(nullptr);
 }
+
+// ko12.10.15: sin golpes (Magikarp) -> 학습장치; la mitad de la EXP; aviso del primer golpe
+TEST(moves, magikarp_sin_golpes_usa_learning_device) {
+  mockNvsReset();
+  Pet p;
+  p.begin();
+  makePet(p, 129);
+  movesDefault(129, 5, p.mv);
+  CHECK(p.needsExpShare());
+  uint8_t lv = 0;
+  CHECK_EQ((int)moveNextAttack(129, 5, &lv), (int)MOVE_TACKLE);
+  CHECK_EQ((int)lv, 15);
+  CHECK(moveNextAttack(63, 5, &lv) != 0);  // Abra: al evolucionar (16)
+  CHECK_EQ((int)lv, 16);
+  uint32_t e0 = p.exp;
+  p.battleResult(BATTLE_WILD, true, false, false, 16, 5);
+  uint32_t full = p.exp - e0;
+  Pet q;
+  q.begin();
+  makePet(q, 129);
+  movesDefault(129, 5, q.mv);
+  q.exp = e0;
+  q.expShare = true;
+  q.battleResult(BATTLE_WILD, true, false, false, 16, 5);
+  CHECK_EQ(q.exp - e0, (full + 1) / 2);
+  uint8_t sm[4] = { 166, 0, 0, 0 };  // esquema: ya se defiende
+  memcpy(q.mv, sm, 4);
+  CHECK(!q.needsExpShare());
+}

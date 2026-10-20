@@ -3492,6 +3492,7 @@ static void startTrainer(uint8_t kind, uint8_t region, const Battler *team, uint
   bRng = BRng(esp_random());
   bMe = makeBattler(pet.speciesId, pet.level(), pet.atkStat(), pet.defStat(), pet.speStat());
   petMovesInto(bMe);  // ko11.31
+  noAtkStruggle(bMe);  // ko12.10.15
   pSlot0Pet = true;
   // ko11.21: en la historia y la expedicion lucha su companero; los premios, para el que crias
   if (kind == BK_STORY || kind == BK_ROGUE) { bMe = storyPartnerBattler(); pSlot0Pet = false; }
@@ -3614,6 +3615,37 @@ void lureDrop() {
   showToast(t);
 }
 
+// ko12.10.15: 학습장치: el que crias no tiene ni un golpe (Magikarp, Abra...): lucha el mas fuerte de los
+// comunes de la caja (nunca raros, legendarios ni shiny) y el tuyo se lleva la mitad de la EXP. Solo hasta
+// que aprenda un golpe (needsExpShare). -1 = ninguno
+static int8_t expShareHelper() {
+  if (!pet.needsExpShare()) return -1;
+  int8_t best = -1;
+  for (uint8_t i = 0; i < box.count(); i++) {
+    const BoxMon &m = box.at(i);
+    if (m.dex < 1 || m.dex > DEX_COUNT || (m.flags & BOXF_SHINY)) continue;
+    uint8_t r = DEX_TBL[m.dex].rarity;
+    if (r == R_RARO || r == R_LEGENDARIO) continue;
+    uint8_t mv[4];
+    if (moveCount(m.mv)) memcpy(mv, m.mv, 4);
+    else movesDefault(m.dex, m.lvl, mv);
+    bool dmg = false;
+    for (uint8_t k = 0; k < 4; k++) if (mv[k] && !moveIsStatus(mv[k])) dmg = true;
+    if (!dmg) continue;
+    if (best < 0 || m.lvl > box.at((uint8_t)best).lvl) best = (int8_t)i;
+  }
+  return best;
+}
+
+// ko12.10.15: sin golpes y sin nadie que luche por el: 발버둥 en una casilla libre, solo en este combate
+// (no se guarda; con un golpe de verdad deja de salir). Si no hay casilla libre, se queda como esta
+static bool noAtkStruggle(Battler &b) {
+  if (!pet.needsExpShare()) return false;
+  for (uint8_t i = 0; i < 4; i++)
+    if (!b.mv[i]) { b.mv[i] = MOVE_STRUGGLE; b.pp[i] = 1; return true; }  // 발버둥 no gasta PP
+  return false;
+}
+
 void startWildIn(uint8_t region) {
   if (!battleAllowed(true)) return;
   autoLeft = 0;  // ko11.19
@@ -3624,6 +3656,16 @@ void startWildIn(uint8_t region) {
   bRng = BRng(esp_random());
   bMe = makeBattler(pet.speciesId, pet.level(), pet.atkStat(), pet.defStat(), pet.speStat());
   petMovesInto(bMe);  // ko11.31
+  int8_t esh = expShareHelper();  // ko12.10.15: 학습장치
+  pet.expShare = esh >= 0;
+  if (esh >= 0) {  // como un combate de equipo: el tuyo en el banquillo (0), el ayudante luchando (1)
+    const BoxMon &m = box.at((uint8_t)esh);
+    pMon[0] = bMe; pBox[0] = -1;
+    bMe = makeBoxBattler(m.dex, m.lvl, pet.level(), m.geneAtk, m.geneDef, m.geneSpe);
+    if (moveCount(m.mv)) { memcpy(bMe.mv, m.mv, 4); movesFillPP(bMe); }
+    pMon[1] = bMe; pBox[1] = esh;
+    pN = 2; pCur = 1; pUsed = 3; pShiny = 0;
+  }
   uint32_t ep = pet.lastSeenEpoch;
   // ko10.11: hasta 3 tiradas; una especie ya vista/capturada se queda solo al 45 %
   // (asi salen mas nuevas). Los raros se quedan siempre
@@ -3641,9 +3683,17 @@ void startWildIn(uint8_t region) {
   bExpDex = bFoe.dex;  // ko11: la EXP no se infla por subirle el nivel
   bExpLvl = bFoe.lvl;
   wildMatchPower(bFoe, bMe, bRng, DEX_TBL[bFoe.dex].rarity == R_LEGENDARIO);  // ko10.11: de tu talla (ko12.9.22: legendario 125-140 %)
-  applyOrb(bMe);  // ko11.16: DESPUES de igualar: el orbe si se nota contra el salvaje
+  if (esh < 0) applyOrb(bMe);  // ko11.16: DESPUES de igualar: el orbe si se nota contra el salvaje
   bool shiny = bRng.below(ev.kind == DEV_SHINY ? 32 : 64) == 0;  // ko11.7: fin de semana x2
   bvSetup(bMe, bFoe, nullptr, shiny);
+  if (esh >= 0) {
+    partyMeName(); partyLoadMe();
+    char t[64];
+    snprintf(t, sizeof(t), XT(X_ES_FMT), dexName(bMe.dex));
+    showToast(t);
+  } else if (noAtkStruggle(bMe)) {
+    showToast(XT(X_ES_NONE));
+  }
   // ko10.11: cuantos de esta especie hay ya en la caja (se ensena unos segundos)
   bvOwned = 0;
   for (uint8_t i = 0; i < box.count(); i++)
@@ -4429,7 +4479,7 @@ static void afterResult() {
   // ese gimnasio, con la medalla nueva a la vista) y tras el reto del dia, a su
   // pantalla. Antes volvia a la principal y habia que entrar otra vez
   if (bKind == BK_ROGUE) rogueSaveParty();  // ko11.21: antes de deshacer el equipo
-  if (bKind != BK_WILD) partyEnd();
+  if (bKind != BK_WILD || pN > 1) partyEnd();  // ko12.10.15: y tras un salvaje con 학습장치
   if (bKind == BK_GYM) {
     foePmd.unload();
     openGyms();
@@ -4560,6 +4610,7 @@ void finishBattle(bool won, bool fled, bool caught) {
     bool wildExp = bKind == BK_WILD && !bLink && bExpDex;  // ko11
     pet.battleResult(bLink ? BATTLE_LINK : BATTLE_WILD, won, fled, caught, wildExp ? bExpDex : bFoe.dex,
                      wildExp ? bExpLvl : bFoe.lvl);
+    pet.expShare = false;  // ko12.10.15
     if (won && bKind == BK_WILD && !bLink) bItems = pet.wildWinItems();  // ko11.1: por probabilidad
     if (pCur == 0 && pSlot0Pet) bvMeLvl = pet.level();  // fork KO (ko7): la caja de vida ensena el nivel nuevo (ko11.20: si lucha el que crias)
     sfxPlay(pet.lastLvlUp ? SFX_LEVEL : won || caught ? SFX_MEDAL : SFX_BYE);  // ko7: subida de nivel

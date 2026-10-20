@@ -635,6 +635,27 @@ uint8_t moveAtLevel(int16_t dex, uint16_t lvl, uint8_t k) {
   return 0;
 }
 
+// ko12.10.15: el primer golpe que aprende despues de lvl (el suyo o, si antes evoluciona, el de la
+// forma nueva). 0 = ninguno. *atLv = a que nivel
+uint8_t moveNextAttack(int16_t dex, uint16_t lvl, uint8_t *atLv) {
+  for (uint16_t L = lvl + 1; dex >= 1 && dex <= DEX_COUNT && L <= LEVEL_MAX; L++) {
+    for (uint8_t k = 0; k < 8; k++) {
+      uint8_t id = moveAtLevel(dex, L, k);
+      if (!id) break;
+      if (!moveIsStatus(id)) { if (atLv) *atLv = (uint8_t)L; return id; }
+    }
+    if (DEX_TBL[dex].evolvesTo && evoLevel(dex) == L) {
+      int16_t nx = DEX_TBL[dex].evolvesTo;
+      uint8_t mv[4];
+      movesDefault(nx, L, mv);
+      for (uint8_t i = 0; i < 4; i++)
+        if (mv[i] && !moveIsStatus(mv[i])) { if (atLv) *atLv = (uint8_t)L; return mv[i]; }
+      dex = nx;
+    }
+  }
+  return 0;
+}
+
 uint8_t moveCount(const uint8_t mv[4]) {
   uint8_t n = 0;
   for (uint8_t i = 0; i < 4; i++) if (mv[i]) n++;

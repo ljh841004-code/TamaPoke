@@ -578,7 +578,11 @@ public:
   // ultima hora real persistida; sirve para resembrar un RTC que perdio la hora
   uint32_t savedEpoch() { return prefs.getUInt("seen", 0); }
   void flushSave();
-  bool saveFailed() const { return saveBad; }  // ko12.10.15: el ultimo guardado no se escribio
+  bool saveFailed() const { return saveBad; }
+  // ko12.10.15: sin ningun golpe (Magikarp, Abra...): en los salvajes lucha uno de la caja y este se
+  // lleva la mitad de la EXP (학습장치). Esquema / transformacion no cuentan: con eso ya se defiende
+  bool needsExpShare() const;
+  bool expShare = false;  // el combate de ahora va con 학습장치 (lo pone y lo quita la pantalla)  // ko12.10.15: el ultimo guardado no se escribio
 
 private:
   Preferences prefs;

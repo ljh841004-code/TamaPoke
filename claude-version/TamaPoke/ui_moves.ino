@@ -735,7 +735,12 @@ void renderCardMoves() {
   drawBtn(236, MVC_BTN_Y, 166, 46, pet.tmCount() ? C565(0x6a, 0x4c, 0xf0) : UI_TRACK, pet.tmCount() ? UI_WHITE : UI_INK, t);
   if (nr) snprintf(t, sizeof(t), LK("배운 기술 %u개, 사탕으로 기억 %u개", "Known %u, recallable %u"), nk, nr);
   else snprintf(t, sizeof(t), LK("배운 기술 %u개", "%u moves known"), nk);
-  drawFit(t, MVC_BTN_Y + 52, 300, 0x8410, 1);
+  if (pet.needsExpShare()) {  // ko12.10.15: sin golpes: cuando aprende el primero
+    uint8_t lv = 0, id = moveNextAttack(pet.speciesId, pet.level(), &lv);
+    if (id) snprintf(t, sizeof(t), XT(X_NOATK_FMT), (unsigned)lv, moveNameId(id));
+    else snprintf(t, sizeof(t), "%s", XT(X_NOATK));
+  }
+  drawFit(t, MVC_BTN_Y + 52, 300, pet.needsExpShare() ? C565(0xd8, 0x50, 0x30) : 0x8410, 1);
   // la ficha del movimiento la pinta renderCard al final (encima de los puntos de pagina)
 }
 
