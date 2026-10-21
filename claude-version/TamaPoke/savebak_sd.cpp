@@ -202,6 +202,40 @@ bool bakDeleteAll() {
   return !SD_MMC.exists(BAK_PATH[0]) && !SD_MMC.exists(BAK_PATH[1]);
 }
 
+uint8_t bakImportFromMons() {
+  static const char *const SRC[2] = { "/mons/save0.bak", "/mons/save1.bak" };
+  uint8_t *buf = bakBuf();
+  if (!sdReady || !buf) return 0;
+  SdCardLock lock;
+  if (!lock) return 0;
+  uint8_t n = 0;
+  for (uint8_t i = 0; i < 2; i++) {
+    if (!SD_MMC.exists(SRC[i])) continue;
+    File f = SD_MMC.open(SRC[i], FILE_READ);
+    if (!f) continue;
+    size_t sz = f.size();
+    size_t got = (sz >= sizeof(BakHdr) + 4 && sz <= BAK_MAX_BYTES) ? f.read(buf, sz) : 0;
+    f.close();
+    BakHdr h;
+    if (!got || got != sz || !bakParse(buf, sz, &h)) {  // no es una copia buena: se deja como esta
+      Serial.printf("BAK: %s no vale\n", SRC[i]);
+      continue;
+    }
+    SD_MMC.mkdir("/tpsave");
+    SD_MMC.remove(BAK_PATH[i]);
+    bool ok = SD_MMC.rename(SRC[i], BAK_PATH[i]);
+    if (!ok) {  // otro sistema de ficheros: copiar y borrar
+      File o = SD_MMC.open(BAK_PATH[i], FILE_WRITE);
+      ok = o && o.write(buf, sz) == sz;
+      if (o) o.close();
+      if (ok) SD_MMC.remove(SRC[i]);
+    }
+    Serial.printf("BAK: %s -> %s %s\n", SRC[i], BAK_PATH[i], ok ? "ok" : "FALLO");
+    if (ok) n++;
+  }
+  return n;
+}
+
 // ko11.9.2: registro de reinicios inesperados (se lee en cualquier PC)
 bool bakCrashLog(const char *line) {
   if (!sdReady || !line) return false;

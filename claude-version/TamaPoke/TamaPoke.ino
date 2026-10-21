@@ -52,7 +52,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.10.17"
+#define FW_VERSION "1.17-ko12.10.18"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -859,6 +859,7 @@ void setup() {
   bootStep(BS_MUSIC);
   if (sdReady && !safeMode) audioLoadMusic();  // /mons/bgm.wav y /mons/battle_wild.wav si existen
 
+  bakImportFromMons();  // ko12.10.18: copias subidas por USB/WiFi (llegan a mons/) -> /tpsave/
   bakBootCheck();  // ko11.6: partida nueva + copia en la SD -> preguntar
   vibPulse(180, 1, 0);  // ko11.25: encendido
   lastInteract = millis();
