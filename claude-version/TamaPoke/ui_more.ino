@@ -1580,13 +1580,16 @@ void updateTap(int16_t x, int16_t y) {
 #define RST_BTN_R 66
 bool rstHint = false;  // ko12.10.9: la ventana "정말 처음부터 시작할까요?"
 bool rstDone = false;
+bool rstBak = false;  // ko12.10.16: "SD 백업도 지우기" (por defecto no: la copia salva un borrado sin querer)
 #define RST_ASK_Y 288  // botones de la ventana
+#define RST_BAK_Y 236  // la casilla de la ventana
 
 void openReset() {
   retMark();
   clockOpen = false;
   rstHint = false;
   rstDone = false;
+  rstBak = false;
   xScreen = XS_RESET;
   sfxPlay(SFX_TAP);
 }
@@ -1599,6 +1602,7 @@ static bool rstInButton(int x, int y) {
 void doResetGame() {
   rstDone = true;
   renderReset();  // "empezando de nuevo..." antes de reiniciar
+  if (rstBak) bakDeleteAll();  // ko12.10.16: sin copia en la SD, al arrancar va directo a elegir inicial
   pet.wipeGameKeepSettings();
   box.wipe();
   hall.wipe();  // ko10.5
@@ -1634,7 +1638,15 @@ void renderReset() {
     uiPanel(48, 130, 370, 216, 22, UI_WHITE, UI_INK);
     drawFit(XT(X_RESET_HINT), 172, 330, UI_INK, 2);
     drawFit(XT(X_RESET_L2), 212, 330, UI_BAR_BAD, 2);
-    drawFit(XT(X_RESET_L3), 246, 330, 0x8410, 1);
+    if (sdReady) {  // ko12.10.16: [v] SD 백업도 지우기
+      const char *bt = XT(X_RESET_BAK);
+      int tw = textW(bt, 2), bx = CX - (38 + tw) / 2;  // casilla + texto, juntos y centrados
+      gfx->drawRoundRect(bx, RST_BAK_Y + 6, 28, 28, 6, UI_INK);
+      if (rstBak) gfx->fillRoundRect(bx + 5, RST_BAK_Y + 11, 18, 18, 4, UI_BAR_BAD);
+      drawFitIn(bt, bx + 38, RST_BAK_Y + 8, tw + 2, UI_INK, 2);
+    } else {
+      drawFit(XT(X_RESET_L3), 246, 330, 0x8410, 1);
+    }
     drawBtn(78, RST_ASK_Y, 150, 44, UI_BAR_BAD, UI_WHITE, XT(X_RESET_HOLD));
     drawBtn(238, RST_ASK_Y, 150, 44, UI_TRACK, UI_INK, XT(X_UPD_CANCEL));
   }
@@ -1644,6 +1656,7 @@ void renderReset() {
 void resetTap(int16_t x, int16_t y) {
   if (rstHint) {  // ko12.10.9: ventana: [새로 시작] borra; lo demas cierra la ventana
     if (inRect(x, y, 78, RST_ASK_Y - 6, 150, 56)) { doResetGame(); return; }
+    if (sdReady && inRect(x, y, 78, RST_BAK_Y, 310, 44)) { rstBak = !rstBak; sfxPlay(SFX_TAP); return; }
     rstHint = false;
     sfxPlay(SFX_TAP);
     return;

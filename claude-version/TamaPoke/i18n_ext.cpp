@@ -212,6 +212,7 @@ static const char *const XS[2][X_COUNT] = {
     "No caught Pokemon to trade", "3 trades done today", "You give: %s Lv.%u",
     "Exp. Share: %s fights for you", "No attack move: using Struggle this time",
     "No attack yet: Lv.%u %s", "No attack move",
+    "Also delete SD backups",
   },
   // ---------------- KO ----------------
   {
@@ -419,6 +420,7 @@ static const char *const XS[2][X_COUNT] = {
     "교환할 수 있는 몬이 없어요", "오늘은 3번 다 교환했어요", "주는 몬: %s Lv.%u",
     "학습장치: %s 대신 싸워요", "공격기가 없어요: 이번엔 발버둥으로 싸워요",
     "아직 공격기 없음: Lv.%u %s", "공격기가 없어요",
+    "SD 백업도 지우기",
   },
 };
 

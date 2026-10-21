@@ -1961,6 +1961,12 @@ static void scenes(bool ko, const char *sfx) {
   {  // ko12.10.9: el boton pregunta otra vez (antes mantener 3 s); [취소] cierra sin borrar
     resetTap(CX, RST_BTN_Y); render(); shot("23b_reset_ask");
     navCheck("ko12.10.9: [새로 시작] abre la pregunta", rstHint && !rstDone);
+    if (sdReady) {  // ko12.10.16: la casilla "SD 백업도 지우기" se marca y se desmarca
+      resetTap(CX, RST_BAK_Y + 20); render(); shot("23c_reset_ask_bak");
+      navCheck("ko12.10.16: casilla SD 백업 marcada", rstBak && rstHint && !rstDone);
+      resetTap(CX, RST_BAK_Y + 20);
+      navCheck("ko12.10.16: casilla SD 백업 desmarcada", !rstBak && rstHint);
+    }
     resetTap(300, RST_ASK_Y + 20);
     navCheck("ko12.10.9: [취소] cierra sin borrar", !rstHint && !rstDone && xScreen == XS_RESET);
   }

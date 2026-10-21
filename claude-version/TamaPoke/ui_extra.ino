@@ -3629,21 +3629,23 @@ static int8_t expShareHelper() {
     uint8_t mv[4];
     if (moveCount(m.mv)) memcpy(mv, m.mv, 4);
     else movesDefault(m.dex, m.lvl, mv);
-    bool dmg = false;
-    for (uint8_t k = 0; k < 4; k++) if (mv[k] && !moveIsStatus(mv[k])) dmg = true;
-    if (!dmg) continue;
+    if (!movesCanHurt(mv)) continue;
     if (best < 0 || m.lvl > box.at((uint8_t)best).lvl) best = (int8_t)i;
   }
   return best;
 }
 
 // ko12.10.15: sin golpes y sin nadie que luche por el: 발버둥 en una casilla libre, solo en este combate
-// (no se guarda; con un golpe de verdad deja de salir). Si no hay casilla libre, se queda como esta
+// (no se guarda; con un golpe de verdad deja de salir). Sin casilla libre, ocupa la ultima solo en este combate
 static bool noAtkStruggle(Battler &b) {
   if (!pet.needsExpShare()) return false;
-  for (uint8_t i = 0; i < 4; i++)
-    if (!b.mv[i]) { b.mv[i] = MOVE_STRUGGLE; b.pp[i] = 1; return true; }  // 발버둥 no gasta PP
-  return false;
+  // casilla libre o, con las 4 llenas, la ultima: solo en la copia del combate (los PP del tuyo no se tocan:
+  // petPPAfter solo copia donde el movimiento coincide)
+  uint8_t i = 0;
+  while (i < 3 && b.mv[i]) i++;
+  b.mv[i] = MOVE_STRUGGLE;
+  b.pp[i] = 1;  // 발버둥 no gasta PP
+  return true;
 }
 
 void startWildIn(uint8_t region) {

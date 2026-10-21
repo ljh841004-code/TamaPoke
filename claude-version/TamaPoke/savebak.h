@@ -150,4 +150,5 @@ void bakInfo(BakSlot out[2]);                         // las dos ranuras de la S
 int bakNewest(const BakSlot s[2]);                    // -1 si no hay ninguna valida
 bool bakBackupNow(int16_t dex, uint16_t lvl, uint32_t epoch, bool manual = false);  // ranura: bakPickSlot
 bool bakRestore(uint8_t slot);
+bool bakDeleteAll();  // ko12.10.16: [새로 시작] + "SD 백업도 지우기": las 2 ranuras (al arrancar ya no pregunta)
 bool bakCrashLog(const char *line);                  // ko11.9.2: anade una linea a /tpsave/crash.txt                        // NVS <- ranura; hay que reiniciar despues

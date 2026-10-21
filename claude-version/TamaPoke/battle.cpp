@@ -642,14 +642,14 @@ uint8_t moveNextAttack(int16_t dex, uint16_t lvl, uint8_t *atLv) {
     for (uint8_t k = 0; k < 8; k++) {
       uint8_t id = moveAtLevel(dex, L, k);
       if (!id) break;
-      if (!moveIsStatus(id)) { if (atLv) *atLv = (uint8_t)L; return id; }
+      if (moveCanHurt(id)) { if (atLv) *atLv = (uint8_t)L; return id; }
     }
     if (DEX_TBL[dex].evolvesTo && evoLevel(dex) == L) {
       int16_t nx = DEX_TBL[dex].evolvesTo;
       uint8_t mv[4];
       movesDefault(nx, L, mv);
       for (uint8_t i = 0; i < 4; i++)
-        if (mv[i] && !moveIsStatus(mv[i])) { if (atLv) *atLv = (uint8_t)L; return mv[i]; }
+        if (moveCanHurt(mv[i])) { if (atLv) *atLv = (uint8_t)L; return mv[i]; }
       dex = nx;
     }
   }
@@ -674,6 +674,18 @@ void movesFillPP(Battler &b) {
 static bool typeIsSpecial(uint8_t t) {
   return t == PT_FIRE || t == PT_WATER || t == PT_GRASS || t == PT_ELECTRIC || t == PT_ICE ||
          t == PT_PSYCHIC || t == PT_DRAGON || t == PT_DARK;
+}
+// ko12.10.15b: puede hacer dano: un golpe, o metronomo / mov. espejo / transformacion / mimetismo / esquema
+// (llaman o copian golpes: Togepi, Ditto, Smeargle no son "sin golpes")
+bool moveCanHurt(uint8_t id) {
+  if (!id || id >= MOVE_N) return false;
+  if (!moveIsStatus(id)) return true;
+  uint8_t fx = moveDef(id).fx;
+  return fx == MX_METRONOME || fx == MX_MIRRORMOVE || fx == MX_TRANSFORM || fx == MX_MIMIC;
+}
+bool movesCanHurt(const uint8_t mv[4]) {
+  for (uint8_t i = 0; i < 4; i++) if (moveCanHurt(mv[i])) return true;
+  return false;
 }
 bool moveIsSpecial(uint8_t id) { return id && id < MOVE_N && !moveIsStatus(id) && typeIsSpecial(moveDef(id).type); }
 
@@ -732,7 +744,9 @@ void movesDefault(int16_t dex, uint16_t lvl, uint8_t out[4]) {
     uint8_t at1 = pre ? evoLevel(pre) : 1;  // los "de nivel 1" de una forma evolucionada: al evolucionar
     for (uint16_t i = MOVE_LS_OFF[d - 1]; i < MOVE_LS_OFF[d] && n < 96; i++) {
       uint8_t lv = MOVE_LS[i][0];
-      if (lv <= 1 && pre && at1 > 1) lv = at1;
+      // ko12.10.15b: solo si ya paso ese nivel; uno que no llega (Gyarados Lv10 salvaje o de la caja) los
+      // sabe desde el 1, como en el original (antes se quedaba con lo de Magikarp: solo salpicadura)
+      if (lv <= 1 && pre && at1 > 1 && lvl >= at1) lv = at1;
       all[n++] = { lv, MOVE_LS[i][1] };
     }
     d = pre;
@@ -746,10 +760,10 @@ void movesDefault(int16_t dex, uint16_t lvl, uint8_t out[4]) {
     out[k++] = all[i].id;
   }
   bool dmg = false;
-  for (uint8_t i = 0; i < k; i++) if (!moveIsStatus(out[i])) dmg = true;
+  for (uint8_t i = 0; i < k; i++) if (moveCanHurt(out[i])) dmg = true;  // ko12.10.15b: metronomo cuenta
   if (!dmg) {  // el ultimo golpe que sepa, en lugar del de estado mas antiguo
     for (int i = (int)n - 1; i >= 0; i--)
-      if (all[i].lv <= lvl && !moveIsStatus(all[i].id) && !movesHas(out, all[i].id)) {
+      if (all[i].lv <= lvl && moveCanHurt(all[i].id) && !movesHas(out, all[i].id)) {
         if (k < 4) out[k++] = all[i].id;
         else out[3] = all[i].id;
         break;

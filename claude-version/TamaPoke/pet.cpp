@@ -1995,13 +1995,7 @@ void Pet::wipeGameKeepSettings() {
 static uint8_t addCap(uint8_t v, uint8_t d) { return (v + d > 100) ? 100 : v + d; }
 
 bool Pet::needsExpShare() const {
-  if (isEgg()) return false;
-  for (uint8_t i = 0; i < 4; i++) {
-    uint8_t id = mv[i];
-    if (!id) continue;
-    if (!moveIsStatus(id) || id == 166 || moveDef(id).fx == MX_TRANSFORM) return false;  // 166 = esquema
-  }
-  return true;
+  return !isEgg() && !movesCanHurt(mv);
 }
 
 void Pet::battleResult(uint8_t kind, bool won, bool fled, bool caught,

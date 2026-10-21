@@ -1474,3 +1474,48 @@ TEST(moves2, aprende_a_su_nivel_como_en_cristal) {
   CHECK(movesHas(p.mv, 86) || p.moveOffer == 86);
   CHECK(p.moveKnown(86));
 }
+
+// ko12.10.15b: formas evolucionadas por debajo de su nivel de evolucion (salvajes, caja): sus golpes de Lv1
+TEST(battle, evolucionado_bajo_sabe_sus_golpes_de_lv1) {
+  uint8_t mv[4];
+  movesDefault(130, 10, mv);  // Gyarados Lv10: 난동부리기, no solo salpicadura
+  CHECK(movesCanHurt(mv));
+  movesDefault(130, 30, mv);  // y por encima, como antes
+  CHECK(movesCanHurt(mv));
+  movesDefault(129, 5, mv);   // Magikarp sigue sin golpes (como en el original)
+  CHECK(!movesCanHurt(mv));
+  CHECK(moveCanHurt(118));    // metronomo (Togepi)
+  movesDefault(175, 10, mv);
+  CHECK(movesCanHurt(mv));
+  movesDefault(132, 10, mv);  // Ditto: transformacion
+  CHECK(movesCanHurt(mv));
+  movesDefault(235, 10, mv);  // Smeargle: esquema
+  CHECK(movesCanHurt(mv));
+  movesDefault(202, 10, mv);  // Wobbuffet: contraataque
+  CHECK(movesCanHurt(mv));
+  // 251 especies: sin golpes solo las del original (antes de aprenderlos)
+  int sin = 0;
+  for (int16_t d = 1; d <= DEX_COUNT; d++) {
+    movesDefault(d, 50, mv);
+    if (!movesCanHurt(mv)) sin++;
+  }
+  CHECK_EQ(sin, 1);  // Abra (solo teletransporte hasta evolucionar)
+}
+
+// ko12.10.15b: 발버둥 en la casilla 4 (las 4 de estado): pega y se lleva 1/4 de retroceso
+TEST(battle, forcejeo_temporal_en_la_cuarta_casilla) {
+  Battler a = withMoves(175, 45, 204, 186, 227), b = makeBattler(19, 30, 60, 60, 60);  // 4 de estado
+  b.maxHp = b.hp = 60000;
+  a.mv[3] = MOVE_STRUGGLE; a.pp[3] = 1;
+  BRng rng(3);
+  BEvent ev[BATTLE_MAX_EVENTS];
+  int n = battleTurn(a, b, BA_M3, BA_GUARD, rng, ev, BATTLE_MAX_EVENTS, false);
+  uint16_t hit = 0, rec = 0;
+  for (int i = 0; i < n; i++) {
+    if (ev[i].kind == EV_HIT && ev[i].mid == MOVE_STRUGGLE && ev[i].side == 0) hit = ev[i].dmg;
+    if (ev[i].kind == EV_RECOIL && ev[i].side == 0) rec = ev[i].dmg;
+  }
+  CHECK(hit > 0);
+  CHECK_EQ(rec, (uint16_t)(hit / 4 ? hit / 4 : 1));
+  CHECK_EQ(a.pp[3], (uint8_t)1);  // no gasta PP
+}

@@ -228,14 +228,42 @@ bool Box::bumpLevel(uint8_t i, uint16_t cap) {
   return true;
 }
 
+// ko12.10.15b: lo que sobra se guarda aparte ("bxe": dex + llegada -> EXP dentro de su nivel), sin tocar
+// BoxMon (las cajas guardadas siguen igual). Los que ya no estan en la caja se van al escribir
+struct BoxExpRec { int16_t dex; uint32_t epoch; uint32_t exp; } __attribute__((packed));
+#define BOX_EXP_MAX 16
+uint32_t Box::expLeft(uint8_t i) {
+  if (i >= n) return 0;
+  BoxExpRec r[BOX_EXP_MAX];
+  size_t k = prefs.getBytes("bxe", r, sizeof(r)) / sizeof(BoxExpRec);
+  for (size_t j = 0; j < k; j++)
+    if (r[j].dex == mons[i].dex && r[j].epoch == mons[i].epoch) return r[j].exp;
+  return 0;
+}
 uint8_t Box::addExp(uint8_t i, uint32_t gx) {
   if (i >= n || !gx || mons[i].lvl >= LEVEL_MAX) return 0;
-  uint16_t to = levelForExp(expForLevel(mons[i].lvl) + gx);
+  BoxExpRec r[BOX_EXP_MAX];
+  size_t k = prefs.getBytes("bxe", r, sizeof(r)) / sizeof(BoxExpRec);
+  size_t w = 0;  // fuera los que ya no estan (y el de este, que se vuelve a poner al final)
+  uint32_t have = 0;
+  for (size_t j = 0; j < k; j++) {
+    if (r[j].dex == mons[i].dex && r[j].epoch == mons[i].epoch) { have = r[j].exp; continue; }
+    bool alive = false;
+    for (uint8_t q = 0; q < n && !alive; q++) alive = mons[q].dex == r[j].dex && mons[q].epoch == r[j].epoch;
+    if (alive) r[w++] = r[j];
+  }
+  uint32_t tot = expForLevel(mons[i].lvl) + have + gx;
+  uint16_t to = levelForExp(tot);
   if (to > LEVEL_MAX) to = LEVEL_MAX;
-  if (to <= mons[i].lvl) return 0;
+  if (to < mons[i].lvl) to = mons[i].lvl;
   uint8_t up = (uint8_t)(to - mons[i].lvl);
   mons[i].lvl = to;
-  save();
+  uint32_t left = to >= LEVEL_MAX ? 0 : tot - expForLevel(to);
+  if (w >= BOX_EXP_MAX) { memmove(r, r + 1, sizeof(BoxExpRec) * (BOX_EXP_MAX - 1)); w = BOX_EXP_MAX - 1; }  // el mas viejo
+  if (left) r[w++] = { mons[i].dex, mons[i].epoch, left };
+  if (w) prefs.putBytes("bxe", r, sizeof(BoxExpRec) * w);
+  else prefs.remove("bxe");
+  if (up) save();
   return up;
 }
 

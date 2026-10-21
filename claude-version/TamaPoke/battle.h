@@ -524,6 +524,8 @@ uint8_t moveLearnset(int16_t dex, uint8_t *lv, uint8_t *mv, uint8_t max);
 // el que aprende justo a ese nivel (0 = ninguno; si hay varios, el k-esimo)
 uint8_t moveAtLevel(int16_t dex, uint16_t lvl, uint8_t k = 0);
 uint8_t moveNextAttack(int16_t dex, uint16_t lvl, uint8_t *atLv);  // ko12.10.15
+bool moveCanHurt(uint8_t id);              // ko12.10.15b: golpe o metronomo/espejo/transformacion/mimetismo/esquema
+bool movesCanHurt(const uint8_t mv[4]);
 // ko12.10: aprende a ese nivel si es "sin original" (10 niveles sin nada nuevo desde Lv.75): uno de los suyos
 #define MOVE_FALLBACK_LV 75
 #define MOVE_FALLBACK_GAP 10

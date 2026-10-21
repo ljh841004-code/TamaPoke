@@ -1324,3 +1324,26 @@ TEST(weather, sitio_por_nombre) {
   CHECK(!krFind("Seoul", &la, &lo, f, sizeof(f)));
   CHECK(!krFind("", &la, &lo, f, sizeof(f)));
 }
+
+// ko12.10.15b: la EXP que sobra al de la caja se guarda (por dex + llegada) y sobrevive a un reinicio
+TEST(box, exp_del_ayudante_se_acumula) {
+  mockNvsReset();
+  Box b("tpbox", 60);
+  b.begin();
+  b.add(25, 10, false, true, 1234);
+  b.add(16, 5, false, true, 99);
+  uint32_t span = expForLevel(11) - expForLevel(10);
+  CHECK_EQ((int)b.addExp(0, span / 2), 0);
+  CHECK_EQ(b.expLeft(0), span / 2);
+  CHECK_EQ((int)b.addExp(0, span - span / 2), 1);  // juntas: un nivel
+  CHECK_EQ((int)b.at(0).lvl, 11);
+  CHECK_EQ(b.expLeft(0), (uint32_t)0);
+  b.addExp(0, 7);
+  Box c("tpbox", 60);
+  c.begin();
+  CHECK_EQ(c.expLeft(0), (uint32_t)7);  // guardado
+  CHECK_EQ(c.expLeft(1), (uint32_t)0);
+  c.release(0);
+  c.addExp(0, 3);  // al escribir se va el que ya no esta
+  CHECK_EQ(c.expLeft(0), (uint32_t)3);
+}

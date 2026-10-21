@@ -197,6 +197,7 @@ enum XId : uint16_t {  // ko10.6: pasaron de 255
   X_BART_3D,  // ko12.10.7
   X_TRD_PICK_FMT, X_TRD_PICK_SUB, X_TRD_GO, X_TRD_NONE, X_TRD_LIMIT, X_TRD_MINE_FMT,  // ko12.10.12: de la caja
   X_ES_FMT, X_ES_NONE, X_NOATK_FMT, X_NOATK,  // ko12.10.15: 학습장치 (sin golpes)
+  X_RESET_BAK,  // ko12.10.16
   X_COUNT
 };
 

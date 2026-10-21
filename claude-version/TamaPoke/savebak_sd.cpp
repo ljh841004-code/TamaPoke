@@ -194,6 +194,14 @@ bool bakRestore(uint8_t slot) {
   return ok;
 }
 
+bool bakDeleteAll() {
+  if (!sdReady) return false;
+  SdCardLock lock;
+  if (!lock) return false;
+  for (const char *p : BAK_PATH) SD_MMC.remove(p);
+  return !SD_MMC.exists(BAK_PATH[0]) && !SD_MMC.exists(BAK_PATH[1]);
+}
+
 // ko11.9.2: registro de reinicios inesperados (se lee en cualquier PC)
 bool bakCrashLog(const char *line) {
   if (!sdReady || !line) return false;
