@@ -2236,6 +2236,41 @@ static uint8_t battleFacing(const PmdMon &m, uint8_t act, bool mine) {
   return m.has(d) ? d : act;
 }
 
+// ko12.10.17: los frames lisos (reposo, ataque, golpe) de un lado se encargan al nucleo 0 en cuanto el sprite
+// esta: el bucle principal ya no los hace (20-60 ms cada uno, el tiron al salir un bicho). Devuelve true si
+// los de reposo ya estan (hasta entonces ese lado no se ensena, como mientras se lee de la SD; tope 1,5 s)
+bool smAAPrebuild(const uint8_t *src, int w, int h, const uint16_t *pal, int s4);
+static int battleDotS4(const PmdMon &m, int16_t dex, bool mine) {
+  gPmdForceS4 = 0;
+  battleDotScale(m, dex, mine);
+  int s = gPmdForceS4;
+  gPmdForceS4 = 0;
+  gSmAASlot = -1;
+  return s;
+}
+static bool battlePrebuildSide(PmdMon &m, int16_t dex, bool mine) {
+  if (!m.loaded || !gSmoothGfx) return true;
+  int s0 = battleDotS4(m, dex, mine);
+  if (!s0) return true;  // sin escala fija: no va por el liso de la cache
+  bool idleReady = true;
+  for (uint8_t base : { (uint8_t)PMD_IDLE, (uint8_t)PMD_ATTACK, (uint8_t)PMD_HURT }) {
+    // ataque y golpe: solo esperando en el menu y con sitio en la cache (si no, sacarian a los de reposo y se
+    // volverian a pedir sin fin)
+    if (base != PMD_IDLE && (bPhase != BP_MENU || gSmAABytes > SMAA_BUDGET * 3 / 4)) continue;
+    uint8_t act = (!mine && pmdDlOdd(dex)) ? base : battleFacing(m, base, mine);
+    if (!m.has(act)) { act = base; if (!m.has(act)) continue; }
+    const PmdAct &a = m.acts[act];
+    if (a.offs) return true;  // TPK3 (3D): va 1:1, sin liso
+    int s = s0;
+    while (s > 8 && a.h * s > 400 * 4) s--;  // como drawPmdActM
+    for (uint8_t i = 0; i < a.frames; i++) {
+      bool ok = smAAPrebuild(a.data + (uint32_t)i * a.w * a.h, a.w, a.h, m.pal, s);
+      if (base == PMD_IDLE && !ok) idleReady = false;
+    }
+  }
+  return idleReady;
+}
+
 // ko12.10.6: mientras el menu espera, deja hechos (uno por fotograma) los frames lisos de ataque y golpe de los
 // dos lados: el primer ataque ya no se traba haciendolos (20-40 ms cada uno en el ESP32). Se "dibuja" debajo
 // de la pantalla: solo se guarda en la cache
@@ -2457,6 +2492,23 @@ void drawBattlers() {
   // ko12.10.14: el sprite aun llega de la SD (segundo plano): ese lado no se dibuja (ni el de antes, ni puntos)
   bool foeWait = pmdPending(&foePmd) || pmdPending(&prgFoe);
   bool meWait = pmdPending(&prgMe) || pmdPending(&helperPmd);
+  {  // ko12.10.17: 도트: sus frames lisos al nucleo 0; hasta que esten los de reposo no sale (tope 1,5 s)
+    static uint32_t foeAaT = 0, meAaT = 0;
+    static const void *foeAaK = nullptr, *meAaK = nullptr;
+    PmdMon &mm = (pCur || !pSlot0Pet) ? helperPmd : pmd;
+    bool foeDot = !foeWait && !(prgFoe.loaded && prgFoe.has(PMD_IDLE)) && foePmd.loaded;
+    bool meDot = !meWait && !(prgMe.loaded && prgMe.has(PMD_IDLE_UR)) && mm.loaded;
+    if (foeDot) {
+      const void *k = foePmd.acts[PMD_IDLE].data;
+      if (k != foeAaK) { foeAaK = k; foeAaT = now; }
+      if (!battlePrebuildSide(foePmd, bvFoeDex, false) && now - foeAaT < 1500) foeWait = true;
+    }
+    if (meDot) {
+      const void *k = mm.acts[PMD_IDLE].data;
+      if (k != meAaK) { meAaK = k; meAaT = now; }
+      if (!battlePrebuildSide(mm, bvMeDex, true) && now - meAaT < 1500) meWait = true;
+    }
+  }
   if (foeWait) foeHide = true;
   if (meWait) meHide = true;
   if (!foeGone && !foeSil && !foeWait) drawRarityAura(foeX, foeG, rarityKind(bvFoeDex), now);  // ko12.9.23
@@ -2505,7 +2557,9 @@ void drawBattlers() {
       if (th) drawThumb(th, meX - GAL_CELL / 2, meG - GAL_CELL, 3, meSil);
     }
   }
-  if (bPhase == BP_MENU) battleWarmOne(pCur || !pSlot0Pet ? helperPmd : pmd);  // ko12.10.6
+  // ko12.10.17: los de ataque y golpe ya se encargan al nucleo 0 (battlePrebuildSide); en el menu solo se
+  // hacen aqui si no hay tarea de fondo (gSmPending == 0 y aun faltan)
+  { extern uint16_t gSmPending; if (bPhase == BP_MENU && !gSmPending) battleWarmOne(pCur || !pSlot0Pet ? helperPmd : pmd); }
   // fork KO (ko7): efecto del ataque encima de los dos
   if (bPhase == BP_PLAY && bqI < bqN) {
     const BEvent &e = bq[bqI];

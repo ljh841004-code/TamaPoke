@@ -563,7 +563,7 @@ void pmdLoadAsync(PmdMon &dst, uint8_t dexNum, bool shiny, const char *kinds, ch
 #endif
 }
 
-uint8_t pmdAsyncPoll() {
+uint8_t pmdAsyncPoll(void (*swapped)(PmdMon *)) {
   if (!gJobs) return 0;
   uint8_t n = 0;
   for (int i = 0; i < PMDJ_N; i++) {
@@ -580,6 +580,7 @@ uint8_t pmdAsyncPoll() {
       j.tmp.loaded = false;
       for (auto &a : j.tmp.acts) { a.frames = 0; a.data = nullptr; a.offs = nullptr; }
       if (j.gotOut) *j.gotOut = j.got;
+      if (swapped) swapped(j.dst);
       n++;
     }
     j.dst = nullptr;

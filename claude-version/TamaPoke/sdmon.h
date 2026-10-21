@@ -64,7 +64,7 @@ struct PmdMon {
 // pmdAsyncPoll() en el bucle principal (coloca lo que ya llego).
 void pmdLoadAsync(PmdMon &dst, uint8_t dexNum, bool shiny, const char *kinds, char *got = nullptr);
 bool pmdPending(const PmdMon *dst);
-uint8_t pmdAsyncPoll();  // cuantos se colocaron (para vaciar caches de dibujo)
+uint8_t pmdAsyncPoll(void (*swapped)(PmdMon *) = nullptr);  // cuantos se colocaron; swapped: cada uno (ko12.10.17)
 
 // miniaturas de la galeria (thumbs.bin entero en PSRAM)
 struct SdThumbs {

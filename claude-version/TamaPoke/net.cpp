@@ -419,6 +419,7 @@ static void pageRoot() {
          "<h2>펌웨어 업데이트</h2><p><a href=/fw>update.bin 올리기 (192.168.4.1/fw)</a></p>"
          "<h2>SD 파일</h2><p><a href=/sd>SD카드에 파일 올리기 (192.168.4.1/sd)</a></p>");
   if (netManualOnSd()) h += F("<h2>설명서</h2><p><a href=/manual.pdf>손바닥 가이드 열기 (manual.pdf)</a></p>");
+  h += F("<p><small><a href=/lag>렉 기록 보기 (/lag)</a></small></p>");  // ko12.10.17
   h += F("</div>");
   // la busqueda aun no acabo: recargar sola en 3 s para que aparezca la lista
   if (scanning) h += F("<script>setTimeout(function(){location.reload()},3000)</script>");
@@ -632,6 +633,18 @@ bool netManualOnSd() {
   return l && manualPathLocked();
 }
 
+// ko12.10.17: registro de tirones (TamaPoke.ino): texto para copiar y mandar
+size_t lagReport(char *out, size_t cap);
+static void pageLag() {
+  gPortalT0 = millis();
+  static char *buf = nullptr;
+  const size_t cap = 6144;
+  if (!buf) buf = (char *)ps_malloc(cap);
+  if (!buf) { gWeb->send(500, "text/plain", "sin memoria"); return; }
+  lagReport(buf, cap);
+  gWeb->send(200, "text/plain; charset=utf-8", buf);
+}
+
 // a trozos, soltando la SD entre trozo y trozo (la musica tambien lee de la SD)
 static void pageManual() {
   gPortalT0 = millis();
@@ -842,6 +855,7 @@ void netStartPortal() {
   gWeb->on("/fw", HTTP_POST, pageFwDone, pageFwUpload);
   gWeb->on("/manual.pdf", HTTP_GET, pageManual);          // ko12.9.25
   gWeb->on("/manual", HTTP_GET, pageManual);
+  gWeb->on("/lag", HTTP_GET, pageLag);                    // ko12.10.17
   gWeb->on("/sd", HTTP_GET, pageSd);                      // ko12.10
   gWeb->on("/sd", HTTP_POST, pageSdDone, pageSdUpload);
   gWeb->onNotFound(pageRedirect);
@@ -932,6 +946,7 @@ static void lanServe(uint32_t now) {
   gWeb->on("/fw", HTTP_GET, pageFw);
   gWeb->on("/fw", HTTP_POST, pageFwDone, pageFwUpload);
   gWeb->on("/manual.pdf", HTTP_GET, pageManual);  // ko12.9.25
+  gWeb->on("/lag", HTTP_GET, pageLag);            // ko12.10.17
   gWeb->on("/sd", HTTP_GET, pageSd);              // ko12.10
   gWeb->on("/sd", HTTP_POST, pageSdDone, pageSdUpload);
   gWeb->onNotFound(pageLanRoot);

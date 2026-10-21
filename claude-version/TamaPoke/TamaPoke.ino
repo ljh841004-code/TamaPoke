@@ -38,16 +38,21 @@
 #include "savebak.h"    // ko11.6: copia de la partida en la SD
 #include "story.h"      // ko11.21: modo historia (guiones en story_ko.cpp)
 #include "battle_size.h"  // ko12.10.2: alto de cada Pokemon en combate (도트 = 원작)
+#include "smaa.h"         // ko12.10.17: frames lisos del combate (cache y trabajos de fondo)
 #ifdef ESP_PLATFORM
 #include <nvs_flash.h>     // ko11.6: particion nvs2
 #include <esp_partition.h>
 #include <Preferences.h>
 #endif
+#include <new>          // ko12.10.17: placement new (frames lisos de fondo)
+#ifdef ESP_PLATFORM
+#include <freertos/queue.h>
+#endif
 #include <qrcode.h>     // fork KO (ko8): QR del portal WiFi (componente espressif/qrcode del core)
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.10.16"
+#define FW_VERSION "1.17-ko12.10.17"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -939,16 +944,62 @@ void perfReset() { perfRenderMax = perfStallMax = 0; perfFrames = 0; perfRenderS
 static bool petHoldAllowed();  // ko12.2
 bool mainNavAllowed();
 bool battleIntroBusy();  // ko12.10.2 (ui_extra.ino)
+// ko12.10.17: registro de tirones (vueltas del bucle de mas de 120 ms) con el reparto de donde se fue el tiempo.
+// En la RAM (48 ultimos) y se ve por la WiFi en 192.168.4.1/lag (o la IP de casa /lag): asi se mide en la placa
+// en vez de adivinar
+struct LagRec { uint32_t t; uint16_t total, render, async, fx, extra, flushW; uint8_t aaMain, aaBg, scr, art; };
+#define LAG_N 48
+static LagRec gLag[LAG_N];
+static uint16_t gLagN = 0, gLagHead = 0;
+static uint32_t gLagLoops = 0, gLagSlow = 0;
+extern uint32_t gSmAABuilds, gSmBgBuilds;
+extern uint8_t gBattleArt;
+size_t lagReport(char *out, size_t cap) {
+  size_t o = 0;
+  auto add = [&](const char *fmt, ...) {
+    if (o + 1 >= cap) return;
+    va_list ap; va_start(ap, fmt);
+    int n = vsnprintf(out + o, cap - o, fmt, ap);
+    va_end(ap);
+    if (n > 0) o += (size_t)n < cap - o ? (size_t)n : cap - o - 1;
+  };
+  add("TamaPoke %s  loops=%lu  slow(>120ms)=%lu  art=%u\n", FW_VERSION, (unsigned long)gLagLoops, (unsigned long)gLagSlow,
+      (unsigned)gBattleArt);
+  add("sec      total render async  fx extra flushW aaMain aaBg scr\n");
+  for (uint16_t i = 0; i < gLagN; i++) {
+    const LagRec &r = gLag[(gLagHead + LAG_N - gLagN + i) % LAG_N];
+    add("%7lu.%01lu %5u %6u %5u %3u %5u %6u %6u %4u %3u\n", (unsigned long)(r.t / 1000), (unsigned long)(r.t / 100 % 10),
+        r.total, r.render, r.async, r.fx, r.extra, r.flushW, r.aaMain, r.aaBg, r.scr);
+  }
+  return o;
+}
+
 void loop() {
   uint32_t now = millis();
+  const uint32_t lagU0 = micros();
+  const uint32_t lagAa0 = gSmAABuilds, lagBg0 = gSmBgBuilds;
+  extern uint32_t flushWaitUs;
+  const uint32_t lagFw0 = flushWaitUs;
+  uint32_t lagAsync = 0, lagFx = 0, lagExtra = 0, lagRender = 0;
   if (!bootLoopT0) bootLoopT0 = now ? now : 1;  // ko12.8.5
   vibLoop(now);  // ko11.25
-  { void smAAReset(); if (pmdAsyncPoll()) smAAReset(); }  // ko12.10.14: sprites leidos en segundo plano
+  // ko12.10.14: sprites leidos en segundo plano. ko12.10.17: solo se olvidan los frames lisos de ESE sprite (su
+  // paleta es la llave); antes se vaciaba toda la cache y el otro lado se tenia que rehacer entero
+  {
+    uint32_t u = micros();
+    { void smAAResetFor(PmdMon *m); pmdAsyncPoll(smAAResetFor); }
+    { void smAAPrebuildPoll(); smAAPrebuildPoll(); }  // ko12.10.17: frames lisos hechos en el nucleo 0
+    lagAsync = micros() - u;
+  }
   moveLearnLoop();  // ko11.31
   centerPoll();     // ko11.31: el centro pokemon termina aunque no se mire
   // ko11.31.4: efectos (combate / ficha del Pokedex): trozos de 8 KB, ~20 ms por vuelta como mucho;
   // ko11.31.5: nada mientras se ve un efecto de la SD
-  if (!battleFxPlaying() && !dexFxPlaying()) fxPump(battleIntroBusy() ? 1 : 12);  // ko12.1.1: tampoco en la ficha
+  {
+    uint32_t u = micros();
+    if (!battleFxPlaying() && !dexFxPlaying()) fxPump(battleIntroBusy() ? 1 : 12);  // ko12.1.1: tampoco en la ficha
+    lagFx = micros() - u;
+  }
   if (!battleScreenOn()) flushPipeStop();  // ko12.1: fuera del combate, un solo buffer otra vez
   // ko12.2: 3 min sin tocar nada en la pantalla principal -> se duerme sola (si no tiene hambre ni esta sucia)
   if (!pet.sleeping && petHoldAllowed() && mainNavAllowed() && (int32_t)(now - lastInteract) >= (int32_t)AUTO_SLEEP_MS) pet.autoSleepNow();
@@ -989,7 +1040,7 @@ void loop() {
   imuPoll(now);  // ko12.4: pasos (tambien con la pantalla apagada)
   tamaLoop();    // ko12.5: avisos de la rutina
   wifiFwLoop();  // ko12.9.2: reiniciar tras recibir firmware por WiFi
-  extraLoop(now);  // fork KO: red, tongsin, batallas (ui_extra.ino)
+  { uint32_t u = micros(); extraLoop(now); lagExtra = micros() - u; }  // fork KO: red, tongsin, batallas (ui_extra.ino)
   bakAutoLoop(now);  // ko11.6: copia de la partida en la SD
   expLoop();         // ko11.7: aviso de vuelta de la expedicion
   sdWatch();         // ko11.16.2: SD que no se monto: reintentar sola
@@ -1065,16 +1116,34 @@ void loop() {
   // ko12.9.22: muy atenuado (5 min sin tocar) se redibuja 2-3 veces por segundo, no 10 (ahorro de bateria)
   if (!screenOff && now - lastRender >= (uint32_t)((gameOpen || sackOpen || trainingFast()) ? 85 : dimStage == 2 ? 400 : 100)) {
     lastRender = now;
-    uint32_t r0 = millis();
+    uint32_t r0 = millis(), ru = micros();
     bootDiagLoop();  // ko11.5
     render();
     renderMs = millis() - r0;
+    lagRender = micros() - ru;
     if (!bootDraw1Ms) bootDraw1Ms = renderMs ? renderMs : 1;  // ko12.8.5
   }
   // ko12.9.22: con la pantalla apagada (o muy atenuada) la CPU descansa entre vueltas en vez de girar
   // a tope: el boton, el reloj, la vibracion y las alarmas siguen igual (miran cada 250 ms o menos)
   if (screenOff) delay(40);
   else if (dimStage == 2) delay(15);
+  if (!screenOff && dimStage != 2) {  // ko12.10.17: registro de tirones
+    gLagLoops++;
+    uint32_t tot = micros() - lagU0;
+    if (tot > 120000) {
+      gLagSlow++;
+      LagRec &r = gLag[gLagHead];
+      gLagHead = (gLagHead + 1) % LAG_N;
+      if (gLagN < LAG_N) gLagN++;
+      auto ms = [](uint32_t us) { return (uint16_t)(us / 1000 > 65535 ? 65535 : us / 1000); };
+      r.t = now; r.total = ms(tot); r.render = ms(lagRender); r.async = ms(lagAsync); r.fx = ms(lagFx);
+      r.extra = ms(lagExtra); r.flushW = ms(flushWaitUs >= lagFw0 ? flushWaitUs - lagFw0 : flushWaitUs);  // PERF bat lo pone a 0 cada 10 s
+      r.aaMain = (uint8_t)(gSmAABuilds - lagAa0 > 255 ? 255 : gSmAABuilds - lagAa0);
+      r.aaBg = (uint8_t)(gSmBgBuilds - lagBg0 > 255 ? 255 : gSmBgBuilds - lagBg0);
+      r.scr = screenCode();
+      r.art = gBattleArt;
+    }
+  }
   if (fastGameNow()) {
     uint32_t stall = millis() - loopT0 - renderMs;
     if (renderMs) { perfFrames++; perfRenderSum += renderMs; if (renderMs > perfRenderMax) perfRenderMax = (uint16_t)renderMs; }
@@ -4826,16 +4895,7 @@ void smoothBlitQ(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, 
 // medio + cuanto cubre) y se guarda; cada fotograma solo se copia al framebuffer, con el borde mezclado con el
 // fondo. Asi no se ven los cuadros del pixel art y cuesta menos que repetir el EPX en cada fotograma.
 // Dos huecos (rival / el tuyo); se rehace al cambiar de frame, de escala o de sprite
-struct SmAA {
-  const uint8_t *src = nullptr;
-  const uint16_t *pal = nullptr;
-  int s4 = 0, W = 0, H = 0;
-  int FW = 0, FH = 0, cx = 0, cy = 0;  // ko12.10.6: tamano entero y recorte (solo lo visible del frame)
-  uint16_t *col = nullptr;  // W*H colores y detras W*H alfas (0..4), en un solo bloque
-  uint8_t *a = nullptr;
-  uint32_t used = 0;
-  void release();
-};
+// struct SmAA: en smaa.h (ko12.10.17: el preprocesador de Arduino pone los prototipos antes que los struct)
 // ko12.10.3: cache de frames ya hechos (antes 1 por lado: cada cambio de frame de la animacion lo rehacia,
 // 20-60 ms en el ESP32, y la animacion y los efectos iban a saltos). Tras la primera vuelta de la animacion
 // cada fotograma solo copia. Hasta SMAA_SLOTS frames / SMAA_BUDGET bytes; sale el que hace mas que no se usa
@@ -4850,7 +4910,18 @@ void SmAA::release() {
   if (col) { gSmAABytes -= (uint32_t)W * H * 3 + (uint32_t)H * 4; free(col); }
   *this = SmAA();
 }
-void smAAReset() { for (SmAA &c : gSmAA) c.release(); }  // al cargar otro sprite (puede caer en la misma memoria)
+static uint32_t gSmGen = 1;  // ko12.10.17 (smAAPrebuild)
+static uint8_t gSmReqN = 0;
+// al cargar otro sprite (puede caer en la misma memoria). ko12.10.17: y lo encargado al nucleo 0 se tira al volver
+void smAAReset() { for (SmAA &c : gSmAA) c.release(); gSmGen++; gSmReqN = 0; }
+// ko12.10.17: solo los de un sprite (la llave pal es su PmdMon::pal). Lo encargado de antes se tira (gSmGen) y
+// los demas se vuelven a pedir solos (ya hechos: no cuesta nada)
+void smAAResetFor(PmdMon *m) {
+  if (!m) return;
+  for (SmAA &c : gSmAA) if (c.col && c.pal == m->pal) c.release();
+  gSmGen++;
+  gSmReqN = 0;
+}
 // ko12.10.6: ya esta hecho este frame (con cualquier escala)?
 bool smAACached(const uint8_t *src, const uint16_t *pal) {
   for (const SmAA &e : gSmAA)
@@ -4862,6 +4933,222 @@ static inline uint16_t smMix565(uint16_t f, uint16_t b, uint8_t a4) {  // a4 de 
   uint32_t m = ((fx * a4 + bx * (4 - a4)) >> 2) & 0x07E0F81FUL;
   return (uint16_t)(m | (m >> 16));
 }
+// ko12.10.17: el frame liso se hace en smAAFill (sin tocar la cache ni el framebuffer), con sus propios buffers de
+// trabajo: asi tambien lo puede hacer la tarea de fondo (nucleo 0) mientras el combate sigue (smAAPrebuild)
+static bool smScratchReady(SmScratch &s, bool big) {
+  if (!s.A) s.A = (uint8_t *)ps_malloc(SM_MAX * SM_MAX * 4);
+  if (!s.B) s.B = (uint8_t *)ps_malloc(SM_MAX * SM_MAX * 16);
+  if (!big && !s.C) s.C = (uint8_t *)ps_malloc(SM_MAX8 * SM_MAX8 * 64);
+  if (!s.tmp) s.tmp = (uint16_t *)ps_malloc(SMAA_MAXPX * 2);
+  return s.A && s.B && (big || s.C);
+}
+// 1 = hecho (c.col en PSRAM, de quien llama), 0 = frame vacio, -1 = no se pudo
+static int smAAFill(SmAA &c, const uint8_t *src, int w, int h, const uint16_t *pal, int s4, SmScratch &sc) {
+  const int FW = w * s4 / 4, FH = h * s4 / 4;
+  // ko12.10.6: solo la caja de lo visible (+1 px de borde): los lienzos de ataque son 3-5 veces mas grandes
+  // que el bicho y antes no cabian todos los frames en la cache (se rehacian en cada ataque y se trababa)
+  int bx0 = w, by0 = h, bx1 = -1, by1 = -1;
+  for (int y = 0; y < h; y++) {
+    const uint8_t *row = src + y * w;
+    for (int x = 0; x < w; x++)
+      if (row[x] != 0xFF) { if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; by1 = y; }
+  }
+  if (bx1 < 0) return 0;
+  int cx = bx0 * s4 / 4 - 1, cy = by0 * s4 / 4 - 1;
+  if (cx < 0) cx = 0;
+  if (cy < 0) cy = 0;
+  int ex = ((bx1 + 1) * s4 + 3) / 4 + 1, ey = ((by1 + 1) * s4 + 3) / 4 + 1;
+  if (ex > FW) ex = FW;
+  if (ey > FH) ey = FH;
+  const int W = ex - cx, H = ey - cy;
+  if (W <= 0 || H <= 0) return 0;
+  bool big = w > SM_MAX8 || h > SM_MAX8;
+  if (!smScratchReady(sc, big)) return -1;
+  uint32_t need = (uint32_t)W * H * 3 + (uint32_t)H * 4;  // colores + alfas + limites de cada fila
+  c.col = (uint16_t *)ps_malloc(need);
+  if (!c.col) return -1;
+  c.a = (uint8_t *)(c.col + W * H);
+  c.W = W; c.H = H; c.cx = cx; c.cy = cy; c.FW = FW; c.FH = FH;
+  int k = big ? 4 : 8, IW = w * k, IH = h * k;
+  smEpx2(src, w, h, sc.A);
+  smEpx2(sc.A, w * 2, h * 2, sc.B);
+  const uint8_t *img = sc.B;
+  if (k == 8) { smEpx2(sc.B, w * 4, h * 4, sc.C); img = sc.C; }
+  // punto de muestra (2 por eje): (o + (2i+1)/4) * 4k/s4 en pixeles de img
+  for (int oy = 0; oy < H; oy++) {
+    int sy0 = (int)(((4 * (oy + cy) + 1) * k) / s4), sy1 = (int)(((4 * (oy + cy) + 3) * k) / s4);
+    if (sy0 >= IH) sy0 = IH - 1;
+    if (sy1 >= IH) sy1 = IH - 1;
+    const uint8_t *r0 = img + sy0 * IW, *r1 = img + sy1 * IW;
+    uint16_t *oc = c.col + oy * W;
+    uint8_t *oa = c.a + oy * W;
+    for (int ox = 0; ox < W; ox++) {
+      int sx0 = (int)(((4 * (ox + cx) + 1) * k) / s4), sx1 = (int)(((4 * (ox + cx) + 3) * k) / s4);
+      if (sx0 >= IW) sx0 = IW - 1;
+      if (sx1 >= IW) sx1 = IW - 1;
+      uint8_t v[4] = { r0[sx0], r0[sx1], r1[sx0], r1[sx1] };
+      uint16_t sr = 0, sg = 0, sb = 0;
+      uint8_t n = 0;
+      for (uint8_t q = 0; q < 4; q++)
+        if (v[q] != 0xFF) {
+          uint16_t p = pal[v[q]];
+          sr += p >> 11; sg += (p >> 5) & 63; sb += p & 31;
+          n++;
+        }
+      oa[ox] = n;
+      if (n) oc[ox] = (uint16_t)(((sr / n) << 11) | ((sg / n) << 5) | (sb / n));
+    }
+  }
+  // suavizado que respeta los bordes: 7 vecinos por eje (horizontal y luego vertical); solo se mezcla con
+  // los que se parecen al del centro, asi el contorno oscuro y los cambios de color fuertes no se emborronan,
+  // pero los escalones del sombreado (bloques de 5-7 px) se funden
+  if (s4 >= 12 && sc.tmp) {
+    uint16_t *tmp = sc.tmp;
+    for (int pass = 0; pass < 2; pass++) {
+      const uint16_t *in = pass ? tmp : c.col;
+      uint16_t *out = pass ? c.col : tmp;
+      int step = pass ? W : 1;
+      for (int oy = 0; oy < H; oy++)
+        for (int ox = 0; ox < W; ox++) {
+          int i = oy * W + ox;
+          uint16_t p = in[i];
+          if (!c.a[i]) { out[i] = p; continue; }
+          int pr = p >> 11, pg = (p >> 5) & 63, pb = p & 31;
+          int sr = pr, sg = pg, sb = pb, n = 1;
+          int pos = pass ? oy : ox, lim = pass ? H : W;
+          for (int d = -3; d <= 3; d++) {
+            if (!d || pos + d < 0 || pos + d >= lim) continue;
+            int j = i + d * step;
+            if (c.a[j] < 4) continue;
+            uint16_t q = in[j];
+            int dr = (q >> 11) - pr, dg = ((q >> 5) & 63) - pg, db = (q & 31) - pb;
+            if (dr * dr * 4 + dg * dg + db * db * 4 > 700) continue;  // muy distinto: borde
+            sr += q >> 11; sg += (q >> 5) & 63; sb += q & 31;
+            n++;
+          }
+          out[i] = (uint16_t)(((sr / n) << 11) | ((sg / n) << 5) | (sb / n));
+        }
+    }
+  }
+  // limites de lo visible en cada fila (al copiar se salta lo transparente de los lados)
+  int16_t *rl = (int16_t *)(c.a + W * H), *rr = rl + H;
+  for (int oy = 0; oy < H; oy++) {
+    const uint8_t *oa = c.a + oy * W;
+    int l = 0, r = W - 1;
+    while (l < W && !oa[l]) l++;
+    while (r >= l && !oa[r]) r--;
+    rl[oy] = (int16_t)l;
+    rr[oy] = (int16_t)r;
+  }
+  c.s4 = s4;
+  return 1;
+}
+// mete un frame hecho en la cache (sale el que hace mas que no se usa si no cabe). Solo el bucle principal
+static SmAA *smAAInstall(SmAA &made, const uint8_t *src, const uint16_t *pal) {
+  uint32_t need = (uint32_t)made.W * made.H * 3 + (uint32_t)made.H * 4;
+  SmAA *hit = nullptr;
+  for (;;) {
+    SmAA *fr = nullptr, *old = nullptr;
+    for (SmAA &e : gSmAA) {
+      if (!e.col) { if (!fr) fr = &e; }
+      else if (!old || e.used < old->used) old = &e;
+    }
+    if (fr && gSmAABytes + need <= SMAA_BUDGET) { hit = fr; break; }
+    if (!old) { free(made.col); made = SmAA(); return nullptr; }
+    old->release();
+  }
+  *hit = made;
+  hit->src = src; hit->pal = pal;
+  hit->used = ++gSmAAUse;
+  gSmAABytes += need;
+  made = SmAA();
+  return hit;
+}
+static SmAA *smAAFind(const uint8_t *src, const uint16_t *pal, int s4, int FW, int FH) {
+  for (SmAA &e : gSmAA)
+    if (e.col && e.src == src && e.pal == pal && e.s4 == s4 && e.FW == FW && e.FH == FH) return &e;
+  return nullptr;
+}
+
+static SmScratch gSmMain;  // los del bucle principal (ko12.10.17)
+// ---- ko12.10.17: frames lisos hechos de antemano en el nucleo 0 (el combate ya no se traba al salir un
+// bicho: antes cada frame nuevo de la animacion costaba 20-60 ms en el bucle principal). La tarea trabaja con
+// una COPIA del frame y de la paleta (si el sprite se descarga a medias no lee memoria liberada); lo hecho
+// lo instala el bucle principal, y se tira si entretanto hubo un smAAReset (gSmGen)
+#define SMREQ_MAX 96
+static struct { const uint8_t *src; int s4; } gSmReq[SMREQ_MAX];
+uint16_t gSmPending = 0;     // frames encargados que aun no han vuelto
+uint32_t gSmBgBuilds = 0;    // hechos en el nucleo 0 (para el registro de tirones)
+#ifdef ESP_PLATFORM
+static QueueHandle_t gSmInQ = nullptr, gSmOutQ = nullptr;
+static void smWorker(void *) {
+  static SmScratch sc;
+  for (;;) {
+    SmJob *j = nullptr;
+    if (xQueueReceive(gSmInQ, &j, portMAX_DELAY) != pdTRUE || !j) continue;
+    j->res = (j->gen == gSmGen) ? smAAFill(j->out, j->frame, j->w, j->h, j->pal, j->s4, sc) : 0;
+    xQueueSend(gSmOutQ, &j, portMAX_DELAY);
+    vTaskDelay(1);  // un respiro al IDLE del nucleo 0 (vigilante de tareas) entre frame y frame
+  }
+}
+#endif
+static void smJobDone(SmJob *j) {
+  if (gSmPending) gSmPending--;
+  if (j->res == 1) {
+    if (j->gen == gSmGen && !smAAFind(j->key, j->palKey, j->s4, j->out.FW, j->out.FH)) {
+      smAAInstall(j->out, j->key, j->palKey);
+      gSmBgBuilds++;
+    } else {
+      free(j->out.col);
+    }
+  }
+  free(j);
+}
+// encarga el frame (si no esta hecho ni pedido ya). Devuelve true si ya estaba en la cache
+bool smAAPrebuild(const uint8_t *src, int w, int h, const uint16_t *pal, int s4) {
+  if (!gSmoothGfx || w <= 0 || h <= 0 || w > SM_MAX || h > SM_MAX) return true;
+  const int FW = w * s4 / 4, FH = h * s4 / 4;
+  if (FW <= 0 || FH <= 0 || FW * FH > SMAA_MAXPX) return true;
+  if (smAAFind(src, pal, s4, FW, FH)) return true;
+  {  // frame vacio: no hay nada que hacer (y no debe esperar por el)
+    bool any = false;
+    for (int i = 0; i < w * h && !any; i++) any = src[i] != 0xFF;
+    if (!any) return true;
+  }
+  for (uint8_t i = 0; i < gSmReqN; i++)
+    if (gSmReq[i].src == src && gSmReq[i].s4 == s4) return false;
+  if (gSmReqN >= SMREQ_MAX) return false;
+  SmJob *j = (SmJob *)ps_malloc(sizeof(SmJob) + (size_t)w * h);
+  if (!j) return false;
+  new (&j->out) SmAA();
+  j->key = src; j->palKey = pal; j->gen = gSmGen; j->w = w; j->h = h; j->s4 = s4; j->res = 0;
+  memcpy(j->pal, pal, sizeof(j->pal));
+  memcpy(j->frame, src, (size_t)w * h);
+  gSmReq[gSmReqN].src = src; gSmReq[gSmReqN].s4 = s4; gSmReqN++;
+  gSmPending++;
+#ifdef ESP_PLATFORM
+  if (!gSmInQ) {
+    gSmInQ = xQueueCreate(SMREQ_MAX, sizeof(SmJob *));
+    gSmOutQ = xQueueCreate(SMREQ_MAX, sizeof(SmJob *));
+    if (gSmInQ && gSmOutQ) xTaskCreatePinnedToCore(smWorker, "smaa", 4096, nullptr, 1, nullptr, 0);
+  }
+  if (gSmInQ && xQueueSend(gSmInQ, &j, 0) == pdTRUE) return false;
+#endif
+  // PC (tests y capturas) o sin tarea: aqui mismo
+  j->res = smAAFill(j->out, j->frame, w, h, j->pal, s4, gSmMain);
+  smJobDone(j);
+  return smAAFind(src, pal, s4, FW, FH) != nullptr;
+}
+// en loop(): instala lo que ya hizo la tarea (poco a poco: es solo apuntar memoria)
+void smAAPrebuildPoll() {
+#ifdef ESP_PLATFORM
+  if (!gSmOutQ) return;
+  SmJob *j = nullptr;
+  while (xQueueReceive(gSmOutQ, &j, 0) == pdTRUE)
+    if (j) smJobDone(j);
+#endif
+}
+
 static bool smoothBlitAA(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, int y0, int s4, uint8_t slot) {
 #ifdef HOST_HD
   return false;
@@ -4871,133 +5158,26 @@ static bool smoothBlitAA(const uint8_t *src, int w, int h, const uint16_t *pal, 
   if (!fb || w <= 0 || h <= 0 || w > SM_MAX || h > SM_MAX) return false;
   const int FW = w * s4 / 4, FH = h * s4 / 4;
   if (FW <= 0 || FH <= 0 || FW * FH > SMAA_MAXPX) return false;
-  SmAA *hit = nullptr;
-  for (SmAA &e : gSmAA)
-    if (e.col && e.src == src && e.pal == pal && e.s4 == s4 && e.FW == FW && e.FH == FH) { hit = &e; break; }
-  bool build = !hit;
-  int W, H, cx, cy;
-  if (hit) {
-    W = hit->W; H = hit->H; cx = hit->cx; cy = hit->cy;
-  } else {
-    // ko12.10.6: solo la caja de lo visible (+1 px de borde): los lienzos de ataque son 3-5 veces mas grandes
-    // que el bicho y antes no cabian todos los frames en la cache (se rehacian en cada ataque y se trababa)
-    int bx0 = w, by0 = h, bx1 = -1, by1 = -1;
-    for (int y = 0; y < h; y++) {
-      const uint8_t *row = src + y * w;
-      for (int x = 0; x < w; x++)
-        if (row[x] != 0xFF) { if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; by1 = y; }
-    }
-    if (bx1 < 0) return true;  // frame vacio
-    cx = bx0 * s4 / 4 - 1; cy = by0 * s4 / 4 - 1;
-    if (cx < 0) cx = 0;
-    if (cy < 0) cy = 0;
-    int ex = ((bx1 + 1) * s4 + 3) / 4 + 1, ey = ((by1 + 1) * s4 + 3) / 4 + 1;
-    if (ex > FW) ex = FW;
-    if (ey > FH) ey = FH;
-    W = ex - cx; H = ey - cy;
-    if (W <= 0 || H <= 0) return true;
-    uint32_t need = (uint32_t)W * H * 3 + (uint32_t)H * 4;  // colores + alfas + limites de cada fila
-    for (;;) {  // sitio: uno libre, o fuera los que hace mas que no se usan hasta que quepa
-      SmAA *fr = nullptr, *old = nullptr;
-      for (SmAA &e : gSmAA) {
-        if (!e.col) { if (!fr) fr = &e; }
-        else if (!old || e.used < old->used) old = &e;
-      }
-      if (fr && gSmAABytes + need <= SMAA_BUDGET) { hit = fr; break; }
-      if (!old) return false;
-      old->release();
-    }
-    hit->col = (uint16_t *)ps_malloc(need);
-    if (!hit->col) return false;
-    hit->a = (uint8_t *)(hit->col + W * H);
+  SmAA *hit = smAAFind(src, pal, s4, FW, FH);
+  if (!hit) {
+    SmAA made;
+    // los buffers de trabajo del bucle principal son los de smoothBlitQ (gSmA/B/C): no se duplica la PSRAM
+    if (!gSmMain.A) gSmMain.A = gSmA;
+    if (!gSmMain.B) gSmMain.B = gSmB;
+    if (!gSmMain.C) gSmMain.C = gSmC;
+    int r = smAAFill(made, src, w, h, pal, s4, gSmMain);
+    if (!gSmA) gSmA = gSmMain.A;
+    if (!gSmB) gSmB = gSmMain.B;
+    if (!gSmC) gSmC = gSmMain.C;
+    if (r == 0) return true;  // frame vacio
+    if (r < 0) return false;
     gSmAABuilds++;
-    hit->W = W; hit->H = H; hit->cx = cx; hit->cy = cy; hit->FW = FW; hit->FH = FH;
-    gSmAABytes += need;
+    hit = smAAInstall(made, src, pal);
+    if (!hit) return false;
   }
   SmAA &c = *hit;
   c.used = ++gSmAAUse;
-  if (build) {
-    if (!gSmA) gSmA = (uint8_t *)ps_malloc(SM_MAX * SM_MAX * 4);
-    if (!gSmB) gSmB = (uint8_t *)ps_malloc(SM_MAX * SM_MAX * 16);
-    bool big = w > SM_MAX8 || h > SM_MAX8;
-    if (!big && !gSmC) gSmC = (uint8_t *)ps_malloc(SM_MAX8 * SM_MAX8 * 64);
-    if (!gSmA || !gSmB || (!big && !gSmC)) { c.release(); return false; }
-    int k = big ? 4 : 8, IW = w * k, IH = h * k;
-    smEpx2(src, w, h, gSmA);
-    smEpx2(gSmA, w * 2, h * 2, gSmB);
-    const uint8_t *img = gSmB;
-    if (k == 8) { smEpx2(gSmB, w * 4, h * 4, gSmC); img = gSmC; }
-    // punto de muestra (2 por eje): (o + (2i+1)/4) * 4k/s4 en pixeles de img
-    for (int oy = 0; oy < H; oy++) {
-      int sy0 = (int)(((4 * (oy + cy) + 1) * k) / s4), sy1 = (int)(((4 * (oy + cy) + 3) * k) / s4);
-      if (sy0 >= IH) sy0 = IH - 1;
-      if (sy1 >= IH) sy1 = IH - 1;
-      const uint8_t *r0 = img + sy0 * IW, *r1 = img + sy1 * IW;
-      uint16_t *oc = c.col + oy * W;
-      uint8_t *oa = c.a + oy * W;
-      for (int ox = 0; ox < W; ox++) {
-        int sx0 = (int)(((4 * (ox + cx) + 1) * k) / s4), sx1 = (int)(((4 * (ox + cx) + 3) * k) / s4);
-        if (sx0 >= IW) sx0 = IW - 1;
-        if (sx1 >= IW) sx1 = IW - 1;
-        uint8_t v[4] = { r0[sx0], r0[sx1], r1[sx0], r1[sx1] };
-        uint16_t sr = 0, sg = 0, sb = 0;
-        uint8_t n = 0;
-        for (uint8_t q = 0; q < 4; q++)
-          if (v[q] != 0xFF) {
-            uint16_t p = pal[v[q]];
-            sr += p >> 11; sg += (p >> 5) & 63; sb += p & 31;
-            n++;
-          }
-        oa[ox] = n;
-        if (n) oc[ox] = (uint16_t)(((sr / n) << 11) | ((sg / n) << 5) | (sb / n));
-      }
-    }
-    // suavizado que respeta los bordes: 7 vecinos por eje (horizontal y luego vertical); solo se mezcla con
-    // los que se parecen al del centro, asi el contorno oscuro y los cambios de color fuertes no se emborronan,
-    // pero los escalones del sombreado (bloques de 5-7 px) se funden
-    if (s4 >= 12) {
-      static uint16_t *tmp = nullptr;
-      if (!tmp) tmp = (uint16_t *)ps_malloc(SMAA_MAXPX * 2);
-      if (tmp) {
-        for (int pass = 0; pass < 2; pass++) {
-          const uint16_t *in = pass ? tmp : c.col;
-          uint16_t *out = pass ? c.col : tmp;
-          int step = pass ? W : 1;
-          for (int oy = 0; oy < H; oy++)
-            for (int ox = 0; ox < W; ox++) {
-              int i = oy * W + ox;
-              uint16_t p = in[i];
-              if (!c.a[i]) { out[i] = p; continue; }
-              int pr = p >> 11, pg = (p >> 5) & 63, pb = p & 31;
-              int sr = pr, sg = pg, sb = pb, n = 1;
-              int pos = pass ? oy : ox, lim = pass ? H : W;
-              for (int d = -3; d <= 3; d++) {
-                if (!d || pos + d < 0 || pos + d >= lim) continue;
-                int j = i + d * step;
-                if (c.a[j] < 4) continue;
-                uint16_t q = in[j];
-                int dr = (q >> 11) - pr, dg = ((q >> 5) & 63) - pg, db = (q & 31) - pb;
-                if (dr * dr * 4 + dg * dg + db * db * 4 > 700) continue;  // muy distinto: borde
-                sr += q >> 11; sg += (q >> 5) & 63; sb += q & 31;
-                n++;
-              }
-              out[i] = (uint16_t)(((sr / n) << 11) | ((sg / n) << 5) | (sb / n));
-            }
-        }
-      }
-    }
-    // limites de lo visible en cada fila (al copiar se salta lo transparente de los lados)
-    int16_t *rl = (int16_t *)(c.a + W * H), *rr = rl + H;
-    for (int oy = 0; oy < H; oy++) {
-      const uint8_t *oa = c.a + oy * W;
-      int l = 0, r = W - 1;
-      while (l < W && !oa[l]) l++;
-      while (r >= l && !oa[r]) r--;
-      rl[oy] = (int16_t)l;
-      rr[oy] = (int16_t)r;
-    }
-    c.src = src; c.pal = pal; c.s4 = s4;
-  }
+  const int W = c.W, H = c.H, cx = c.cx, cy = c.cy;
   const int X0 = x0 + cx;  // ko12.10.6: el recorte empieza en (cx, cy) del frame entero
   for (int oy = 0; oy < H; oy++) {
     int py = y0 + cy + oy;
