@@ -52,7 +52,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.10.20"
+#define FW_VERSION "1.17-ko12.10.21"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -955,6 +955,17 @@ static uint16_t gLagN = 0, gLagHead = 0;
 static uint32_t gLagLoops = 0, gLagSlow = 0;
 extern uint32_t gSmAABuilds, gSmBgBuilds;
 extern uint8_t gBattleArt;
+// ko12.10.21: ultimos toques (donde apoyo y donde solto el dedo, cuanto duro): sale en /lag debajo de los tirones
+struct TouchRec { uint32_t t; int16_t x0, y0, x1, y1; uint16_t dt; };
+#define TLOG_N 24
+static TouchRec gTLog[TLOG_N];
+static uint8_t gTLogN = 0, gTLogHead = 0;
+void touchLogAdd(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint32_t dt) {
+  TouchRec &r = gTLog[gTLogHead];
+  gTLogHead = (gTLogHead + 1) % TLOG_N;
+  if (gTLogN < TLOG_N) gTLogN++;
+  r.t = millis(); r.x0 = x0; r.y0 = y0; r.x1 = x1; r.y1 = y1; r.dt = (uint16_t)(dt > 65535 ? 65535 : dt);
+}
 size_t lagReport(char *out, size_t cap) {
   size_t o = 0;
   auto add = [&](const char *fmt, ...) {
@@ -971,6 +982,12 @@ size_t lagReport(char *out, size_t cap) {
     const LagRec &r = gLag[(gLagHead + LAG_N - gLagN + i) % LAG_N];
     add("%7lu.%01lu %5u %6u %5u %3u %5u %6u %6u %4u %3u\n", (unsigned long)(r.t / 1000), (unsigned long)(r.t / 100 % 10),
         r.total, r.render, r.async, r.fx, r.extra, r.flushW, r.aaMain, r.aaBg, r.scr);
+  }
+  add("\ntouch: sec  down(x,y)  up(x,y)  ms\n");
+  for (uint8_t i = 0; i < gTLogN; i++) {
+    const TouchRec &r = gTLog[(gTLogHead + TLOG_N - gTLogN + i) % TLOG_N];
+    add("%7lu.%01lu  %4d,%4d  %4d,%4d  %5u\n", (unsigned long)(r.t / 1000), (unsigned long)(r.t / 100 % 10),
+        r.x0, r.y0, r.x1, r.y1, r.dt);
   }
   return o;
 }
@@ -1823,6 +1840,7 @@ void touchSample(bool pressed, int16_t x, int16_t y) {
     lastInteract = millis();
     int dx = tXl - tX0, dy = tYl - tY0;
     uint32_t dt = touchNow() - tStart;  // ko11.6: duracion real del toque
+    { void touchLogAdd(int16_t, int16_t, int16_t, int16_t, uint32_t); touchLogAdd(tX0, tY0, tXl, tYl, dt); }  // ko12.10.21
     if (!holdFired && !swallowGesture) {
       // ko10.8: arrastres lentos (hasta 1,5 s) y algo torcidos tambien valen: manda
       // el eje dominante (antes < 0,8 s y la otra direccion < 70 px)
@@ -2058,9 +2076,16 @@ void onTap(int16_t x, int16_t y) {
     if (navHit(NAV_R, x, y)) { openBox(); sfxPlay(SFX_TAP); return; }       // ko11.15.1: caja
     if (!pet.isEgg() && navHit(NAV_UP, x, y)) { cardOpen = true; cardPage = 0; sfxPlay(SFX_TAP); return; }
   }
+  // ko12.10.21: el MAS CERCANO de los que estan a tiro (los circulos de 36 px se solapan 10 px: antes ganaba
+  // siempre el de la izquierda y un toque entre el 1 y el 2 daba de comer)
+  int best = -1, bestD = BTN_HIT * BTN_HIT + 1;
   for (int i = 0; i < 4; i++) {
     int dx = x - buttons[i].cx, dy = y - buttons[i].cy;
-    if (dx * dx + dy * dy <= BTN_HIT * BTN_HIT) {
+    if (dx * dx + dy * dy < bestD) { bestD = dx * dx + dy * dy; best = i; }
+  }
+  if (best >= 0) {
+    const int i = best;
+    {
       Serial.printf("BTN %d\n", i);
       sfxPlay(SFX_TAP);
       if (i == 0) {
