@@ -142,7 +142,9 @@ static void fxPumpOne() {
       if (!slot) { gQ.on = false; return; }
     }
     {
-      SdCardLock lock;
+      // ko12.10.18: sin esperar a la SD (la tienen los sprites del nucleo 0 o la musica): si esta ocupada, a la
+      // proxima vuelta. Antes el bucle se quedaba aqui 50-60 ms (registro de tirones: columna fx)
+      SdCardLock lock(pdMS_TO_TICKS(2));
       if (!lock) return;
       gQ.f = fxOpen(id);
       gQ.sz = gQ.f ? gQ.f.size() : 0;
@@ -164,7 +166,7 @@ static void fxPumpOne() {
   uint32_t n = gQ.sz - gQ.off > 8192 ? 8192 : gQ.sz - gQ.off;
   bool ok;
   {
-    SdCardLock lock;
+    SdCardLock lock(pdMS_TO_TICKS(2));  // ko12.10.18: ocupada -> a la proxima vuelta
     if (!lock) return;
     ok = gQ.f.read(gQ.slot->data + gQ.off, n) == n;
   }

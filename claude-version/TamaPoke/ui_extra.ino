@@ -2511,6 +2511,7 @@ void drawBattlers() {
   }
   if (foeWait) foeHide = true;
   if (meWait) meHide = true;
+  { extern bool gBattleSideWait; gBattleSideWait = foeWait || meWait; }  // ko12.10.18: updateWild espera
   if (!foeGone && !foeSil && !foeWait) drawRarityAura(foeX, foeG, rarityKind(bvFoeDex), now);  // ko12.9.23
   if (!meGone && !meSil && !meWait) drawRarityAura(meX, meG, rarityKind(bvMeDex), now);
 #ifdef HOST_HD
@@ -4824,9 +4825,24 @@ bool stepEvents() {
   return false;
 }
 
+bool gBattleSideWait = false;  // ko12.10.18: un lado aun no se ve (llegando de la SD o preparando su dibujo liso)
 void updateWild() {
   uint32_t now = millis();
   if (bLegendT) { if (legendIntroOn(now)) return; legendIntroEnd(); }  // ko12.9.22
+  {  // ko12.10.18: mientras un bicho no se ve, el combate espera (antes atacaba y el efecto iba a un hueco vacio)
+    static uint32_t waitT0 = 0;
+    if (gBattleSideWait && (bPhase == BP_INTRO || bPhase == BP_MENU || bPhase == BP_PLAY)) {
+      if (!waitT0) waitT0 = now;
+      if (now - waitT0 < 4000) {  // tope: si algo no llega nunca, sigue como antes
+        if (bPhase == BP_INTRO && bPhaseT) bPhaseT = now;
+        if (bPhase == BP_PLAY) bqT = now;
+        autoMenuT = now;
+        return;
+      }
+    } else {
+      waitT0 = 0;
+    }
+  }
   if (autoLeft && bPhase == BP_MENU && now - autoMenuT > AUTO_STEP_MS) {  // ko11.19
     battleDoAction(autoPick());
     return;

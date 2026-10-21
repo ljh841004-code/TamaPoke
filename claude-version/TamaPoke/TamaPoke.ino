@@ -52,7 +52,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.10.18"
+#define FW_VERSION "1.17-ko12.10.19"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -5095,6 +5095,8 @@ static void smWorker(void *) {
 #endif
 static void smJobDone(SmJob *j) {
   if (gSmPending) gSmPending--;
+  for (uint8_t i = 0; i < gSmReqN; i++)  // ko12.10.18: ya no esta pedido (si luego sale de la cache, se pide otra vez)
+    if (gSmReq[i].src == j->key && gSmReq[i].s4 == j->s4) { gSmReq[i] = gSmReq[--gSmReqN]; break; }
   if (j->res == 1) {
     if (j->gen == gSmGen && !smAAFind(j->key, j->palKey, j->s4, j->out.FW, j->out.FH)) {
       smAAInstall(j->out, j->key, j->palKey);
@@ -5160,6 +5162,18 @@ static bool smoothBlitAA(const uint8_t *src, int w, int h, const uint16_t *pal, 
   const int FW = w * s4 / 4, FH = h * s4 / 4;
   if (FW <= 0 || FH <= 0 || FW * FH > SMAA_MAXPX) return false;
   SmAA *hit = smAAFind(src, pal, s4, FW, FH);
+#ifdef ESP_PLATFORM
+  // ko12.10.18: en la placa no se hace aqui (20-60 ms: columna aaMain del registro): se encarga al nucleo 0 y
+  // mientras tanto este fotograma va en pixel normal (barato); al siguiente o al otro ya sale liso
+  if (!hit && !smAAPrebuild(src, w, h, pal, s4)) {
+    bool sm = gSmoothGfx;
+    gSmoothGfx = false;
+    smoothBlitQ(src, w, h, pal, x0, y0, s4, false);
+    gSmoothGfx = sm;
+    return true;
+  }
+  if (!hit) hit = smAAFind(src, pal, s4, FW, FH);
+#endif
   if (!hit) {
     SmAA made;
     // los buffers de trabajo del bucle principal son los de smoothBlitQ (gSmA/B/C): no se duplica la PSRAM
