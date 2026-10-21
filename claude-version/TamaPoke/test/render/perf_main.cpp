@@ -25,12 +25,20 @@ int main(int argc, char **argv) {
   pet.eggTap(); pet.eggTap(); pet.eggTap();
   pet.exp = expForLevel(30);
   ensureMon();
-  for (int art = 0; art < 2; art++) {
+  for (int art = 0; art < 3; art++) {
     gBattleArt = art;
+    auto s0 = std::chrono::steady_clock::now();
     startWild();
+    for (int k = 0; k < 8; k++) { gMockMillis += 33; pmdAsyncPoll(); }
+    printf("  startWild+carga         %8.1f us\n", std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - s0).count());
+    for (int k = 0; k < 3; k++) {  // ko12.10.17: los primeros fotogramas (cachés que se llenan)
+      auto f0 = std::chrono::steady_clock::now();
+      gMockMillis += 33; renderBattleView();
+      printf("  fotograma %d             %8.1f us\n", k, std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - f0).count());
+    }
     bPhase = BP_MENU;
     txFmt(bvL1, sizeof(bvL1), X_WHAT_DO, bvMeName);
-    printf("== combate (%s), region %u, hora %d\n", art ? "PokeRogue" : "PMD", (unsigned)bRegion, sceneHour());
+    printf("== combate (%s), region %u, hora %d\n", art == 2 ? "3D" : art ? "PokeRogue" : "PMD", (unsigned)bRegion, sceneHour());
     int hh = sceneHour(); bool night = hh < 6 || hh >= 20; uint8_t wx = sceneWeather();
     double total = timeIt("renderBattleView", [] { renderBattleView(); });
     double bg = timeIt("drawBattleBg", [] { drawBattleBg(); });
@@ -39,8 +47,8 @@ int main(int argc, char **argv) {
     timeIt("  drawWeather", [&] { drawWeather(wx, 262, millis(), night); });
     double bat = timeIt("drawBattlers", [] { drawBattlers(); });
     double box2 = timeIt("drawHpBox x2", [] {
-      drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true, 0);
-      drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true, 0);
+      drawHpBox(84, 50, 176, bvFoeName, bvFoeLvl, bvFoeHp, bvFoeMax, true, 0, -1, 0, -1);
+      drawHpBox(236, 176, 176, bvMeName, bvMeLvl, bvMeHp, bvMeMax, true, 0, -1, 0, -1);
     });
     double menu = timeIt("drawBattleMenu", [] { drawBattleMenu(); });
     printf("  reparto: fondo %.0f%%  pokemon %.0f%%  cajas %.0f%%  menu %.0f%%  resto %.0f%%\n",
