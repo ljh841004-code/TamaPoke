@@ -52,7 +52,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "1.17-ko12.10.19"
+#define FW_VERSION "1.17-ko12.10.20"
 // ko6.2: marca que la pantalla de SD UPDATE busca dentro de update.bin para
 // mostrar que version trae el fichero antes de instalarlo (sdUpdateFileVersion)
 extern const char TP_VERSION_TAG[];
@@ -4869,8 +4869,11 @@ void smoothBlitQ(const uint8_t *src, int w, int h, const uint16_t *pal, int x0, 
   }
   // ko12.10.2: con "도트" del tamano del original algunos van a x6-x7: una pasada mas (x8) y los bordes
   // curvos salen sin escalones
-  if (s4 >= 22 && w <= SM_MAX8 && h <= SM_MAX8 && !gSmC) gSmC = (uint8_t *)ps_malloc(SM_MAX8 * SM_MAX8 * 64);
-  int k = (s4 >= 22 && w <= SM_MAX8 && h <= SM_MAX8 && gSmC) ? 8 : s4 >= 16 ? 4 : 2, W = w * 2, H = h * 2, d = 4 * k;
+  // ko12.10.20: la 3a pasada (x8) solo desde x7 (antes x5,5): el bicho de la pantalla principal (x5,5) la hacia
+  // en CADA fotograma, 100-150 ms en las acciones grandes (registro de tirones, pantalla principal). Con x4 los
+  // bordes siguen lisos y cuesta ~4 veces menos
+  if (s4 >= 28 && w <= SM_MAX8 && h <= SM_MAX8 && !gSmC) gSmC = (uint8_t *)ps_malloc(SM_MAX8 * SM_MAX8 * 64);
+  int k = (s4 >= 28 && w <= SM_MAX8 && h <= SM_MAX8 && gSmC) ? 8 : s4 >= 16 ? 4 : 2, W = w * 2, H = h * 2, d = 4 * k;
   smEpx2(src, w, h, gSmA);
   const uint8_t *img = gSmA;
   if (k >= 4) { smEpx2(gSmA, W, H, gSmB); img = gSmB; W *= 2; H *= 2; }

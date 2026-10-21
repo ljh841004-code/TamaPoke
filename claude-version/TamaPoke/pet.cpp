@@ -1590,6 +1590,7 @@ PetMood Pet::mood() const {
 }
 
 void Pet::save() {
+  if (saveHold) { saveWanted = true; return; }  // ko12.10.20: se hace uno al soltar (releaseSaves)
   ticksSinceSave = 0;
   pendingSave = false;
   saveBad = !prefs.putUChar("full", fullness);  // ko12.10.15: que no falle sin avisar

@@ -4644,7 +4644,14 @@ static void petPPAfter(bool won) {
   pet.saveNow();
 }
 
+static void finishBattleImpl(bool won, bool fled, bool caught);
+// ko12.10.20: todo lo que guarda al acabar (resultado, PP, premios) en UNA escritura de la partida
 void finishBattle(bool won, bool fled, bool caught) {
+  pet.holdSaves();
+  finishBattleImpl(won, fled, caught);
+  pet.releaseSaves();
+}
+static void finishBattleImpl(bool won, bool fled, bool caught) {
   bLegendT = 0;
   autoLeft = 0;  // ko11.19
   bMoveMenu = false;

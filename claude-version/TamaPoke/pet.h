@@ -579,6 +579,10 @@ public:
   uint32_t savedEpoch() { return prefs.getUInt("seen", 0); }
   void flushSave();
   bool saveFailed() const { return saveBad; }
+  // ko12.10.20: varios save() seguidos (fin del combate: resultado, PP, caramelo, medalla...) -> uno solo al
+  // soltar. Cada save() completo son ~130 escrituras en la NVS (40-70 ms): al acabar un combate se juntaban 2-4
+  void holdSaves() { saveHold++; }
+  void releaseSaves() { if (saveHold && !--saveHold && saveWanted) { saveWanted = false; save(); } }
   // ko12.10.15: sin ningun golpe (Magikarp, Abra...): en los salvajes lucha uno de la caja y este se
   // lleva la mitad de la EXP (학습장치). Esquema / transformacion no cuentan: con eso ya se defiende
   bool needsExpShare() const;
@@ -598,6 +602,8 @@ private:
   uint8_t ticksSinceSave = 0;
   bool pendingSave = false;     // guardado periodico pendiente de volcar
   bool saveBad = false;
+  uint8_t saveHold = 0;
+  bool saveWanted = false;
   uint16_t evoDeclinedLv = 0;   // "mantener forma": no ofrecer evolucion hasta subir de nivel
   uint32_t farDeclinedAge = 0;  // "quedaros juntos": no ofrecer despedida hasta esta edad
   bool starterPick = false;     // primera partida: esperando que el jugador elija inicial
